@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login</title>
+  <link rel="stylesheet" href="{% static 'login.css' %}">
+</head>
+<body class="login-page">
+  <main class="login-wrapper">
+    <section class="login-card" aria-labelledby="login-title">
+      <div class="login-header">
+        <div class="login-logo" aria-hidden="true">ET</div>
+        <h1 id="login-title">Admin Portal</h1>
+        <p>Authorized personnel only</p>
+      </div>
+
+      {% if error %}
+        <p class="login-message login-error">{{ error }}</p>
+      {% endif %}
+
+      {% if success %}
+        <p class="login-message login-success">{{ success }}</p>
+      {% endif %}
+
+      <form class="login-form" action="{% url 'login' %}" method="post">
+        {% csrf_token %}
+        <div class="login-field">
+          <label for="email">Email</label>
+          <span class="login-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+              <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+          </span>
+          <input type="email" id="email" name="email" placeholder="Enter your email" value="{{ email|default:'' }}" required>
+        </div>
+
+        <div class="login-field">
+          <label for="password">Password</label>
+          <span class="login-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <rect x="3" y="11" width="18" height="11" rx="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+          </span>
+          <input type="password" id="password" name="password" placeholder="Enter your password" required>
+        </div>
+
+        <div class="login-field">
+          <label for="role">Role</label>
+          <span class="login-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+              <circle cx="9" cy="7" r="4"></circle>
+              <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+            </svg>
+          </span>
+          <select id="role" name="role" required>
+            <option value="" selected disabled>Select your role</option>
+            {% for value, label in roles.items %}
+              <option value="{{ value }}" {% if selected_role == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <label class="login-remember">
+          <input type="checkbox" name="remember">
+          <span>Remember me</span>
+        </label>
+
+        <button class="login-button" type="submit">Sign In</button>
+      </form>
+
+      <p class="login-footer">Sign in to continue to your assigned portal.</p>
+    </section>
+  </main>
+</body>
+</html>

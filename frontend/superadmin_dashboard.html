@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Super Admin Dashboard</title>
+  <link rel="stylesheet" href="{% static 'superadmin_dashboard.css' %}">
+</head>
+<body class="dashboard-page">
+  <aside class="sidebar">
+    <div class="brand">
+      <h1>EventTab</h1>
+      <span>Super Admin Portal</span>
+    </div>
+
+    <nav class="side-nav" aria-label="Super Admin navigation">
+      <a class="active" href="{% url 'superadmin_dashboard' %}">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13h6V4H4v9Zm10 7h6v-9h-6v9ZM4 20h6v-5H4v5Zm10-11h6V4h-6v5Z"></path></svg>
+        Dashboard
+      </a>
+      <a href="#">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 11c1.66 0 3-1.57 3-3.5S17.66 4 16 4s-3 1.57-3 3.5 1.34 3.5 3 3.5ZM8 11c1.66 0 3-1.57 3-3.5S9.66 4 8 4 5 5.57 5 7.5 6.34 11 8 11Zm0 2c-2.67 0-8 1.34-8 4v3h16v-3c0-2.66-5.33-4-8-4Zm8 0c-.31 0-.66.02-1.03.05 1.32.95 2.03 2.18 2.03 3.95v3h7v-3c0-2.66-5.33-4-8-4Z"></path></svg>
+        Admins
+      </a>
+      <a href="#">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm2 4v2h10V7H7Zm0 4v2h10v-2H7Zm0 4v2h7v-2H7Z"></path></svg>
+        Reports
+      </a>
+      <a href="#">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8v5l4 2 .8-1.6-3-1.4V8H12Zm0-6a10 10 0 1 0 10 10h-2a8 8 0 1 1-2.34-5.66L15 9h7V2l-2.93 2.93A9.97 9.97 0 0 0 12 2Z"></path></svg>
+        Activity Logs
+      </a>
+    </nav>
+
+    <a class="logout-link" href="{% url 'logout' %}">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17v-2h4V9h-4V7l-5 5 5 5Zm-7 4h9v-2H5V5h7V3H3v18Zm14-4 5-5-5-5v3h-7v4h7v3Z"></path></svg>
+      Logout
+    </a>
+  </aside>
+
+  <main class="dashboard-shell">
+    <header class="topbar">
+      <button class="top-icon" type="button" aria-label="Notifications">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm8-6-2-2v-5a6 6 0 1 0-12 0v5l-2 2v1h16v-1Z"></path></svg>
+      </button>
+      <div class="profile-avatar" aria-label="Super Admin">SA</div>
+    </header>
+
+    <section class="dashboard-content">
+      <div class="dashboard-title">
+        <h2>System Dashboard</h2>
+      </div>
+
+      <div class="dashboard-grid">
+        <section class="main-panel">
+          <div class="stats-row">
+            <article class="stat-card">
+              <div class="stat-top">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21V9h5V3h8v8h5v10H3Zm7-10h4V5h-4v6Zm-5 8h3v-3H5v3Zm0-5h3v-3H5v3Zm5 5h4v-3h-4v3Zm0-5h4v-3h-4v3Zm6 5h3v-3h-3v3Zm0-5h3v-1h-3v1Z"></path></svg>
+                <span></span>
+              </div>
+              <strong>{{ departments }}</strong>
+              <p>Total Departments</p>
+            </article>
+
+            <article class="stat-card">
+              <div class="stat-top">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5Zm0 2c-4.42 0-8 2.24-8 5v1h16v-1c0-2.76-3.58-5-8-5Z"></path></svg>
+                <span></span>
+              </div>
+              <strong>{{ admins }}</strong>
+              <p>Admins</p>
+            </article>
+
+            <article class="stat-card">
+              <div class="stat-top">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2H7Zm12 8H5V6h14v4ZM5 12h4v4H5v-4Z"></path></svg>
+                <span></span>
+              </div>
+              <strong>{{ total_users }}</strong>
+              <p>Total Users</p>
+            </article>
+          </div>
+
+          <section class="role-management">
+            <h3>Role Management</h3>
+            <div class="table-card">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Identity</th>
+                    <th>Role</th>
+                    <th>Department</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for user in users %}
+                    <tr>
+                      <td data-label="Identity">
+                        <div class="identity-cell">
+                          <span class="mini-avatar">{{ user.username|slice:":1"|upper }}</span>
+                          <div>
+                            <strong>{{ user.username }}</strong>
+                            <small>{{ user.email|default:"No email" }}</small>
+                          </div>
+                        </div>
+                      </td>
+                      <td data-label="Role">{% if user.is_superuser %}Super Admin{% elif user.is_staff %}Admin{% else %}User{% endif %}</td>
+                      <td data-label="Department"><span class="department-pill">System</span></td>
+                      <td data-label="Actions"><button class="action-button" type="button">View</button></td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <aside class="activity-card">
+          <div class="activity-header">
+            <h3>Activity Alert</h3>
+            <span>Live</span>
+          </div>
+
+          <ul class="activity-list">
+            <li>
+              <span class="dot yellow"></span>
+              <div>
+                <strong>Security Protocol</strong>
+                <p>Super Admin access is active for system monitoring.</p>
+              </div>
+            </li>
+            <li>
+              <span class="dot green"></span>
+              <div>
+                <strong>New Event Published</strong>
+                <p>Event records can be reviewed from the dashboard.</p>
+              </div>
+            </li>
+            <li>
+              <span class="dot blue"></span>
+              <div>
+                <strong>Role Assignment</strong>
+                <p>Admin accounts and departments are ready to manage.</p>
+              </div>
+            </li>
+          </ul>
+
+          <button class="logs-button" type="button">View All Logs</button>
+        </aside>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
