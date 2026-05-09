@@ -5,9 +5,28 @@ __pycache__/
 *.pyd
 .Python
 
+# Environment variables
 .env
+.env.local
+
+# Database
 *.sqlite3
+db.sqlite3
 eventtabs
 
+# Static and Media files
+staticfiles/
+media/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
 .DS_Store
 Thumbs.db
+
+# Logs
+*.log

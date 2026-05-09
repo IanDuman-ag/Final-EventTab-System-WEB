@@ -1,0 +1,315 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Accounts - EventTab</title>
+  <link rel="stylesheet" href="{% static 'admin.css' %}?v=20260510a">
+</head>
+<body class="admin-page">
+  <div class="admin-shell">
+    <aside class="sidebar" aria-label="Super admin navigation">
+      <div class="brand">
+        <h1>EventTab</h1>
+        <span>Super Admin Portal</span>
+      </div>
+
+      <nav class="side-nav">
+        <a href="{% url 'superadmin_dashboard' %}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm9 0h7v7h-7v-7Z"></path></svg>
+          <span>Dashboard</span>
+        </a>
+        <a class="active" href="{% url 'superadmin_admins' %}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 11c1.66 0 3-1.57 3-3.5S17.66 4 16 4s-3 1.57-3 3.5 1.34 3.5 3 3.5ZM8 11c1.66 0 3-1.57 3-3.5S9.66 4 8 4 5 5.57 5 7.5 6.34 11 8 11Zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 14.17 10.33 13 8 13Zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5Z"></path></svg>
+          <span>Admins</span>
+        </a>
+        <a href="{% url 'superadmin_reports' %}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14a2 2 0 0 1 2 2v14l-4-3H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm2 4v2h10V7H7Zm0 4v2h7v-2H7Z"></path></svg>
+          <span>Reports</span>
+        </a>
+        <a href="{% url 'superadmin_activity_logs' %}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 3a9 9 0 1 1-8.74 11.19l1.94-.49A7 7 0 1 0 13 5v4L7.5 3.5 13-2v5Zm-1 6h2v5l4 2-.9 1.79L12 15V9Z"></path></svg>
+          <span>Activity Logs</span>
+        </a>
+      </nav>
+
+      <a class="logout-link" href="{% url 'logout' %}">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17v-3H3v-4h7V7l5 5-5 5Zm2-14h8v18h-8v-2h6V5h-6V3Z"></path></svg>
+        <span>Logout</span>
+      </a>
+    </aside>
+
+    <div class="content-area">
+      <header class="topbar">
+        <div></div>
+        <div class="topbar-actions">
+          <a class="icon-button" href="{% url 'superadmin_activity_logs' %}" aria-label="Notifications">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm8-6-2-2v-5a6 6 0 1 0-12 0v5l-2 2v1h16v-1Z"></path></svg>
+          </a>
+          <div class="profile-avatar" aria-label="{{ request.user.username }}">
+            {{ request.user.username|default:"SA"|slice:":2"|upper }}
+          </div>
+        </div>
+      </header>
+
+      <main class="admin-main">
+        <section class="page-heading">
+          <div>
+            <h2>Admin Accounts</h2>
+            <p>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 10 10A10.01 10.01 0 0 0 12 2Zm1 15h-2v-6h2v6Zm0-8h-2V7h2v2Z"></path></svg>
+              Showing {{ admin_count|default:"0" }} of {{ total_admin_count|default:"0" }} administrators across {{ department_count|default:"0" }} departments
+            </p>
+          </div>
+          <button class="create-admin-btn" type="button" id="open-create-admin-modal">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2Z"></path></svg>
+            <span>Create New Admin Account</span>
+          </button>
+        </section>
+
+        <section class="metrics-grid" aria-label="Admin summary cards">
+          <article class="metric-card">
+            <span>Filtered Results</span>
+            <strong>{{ admin_count|default:"0" }}</strong>
+          </article>
+          <article class="metric-card">
+            <span>Total Administrators</span>
+            <strong>{{ total_admin_count|default:"0" }}</strong>
+          </article>
+          <article class="metric-card">
+            <span>Departments</span>
+            <strong>{{ department_count|default:"0" }}</strong>
+          </article>
+        </section>
+
+        <section class="filters-card" aria-label="Admin filters">
+          <form class="filters" method="get">
+            <span>Filters:</span>
+            <input type="text" name="q" value="{{ search_query }}" placeholder="Search username, email, department" aria-label="Search admins">
+            <select name="department" aria-label="Filter by department">
+              <option value="">All Departments</option>
+              {% for department_name in department_names %}
+                <option value="{{ department_name }}" {% if selected_department == department_name %}selected{% endif %}>{{ department_name }}</option>
+              {% endfor %}
+            </select>
+            <select name="role" aria-label="Filter by role">
+              <option value="">Any Role</option>
+              <option value="Admin" {% if selected_role == 'Admin' %}selected{% endif %}>Admin</option>
+              <option value="Super Admin" {% if selected_role == 'Super Admin' %}selected{% endif %}>Super Admin</option>
+            </select>
+            <select name="status" aria-label="Filter by status">
+              <option value="">Any Status</option>
+              <option value="Active" {% if selected_status == 'Active' %}selected{% endif %}>Active</option>
+              <option value="Deactivated" {% if selected_status == 'Deactivated' %}selected{% endif %}>Deactivated</option>
+            </select>
+            <input type="hidden" name="sort" value="{{ sort }}">
+            <input type="hidden" name="dir" value="{{ dir }}">
+            <button class="filter-btn" type="submit">Apply</button>
+            <a class="reset-btn" href="{% url 'superadmin_admins' %}">Reset</a>
+          </form>
+        </section>
+
+        <section class="bulk-actions-card" aria-label="Bulk actions">
+          <section class="bulk-actions" aria-label="Bulk actions">
+          <button id="bulk-deactivate-btn" class="bulk-btn" type="button" disabled>Deactivate Selected</button>
+          <span id="selected-count">0 selected</span>
+          </section>
+        </section>
+
+        <section class="admin-table-card">
+          <div class="table-scroll">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>
+                    <input id="select-all-admins" type="checkbox" aria-label="Select all admins">
+                  </th>
+                  <th>
+                    <a class="sort-link" href="?q={{ search_query|urlencode }}&department={{ selected_department|urlencode }}&role={{ selected_role|urlencode }}&status={{ selected_status|urlencode }}&sort=username&dir={% if sort == 'username' and dir == 'asc' %}desc{% else %}asc{% endif %}">
+                      Name {% if sort == 'username' %}{% if dir == 'asc' %}↑{% else %}↓{% endif %}{% endif %}
+                    </a>
+                  </th>
+                  <th>
+                    <a class="sort-link" href="?q={{ search_query|urlencode }}&department={{ selected_department|urlencode }}&role={{ selected_role|urlencode }}&status={{ selected_status|urlencode }}&sort=department&dir={% if sort == 'department' and dir == 'asc' %}desc{% else %}asc{% endif %}">
+                      Department
+                      {% if sort == 'department' %}{% if dir == 'asc' %}↑{% else %}↓{% endif %}{% endif %}
+                    </a>
+                  </th>
+                  <th>
+                    <a class="sort-link" href="?q={{ search_query|urlencode }}&department={{ selected_department|urlencode }}&role={{ selected_role|urlencode }}&status={{ selected_status|urlencode }}&sort=role&dir={% if sort == 'role' and dir == 'asc' %}desc{% else %}asc{% endif %}">
+                      Role {% if sort == 'role' %}{% if dir == 'asc' %}↑{% else %}↓{% endif %}{% endif %}
+                    </a>
+                  </th>
+                  <th>
+                    <a class="sort-link" href="?q={{ search_query|urlencode }}&department={{ selected_department|urlencode }}&role={{ selected_role|urlencode }}&status={{ selected_status|urlencode }}&sort=status&dir={% if sort == 'status' and dir == 'asc' %}desc{% else %}asc{% endif %}">
+                      Status {% if sort == 'status' %}{% if dir == 'asc' %}↑{% else %}↓{% endif %}{% endif %}
+                    </a>
+                  </th>
+                  <th>
+                    <a class="sort-link" href="?q={{ search_query|urlencode }}&department={{ selected_department|urlencode }}&role={{ selected_role|urlencode }}&status={{ selected_status|urlencode }}&sort=last_login&dir={% if sort == 'last_login' and dir == 'asc' %}desc{% else %}asc{% endif %}">
+                      Last Login {% if sort == 'last_login' %}{% if dir == 'asc' %}↑{% else %}↓{% endif %}{% endif %}
+                    </a>
+                  </th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in admin_rows %}
+                  <tr
+                    data-admin-id="{{ row.user.id }}"
+                    data-admin-name="{{ row.user.username }}"
+                    data-admin-email="{{ row.user.email|default:'' }}"
+                    data-admin-department="{{ row.department }}"
+                    data-admin-role="{{ row.role }}"
+                    data-status="{{ row.status|lower }}"
+                  >
+                    <td data-label="Select">
+                      <input class="admin-checkbox" type="checkbox" value="{{ row.user.id }}" {% if row.status != 'Active' %}disabled{% endif %} aria-label="Select {{ row.user.username }}">
+                    </td>
+                    <td data-label="Name">
+                      <div class="admin-identity">
+                        <div class="admin-avatar">{{ row.user.username|slice:":2"|upper }}</div>
+                        <div>
+                          <strong>{{ row.user.username }}</strong>
+                          <span>{{ row.user.email|default:"No email" }}</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td data-label="Department / Course">{{ row.department }}</td>
+                    <td data-label="Role">
+                      <span class="role-badge {% if row.role == 'Super Admin' %}super-role{% endif %}">{{ row.role }}</span>
+                    </td>
+                    <td data-label="Status">
+                      <span class="status-badge {% if row.status == 'Active' %}active-status{% else %}inactive-status{% endif %}">
+                        <span></span>
+                        {{ row.status }}
+                      </span>
+                    </td>
+                    <td data-label="Last Login" class="last-login">{{ row.last_login }}</td>
+                    <td data-label="Actions">
+                      <div class="table-actions">
+                        <button class="table-action edit-btn" type="button" data-admin-id="{{ row.user.id }}" aria-label="Edit {{ row.user.username }}" title="Edit">
+                          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 17.25 11.06-11.06 3.75 3.75L6.75 21H3v-3.75ZM19.71 8.04 15.96 4.3l1.33-1.33a1 1 0 0 1 1.42 0l2.33 2.33a1 1 0 0 1 0 1.42l-1.33 1.33Z"></path></svg>
+                        </button>
+                        <button class="table-action view-btn" type="button" data-admin-id="{{ row.user.id }}" aria-label="View {{ row.user.username }}" title="View">
+                          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5Zm0 12.5a5 5 0 1 1 0-10 5 5 0 0 1 0 10Zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"></path></svg>
+                        </button>
+                        {% if row.status == 'Active' %}
+                          <button class="table-action deactivate-btn" type="button" data-admin-id="{{ row.user.id }}" aria-label="Deactivate {{ row.user.username }}" title="Deactivate">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 21q-.82 0-1.41-.59Q5 19.82 5 19V7H4V5h5V4h6v1h5v2h-1v12q0 .82-.59 1.41Q17.82 21 17 21H7Zm2-4h2V9H9v8Zm4 0h2V9h-2v8Z"></path></svg>
+                          </button>
+                        {% else %}
+                          <button class="table-action activate-btn" type="button" data-admin-id="{{ row.user.id }}" aria-label="Activate {{ row.user.username }}" title="Activate">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7-11-7Zm-4 7a8 8 0 1 0 8-8v2a6 6 0 1 1-6 6H4Z"></path></svg>
+                          </button>
+                        {% endif %}
+                        <button class="table-action delete-btn" type="button" data-admin-id="{{ row.user.id }}" aria-label="Delete {{ row.user.username }}" title="Delete">
+                          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm1 7h2v8h-2v-8Zm4 0h2v8h-2v-8ZM6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7Z"></path></svg>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                {% empty %}
+                  <tr>
+                    <td class="empty-state" colspan="7">No admin accounts found for your current filters.</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="pagination-bar" aria-label="Pagination">
+          <span>Showing {{ start_index }} to {{ end_index }} of {{ admin_count|default:"0" }} results</span>
+          <div class="pagination-controls">
+            {% if page_obj.has_previous %}
+              <a href="?q={{ search_query|urlencode }}&department={{ selected_department|urlencode }}&role={{ selected_role|urlencode }}&status={{ selected_status|urlencode }}&sort={{ sort }}&dir={{ dir }}&page={{ page_obj.previous_page_number }}" aria-label="Previous page">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12l4.58-4.59Z"></path></svg>
+              </a>
+            {% endif %}
+            {% for num in page_obj.paginator.page_range %}
+              {% if num >= page_obj.number|add:-2 and num <= page_obj.number|add:2 %}
+                <a class="{% if page_obj.number == num %}active{% endif %}" href="?q={{ search_query|urlencode }}&department={{ selected_department|urlencode }}&role={{ selected_role|urlencode }}&status={{ selected_status|urlencode }}&sort={{ sort }}&dir={{ dir }}&page={{ num }}">{{ num }}</a>
+              {% endif %}
+            {% endfor %}
+            {% if page_obj.has_next %}
+              <a href="?q={{ search_query|urlencode }}&department={{ selected_department|urlencode }}&role={{ selected_role|urlencode }}&status={{ selected_status|urlencode }}&sort={{ sort }}&dir={{ dir }}&page={{ page_obj.next_page_number }}" aria-label="Next page">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.59 16.59 10 18l6-6-6-6-1.41 1.41L13.17 12l-4.58 4.59Z"></path></svg>
+              </a>
+            {% endif %}
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div id="admin-modal" class="admin-modal hidden" aria-hidden="true">
+    <div class="admin-modal-backdrop" data-close-modal="true"></div>
+    <div class="admin-modal-panel" role="dialog" aria-modal="true" aria-labelledby="admin-modal-title">
+      <div class="admin-modal-header">
+        <h3 id="admin-modal-title">Create Admin Account</h3>
+        <button type="button" class="admin-modal-close" data-close-modal="true" aria-label="Close">&times;</button>
+      </div>
+      <p id="admin-modal-subtitle" class="admin-modal-subtitle">Create a new admin account with your selected access level.</p>
+      <form id="admin-modal-form" class="admin-modal-form">
+        {% csrf_token %}
+        <input type="hidden" id="modal-admin-id" value="">
+        <div class="modal-grid">
+          <label>
+            Name
+            <input type="text" id="modal-username" required>
+          </label>
+          <label>
+            Email
+            <input type="email" id="modal-email" required>
+          </label>
+          <label>
+            Password <small>(required for create, optional for edit)</small>
+            <input type="password" id="modal-password">
+          </label>
+        </div>
+        <div class="modal-role-grid">
+          <label>
+            Role
+            <select id="modal-role">
+              <option value="Admin">Admin</option>
+              <option value="Super Admin">Super Admin</option>
+            </select>
+          </label>
+          <label>
+            Type
+            <select id="modal-type">
+              <option value="System">System</option>
+            </select>
+          </label>
+          <label>
+            Department
+            <select id="modal-department">
+              <option value="">Unassigned</option>
+              {% for department in departments %}
+                <option value="{{ department.name }}">{{ department.name }}</option>
+              {% endfor %}
+            </select>
+          </label>
+        </div>
+        <label class="photo-upload">
+          <span>Users Photo</span>
+          <input type="file" id="modal-photo" accept="image/png,image/jpeg,image/jpg">
+          <small>Supported file type: JPG, JPEG, or PNG</small>
+        </label>
+        <label class="status-toggle">
+          <input type="checkbox" id="modal-is-active" checked>
+          <span>Active account</span>
+        </label>
+        <div class="admin-modal-actions">
+          <button type="button" class="secondary-btn" data-close-modal="true">Cancel</button>
+          <button type="submit" class="primary-btn" id="admin-modal-submit">Save Account</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="{% static 'js/admin_actions.js' %}"></script>
+</body>
+</html>

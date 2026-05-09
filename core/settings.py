@@ -10,7 +10,27 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
+import os
 from pathlib import Path
+from decouple import config
+
+
+def config_bool(name, default=False):
+    value = config(name, default=default)
+    if isinstance(value, bool):
+        return value
+
+    normalized_value = str(value).strip().lower()
+    true_values = {'1', 'true', 'yes', 'on'}
+    false_values = {'0', 'false', 'no', 'off', 'release', 'prod', 'production'}
+
+    if normalized_value in true_values:
+        return True
+    if normalized_value in false_values:
+        return False
+
+    return default
+
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -20,12 +40,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-t0fsbsk9yli1jd69u71l7&h9$rs7ir0!6wt521vxa$7!z1_pc*'
+SECRET_KEY = config('SECRET_KEY', default='django-insecure-t0fsbsk9yli1jd69u71l7&h9$rs7ir0!6wt521vxa$7!z1_pc*')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = config_bool('DEBUG', default=True)
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=lambda v: [s.strip() for s in v.split(',')])
 
 
 # Application definition
@@ -75,12 +95,11 @@ WSGI_APPLICATION = 'core.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'eventtabs',
-        'USER': 'event_users',
-        'PASSWORD': 'event_pass',
-        'HOST': '127.0.0.1',
-        'PORT': '5432',
-
+        'NAME': config('DB_NAME', default='eventtabs'),
+        'USER': config('DB_USER', default='event_users'),
+        'PASSWORD': config('DB_PASSWORD', default='event_pass'),
+        'HOST': config('DB_HOST', default='127.0.0.1'),
+        'PORT': config('DB_PORT', default='5432'),
     }
 }
 
@@ -121,3 +140,11 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 STATICFILES_DIRS = [BASE_DIR / 'frontend']
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# Media files (User uploaded content)
+MEDIA_URL = 'media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
+# Default primary key field type
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

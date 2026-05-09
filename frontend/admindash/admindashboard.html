@@ -1,0 +1,120 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Dashboard - EventTab</title>
+  <link rel="stylesheet" href="{% static 'admindash/admindashboard.css' %}?v=20260510a">
+</head>
+<body class="admin-dashboard-page">
+  <div class="dashboard-shell">
+    <aside class="sidebar" aria-label="Admin navigation">
+      <div class="brand">
+        <h1>EventTab</h1>
+        <span>Admin Portal</span>
+      </div>
+
+      <nav class="side-nav">
+        <a class="active" href="{% url 'admin_dashboard' %}" aria-current="page">
+          <span>Dashboard</span>
+        </a>
+        <a href="{% url 'admin_manage_events' %}">Manage Events</a>
+        <a href="{% url 'admin_dashboard' %}">Manage Account</a>
+        <a href="{% url 'admin_dashboard' %}">Departments</a>
+        <a href="{% url 'admin_dashboard' %}">Results</a>
+        <a href="{% url 'admin_dashboard' %}">CV Processing</a>
+        <a href="{% url 'admin_dashboard' %}">Generate Report</a>
+      </nav>
+
+      <a class="logout-link" href="{% url 'logout' %}">Logout</a>
+    </aside>
+
+    <div class="content-area">
+      <header class="topbar">
+        <h2>ADMIN DASHBOARD</h2>
+        <div class="profile-avatar">{{ request.user.username|default:"AD"|slice:":2"|upper }}</div>
+      </header>
+
+      <main class="main-content">
+        <section class="stats-grid" aria-label="Dashboard summary">
+          <article class="stat-card primary">
+            <small>Ongoing Games</small>
+            <strong>{{ ongoing_games|default:"0" }}</strong>
+            <p>Live activity count</p>
+          </article>
+          <article class="stat-card">
+            <small>Total Events</small>
+            <strong>{{ total_events|default:"0" }}</strong>
+            <p>Across all categories</p>
+          </article>
+          <article class="stat-card">
+            <small>Completed</small>
+            <strong>{{ completed_events|default:"0" }}</strong>
+            <p>Ready for reports</p>
+          </article>
+        </section>
+
+        <section class="events-card">
+          <div class="events-header">
+            <h3>Upcoming Events</h3>
+            <form class="event-filters" method="get" role="search">
+              <input type="text" name="q" value="{{ search_query }}" placeholder="Search events">
+              <select name="category" aria-label="Category">
+                <option value="all">All Categories</option>
+                {% for category in categories %}
+                  <option value="{{ category|lower }}" {% if selected_category == category|lower %}selected{% endif %}>{{ category }}</option>
+                {% endfor %}
+              </select>
+              <select name="status" aria-label="Status">
+                <option value="all" {% if selected_status == 'all' %}selected{% endif %}>All Status</option>
+                <option value="active" {% if selected_status == 'active' %}selected{% endif %}>Active</option>
+                <option value="pending" {% if selected_status == 'pending' %}selected{% endif %}>Pending</option>
+                <option value="cancelled" {% if selected_status == 'cancelled' %}selected{% endif %}>Cancelled</option>
+              </select>
+              <button type="submit">Apply</button>
+            </form>
+          </div>
+
+          <div class="table-wrap">
+            <table class="events-table">
+              <thead>
+                <tr>
+                  <th>Event Name</th>
+                  <th>Date & Time</th>
+                  <th>Category</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in event_rows %}
+                  <tr>
+                    <td>
+                      <div class="event-main">
+                        <strong>{{ row.name }}</strong>
+                        <span>{{ row.description }}</span>
+                      </div>
+                    </td>
+                    <td>
+                      <div class="event-time">
+                        <strong>{{ row.date_label }}</strong>
+                        <span>{{ row.time_label }}</span>
+                      </div>
+                    </td>
+                    <td><span class="category-pill">{{ row.category }}</span></td>
+                    <td><span class="status-pill {{ row.status }}">{{ row.status_label }}</span></td>
+                  </tr>
+                {% empty %}
+                  <tr>
+                    <td colspan="4" class="empty-state">No events found for your filters.</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+</body>
+</html>
