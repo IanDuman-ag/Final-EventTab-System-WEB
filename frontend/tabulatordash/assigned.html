@@ -1,0 +1,161 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Assigned Events — EventTab</title>
+  <link rel="stylesheet" href="{% static 'tabulatordash/tabdashboard.css' %}?v=20260514">
+  <link rel="stylesheet" href="{% static 'tabulatordash/assigned.css' %}?v=20260514">
+</head>
+<body class="tabulator-dashboard-page tabulator-assigned-page">
+  <div class="tab-shell">
+    <aside class="tab-sidebar" aria-label="Tabulator navigation">
+      <div class="tab-brand">
+        <h1>EventTab</h1>
+        <span>Tabulator Portal</span>
+      </div>
+
+      <nav class="tab-nav">
+        <a class="tab-nav-link" href="{% url 'tabulator_dashboard' %}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm9 0h7v7h-7v-7Z"></path></svg>
+          <span>Dashboard</span>
+        </a>
+        <a class="tab-nav-link is-active" href="{% url 'tabulator_assigned' %}" aria-current="page">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2Zm0 16H5V10h14v10Zm0-12H5V6h14v2Z"></path></svg>
+          <span>Assigned Events</span>
+        </a>
+        <a class="tab-nav-link" href="{% url 'tabulator_scoresheets' %}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Zm0 16H5V5h14v14zM7 7h10v2H7V7zm0 4h10v2H7v-2zm0 4h7v2H7v-2z"></path></svg>
+          <span>Scoresheets</span>
+        </a>
+      </nav>
+
+      <a class="tab-logout" href="{% url 'logout' %}">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17v-3H3v-4h7V7l5 5-5 5Zm2-14h8v18h-8v-2h6V5h-6V3Z"></path></svg>
+        <span>Logout</span>
+      </a>
+    </aside>
+
+    <div class="tab-main">
+      <header class="tab-topbar">
+        <span class="tab-topbar-spacer" aria-hidden="true"></span>
+        <div class="tab-topbar-actions">
+          <button class="tab-icon-btn" type="button" aria-label="Notifications">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm8-6-2-2v-5a6 6 0 1 0-12 0v5l-2 2v1h16v-1Z"></path></svg>
+          </button>
+          <div class="tab-avatar" aria-label="{{ request.user.username }}">
+            {{ request.user.username|default:"TB"|slice:":2"|upper }}
+          </div>
+        </div>
+      </header>
+
+      <main class="tab-content tab-asg-content">
+        <header class="tab-asg-head">
+          <div class="tab-asg-head-text">
+            <h2 class="tab-page-title tab-asg-title">Assigned Events</h2>
+            <p class="tab-asg-desc">
+              Precision tracking for active competitive streams. Monitor judging progress and verify final scores for your assigned academic tracks.
+            </p>
+          </div>
+          <div class="tab-asg-toolbar">
+            <button type="button" class="tab-asg-toolbtn">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v2H4V6Zm3 5h10v2H7v-2Zm4 5h2v2h-2v-2Z"></path></svg>
+              Advanced Filters
+            </button>
+            <button type="button" class="tab-asg-toolbtn">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v2H4V6Zm3 5h10v2H7v-2Zm4 5h2v2h-2v-2Z"></path></svg>
+              Assigned
+            </button>
+          </div>
+        </header>
+
+        <section class="tab-asg-kpis" aria-label="Assignment summary">
+          {% for stat in assigned_stats %}
+          <article class="tab-asg-kpi tab-asg-kpi--{{ stat.variant }}">
+            <div class="tab-asg-kpi-icon" aria-hidden="true">
+              {% if stat.icon == 'clipboard' %}
+              <svg viewBox="0 0 24 24"><path d="M16 4h-1V2h-2v2H9V2H7v2H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2Zm0 16H6V8h10v12Z"></path></svg>
+              {% elif stat.icon == 'pending' %}
+              <svg viewBox="0 0 24 24"><path d="M16 4h-1V2h-2v2H9V2H7v2H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2Zm-1 10h-2v4h2v-4Zm-1-8a4 4 0 1 1 0 8 4 4 0 0 1 0-8Z"></path></svg>
+              {% elif stat.icon == 'verified' %}
+              <svg viewBox="0 0 24 24"><path d="M12 1 3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4Zm-1 14-4-4 1.41-1.41L11 12.17l4.59-4.58L17 9l-6 6Z"></path></svg>
+              {% else %}
+              <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2Zm1 15h-2v-2h2v2Zm0-4h-2V7h2v6Z"></path></svg>
+              {% endif %}
+            </div>
+            <span class="tab-asg-kpi-label">{{ stat.label }}</span>
+            <strong class="tab-asg-kpi-value">{{ stat.value }}</strong>
+          </article>
+          {% endfor %}
+        </section>
+
+        <section class="tab-asg-table-wrap" aria-label="Assigned events list">
+          <div class="tab-asg-table-scroll">
+            <table class="tab-asg-table">
+              <thead>
+                <tr>
+                  <th scope="col">Event identity</th>
+                  <th scope="col">Category</th>
+                  <th scope="col">Judging panel</th>
+                  <th scope="col">Current status</th>
+                  <th scope="col">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in assigned_rows %}
+                <tr>
+                  <td>
+                    <div class="tab-asg-identity">
+                      <span class="tab-asg-identity-title">{{ row.title }}</span>
+                      <span class="tab-asg-identity-code">{{ row.code }}</span>
+                    </div>
+                  </td>
+                  <td>
+                    <span class="tab-asg-cat">{{ row.category }}</span>
+                  </td>
+                  <td>
+                    <div class="tab-asg-panel">
+                      {% for ini in row.panel_initials %}
+                      <span class="tab-asg-avatar" title="Panel member">{{ ini }}</span>
+                      {% endfor %}
+                      {% if row.panel_meta %}
+                      <span class="tab-asg-panel-meta">{{ row.panel_meta }}</span>
+                      {% endif %}
+                    </div>
+                  </td>
+                  <td>
+                    <span class="tab-asg-status tab-asg-status--{{ row.status }}">
+                      <span class="tab-asg-status-dot" aria-hidden="true"></span>
+                      {{ row.status_label }}
+                    </span>
+                  </td>
+                  <td>
+                    {% if row.action_kind == 'primary' %}
+                    <a class="tab-asg-action tab-asg-action--primary" href="#">{{ row.action_label }}</a>
+                    {% else %}
+                    <a class="tab-asg-action tab-asg-action--link" href="#">{{ row.action_label }}</a>
+                    {% endif %}
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+
+          <footer class="tab-asg-footer">
+            <p class="tab-asg-foot-note">Showing {{ assigned_showing }} of {{ assigned_total }} assigned events</p>
+            <nav class="tab-asg-pager" aria-label="Pagination">
+              <a class="tab-asg-page tab-asg-page--arrow" href="#" aria-label="Previous page">‹</a>
+              {% for n in assigned_page_numbers %}
+              <a class="tab-asg-page{% if n == assigned_page %} is-current{% endif %}" href="#"{% if n == assigned_page %} aria-current="page"{% endif %}>{{ n }}</a>
+              {% endfor %}
+              <a class="tab-asg-page tab-asg-page--arrow" href="#" aria-label="Next page">›</a>
+            </nav>
+          </footer>
+        </section>
+      </main>
+    </div>
+  </div>
+</body>
+</html>

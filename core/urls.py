@@ -36,7 +36,9 @@ from .views import (
     superadmin_admins,
     superadmin_dashboard,
     superadmin_reports,
+    tabulator_assigned_events,
     tabulator_dashboard,
+    tabulator_scoresheets,
     update_assignment_account,
     update_admin,
 )
@@ -45,6 +47,8 @@ urlpatterns = [
     path('', login_view, name='home'),
     path('login/', login_view, name='login'),
     path('tabulator/dashboard/', tabulator_dashboard, name='tabulator_dashboard'),
+    path('tabulator/assigned/', tabulator_assigned_events, name='tabulator_assigned'),
+    path('tabulator/scoresheets/', tabulator_scoresheets, name='tabulator_scoresheets'),
     path('admin/dashboard/', admin_dashboard, name='admin_dashboard'),
     path('admin/departments/', admin_departments, name='admin_departments'),
     path('admin/events/', admin_manage_events, name='admin_manage_events'),

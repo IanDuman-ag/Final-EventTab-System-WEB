@@ -1,4 +1,5 @@
 from django.contrib.auth import authenticate, get_user_model, login, logout
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.admin.models import ADDITION, CHANGE, DELETION, LogEntry
 from django.contrib.auth.models import Group
@@ -7,6 +8,8 @@ from django.db.models import Q
 from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.http import HttpResponse, JsonResponse
+from django.views.decorators.cache import never_cache
+from django.views.decorators.csrf import ensure_csrf_cookie
 from django.contrib.contenttypes.models import ContentType
 import json
 import csv
@@ -207,6 +210,8 @@ def get_department_rows():
     return department_rows
 
 
+@never_cache
+@ensure_csrf_cookie
 def login_view(request):
     context = {'roles': ROLE_CHOICES}
 
@@ -548,6 +553,13 @@ def _event_progress_meta(status_key):
 @login_required
 @user_passes_test(lambda user: user.is_staff, login_url='login')
 def admin_manage_events(request):
+    if request.method == 'POST' and request.POST.get('form_action') == 'create_event':
+        messages.success(
+            request,
+            'Event details received. Persisting events to the database will be enabled when the event model is connected.',
+        )
+        return redirect('admin_manage_events')
+
     status_filter = request.GET.get('status', 'all').strip().lower()
     category_filter = request.GET.get('category', 'all').strip().lower()
     schedule_filter = request.GET.get('schedule', '').strip().lower()
@@ -577,6 +589,9 @@ def admin_manage_events(request):
     upcoming_count = sum(1 for row in event_rows if row['status'] == 'upcoming')
     completed_count = sum(1 for row in event_rows if row['status'] == 'completed')
     category_names = sorted({row['category'] for row in event_rows}) or ['Sports', 'Esports', 'Pageant']
+    department_names = list(Group.objects.order_by('name').values_list('name', flat=True))
+    create_category_options = sorted(set(category_names) | {'Academic', 'Sports', 'Esports', 'Socio-cultural', 'Pageant'})
+    create_division_options = ['College', 'Senior High School', 'Junior High School', 'Elementary']
 
     return render(request, 'admindash/event.html', {
         'event_rows': event_rows[:30],
@@ -584,6 +599,9 @@ def admin_manage_events(request):
         'upcoming_count': upcoming_count,
         'completed_count': completed_count,
         'category_names': category_names,
+        'department_names': department_names,
+        'create_category_options': create_category_options,
+        'create_division_options': create_division_options,
         'selected_category': category_filter,
         'selected_status': status_filter,
         'search_query': search_query,
@@ -737,10 +755,136 @@ def tabulator_dashboard(request):
         'pending_verify_fmt': f'{pending_verify:02d}',
         'completion_rate': completion_rate,
         'next_up_items': [
-            {'code': 'ITS 201', 'tag': 'Academic', 'tag_variant': 'academic', 'title': 'Quiz Bee', 'status_line': ''},
+            {'code': 'ITB 201', 'tag': 'Academic', 'tag_variant': 'academic', 'title': 'Quiz Bee', 'status_line': ''},
             {'code': 'MSC 02', 'tag': 'Esports', 'tag_variant': 'esports', 'title': 'Mobile Legends (Women)', 'status_line': ''},
             {'code': 'CC 1', 'tag': 'Sports', 'tag_variant': 'sports', 'title': '3v3 Basketball (Men)', 'status_line': 'Pending Release'},
         ],
+    })
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda u: user_has_role(u, 'tabulator'), login_url='login')
+def tabulator_assigned_events(request):
+    """Tabulator assigned events list (sample data until event models exist)."""
+    return render(request, 'tabulatordash/assigned.html', {
+        'display_name': _tabulator_display_name(request.user),
+        'assigned_stats': [
+            {'label': 'Total Events', 'value': '24', 'variant': 'blue', 'icon': 'clipboard'},
+            {'label': 'Pending', 'value': '12', 'variant': 'amber', 'icon': 'pending'},
+            {'label': 'Verified', 'value': '08', 'variant': 'green', 'icon': 'verified'},
+            {'label': 'Disputes', 'value': '04', 'variant': 'red', 'icon': 'dispute'},
+        ],
+        'assigned_rows': [
+            {
+                'title': 'Chess',
+                'code': 'CW-2024-001',
+                'category': 'Sports',
+                'panel_initials': ['JD', 'MK', 'LP'],
+                'panel_meta': '+2',
+                'status': 'awaiting',
+                'status_label': 'Awaiting Scores',
+                'action_label': 'TABULATE',
+                'action_kind': 'link',
+            },
+            {
+                'title': 'Modern Dance Competition',
+                'code': 'AM-2024-042',
+                'category': 'Socio-cultural',
+                'panel_initials': ['AR', 'BN'],
+                'panel_meta': '3/3',
+                'status': 'ready',
+                'status_label': 'Ready for Verification',
+                'action_label': 'TABULATE',
+                'action_kind': 'primary',
+            },
+            {
+                'title': 'Singing Competition',
+                'code': 'WH-2024-118',
+                'category': 'Socio-cultural',
+                'panel_initials': ['KC'],
+                'panel_meta': '1/4',
+                'status': 'idle',
+                'status_label': 'Not Started',
+                'action_label': 'TABULATE',
+                'action_kind': 'link',
+            },
+            {
+                'title': 'Essay Writing',
+                'code': 'BS-2024-009',
+                'category': 'Academic',
+                'panel_initials': ['LM', 'PQ', 'RS'],
+                'panel_meta': '',
+                'status': 'done',
+                'status_label': 'Verified',
+                'action_label': 'VIEW REPORT',
+                'action_kind': 'link',
+            },
+        ],
+        'assigned_showing': 4,
+        'assigned_total': 24,
+        'assigned_page': 1,
+        'assigned_page_count': 3,
+        'assigned_page_numbers': [1, 2, 3],
+    })
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda u: user_has_role(u, 'tabulator'), login_url='login')
+def tabulator_scoresheets(request):
+    """Tabulator scoresheet review: verify judge scores, deductions, and totals (sample data)."""
+    return render(request, 'tabulatordash/scoresheets.html', {
+        'display_name': _tabulator_display_name(request.user),
+        'sheet_total_events': 42,
+        'sheet_category_count': 4,
+        'sheet_options': [
+            {'id': 'rq-d1', 'label': 'Regional Qualifiers — Day 1'},
+            {'id': 'rq-d2', 'label': 'Regional Qualifiers — Day 2'},
+            {'id': 'finals', 'label': 'Championship Finals'},
+        ],
+        'sheet_selected_id': 'rq-d1',
+        'sheet_rows': [
+            {
+                'title': 'Table Tennis',
+                'category': 'Sports',
+                'accent': 'amber',
+                'j1': '88.0', 'j2': '90.0', 'j3': '89.0',
+                'raw_avg': '89.00',
+                'deduction': '0.0',
+                'deduction_alert': False,
+                'final': '89.00',
+            },
+            {
+                'title': 'Quiz Bee',
+                'category': 'Academic',
+                'accent': 'blue',
+                'j1': '91.0', 'j2': '93.5', 'j3': '92.0',
+                'raw_avg': '92.17',
+                'deduction': '0.5',
+                'deduction_alert': True,
+                'final': '91.67',
+            },
+            {
+                'title': 'Spelling Bee',
+                'category': 'Academic',
+                'accent': 'slate',
+                'j1': '95.0', 'j2': '94.0', 'j3': '96.0',
+                'raw_avg': '95.00',
+                'deduction': '0.0',
+                'deduction_alert': False,
+                'final': '95.00',
+            },
+            {
+                'title': 'Modern Dance',
+                'category': 'Socio-cultural',
+                'accent': 'rose',
+                'j1': '87.5', 'j2': '88.0', 'j3': '87.0',
+                'raw_avg': '87.50',
+                'deduction': '1.0',
+                'deduction_alert': True,
+                'final': '86.50',
+            },
+        ],
+        'last_computed': 'Today at 14:32:05',
     })
 
 

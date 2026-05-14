@@ -1,0 +1,141 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scoresheets — EventTab</title>
+  <link rel="stylesheet" href="{% static 'tabulatordash/tabdashboard.css' %}?v=20260514">
+  <link rel="stylesheet" href="{% static 'tabulatordash/scoresheets.css' %}?v=20260514">
+</head>
+<body class="tabulator-dashboard-page tabulator-scoresheets-page">
+  <div class="tab-shell">
+    <aside class="tab-sidebar" aria-label="Tabulator navigation">
+      <div class="tab-brand">
+        <h1>EventTab</h1>
+        <span>Tabulator Portal</span>
+      </div>
+
+      <nav class="tab-nav">
+        <a class="tab-nav-link" href="{% url 'tabulator_dashboard' %}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm9 0h7v7h-7v-7Z"></path></svg>
+          <span>Dashboard</span>
+        </a>
+        <a class="tab-nav-link" href="{% url 'tabulator_assigned' %}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2Zm0 16H5V10h14v10Zm0-12H5V6h14v2Z"></path></svg>
+          <span>Assigned Events</span>
+        </a>
+        <a class="tab-nav-link is-active" href="{% url 'tabulator_scoresheets' %}" aria-current="page">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Zm0 16H5V5h14v14zM7 7h10v2H7V7zm0 4h10v2H7v-2zm0 4h7v2H7v-2z"></path></svg>
+          <span>Scoresheets</span>
+        </a>
+      </nav>
+
+      <a class="tab-logout" href="{% url 'logout' %}">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17v-3H3v-4h7V7l5 5-5 5Zm2-14h8v18h-8v-2h6V5h-6V3Z"></path></svg>
+        <span>Logout</span>
+      </a>
+    </aside>
+
+    <div class="tab-main">
+      <header class="tab-topbar">
+        <span class="tab-topbar-spacer" aria-hidden="true"></span>
+        <div class="tab-topbar-actions">
+          <button class="tab-icon-btn" type="button" aria-label="Notifications">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm8-6-2-2v-5a6 6 0 1 0-12 0v5l-2 2v1h16v-1Z"></path></svg>
+          </button>
+          <div class="tab-avatar" aria-label="{{ request.user.username }}">
+            {{ request.user.username|default:"TB"|slice:":2"|upper }}
+          </div>
+        </div>
+      </header>
+
+      <main class="tab-content tab-ss-content">
+        <div class="tab-ss-actions-row">
+          <button type="button" class="tab-ss-submit" aria-label="Submit scores to admin">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 21 23 12 2 3v7l15 2-15 2v7Z"></path></svg>
+            Submit to Admin
+          </button>
+        </div>
+        <header class="tab-ss-intro">
+          <h2 class="tab-page-title tab-ss-title">Scoresheets</h2>
+          <p class="tab-ss-lede">
+            Review and verify submitted scores, spot inconsistencies, edit sheets when needed, and finalize totals before approval.
+          </p>
+        </header>
+
+        <section class="tab-ss-summary" aria-label="Scoresheet scope">
+          <div class="tab-ss-stat">
+            <span class="tab-ss-stat-label">Total events</span>
+            <strong class="tab-ss-stat-value">{{ sheet_total_events }}</strong>
+          </div>
+          <div class="tab-ss-stat">
+            <span class="tab-ss-stat-label">Category</span>
+            <strong class="tab-ss-stat-value">{{ sheet_category_count }}</strong>
+          </div>
+          <div class="tab-ss-select-wrap">
+            <label class="visually-hidden" for="scoresheet-select">Select scoresheet</label>
+            <select id="scoresheet-select" class="tab-ss-select" name="scoresheet">
+              {% for opt in sheet_options %}
+              <option value="{{ opt.id }}"{% if opt.id == sheet_selected_id %} selected{% endif %}>{{ opt.label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </section>
+
+        <div class="tab-ss-table-card">
+          <div class="tab-ss-table-scroll">
+            <table class="tab-ss-table">
+              <thead>
+                <tr>
+                  <th scope="col">Events</th>
+                  <th scope="col">Judge 01</th>
+                  <th scope="col">Judge 02</th>
+                  <th scope="col">Judge 03</th>
+                  <th scope="col">Raw avg</th>
+                  <th scope="col">Deductions</th>
+                  <th scope="col">Final score</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in sheet_rows %}
+                <tr>
+                  <td>
+                    <div class="tab-ss-event tab-ss-event--{{ row.accent }}">
+                      <div class="tab-ss-event-text">
+                        <span class="tab-ss-event-title">{{ row.title }}</span>
+                        <span class="tab-ss-event-cat">{{ row.category|upper }}</span>
+                      </div>
+                    </div>
+                  </td>
+                  <td><span class="tab-ss-score">{{ row.j1 }}</span></td>
+                  <td><span class="tab-ss-score">{{ row.j2 }}</span></td>
+                  <td><span class="tab-ss-score">{{ row.j3 }}</span></td>
+                  <td><span class="tab-ss-score">{{ row.raw_avg }}</span></td>
+                  <td>
+                    <span class="tab-ss-deduction{% if row.deduction_alert %} is-alert{% endif %}">{{ row.deduction }}</span>
+                  </td>
+                  <td><strong class="tab-ss-final">{{ row.final }}</strong></td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+
+          <footer class="tab-ss-footer">
+            <button type="button" class="tab-ss-footbtn tab-ss-footbtn--deduct">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 4 6v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V6l-8-4Zm-1 5v6h2V7h-2Zm0 8v2h2v-2h-2Z"></path></svg>
+              Apply deductions
+            </button>
+            <button type="button" class="tab-ss-footbtn tab-ss-footbtn--correct">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Zm4 18H6V4h7v5h5v11Zm-2-6H8v-2h8v2Zm0 4H8v-2h8v2Zm-8-8V7h2v3h2V7h2v3h2V7h2v5H8Z"></path></svg>
+              Correction
+            </button>
+            <span class="tab-ss-computed" aria-live="polite">Last computed: {{ last_computed }}</span>
+          </footer>
+        </div>
+      </main>
+    </div>
+  </div>
+</body>
+</html>

@@ -24,7 +24,7 @@
         <p class="login-message login-success">{{ success }}</p>
       {% endif %}
 
-      <form class="login-form" action="{% url 'login' %}" method="post">
+      <form class="login-form" method="post" action="">
         {% csrf_token %}
         <div class="login-field">
           <label for="email">Email</label>

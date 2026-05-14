@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Manage Events - EventTab</title>
-  <link rel="stylesheet" href="{% static 'admindash/event.css' %}?v=20260511b">
+  <link rel="stylesheet" href="{% static 'admindash/event.css' %}?v=20260514c">
 </head>
 <body class="admin-dashboard-page manage-events-page">
   <div class="dashboard-shell">
@@ -68,6 +68,14 @@
       </header>
 
       <main class="main-content events-main">
+        {% if messages %}
+        <ul class="events-flash" role="status">
+          {% for message in messages %}
+          <li class="events-flash-item {% if message.tags %}{{ message.tags }}{% endif %}">{{ message }}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+
         <section class="title-band">
           <h3>MANAGE EVENTS</h3>
         </section>
@@ -120,7 +128,7 @@
                   <button type="submit">Apply</button>
                 </form>
               </details>
-              <a href="?status=all&category=all" class="add-event-btn">+ Add Event</a>
+              <button type="button" class="add-event-btn" id="open-create-event">Create Event</button>
             </div>
           </div>
 
@@ -172,5 +180,113 @@
       </main>
     </div>
   </div>
+
+  <dialog id="create-event-dialog" class="create-event-dialog" aria-labelledby="create-event-title">
+    <form class="create-event-form" method="post" action="{% url 'admin_manage_events' %}">
+      {% csrf_token %}
+      <input type="hidden" name="form_action" value="create_event">
+      <header class="create-event-dialog-head">
+        <h2 id="create-event-title">Create event</h2>
+        <button type="button" class="create-event-close" id="close-create-event" aria-label="Close dialog">×</button>
+      </header>
+      <div class="create-event-grid">
+        <label class="create-event-field">
+          <span class="create-event-label">Event Name</span>
+          <input type="text" name="event_name" required maxlength="200" placeholder="e.g. Inter-college Debate 2026" autocomplete="off">
+        </label>
+        <label class="create-event-field">
+          <span class="create-event-label">Category</span>
+          <select name="category" required>
+            <option value="" disabled selected>Select category</option>
+            {% for cat in create_category_options %}
+            <option value="{{ cat }}">{{ cat }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="create-event-field">
+          <span class="create-event-label">Division</span>
+          <select name="division" required>
+            <option value="" disabled selected>Select division</option>
+            {% for div in create_division_options %}
+            <option value="{{ div }}">{{ div }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="create-event-field">
+          <span class="create-event-label">Department</span>
+          <select name="department">
+            <option value="">Select department</option>
+            {% for dept in department_names %}
+            <option value="{{ dept }}">{{ dept }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="create-event-field">
+          <span class="create-event-label">Maximum Participants</span>
+          <input type="number" name="max_participants" min="1" max="99999" placeholder="e.g. 120" required>
+        </label>
+        <label class="create-event-field">
+          <span class="create-event-label">Number of Teams/Groups</span>
+          <input type="number" name="num_teams" min="1" max="9999" placeholder="e.g. 16" required>
+        </label>
+        <label class="create-event-field">
+          <span class="create-event-label">Faculty In-Charge</span>
+          <input type="text" name="faculty_in_charge" maxlength="150" placeholder="Full name" required>
+        </label>
+        <label class="create-event-field">
+          <span class="create-event-label">Student In-Charge</span>
+          <input type="text" name="student_in_charge" maxlength="150" placeholder="Full name" required>
+        </label>
+        <label class="create-event-field">
+          <span class="create-event-label">Date</span>
+          <input type="date" name="event_date" required>
+        </label>
+        <label class="create-event-field">
+          <span class="create-event-label">Time</span>
+          <input type="time" name="event_time" required>
+        </label>
+        <label class="create-event-field create-event-field--full">
+          <span class="create-event-label">Venue</span>
+          <input type="text" name="venue" maxlength="200" placeholder="Building, room, or court" required>
+        </label>
+        <label class="create-event-field create-event-field--full">
+          <span class="create-event-label">Mechanics/Rules</span>
+          <textarea name="mechanics" rows="4" maxlength="8000" placeholder="Eligibility, rounds, equipment, conduct…" required></textarea>
+        </label>
+        <label class="create-event-field create-event-field--full">
+          <span class="create-event-label">Scoring Criteria</span>
+          <textarea name="scoring_criteria" rows="4" maxlength="8000" placeholder="How judges score and weighting…" required></textarea>
+        </label>
+      </div>
+      <footer class="create-event-actions">
+        <button type="button" class="create-event-cancel" id="cancel-create-event">Cancel</button>
+        <button type="submit" class="create-event-submit">Create event</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <script>
+    (function () {
+      var dialog = document.getElementById('create-event-dialog');
+      var openBtn = document.getElementById('open-create-event');
+      var closeBtn = document.getElementById('close-create-event');
+      var cancelBtn = document.getElementById('cancel-create-event');
+      if (!dialog || !openBtn) return;
+      function openDialog() {
+        if (typeof dialog.showModal === 'function') dialog.showModal();
+        else dialog.setAttribute('open', '');
+      }
+      function closeDialog() {
+        if (typeof dialog.close === 'function') dialog.close();
+        else dialog.removeAttribute('open');
+      }
+      openBtn.addEventListener('click', openDialog);
+      if (closeBtn) closeBtn.addEventListener('click', closeDialog);
+      if (cancelBtn) cancelBtn.addEventListener('click', closeDialog);
+      dialog.addEventListener('click', function (e) {
+        if (e.target === dialog) closeDialog();
+      });
+    })();
+  </script>
 </body>
 </html>
