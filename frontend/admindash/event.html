@@ -69,7 +69,7 @@
 
       <main class="main-content events-main">
         {% if messages %}
-        <ul class="events-flash" role="status">
+        <ul class="events-flash" role="list" aria-live="polite" aria-label="Status messages">
           {% for message in messages %}
           <li class="events-flash-item {% if message.tags %}{{ message.tags }}{% endif %}">{{ message }}</li>
           {% endfor %}
@@ -162,15 +162,21 @@
                     <td>{{ row.venue }}</td>
                     <td>
                       <div class="action-buttons">
-                        <a href="#" title="View">👁</a>
-                        <a href="#" title="Edit">✎</a>
-                        <a href="#" title="Delete" class="danger">🗑</a>
+                        <button type="button" class="btn-view-event" data-id="{{ row.id }}" title="View" aria-label="View {{ row.name }}">
+                          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5ZM12 17a5 5 0 1 1 0-10 5 5 0 0 1 0 10Zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"></path></svg>
+                        </button>
+                        <button type="button" class="btn-edit-event" data-id="{{ row.id }}" title="Edit" aria-label="Edit {{ row.name }}">
+                          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 17.25 11.06-11.06 3.75 3.75L6.75 21H3v-3.75ZM19.71 8.04 15.96 4.3l1.33-1.33a1 1 0 0 1 1.42 0l2.33 2.33a1 1 0 0 1 0 1.42l-1.33 1.33Z"></path></svg>
+                        </button>
+                        <button type="button" class="btn-delete-event danger" data-id="{{ row.id }}" title="Delete" aria-label="Delete {{ row.name }}">
+                          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm1 7h2v8h-2v-8Zm4 0h2v8h-2v-8ZM6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7Z"></path></svg>
+                        </button>
                       </div>
                     </td>
                   </tr>
                 {% empty %}
                   <tr>
-                    <td colspan="5" class="empty-state">No events found with your current filters.</td>
+                    <td colspan="5" class="empty-state">No events yet. Click "Create Event" to add one.</td>
                   </tr>
                 {% endfor %}
               </tbody>
@@ -265,28 +271,310 @@
     </form>
   </dialog>
 
+  <!-- ── View Details Dialog ─────────────────────────────────────── -->
+  <dialog id="view-event-dialog" class="create-event-dialog" aria-labelledby="view-event-title">
+    <div class="create-event-form">
+      <header class="create-event-dialog-head">
+        <h2 id="view-event-title">Event Details</h2>
+        <button type="button" class="create-event-close" id="close-view-event" aria-label="Close dialog">×</button>
+      </header>
+      <div class="create-event-grid view-event-grid">
+        <div class="view-field">
+          <span class="create-event-label">Event Name</span>
+          <p id="vd-name"></p>
+        </div>
+        <div class="view-field">
+          <span class="create-event-label">Category</span>
+          <p id="vd-category"></p>
+        </div>
+        <div class="view-field">
+          <span class="create-event-label">Division</span>
+          <p id="vd-division"></p>
+        </div>
+        <div class="view-field">
+          <span class="create-event-label">Department</span>
+          <p id="vd-department"></p>
+        </div>
+        <div class="view-field">
+          <span class="create-event-label">Date</span>
+          <p id="vd-date"></p>
+        </div>
+        <div class="view-field">
+          <span class="create-event-label">Time</span>
+          <p id="vd-time"></p>
+        </div>
+        <div class="view-field">
+          <span class="create-event-label">Venue</span>
+          <p id="vd-venue"></p>
+        </div>
+        <div class="view-field">
+          <span class="create-event-label">Status</span>
+          <p id="vd-status"></p>
+        </div>
+        <div class="view-field">
+          <span class="create-event-label">Max Participants</span>
+          <p id="vd-max-participants"></p>
+        </div>
+        <div class="view-field">
+          <span class="create-event-label">Teams / Groups</span>
+          <p id="vd-num-teams"></p>
+        </div>
+        <div class="view-field view-field--full">
+          <span class="create-event-label">Faculty In-Charge</span>
+          <p id="vd-faculty"></p>
+        </div>
+        <div class="view-field view-field--full">
+          <span class="create-event-label">Student In-Charge</span>
+          <p id="vd-student"></p>
+        </div>
+        <div class="view-field view-field--full">
+          <span class="create-event-label">Mechanics / Rules</span>
+          <p id="vd-mechanics"></p>
+        </div>
+        <div class="view-field view-field--full">
+          <span class="create-event-label">Scoring Criteria</span>
+          <p id="vd-scoring"></p>
+        </div>
+      </div>
+      <footer class="create-event-actions">
+        <button type="button" class="create-event-cancel" id="cancel-view-event">Close</button>
+      </footer>
+    </div>
+  </dialog>
+
+  <!-- ── Edit Event Dialog ────────────────────────────────────────── -->
+  <dialog id="edit-event-dialog" class="create-event-dialog" aria-labelledby="edit-event-title">
+    <form class="create-event-form" method="post" id="edit-event-form">
+      {% csrf_token %}
+      <input type="hidden" name="form_action" value="edit_event">
+      <header class="create-event-dialog-head">
+        <h2 id="edit-event-title">Edit Event</h2>
+        <button type="button" class="create-event-close" id="close-edit-event" aria-label="Close dialog">×</button>
+      </header>
+      <div class="create-event-grid">
+        <label class="create-event-field">
+          <span class="create-event-label">Event Name</span>
+          <input type="text" name="event_name" id="edit-event-name" required maxlength="200" autocomplete="off">
+        </label>
+        <label class="create-event-field">
+          <span class="create-event-label">Category</span>
+          <select name="category" id="edit-category" required>
+            <option value="" disabled>Select category</option>
+            {% for cat in create_category_options %}
+            <option value="{{ cat }}">{{ cat }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="create-event-field">
+          <span class="create-event-label">Division</span>
+          <select name="division" id="edit-division" required>
+            <option value="" disabled>Select division</option>
+            {% for div in create_division_options %}
+            <option value="{{ div }}">{{ div }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="create-event-field">
+          <span class="create-event-label">Department</span>
+          <select name="department" id="edit-department">
+            <option value="">Select department</option>
+            {% for dept in department_names %}
+            <option value="{{ dept }}">{{ dept }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="create-event-field">
+          <span class="create-event-label">Maximum Participants</span>
+          <input type="number" name="max_participants" id="edit-max-participants" min="1" max="99999">
+        </label>
+        <label class="create-event-field">
+          <span class="create-event-label">Number of Teams/Groups</span>
+          <input type="number" name="num_teams" id="edit-num-teams" min="1" max="9999">
+        </label>
+        <label class="create-event-field">
+          <span class="create-event-label">Faculty In-Charge</span>
+          <input type="text" name="faculty_in_charge" id="edit-faculty" maxlength="150">
+        </label>
+        <label class="create-event-field">
+          <span class="create-event-label">Student In-Charge</span>
+          <input type="text" name="student_in_charge" id="edit-student" maxlength="150">
+        </label>
+        <label class="create-event-field">
+          <span class="create-event-label">Date</span>
+          <input type="date" name="event_date" id="edit-event-date" required>
+        </label>
+        <label class="create-event-field">
+          <span class="create-event-label">Time</span>
+          <input type="time" name="event_time" id="edit-event-time">
+        </label>
+        <label class="create-event-field create-event-field--full">
+          <span class="create-event-label">Venue</span>
+          <input type="text" name="venue" id="edit-venue" maxlength="200" required>
+        </label>
+        <label class="create-event-field create-event-field--full">
+          <span class="create-event-label">Mechanics/Rules</span>
+          <textarea name="mechanics" id="edit-mechanics" rows="4" maxlength="8000"></textarea>
+        </label>
+        <label class="create-event-field create-event-field--full">
+          <span class="create-event-label">Scoring Criteria</span>
+          <textarea name="scoring_criteria" id="edit-scoring-criteria" rows="4" maxlength="8000"></textarea>
+        </label>
+      </div>
+      <footer class="create-event-actions">
+        <button type="button" class="create-event-cancel" id="cancel-edit-event">Cancel</button>
+        <button type="submit" class="create-event-submit">Save Changes</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- ── Delete Confirmation Dialog ──────────────────────────────── -->
+  <dialog id="delete-event-dialog" class="delete-confirm-dialog" aria-labelledby="delete-event-title">
+    <div class="delete-confirm-inner">
+      <div class="delete-confirm-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm1 7h2v8h-2v-8Zm4 0h2v8h-2v-8ZM6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7Z"></path></svg>
+      </div>
+      <h2 id="delete-event-title">Delete Event?</h2>
+      <p>You are about to delete <strong id="delete-event-name"></strong>. This cannot be undone.</p>
+      <form method="post" id="delete-event-form">
+        {% csrf_token %}
+        <input type="hidden" name="form_action" value="delete_event">
+        <div class="delete-confirm-actions">
+          <button type="button" class="create-event-cancel" id="cancel-delete-event">Cancel</button>
+          <button type="submit" class="delete-confirm-btn">Delete</button>
+        </div>
+      </form>
+    </div>
+  </dialog>
+
   <script>
-    (function () {
-      var dialog = document.getElementById('create-event-dialog');
-      var openBtn = document.getElementById('open-create-event');
-      var closeBtn = document.getElementById('close-create-event');
-      var cancelBtn = document.getElementById('cancel-create-event');
-      if (!dialog || !openBtn) return;
-      function openDialog() {
-        if (typeof dialog.showModal === 'function') dialog.showModal();
-        else dialog.setAttribute('open', '');
+  (function () {
+    /* ── Helpers ─────────────────────────────────────────────────── */
+    function openDialog(dlg) {
+      if (typeof dlg.showModal === 'function') dlg.showModal();
+      else dlg.setAttribute('open', '');
+    }
+    function closeDialog(dlg) {
+      if (typeof dlg.close === 'function') dlg.close();
+      else dlg.removeAttribute('open');
+    }
+    function setSelectValue(sel, val) {
+      for (var i = 0; i < sel.options.length; i++) {
+        if (sel.options[i].value === val) { sel.selectedIndex = i; return; }
       }
-      function closeDialog() {
-        if (typeof dialog.close === 'function') dialog.close();
-        else dialog.removeAttribute('open');
-      }
-      openBtn.addEventListener('click', openDialog);
-      if (closeBtn) closeBtn.addEventListener('click', closeDialog);
-      if (cancelBtn) cancelBtn.addEventListener('click', closeDialog);
-      dialog.addEventListener('click', function (e) {
-        if (e.target === dialog) closeDialog();
+      // value not in list — add a temporary option
+      var opt = document.createElement('option');
+      opt.value = val; opt.textContent = val;
+      sel.appendChild(opt);
+      sel.value = val;
+    }
+
+    /* ── Event data embedded from Django template ────────────────── */
+    var EVENT_DATA = {};
+    {% for row in event_rows %}
+    EVENT_DATA[{{ row.id }}] = {
+      id: {{ row.id }},
+      name: "{{ row.name|escapejs }}",
+      category: "{{ row.category|escapejs }}",
+      division: "{{ row.division|escapejs }}",
+      department: "{{ row.department|escapejs }}",
+      schedule_label: "{{ row.schedule_label|escapejs }}",
+      event_date: "{{ row.event_date|escapejs }}",
+      event_time: "{{ row.event_time|escapejs }}",
+      venue: "{{ row.venue|escapejs }}",
+      status: "{{ row.status|escapejs }}",
+      max_participants: "{{ row.max_participants|escapejs }}",
+      num_teams: "{{ row.num_teams|escapejs }}",
+      faculty_in_charge: "{{ row.faculty_in_charge|escapejs }}",
+      student_in_charge: "{{ row.student_in_charge|escapejs }}",
+      mechanics: "{{ row.mechanics|escapejs }}",
+      scoring_criteria: "{{ row.scoring_criteria|escapejs }}"
+    };
+    {% endfor %}
+
+    /* ── Create dialog ───────────────────────────────────────────── */
+    var createDlg  = document.getElementById('create-event-dialog');
+    var openCreate = document.getElementById('open-create-event');
+    if (createDlg && openCreate) {
+      openCreate.addEventListener('click', function () { openDialog(createDlg); });
+      document.getElementById('close-create-event').addEventListener('click', function () { closeDialog(createDlg); });
+      document.getElementById('cancel-create-event').addEventListener('click', function () { closeDialog(createDlg); });
+      createDlg.addEventListener('click', function (e) { if (e.target === createDlg) closeDialog(createDlg); });
+    }
+
+    /* ── View dialog ─────────────────────────────────────────────── */
+    var viewDlg = document.getElementById('view-event-dialog');
+    document.getElementById('close-view-event').addEventListener('click', function () { closeDialog(viewDlg); });
+    document.getElementById('cancel-view-event').addEventListener('click', function () { closeDialog(viewDlg); });
+    viewDlg.addEventListener('click', function (e) { if (e.target === viewDlg) closeDialog(viewDlg); });
+
+    document.querySelectorAll('.btn-view-event').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var ev = EVENT_DATA[parseInt(btn.dataset.id, 10)];
+        if (!ev) return;
+        document.getElementById('vd-name').textContent          = ev.name || '—';
+        document.getElementById('vd-category').textContent      = ev.category || '—';
+        document.getElementById('vd-division').textContent      = ev.division || '—';
+        document.getElementById('vd-department').textContent    = ev.department || '—';
+        document.getElementById('vd-date').textContent          = ev.schedule_label || '—';
+        document.getElementById('vd-time').textContent          = ev.event_time || '—';
+        document.getElementById('vd-venue').textContent         = ev.venue || '—';
+        document.getElementById('vd-status').textContent        = ev.status === 'active' ? 'Active (Judging)' : ev.status === 'upcoming' ? 'Setup / Upcoming' : 'Completed';
+        document.getElementById('vd-max-participants').textContent = ev.max_participants || '—';
+        document.getElementById('vd-num-teams').textContent     = ev.num_teams || '—';
+        document.getElementById('vd-faculty').textContent       = ev.faculty_in_charge || '—';
+        document.getElementById('vd-student').textContent       = ev.student_in_charge || '—';
+        document.getElementById('vd-mechanics').textContent     = ev.mechanics || '—';
+        document.getElementById('vd-scoring').textContent       = ev.scoring_criteria || '—';
+        openDialog(viewDlg);
       });
-    })();
+    });
+
+    /* ── Edit dialog ─────────────────────────────────────────────── */
+    var editDlg  = document.getElementById('edit-event-dialog');
+    var editForm = document.getElementById('edit-event-form');
+    document.getElementById('close-edit-event').addEventListener('click', function () { closeDialog(editDlg); });
+    document.getElementById('cancel-edit-event').addEventListener('click', function () { closeDialog(editDlg); });
+    editDlg.addEventListener('click', function (e) { if (e.target === editDlg) closeDialog(editDlg); });
+
+    document.querySelectorAll('.btn-edit-event').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var ev = EVENT_DATA[parseInt(btn.dataset.id, 10)];
+        if (!ev) return;
+        // Set form action to the edit URL for this event
+        editForm.action = '/admin/events/' + ev.id + '/edit/';
+        document.getElementById('edit-event-name').value        = ev.name || '';
+        setSelectValue(document.getElementById('edit-category'), ev.category);
+        setSelectValue(document.getElementById('edit-division'), ev.division);
+        setSelectValue(document.getElementById('edit-department'), ev.department);
+        document.getElementById('edit-max-participants').value  = ev.max_participants || '';
+        document.getElementById('edit-num-teams').value         = ev.num_teams || '';
+        document.getElementById('edit-faculty').value           = ev.faculty_in_charge || '';
+        document.getElementById('edit-student').value           = ev.student_in_charge || '';
+        document.getElementById('edit-event-date').value        = ev.event_date || '';
+        document.getElementById('edit-event-time').value        = ev.event_time || '';
+        document.getElementById('edit-venue').value             = ev.venue || '';
+        document.getElementById('edit-mechanics').value         = ev.mechanics || '';
+        document.getElementById('edit-scoring-criteria').value  = ev.scoring_criteria || '';
+        openDialog(editDlg);
+      });
+    });
+
+    /* ── Delete dialog ───────────────────────────────────────────── */
+    var deleteDlg  = document.getElementById('delete-event-dialog');
+    var deleteForm = document.getElementById('delete-event-form');
+    document.getElementById('cancel-delete-event').addEventListener('click', function () { closeDialog(deleteDlg); });
+    deleteDlg.addEventListener('click', function (e) { if (e.target === deleteDlg) closeDialog(deleteDlg); });
+
+    document.querySelectorAll('.btn-delete-event').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var ev = EVENT_DATA[parseInt(btn.dataset.id, 10)];
+        if (!ev) return;
+        document.getElementById('delete-event-name').textContent = ev.name;
+        deleteForm.action = '/admin/events/' + ev.id + '/delete/';
+        openDialog(deleteDlg);
+      });
+    });
+  }());
   </script>
 </body>
 </html>

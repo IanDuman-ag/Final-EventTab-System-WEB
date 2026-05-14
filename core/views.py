@@ -13,7 +13,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.contrib.contenttypes.models import ContentType
 import json
 import csv
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 
 ROLE_CHOICES = {
@@ -474,55 +474,13 @@ def delete_assignment_account(request, account_id):
         return JsonResponse({'success': False, 'message': str(e)}, status=500)
 
 
-def get_admin_event_activity_rows(limit=80):
+def get_session_events(request):
     """
-    Build synthetic event rows from admin LogEntry activity.
-    Placeholder until a dedicated Event model exists (see SYSTEM_FLOW.md).
+    Return the list of events stored in the session.
+    Each event is a plain dict saved when the admin submits the Create Event form.
+    This is a session-based placeholder until a dedicated Event model is connected.
     """
-    logs = LogEntry.objects.select_related('user').order_by('-action_time')[:limit]
-    status_map = {
-        ADDITION: 'active',
-        CHANGE: 'upcoming',
-        DELETION: 'completed',
-    }
-    category_map = {
-        ADDITION: 'Sports',
-        CHANGE: 'Esports',
-        DELETION: 'Pageant',
-    }
-    venue_map = {
-        ADDITION: 'Covered Court',
-        CHANGE: 'Smart Room',
-        DELETION: 'Main Auditorium',
-    }
-
-    event_rows = []
-    now = timezone.now()
-    for entry in logs:
-        event_name = entry.object_repr or 'Event'
-        category = category_map.get(entry.action_flag, 'General')
-        status = status_map.get(entry.action_flag, 'active')
-        venue = venue_map.get(entry.action_flag, 'Main Hall')
-        local_time = timezone.localtime(entry.action_time)
-        delta = now - entry.action_time
-        if delta.days:
-            relative_updated = f'{delta.days}d ago'
-        else:
-            minutes = delta.seconds // 60
-            relative_updated = f'{minutes}m ago' if minutes else 'Just now'
-
-        event_rows.append({
-            'id': entry.id,
-            'name': event_name[:42],
-            'category': category,
-            'schedule': local_time,
-            'schedule_label': local_time.strftime('%B %d, %Y'),
-            'venue': venue,
-            'status': status,
-            'actor': entry.user.username if entry.user else 'System',
-            'relative_updated': relative_updated,
-        })
-    return event_rows
+    return request.session.get('admin_events', [])
 
 
 def _event_progress_meta(status_key):
@@ -554,10 +512,58 @@ def _event_progress_meta(status_key):
 @user_passes_test(lambda user: user.is_staff, login_url='login')
 def admin_manage_events(request):
     if request.method == 'POST' and request.POST.get('form_action') == 'create_event':
-        messages.success(
-            request,
-            'Event details received. Persisting events to the database will be enabled when the event model is connected.',
-        )
+        # Build a plain event dict from the submitted form and store it in the session.
+        # This is a session-based placeholder until a dedicated Event model is connected.
+        event_name = request.POST.get('event_name', '').strip()
+        category = request.POST.get('category', '').strip()
+        division = request.POST.get('division', '').strip()
+        department = request.POST.get('department', '').strip()
+        event_date = request.POST.get('event_date', '').strip()
+        event_time = request.POST.get('event_time', '').strip()
+        venue = request.POST.get('venue', '').strip()
+        faculty_in_charge = request.POST.get('faculty_in_charge', '').strip()
+        student_in_charge = request.POST.get('student_in_charge', '').strip()
+        max_participants = request.POST.get('max_participants', '').strip()
+        num_teams = request.POST.get('num_teams', '').strip()
+        mechanics = request.POST.get('mechanics', '').strip()
+        scoring_criteria = request.POST.get('scoring_criteria', '').strip()
+
+        if not event_name or not category or not event_date or not venue:
+            messages.error(request, 'Event name, category, date, and venue are required.')
+            return redirect('admin_manage_events')
+
+        # Format the schedule label for display
+        try:
+            dt = datetime.strptime(event_date, '%Y-%m-%d')
+            schedule_label = dt.strftime('%B %d, %Y')
+        except ValueError:
+            schedule_label = event_date
+
+        # Append to the session event list
+        events = request.session.get('admin_events', [])
+        new_event = {
+            'id': len(events) + 1,
+            'name': event_name[:80],
+            'category': category,
+            'division': division,
+            'department': department,
+            'schedule_label': schedule_label,
+            'event_date': event_date,
+            'event_time': event_time,
+            'venue': venue,
+            'faculty_in_charge': faculty_in_charge,
+            'student_in_charge': student_in_charge,
+            'max_participants': max_participants,
+            'num_teams': num_teams,
+            'mechanics': mechanics,
+            'scoring_criteria': scoring_criteria,
+            'status': 'upcoming',
+        }
+        events.insert(0, new_event)
+        request.session['admin_events'] = events
+        request.session.modified = True
+
+        messages.success(request, f'Event "{event_name}" created successfully.')
         return redirect('admin_manage_events')
 
     status_filter = request.GET.get('status', 'all').strip().lower()
@@ -565,7 +571,7 @@ def admin_manage_events(request):
     schedule_filter = request.GET.get('schedule', '').strip().lower()
     search_query = request.GET.get('q', '').strip()
 
-    event_rows = get_admin_event_activity_rows()
+    event_rows = get_session_events(request)
 
     if search_query:
         q_lower = search_query.lower()
@@ -588,7 +594,9 @@ def admin_manage_events(request):
     active_count = sum(1 for row in event_rows if row['status'] == 'active')
     upcoming_count = sum(1 for row in event_rows if row['status'] == 'upcoming')
     completed_count = sum(1 for row in event_rows if row['status'] == 'completed')
-    category_names = sorted({row['category'] for row in event_rows}) or ['Sports', 'Esports', 'Pageant']
+
+    all_events = get_session_events(request)
+    category_names = sorted({row['category'] for row in all_events}) or ['Sports', 'Esports', 'Pageant']
     department_names = list(Group.objects.order_by('name').values_list('name', flat=True))
     create_category_options = sorted(set(category_names) | {'Academic', 'Sports', 'Esports', 'Socio-cultural', 'Pageant'})
     create_division_options = ['College', 'Senior High School', 'Junior High School', 'Elementary']
@@ -611,13 +619,88 @@ def admin_manage_events(request):
 
 @login_required
 @user_passes_test(lambda user: user.is_staff, login_url='login')
+@login_required
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def admin_edit_event(request, event_id):
+    """Update an existing session event by its id."""
+    if request.method != 'POST':
+        return redirect('admin_manage_events')
+
+    events = request.session.get('admin_events', [])
+    idx = next((i for i, e in enumerate(events) if e.get('id') == event_id), None)
+    if idx is None:
+        messages.error(request, 'Event not found.')
+        return redirect('admin_manage_events')
+
+    event_name = request.POST.get('event_name', '').strip()
+    category = request.POST.get('category', '').strip()
+    event_date = request.POST.get('event_date', '').strip()
+    venue = request.POST.get('venue', '').strip()
+
+    if not event_name or not category or not event_date or not venue:
+        messages.error(request, 'Event name, category, date, and venue are required.')
+        return redirect('admin_manage_events')
+
+    try:
+        dt = datetime.strptime(event_date, '%Y-%m-%d')
+        schedule_label = dt.strftime('%B %d, %Y')
+    except ValueError:
+        schedule_label = event_date
+
+    # Preserve the original id and status; update everything else
+    events[idx].update({
+        'name': event_name[:80],
+        'category': category,
+        'division': request.POST.get('division', '').strip(),
+        'department': request.POST.get('department', '').strip(),
+        'schedule_label': schedule_label,
+        'event_date': event_date,
+        'event_time': request.POST.get('event_time', '').strip(),
+        'venue': venue,
+        'faculty_in_charge': request.POST.get('faculty_in_charge', '').strip(),
+        'student_in_charge': request.POST.get('student_in_charge', '').strip(),
+        'max_participants': request.POST.get('max_participants', '').strip(),
+        'num_teams': request.POST.get('num_teams', '').strip(),
+        'mechanics': request.POST.get('mechanics', '').strip(),
+        'scoring_criteria': request.POST.get('scoring_criteria', '').strip(),
+    })
+    request.session['admin_events'] = events
+    request.session.modified = True
+
+    messages.success(request, f'Event "{event_name}" updated successfully.')
+    return redirect('admin_manage_events')
+
+
+@login_required
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def admin_delete_event(request, event_id):
+    """Remove a session event by its id."""
+    if request.method != 'POST':
+        return redirect('admin_manage_events')
+
+    events = request.session.get('admin_events', [])
+    original_count = len(events)
+    events = [e for e in events if e.get('id') != event_id]
+
+    if len(events) == original_count:
+        messages.error(request, 'Event not found.')
+    else:
+        request.session['admin_events'] = events
+        request.session.modified = True
+        messages.success(request, 'Event deleted successfully.')
+
+    return redirect('admin_manage_events')
+
+
+@login_required
+@user_passes_test(lambda user: user.is_staff, login_url='login')
 def admin_event_progress(request):
     """Monitor event lifecycle progress (aligned with SYSTEM_FLOW.md event statuses)."""
     status_filter = request.GET.get('status', 'all').strip().lower()
     category_filter = request.GET.get('category', 'all').strip().lower()
     search_query = request.GET.get('q', '').strip()
 
-    all_rows = get_admin_event_activity_rows()
+    all_rows = get_session_events(request)
     event_rows = list(all_rows)
 
     if search_query:

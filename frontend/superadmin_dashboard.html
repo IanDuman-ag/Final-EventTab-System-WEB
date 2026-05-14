@@ -4,8 +4,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>System Dashboard - EventTab</title>
-  <link rel="stylesheet" href="{% static 'superadmin_dashboard.css' %}">
+  <title>System Dashboard — EventTab</title>
+  <link rel="stylesheet" href="{% static 'superadmin_dashboard.css' %}?v=20260515">
 </head>
 <body class="superadmin-dashboard-page">
   <div class="dashboard-shell">
@@ -163,31 +163,7 @@
               <span>Live</span>
             </div>
 
-            <ul class="activity-list">
-              {% for alert in activity_alerts %}
-                <li class="activity-item {{ alert.accent }}">
-                  <span class="activity-dot"></span>
-                  <div>
-                    <div class="activity-title">
-                      <strong>{{ alert.title }}</strong>
-                      <time>{{ alert.time }}</time>
-                    </div>
-                    <p>{{ alert.message|truncatechars:96 }}</p>
-                  </div>
-                </li>
-              {% empty %}
-                <li class="activity-item blue">
-                  <span class="activity-dot"></span>
-                  <div>
-                    <div class="activity-title">
-                      <strong>System Ready</strong>
-                      <time>Live</time>
-                    </div>
-                    <p>No recent activity logs yet.</p>
-                  </div>
-                </li>
-              {% endfor %}
-            </ul>
+            <ul class="activity-list">{% for alert in activity_alerts %}<li class="activity-item {{ alert.accent }}"><span class="activity-dot"></span><div><div class="activity-title"><strong>{{ alert.title }}</strong><time>{{ alert.time }}</time></div><p>{{ alert.message|truncatechars:96 }}</p></div></li>{% empty %}<li class="activity-item blue"><span class="activity-dot"></span><div><div class="activity-title"><strong>System Ready</strong><time>Live</time></div><p>No recent activity logs yet.</p></div></li>{% endfor %}</ul>
 
             <a class="view-logs-btn" href="{% url 'superadmin_activity_logs' %}">View All Logs</a>
           </aside>

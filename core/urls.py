@@ -19,6 +19,8 @@ from django.urls import path
 from .views import (
     admin_departments,
     admin_dashboard,
+    admin_delete_event,
+    admin_edit_event,
     admin_event_progress,
     admin_ocr,
     admin_scoresheets,
@@ -52,6 +54,8 @@ urlpatterns = [
     path('admin/dashboard/', admin_dashboard, name='admin_dashboard'),
     path('admin/departments/', admin_departments, name='admin_departments'),
     path('admin/events/', admin_manage_events, name='admin_manage_events'),
+    path('admin/events/<int:event_id>/edit/', admin_edit_event, name='admin_edit_event'),
+    path('admin/events/<int:event_id>/delete/', admin_delete_event, name='admin_delete_event'),
     path('admin/results/', admin_event_progress, name='admin_event_progress'),
     path('admin/scoresheets/', admin_scoresheets, name='admin_scoresheets'),
     path('admin/ocr/', admin_ocr, name='admin_ocr'),

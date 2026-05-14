@@ -256,36 +256,54 @@
 .action-buttons {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
-.action-buttons a {
-  width: 18px;
-  height: 18px;
+.action-buttons a,
+.action-buttons button {
+  width: 22px;
+  height: 22px;
   border-radius: 4px;
+  border: 0;
   text-decoration: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 9px;
-  font-weight: 800;
   background: #e8f0ff;
   color: #11488f;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
 }
 
-.action-buttons a:nth-child(1) {
-  background: #6dd071;
-  color: #ffffff;
+.action-buttons a svg,
+.action-buttons button svg {
+  width: 11px;
+  height: 11px;
+  fill: currentColor;
 }
 
-.action-buttons a:nth-child(2) {
-  background: #f8b24a;
-  color: #ffffff;
+.action-buttons a:hover,
+.action-buttons button:hover {
+  opacity: 0.82;
 }
 
+/* View — green */
+.btn-view-event {
+  background: #6dd071 !important;
+  color: #ffffff !important;
+}
+
+/* Edit — amber */
+.btn-edit-event {
+  background: #f8b24a !important;
+  color: #ffffff !important;
+}
+
+/* Delete — red */
+.btn-delete-event,
 .action-buttons a.danger {
-  background: #ffd8df;
-  color: #f15c74;
+  background: #ffd8df !important;
+  color: #f15c74 !important;
 }
 
 .events-table td:last-child {
@@ -517,4 +535,123 @@
   .create-event-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* ── View Details fields ──────────────────────────────────────────── */
+.view-event-grid {
+  background: #f8fafc;
+}
+
+.view-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.view-field--full {
+  grid-column: 1 / -1;
+}
+
+.view-field p {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #e2eaf4;
+  background: #ffffff;
+  color: #1f4066;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ── Delete Confirmation Dialog ───────────────────────────────────── */
+.delete-confirm-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  margin: 0;
+  width: min(420px, calc(100vw - 32px));
+  padding: 0;
+  border: none;
+  border-radius: 12px;
+  box-shadow: 0 24px 48px rgba(9, 34, 72, 0.22);
+  overflow: hidden;
+}
+
+.delete-confirm-dialog::backdrop {
+  background: rgba(7, 31, 61, 0.45);
+}
+
+.delete-confirm-inner {
+  padding: 32px 28px 24px;
+  background: #ffffff;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.delete-confirm-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: #fff0f2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.delete-confirm-icon svg {
+  width: 24px;
+  height: 24px;
+  fill: #f15c74;
+}
+
+.delete-confirm-inner h2 {
+  color: #0f2744;
+  font-size: 20px;
+  font-weight: 800;
+  margin: 0;
+}
+
+.delete-confirm-inner p {
+  color: #5a6a7e;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.delete-confirm-inner p strong {
+  color: #0f2744;
+  font-weight: 800;
+}
+
+.delete-confirm-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 8px;
+}
+
+.delete-confirm-btn {
+  min-height: 40px;
+  padding: 0 24px;
+  border-radius: 8px;
+  border: 1px solid #e53e4d;
+  background: #e53e4d;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: filter 0.15s ease;
+}
+
+.delete-confirm-btn:hover {
+  filter: brightness(1.08);
 }
