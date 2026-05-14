@@ -1,0 +1,5 @@
+@import url("admindashboard.css?v=20260511a");
+
+.manage-account-page .side-nav a.active {
+  color: #ffffff;
+}

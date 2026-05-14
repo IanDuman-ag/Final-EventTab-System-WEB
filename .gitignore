@@ -1,3 +1,6 @@
+# Intermediates (AGENTS.md)
+.tmp/
+
 venv/
 __pycache__/
 *.pyc
@@ -8,6 +11,10 @@ __pycache__/
 # Environment variables
 .env
 .env.local
+
+# Google OAuth (AGENTS.md)
+credentials.json
+token.json
 
 # Database
 *.sqlite3

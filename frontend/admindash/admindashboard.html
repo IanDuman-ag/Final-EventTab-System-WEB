@@ -4,10 +4,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Admin Dashboard - EventTab</title>
-  <link rel="stylesheet" href="{% static 'admindash/admindashboard.css' %}?v=20260510a">
+  <title>Assign Accounts - EventTab</title>
+  <link rel="stylesheet" href="{% static 'admindash/admindashboard.css' %}?v=20260511b">
 </head>
-<body class="admin-dashboard-page">
+<body class="admin-dashboard-page admin-dashboard-home">
   <div class="dashboard-shell">
     <aside class="sidebar" aria-label="Admin navigation">
       <div class="brand">
@@ -17,96 +17,136 @@
 
       <nav class="side-nav">
         <a class="active" href="{% url 'admin_dashboard' %}" aria-current="page">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm9 0h7v7h-7v-7Z"></path></svg>
           <span>Dashboard</span>
         </a>
-        <a href="{% url 'admin_manage_events' %}">Manage Events</a>
-        <a href="{% url 'admin_dashboard' %}">Manage Account</a>
-        <a href="{% url 'admin_dashboard' %}">Departments</a>
-        <a href="{% url 'admin_dashboard' %}">Results</a>
-        <a href="{% url 'admin_dashboard' %}">CV Processing</a>
-        <a href="{% url 'admin_dashboard' %}">Generate Report</a>
+        <a href="{% url 'admin_manage_events' %}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2v2H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2H7Zm12 8H5V7h14v3Zm-8 3H7v4h4v-4Z"></path></svg>
+          <span>Manage Events</span>
+        </a>
+        <a href="{% url 'admin_manage_account' %}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 11c1.66 0 3-1.57 3-3.5S17.66 4 16 4s-3 1.57-3 3.5 1.34 3.5 3 3.5ZM8 11c1.66 0 3-1.57 3-3.5S9.66 4 8 4 5 5.57 5 7.5 6.34 11 8 11Zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 14.17 10.33 13 8 13Zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5Z"></path></svg>
+          <span>Manage Account</span>
+        </a>
+        <a href="{% url 'admin_departments' %}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V9h5V3h6v8h5v10H4Zm2-2h3v-3H6v3Zm0-5h3v-3H6v3Zm5 5h2v-3h-2v3Zm0-5h2v-3h-2v3Zm0-5h2V5h-2v4Zm4 10h3v-3h-3v3Zm0-5h3v-1h-3v1Z"></path></svg>
+          <span>Departments</span>
+        </a>
+        <a href="{% url 'admin_event_progress' %}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19h14v2H5v-2Zm1-8h3v6H6v-6Zm5-6h3v12h-3V5Zm5 4h3v8h-3V9Z"></path></svg>
+          <span>Results</span>
+        </a>
+        <a href="{% url 'admin_scoresheets' %}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zm0 16H5V5h14v14zM7 7h10v2H7V7zm0 4h10v2H7v-2zm0 4h7v2H7v-2z"></path></svg>
+          <span>Scoresheet</span>
+        </a>
+        <a href="{% url 'admin_ocr' %}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h9l5 5v15H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Zm8 1.5V8h4.5L14 3.5ZM8 12h8v2H8v-2Zm0 4h8v2H8v-2Z"></path></svg>
+          <span>OCR Processing</span>
+        </a>
+        <a href="{% url 'admin_dashboard' %}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4V4Zm2 2v12h12V6H6Zm2 2h8v2H8V8Zm0 4h5v2H8v-2Z"></path></svg>
+          <span>Generate Report</span>
+        </a>
       </nav>
 
-      <a class="logout-link" href="{% url 'logout' %}">Logout</a>
+      <a class="logout-link" href="{% url 'logout' %}">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17v-3H3v-4h7V7l5 5-5 5Zm2-14h8v18h-8v-2h6V5h-6V3Z"></path></svg>
+        <span>Logout</span>
+      </a>
     </aside>
 
     <div class="content-area">
       <header class="topbar">
-        <h2>ADMIN DASHBOARD</h2>
-        <div class="profile-avatar">{{ request.user.username|default:"AD"|slice:":2"|upper }}</div>
+        <span class="topbar-spacer" aria-hidden="true"></span>
+        <div class="topbar-actions">
+          <button class="icon-button" type="button" aria-label="Notifications">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm8-6-2-2v-5a6 6 0 1 0-12 0v5l-2 2v1h16v-1Z"></path></svg>
+          </button>
+          <div class="profile-avatar" aria-label="{{ request.user.username }}">
+            {{ request.user.username|default:"AD"|slice:":2"|upper }}
+          </div>
+        </div>
       </header>
 
-      <main class="main-content">
-        <section class="stats-grid" aria-label="Dashboard summary">
-          <article class="stat-card primary">
-            <small>Ongoing Games</small>
-            <strong>{{ ongoing_games|default:"0" }}</strong>
-            <p>Live activity count</p>
+      <main class="main-content dashboard-main">
+        <section class="dashboard-hero" aria-label="Dashboard heading">
+          <h2>ADMIN DASHBOARD</h2>
+        </section>
+
+        <section class="dashboard-metrics" aria-label="Dashboard metrics">
+          <article class="metric-card metric-primary">
+            <span class="metric-label">Ongoing Games</span>
+            <strong>{{ active_user_count|default:"12" }}</strong>
+            <div class="metric-tags">
+              <span>Basketball</span>
+              <span>Volleyball</span>
+              <span>E-sports</span>
+            </div>
           </article>
-          <article class="stat-card">
-            <small>Total Events</small>
-            <strong>{{ total_events|default:"0" }}</strong>
-            <p>Across all categories</p>
+          <article class="metric-card">
+            <span class="metric-label">Total Events</span>
+            <strong>{{ total_user_count|default:"48" }}</strong>
+            <small>Across all categories</small>
           </article>
-          <article class="stat-card">
-            <small>Completed</small>
-            <strong>{{ completed_events|default:"0" }}</strong>
-            <p>Ready for reports</p>
+          <article class="metric-card">
+            <span class="metric-label">Completed</span>
+            <strong>{{ filtered_user_count|default:"24" }}</strong>
+            <div class="progress-track"><span></span></div>
+            <small>50% progress</small>
           </article>
         </section>
 
-        <section class="events-card">
-          <div class="events-header">
+        <section class="dashboard-table-card" aria-label="Upcoming events">
+          <div class="dashboard-table-header">
             <h3>Upcoming Events</h3>
-            <form class="event-filters" method="get" role="search">
-              <input type="text" name="q" value="{{ search_query }}" placeholder="Search events">
-              <select name="category" aria-label="Category">
-                <option value="all">All Categories</option>
-                {% for category in categories %}
-                  <option value="{{ category|lower }}" {% if selected_category == category|lower %}selected{% endif %}>{{ category }}</option>
-                {% endfor %}
+            <form method="get" class="dashboard-filter-form">
+              <select name="role" aria-label="Category filter">
+                <option value="all" {% if selected_role == 'all' %}selected{% endif %}>All Categories</option>
+                <option value="tabulator" {% if selected_role == 'tabulator' %}selected{% endif %}>Sports</option>
+                <option value="judge" {% if selected_role == 'judge' %}selected{% endif %}>Academic</option>
               </select>
-              <select name="status" aria-label="Status">
-                <option value="all" {% if selected_status == 'all' %}selected{% endif %}>All Status</option>
-                <option value="active" {% if selected_status == 'active' %}selected{% endif %}>Active</option>
-                <option value="pending" {% if selected_status == 'pending' %}selected{% endif %}>Pending</option>
-                <option value="cancelled" {% if selected_status == 'cancelled' %}selected{% endif %}>Cancelled</option>
-              </select>
-              <button type="submit">Apply</button>
             </form>
           </div>
 
           <div class="table-wrap">
-            <table class="events-table">
+            <table class="dashboard-events-table">
               <thead>
                 <tr>
-                  <th>Event Name</th>
-                  <th>Date & Time</th>
+                  <th>Event Details</th>
+                  <th>Date &amp; Venue</th>
                   <th>Category</th>
                   <th>Status</th>
                 </tr>
               </thead>
               <tbody>
-                {% for row in event_rows %}
+                {% for row in account_rows|slice:":4" %}
                   <tr>
                     <td>
-                      <div class="event-main">
-                        <strong>{{ row.name }}</strong>
-                        <span>{{ row.description }}</span>
+                      <div class="event-detail-cell">
+                        <span class="event-thumb">{{ row.initials }}</span>
+                        <div>
+                          <strong>{{ row.full_name|default:"Quiz Bee" }}</strong>
+                          <small>{{ row.role|default:"Academic" }} Event</small>
+                        </div>
                       </div>
                     </td>
                     <td>
-                      <div class="event-time">
-                        <strong>{{ row.date_label }}</strong>
-                        <span>{{ row.time_label }}</span>
+                      <div class="event-meta">
+                        <strong>{{ row.contact|default:"Oct 24, 2024" }}</strong>
+                        <small>{{ row.user.email|default:"Smart Room 201" }}</small>
                       </div>
                     </td>
-                    <td><span class="category-pill">{{ row.category }}</span></td>
-                    <td><span class="status-pill {{ row.status }}">{{ row.status_label }}</span></td>
+                    <td><span class="category-pill">{{ row.role|default:"Academic" }}</span></td>
+                    <td>
+                      <span class="status-pill {% if row.status_key == 'active' %}active{% else %}inactive{% endif %}">
+                        {% if row.status_key == 'active' %}Active{% else %}Pending{% endif %}
+                      </span>
+                    </td>
                   </tr>
                 {% empty %}
                   <tr>
-                    <td colspan="4" class="empty-state">No events found for your filters.</td>
+                    <td colspan="4" class="empty-state">No upcoming events available.</td>
                   </tr>
                 {% endfor %}
               </tbody>

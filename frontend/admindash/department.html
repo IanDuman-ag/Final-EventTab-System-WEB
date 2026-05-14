@@ -1,0 +1,194 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Departments - EventTab</title>
+  <link rel="stylesheet" href="{% static 'admindash/department.css' %}?v=20260511c">
+</head>
+<body class="admin-dashboard-page department-page">
+  <div class="dashboard-shell">
+    <aside class="sidebar" aria-label="Admin navigation">
+      <div class="brand">
+        <h1>EventTab</h1>
+        <span>Admin Portal</span>
+      </div>
+
+      <nav class="side-nav">
+        <a href="{% url 'admin_dashboard' %}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm9 0h7v7h-7v-7Z"></path></svg>
+          <span>Dashboard</span>
+        </a>
+        <a href="{% url 'admin_manage_events' %}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2v2H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2H7Zm12 8H5V7h14v3Zm-8 3H7v4h4v-4Z"></path></svg>
+          <span>Manage Events</span>
+        </a>
+        <a href="{% url 'admin_manage_account' %}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 11c1.66 0 3-1.57 3-3.5S17.66 4 16 4s-3 1.57-3 3.5 1.34 3.5 3 3.5ZM8 11c1.66 0 3-1.57 3-3.5S9.66 4 8 4 5 5.57 5 7.5 6.34 11 8 11Zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 14.17 10.33 13 8 13Zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5Z"></path></svg>
+          <span>Manage Account</span>
+        </a>
+        <a class="active" href="{% url 'admin_departments' %}" aria-current="page">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V9h5V3h6v8h5v10H4Zm2-2h3v-3H6v3Zm0-5h3v-3H6v3Zm5 5h2v-3h-2v3Zm0-5h2v-3h-2v3Zm0-5h2V5h-2v4Zm4 10h3v-3h-3v3Zm0-5h3v-1h-3v1Z"></path></svg>
+          <span>Departments</span>
+        </a>
+        <a href="{% url 'admin_event_progress' %}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19h14v2H5v-2Zm1-8h3v6H6v-6Zm5-6h3v12h-3V5Zm5 4h3v8h-3V9Z"></path></svg>
+          <span>Results</span>
+        </a>
+        <a href="{% url 'admin_scoresheets' %}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zm0 16H5V5h14v14zM7 7h10v2H7V7zm0 4h10v2H7v-2zm0 4h7v2H7v-2z"></path></svg>
+          <span>Scoresheet</span>
+        </a>
+        <a href="{% url 'admin_ocr' %}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h9l5 5v15H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Zm8 1.5V8h4.5L14 3.5ZM8 12h8v2H8v-2Zm0 4h8v2H8v-2Z"></path></svg>
+          <span>OCR Processing</span>
+        </a>
+        <a href="{% url 'admin_dashboard' %}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4V4Zm2 2v12h12V6H6Zm2 2h8v2H8V8Zm0 4h5v2H8v-2Z"></path></svg>
+          <span>Generate Report</span>
+        </a>
+      </nav>
+
+      <a class="logout-link" href="{% url 'logout' %}">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17v-3H3v-4h7V7l5 5-5 5Zm2-14h8v18h-8v-2h6V5h-6V3Z"></path></svg>
+        <span>Logout</span>
+      </a>
+    </aside>
+
+    <div class="content-area">
+      <header class="topbar">
+        <span class="topbar-spacer" aria-hidden="true"></span>
+        <div class="topbar-actions">
+          <button class="icon-button" type="button" aria-label="Notifications">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm8-6-2-2v-5a6 6 0 1 0-12 0v5l-2 2v1h16v-1Z"></path></svg>
+          </button>
+          <div class="profile-avatar" aria-label="{{ request.user.username }}">
+            {{ request.user.username|default:"AD"|slice:":2"|upper }}
+          </div>
+        </div>
+      </header>
+
+      <main class="main-content departments-main">
+        <section class="departments-header" aria-labelledby="dept-registry-title">
+          <div class="departments-header-text">
+            <h2 id="dept-registry-title">Department Registry</h2>
+            <p class="departments-lead">Review academic units, deans, and member counts. Departments are synced from user groups.</p>
+            <ul class="departments-stat-strip" aria-label="Department summary">
+              <li>
+                <span class="stat-strip-label">With dean</span>
+                <strong>{{ with_dean_count|default:"0" }}</strong>
+              </li>
+              <li>
+                <span class="stat-strip-label">Students (non-staff)</span>
+                <strong>{{ total_students_count|default:"0" }}</strong>
+              </li>
+              <li>
+                <span class="stat-strip-label">Shown</span>
+                <strong>{{ visible_department_count|default:"0" }}</strong>
+                {% if search_query %}<span class="stat-strip-hint">of {{ total_department_count }}</span>{% endif %}
+              </li>
+            </ul>
+          </div>
+          <article class="departments-total-card">
+            <span>Total Departments</span>
+            <strong>{{ total_department_count|default:"0" }}</strong>
+            <small>↗ +{{ new_department_count|default:"0" }} this semester</small>
+          </article>
+        </section>
+
+        <section class="departments-panel" aria-label="Department management table">
+          <div class="departments-toolbar">
+            <div class="departments-panel-title">
+              <h3>Department Management</h3>
+              <p class="departments-panel-sub">Search filters the table below. Scroll horizontally on small screens.</p>
+            </div>
+            <form class="departments-search" method="get" role="search" aria-label="Search departments">
+              <input type="search" name="q" value="{{ search_query }}" placeholder="Search name, dean, description…" autocomplete="off">
+              <button type="submit">Search</button>
+              {% if search_query %}
+                <a class="departments-clear" href="{% url 'admin_departments' %}">Clear</a>
+              {% endif %}
+            </form>
+            <div class="departments-actions">
+              <span class="swipe-hint">Swipe to view more</span>
+              <a class="btn-add-dept" href="{% url 'admin:auth_group_add' %}">+ Add Department</a>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table class="departments-table">
+              <thead>
+                <tr>
+                  <th>Department</th>
+                  <th>Dean</th>
+                  <th>Est. Year</th>
+                  <th>Students</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in department_rows %}
+                  <tr>
+                    <td>
+                      <div class="department-cell">
+                        <span class="department-avatar">{{ row.short_name|slice:":1" }}</span>
+                        <div>
+                          <strong>{{ row.name }}</strong>
+                          <small>{{ row.description }}</small>
+                        </div>
+                      </div>
+                    </td>
+                    <td>{{ row.dean }}</td>
+                    <td>{{ row.est_year }}</td>
+                    <td>{{ row.students }}</td>
+                    <td>
+                      <div class="table-actions">
+                        <button class="ok" type="button" aria-label="Approve">✓</button>
+                        <button class="edit" type="button" aria-label="Edit">✎</button>
+                        <button class="view" type="button" aria-label="View">◉</button>
+                        <button class="delete" type="button" aria-label="Delete">🗑</button>
+                      </div>
+                    </td>
+                  </tr>
+                {% empty %}
+                  <tr>
+                    <td colspan="5" class="empty-state-cell">
+                      <div class="empty-state">
+                        <p class="empty-state-title">{% if search_query %}No matches{% else %}No departments yet{% endif %}</p>
+                        <p class="empty-state-text">
+                          {% if search_query %}
+                            Try another keyword or <a href="{% url 'admin_departments' %}">clear the search</a>.
+                          {% else %}
+                            Create a group in Django admin (excluding reserved roles) to list it here. Assign staff members to show a dean.
+                          {% endif %}
+                        </p>
+                        <a class="empty-state-cta" href="{% url 'admin:auth_group_add' %}">Open group admin</a>
+                      </div>
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="scroll-hint" aria-hidden="true">
+            <span class="arrow">‹</span>
+            <span class="track"><span class="fill"></span></span>
+            <span class="arrow">›</span>
+          </div>
+
+          <aside class="departments-tips" aria-label="UI suggestions">
+            <h4>Suggestions</h4>
+            <ul>
+              <li>Add <strong>established year</strong> and <strong>student cap</strong> fields when you introduce a Department model.</li>
+              <li>Replace emoji action buttons with SVG icons and confirm dialogs for delete.</li>
+              <li>Show a <strong>row details drawer</strong> on “View” instead of a dead-end button.</li>
+            </ul>
+          </aside>
+        </section>
+      </main>
+    </div>
+  </div>
+</body>
+</html>
