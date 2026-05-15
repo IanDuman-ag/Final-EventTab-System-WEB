@@ -112,7 +112,7 @@
             </form>
             <div class="departments-actions">
               <span class="swipe-hint">Swipe to view more</span>
-              <a class="btn-add-dept" href="{% url 'admin:auth_group_add' %}">+ Add Department</a>
+              <button class="btn-add-dept" id="openModalBtn" type="button">+ Add Department</button>
             </div>
           </div>
 
@@ -190,5 +190,117 @@
       </main>
     </div>
   </div>
+
+  <!-- Create Department Modal -->
+  <div class="modal-overlay" id="deptModal">
+    <div class="modal-container">
+      <div class="modal-header">
+        <h3>Create Department</h3>
+        <button class="close-modal" id="closeModalBtn" type="button">&times;</button>
+      </div>
+      <form class="modal-form" id="createDeptForm" action="{% url 'admin_create_department' %}" method="POST">
+        {% csrf_token %}
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="deptName">Department Name</label>
+              <input type="text" id="deptName" name="name" placeholder="e.g. College of Engineering" required>
+            </div>
+            <div class="form-group">
+              <label for="deptCode">Department Code</label>
+              <input type="text" id="deptCode" name="code" placeholder="e.g. COE" required>
+            </div>
+            <div class="form-group">
+              <label for="unitNumber">Unit Number</label>
+              <input type="number" id="unitNumber" name="unit_number" placeholder="e.g. 101">
+            </div>
+            <div class="form-group">
+              <label for="delegationColor">Delegation Color</label>
+              <div class="color-input-wrap">
+                <input type="color" id="delegationColor" name="color" value="#022068">
+                <span class="color-hex">#022068</span>
+              </div>
+            </div>
+            <div class="form-group full-width">
+              <label for="deptHead">Department Head</label>
+              <input type="text" id="deptHead" name="head" placeholder="Dean's Full Name">
+            </div>
+            <div class="form-group full-width">
+              <label for="deptStatus">Status</label>
+              <select id="deptStatus" name="status">
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+                <option value="archived">Archived</option>
+              </select>
+            </div>
+            <div class="form-group full-width">
+              <label for="deptRemarks">Remarks</label>
+              <textarea id="deptRemarks" name="remarks" rows="3" placeholder="Additional notes..."></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-cancel" id="cancelModalBtn" type="button">Cancel</button>
+          <button class="btn-save" type="submit">Create Department</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const modal = document.getElementById('deptModal');
+      const openBtn = document.getElementById('openModalBtn');
+      const closeBtn = document.getElementById('closeModalBtn');
+      const cancelBtn = document.getElementById('cancelModalBtn');
+      const colorInput = document.getElementById('delegationColor');
+      const colorHex = document.querySelector('.color-hex');
+
+      const toggleModal = (show) => {
+        modal.classList.toggle('active', show);
+        if (show) document.body.style.overflow = 'hidden';
+        else document.body.style.overflow = '';
+      };
+
+      openBtn.addEventListener('click', () => toggleModal(true));
+      [closeBtn, cancelBtn].forEach(btn => btn.addEventListener('click', () => toggleModal(false)));
+      
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) toggleModal(false);
+      });
+
+      colorInput.addEventListener('input', (e) => {
+        colorHex.textContent = e.target.value.toUpperCase();
+      });
+
+      document.getElementById('createDeptForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const form = e.target;
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+
+        try {
+          const response = await fetch(form.action, {
+            method: 'POST',
+            headers: {
+              'X-CSRFToken': formData.get('csrfmiddlewaretoken'),
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+          });
+
+          const result = await response.json();
+          if (result.success) {
+            alert(result.message);
+            location.reload(); 
+          } else {
+            alert('Error: ' + result.message);
+          }
+        } catch (error) {
+          alert('Failed to create department: ' + error.message);
+        }
+      });
+    });
+  </script>
 </body>
 </html>

@@ -75,7 +75,7 @@ ROOT_URLCONF = 'core.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [BASE_DIR / 'frontend'],
+        'DIRS': [BASE_DIR / 'frontend', BASE_DIR / 'frontend' / 'superadmindash'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -140,7 +140,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
-STATICFILES_DIRS = [BASE_DIR / 'frontend']
+STATICFILES_DIRS = [BASE_DIR / 'frontend', BASE_DIR / 'frontend' / 'superadmindash']
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # Media files (User uploaded content)

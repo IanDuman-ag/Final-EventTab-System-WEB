@@ -50,3 +50,30 @@ class Event(models.Model):
     @property
     def event_time_str(self):
         return self.event_time.strftime('%H:%M') if self.event_time else ''
+
+
+class Department(models.Model):
+    STATUS_ACTIVE = 'active'
+    STATUS_INACTIVE = 'inactive'
+    STATUS_ARCHIVED = 'archived'
+    STATUS_CHOICES = [
+        (STATUS_ACTIVE, 'Active'),
+        (STATUS_INACTIVE, 'Inactive'),
+        (STATUS_ARCHIVED, 'Archived'),
+    ]
+
+    name = models.CharField(max_length=200)
+    code = models.CharField(max_length=50, unique=True)
+    unit_number = models.CharField(max_length=50, blank=True, default='')
+    delegation_color = models.CharField(max_length=20, default='#022068')
+    head = models.CharField(max_length=200, blank=True, default='')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_ACTIVE)
+    remarks = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+
+    def __str__(self):
+        return f"{self.name} ({self.code})"

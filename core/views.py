@@ -15,7 +15,7 @@ import json
 import csv
 from datetime import datetime, timedelta
 
-from events.models import Event
+from events.models import Event, Department
 
 
 ROLE_CHOICES = {
@@ -187,29 +187,96 @@ def get_assignment_account_context(request):
 
 
 def get_department_rows():
-    reserved_groups = {'Admin', 'Tabulator', 'Judge', 'Judges', 'Viewers'}
-    department_groups = Group.objects.exclude(name__in=reserved_groups).order_by('name').prefetch_related('user_set')
+    departments = Department.objects.all().order_by('name')
     department_rows = []
 
-    for group in department_groups:
-        members = list(group.user_set.all())
-        student_count = sum(1 for user in members if not user.is_staff and not user.is_superuser)
-        dean_user = next((user for user in members if user.is_staff or user.is_superuser), None)
-        dean_name = dean_user.get_full_name().strip() if dean_user else ''
-        if not dean_name:
-            dean_name = dean_user.username if dean_user else 'Not Assigned'
+    if not departments.exists():
+        # Fallback to Group-based logic for legacy support
+        reserved_groups = {'Admin', 'Tabulator', 'Judge', 'Judges', 'Viewers'}
+        department_groups = Group.objects.exclude(name__in=reserved_groups).order_by('name').prefetch_related('user_set')
+        for group in department_groups:
+            members = list(group.user_set.all())
+            student_count = sum(1 for user in members if not user.is_staff and not user.is_superuser)
+            dean_user = next((user for user in members if user.is_staff or user.is_superuser), None)
+            dean_name = dean_user.get_full_name().strip() if dean_user else ''
+            if not dean_name:
+                dean_name = dean_user.username if dean_user else 'Not Assigned'
 
-        department_rows.append({
-            'id': group.id,
-            'name': group.name,
-            'short_name': ''.join(part[:1] for part in group.name.split()[:4]).upper() or group.name[:4].upper(),
-            'description': f'{group.name} Department',
-            'dean': dean_name,
-            'est_year': '--',
-            'students': student_count,
-        })
+            department_rows.append({
+                'id': group.id,
+                'name': group.name,
+                'short_name': ''.join(part[:1] for part in group.name.split()[:4]).upper() or group.name[:4].upper(),
+                'description': f'{group.name} Department',
+                'dean': dean_name,
+                'est_year': '--',
+                'students': student_count,
+                'status': 'active'
+            })
+    else:
+        for dept in departments:
+            try:
+                group = Group.objects.get(name=dept.name)
+                student_count = group.user_set.filter(is_staff=False, is_superuser=False).count()
+            except Group.DoesNotExist:
+                student_count = 0
+
+            department_rows.append({
+                'id': dept.id,
+                'name': dept.name,
+                'short_name': dept.code,
+                'description': dept.remarks or f'{dept.name} Department',
+                'dean': dept.head or 'Not Assigned',
+                'est_year': dept.unit_number or '--',
+                'students': student_count,
+                'color': dept.delegation_color,
+                'status': dept.status
+            })
 
     return department_rows
+
+
+@login_required
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def admin_create_department(request):
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': 'Invalid request method.'}, status=400)
+    
+    try:
+        # Support both JSON and Form data
+        if request.content_type == 'application/json':
+            data = json.loads(request.body)
+        else:
+            data = request.POST
+
+        name = data.get('name', '').strip()
+        code = data.get('code', '').strip()
+        unit_number = data.get('unit_number', '').strip()
+        delegation_color = data.get('color', '#022068')
+        head = data.get('head', '').strip()
+        status = data.get('status', 'active')
+        remarks = data.get('remarks', '').strip()
+
+        if not name or not code:
+            return JsonResponse({'success': False, 'message': 'Name and Code are required.'}, status=400)
+
+        # Create matching Group for role system
+        Group.objects.get_or_create(name=name)
+        
+        dept, created = Department.objects.update_or_create(
+            code=code,
+            defaults={
+                'name': name,
+                'unit_number': unit_number,
+                'delegation_color': delegation_color,
+                'head': head,
+                'status': status,
+                'remarks': remarks
+            }
+        )
+        
+        return JsonResponse({'success': True, 'message': f'Department {name} created.'})
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': str(e)}, status=500)
 
 
 @never_cache
