@@ -108,7 +108,6 @@
               {% endif %}
             </form>
             <div class="departments-actions">
-              <span class="swipe-hint">Swipe to view more</span>
               <button class="btn-add-dept" id="openModalBtn" type="button">+ Add Department</button>
             </div>
           </div>
@@ -118,6 +117,7 @@
               <thead>
                 <tr>
                   <th>Department</th>
+                  <th>Dept Code</th>
                   <th>Dean</th>
                   <th>Unit No.</th>
                   <th>Status</th>
@@ -140,6 +140,7 @@
                         </div>
                       </div>
                     </td>
+                    <td>{{ row.code }}</td>
                     <td>{{ row.dean }}</td>
                     <td>{{ row.unit_number|default:"--" }}</td>
                     <td><span class="view-badge {{ row.status }}">{{ row.status|title }}</span></td>
@@ -179,14 +180,7 @@
             <span class="arrow">›</span>
           </div>
 
-          <aside class="departments-tips" aria-label="UI suggestions">
-            <h4>Suggestions</h4>
-            <ul>
-              <li>Add <strong>established year</strong> and <strong>student cap</strong> fields when you introduce a Department model.</li>
-              <li>Replace emoji action buttons with SVG icons and confirm dialogs for delete.</li>
-              <li>Show a <strong>row details drawer</strong> on “View” instead of a dead-end button.</li>
-            </ul>
-          </aside>
+
         </section>
       </main>
     </div>
@@ -377,6 +371,15 @@
       const closeViewFooterBtn = document.getElementById('closeViewModalFooterBtn');
       const viewDetailsContainer = document.getElementById('viewDeptDetails');
 
+      // Toast notification helper
+      const showToast = (message, type = 'success') => {
+        const toast = document.createElement('div');
+        toast.className = `toast-message ${type}`;
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 3000);
+      };
+
       // Helper function to toggle modals
       const toggleModal = (modal, show) => {
         if (!modal) return;
@@ -420,13 +423,13 @@
 
             const result = await response.json();
             if (result.success) {
-              alert(result.message);
-              location.reload(); 
+              showToast(result.message, 'success');
+              setTimeout(() => location.reload(), 1500); 
             } else {
-              alert('Error: ' + result.message);
+              showToast('Error: ' + result.message, 'error');
             }
           } catch (error) {
-            alert('Failed to create department: ' + error.message);
+            showToast('Failed to create department: ' + error.message, 'error');
           }
         });
       }
@@ -479,13 +482,13 @@
 
             const result = await response.json();
             if (result.success) {
-              alert(result.message);
-              location.reload();
+              showToast(result.message, 'success');
+              setTimeout(() => location.reload(), 1500);
             } else {
-              alert('Error: ' + result.message);
+              showToast('Error: ' + result.message, 'error');
             }
           } catch (error) {
-            alert('Failed to update department: ' + error.message);
+            showToast('Failed to update department: ' + error.message, 'error');
           }
         });
       }
@@ -517,13 +520,13 @@
 
             const result = await response.json();
             if (result.success) {
-              alert(result.message);
-              location.reload();
+              showToast(result.message, 'success');
+              setTimeout(() => location.reload(), 1500);
             } else {
-              alert('Error: ' + result.message);
+              showToast('Error: ' + result.message, 'error');
             }
           } catch (error) {
-            alert('Failed to delete department: ' + error.message);
+            showToast('Failed to delete department: ' + error.message, 'error');
           }
           toggleModal(deleteModal, false);
         });
