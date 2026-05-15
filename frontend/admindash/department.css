@@ -811,7 +811,8 @@
 .toast-message {
   position: fixed;
   top: 20px;
-  right: 20px;
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 2500;
   max-width: 420px;
   padding: 12px 16px;
