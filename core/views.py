@@ -5,7 +5,7 @@ from django.contrib.admin.models import ADDITION, CHANGE, DELETION, LogEntry
 from django.contrib.auth.models import Group
 from django.core.paginator import Paginator
 from django.db.models import Q
-from django.shortcuts import redirect, render
+from django.shortcuts import redirect, render, get_object_or_404
 from django.utils import timezone
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.cache import never_cache
@@ -14,6 +14,8 @@ from django.contrib.contenttypes.models import ContentType
 import json
 import csv
 from datetime import datetime, timedelta
+
+from events.models import Event
 
 
 ROLE_CHOICES = {
@@ -476,11 +478,10 @@ def delete_assignment_account(request, account_id):
 
 def get_session_events(request):
     """
-    Return the list of events stored in the session.
-    Each event is a plain dict saved when the admin submits the Create Event form.
-    This is a session-based placeholder until a dedicated Event model is connected.
+    Kept for backward compatibility — returns an empty list.
+    Events are now stored in the database via the Event model.
     """
-    return request.session.get('admin_events', [])
+    return []
 
 
 def _event_progress_meta(status_key):
@@ -512,160 +513,166 @@ def _event_progress_meta(status_key):
 @user_passes_test(lambda user: user.is_staff, login_url='login')
 def admin_manage_events(request):
     if request.method == 'POST' and request.POST.get('form_action') == 'create_event':
-        # Build a plain event dict from the submitted form and store it in the session.
-        # This is a session-based placeholder until a dedicated Event model is connected.
         event_name = request.POST.get('event_name', '').strip()
-        category = request.POST.get('category', '').strip()
-        division = request.POST.get('division', '').strip()
-        department = request.POST.get('department', '').strip()
+        category   = request.POST.get('category', '').strip()
         event_date = request.POST.get('event_date', '').strip()
-        event_time = request.POST.get('event_time', '').strip()
-        venue = request.POST.get('venue', '').strip()
-        faculty_in_charge = request.POST.get('faculty_in_charge', '').strip()
-        student_in_charge = request.POST.get('student_in_charge', '').strip()
-        max_participants = request.POST.get('max_participants', '').strip()
-        num_teams = request.POST.get('num_teams', '').strip()
-        mechanics = request.POST.get('mechanics', '').strip()
-        scoring_criteria = request.POST.get('scoring_criteria', '').strip()
+        venue      = request.POST.get('venue', '').strip()
 
         if not event_name or not category or not event_date or not venue:
             messages.error(request, 'Event name, category, date, and venue are required.')
             return redirect('admin_manage_events')
 
-        # Format the schedule label for display
-        try:
-            dt = datetime.strptime(event_date, '%Y-%m-%d')
-            schedule_label = dt.strftime('%B %d, %Y')
-        except ValueError:
-            schedule_label = event_date
+        def _int_or_none(val):
+            try:
+                return int(val) if val else None
+            except (ValueError, TypeError):
+                return None
 
-        # Append to the session event list
-        events = request.session.get('admin_events', [])
-        new_event = {
-            'id': len(events) + 1,
-            'name': event_name[:80],
-            'category': category,
-            'division': division,
-            'department': department,
-            'schedule_label': schedule_label,
-            'event_date': event_date,
-            'event_time': event_time,
-            'venue': venue,
-            'faculty_in_charge': faculty_in_charge,
-            'student_in_charge': student_in_charge,
-            'max_participants': max_participants,
-            'num_teams': num_teams,
-            'mechanics': mechanics,
-            'scoring_criteria': scoring_criteria,
-            'status': 'upcoming',
-        }
-        events.insert(0, new_event)
-        request.session['admin_events'] = events
-        request.session.modified = True
+        event_time_str = request.POST.get('event_time', '').strip()
+        event_time_val = None
+        if event_time_str:
+            try:
+                from datetime import time as dt_time
+                parts = event_time_str.split(':')
+                event_time_val = dt_time(int(parts[0]), int(parts[1]))
+            except (ValueError, IndexError):
+                event_time_val = None
 
+        Event.objects.create(
+            name              = event_name[:200],
+            category          = category,
+            division          = request.POST.get('division', '').strip(),
+            department        = request.POST.get('department', '').strip(),
+            event_date        = event_date,
+            event_time        = event_time_val,
+            venue             = venue,
+            status            = Event.STATUS_UPCOMING,
+            max_participants  = _int_or_none(request.POST.get('max_participants', '')),
+            num_teams         = _int_or_none(request.POST.get('num_teams', '')),
+            faculty_in_charge = request.POST.get('faculty_in_charge', '').strip(),
+            student_in_charge = request.POST.get('student_in_charge', '').strip(),
+            mechanics         = request.POST.get('mechanics', '').strip(),
+            scoring_criteria  = request.POST.get('scoring_criteria', '').strip(),
+            created_by        = request.user,
+        )
         messages.success(request, f'Event "{event_name}" created successfully.')
         return redirect('admin_manage_events')
 
-    status_filter = request.GET.get('status', 'all').strip().lower()
+    status_filter   = request.GET.get('status', 'all').strip().lower()
     category_filter = request.GET.get('category', 'all').strip().lower()
     schedule_filter = request.GET.get('schedule', '').strip().lower()
-    search_query = request.GET.get('q', '').strip()
+    search_query    = request.GET.get('q', '').strip()
 
-    event_rows = get_session_events(request)
+    event_qs = Event.objects.all()
 
     if search_query:
-        q_lower = search_query.lower()
-        event_rows = [
-            row for row in event_rows
-            if q_lower in row['name'].lower()
-            or q_lower in row['category'].lower()
-            or q_lower in row['venue'].lower()
-        ]
-
+        event_qs = event_qs.filter(
+            Q(name__icontains=search_query)
+            | Q(category__icontains=search_query)
+            | Q(venue__icontains=search_query)
+        )
     if category_filter != 'all':
-        event_rows = [row for row in event_rows if row['category'].lower() == category_filter]
-
+        event_qs = event_qs.filter(category__iexact=category_filter)
     if status_filter != 'all':
-        event_rows = [row for row in event_rows if row['status'] == status_filter]
-
+        event_qs = event_qs.filter(status=status_filter)
     if schedule_filter:
-        event_rows = [row for row in event_rows if schedule_filter in row['schedule_label'].lower()]
+        event_qs = event_qs.filter(event_date__icontains=schedule_filter)
 
-    active_count = sum(1 for row in event_rows if row['status'] == 'active')
-    upcoming_count = sum(1 for row in event_rows if row['status'] == 'upcoming')
-    completed_count = sum(1 for row in event_rows if row['status'] == 'completed')
+    event_rows = []
+    for ev in event_qs[:30]:
+        event_rows.append({
+            'id':               ev.id,
+            'name':             ev.name,
+            'category':         ev.category,
+            'division':         ev.division,
+            'department':       ev.department,
+            'schedule_label':   ev.schedule_label,
+            'event_date':       ev.event_date.strftime('%Y-%m-%d') if ev.event_date else '',
+            'event_time':       ev.event_time_str,
+            'venue':            ev.venue,
+            'status':           ev.status,
+            'max_participants': str(ev.max_participants) if ev.max_participants else '',
+            'num_teams':        str(ev.num_teams) if ev.num_teams else '',
+            'faculty_in_charge': ev.faculty_in_charge,
+            'student_in_charge': ev.student_in_charge,
+            'mechanics':        ev.mechanics,
+            'scoring_criteria': ev.scoring_criteria,
+        })
 
-    all_events = get_session_events(request)
-    category_names = sorted({row['category'] for row in all_events}) or ['Sports', 'Esports', 'Pageant']
+    all_events = Event.objects.all()
+    active_count    = all_events.filter(status=Event.STATUS_ACTIVE).count()
+    upcoming_count  = all_events.filter(status=Event.STATUS_UPCOMING).count()
+    completed_count = all_events.filter(status=Event.STATUS_COMPLETED).count()
+    category_names  = sorted(all_events.values_list('category', flat=True).distinct()) or ['Sports', 'Esports', 'Pageant']
+
     department_names = list(Group.objects.order_by('name').values_list('name', flat=True))
     create_category_options = sorted(set(category_names) | {'Academic', 'Sports', 'Esports', 'Socio-cultural', 'Pageant'})
     create_division_options = ['College', 'Senior High School', 'Junior High School', 'Elementary']
 
     return render(request, 'admindash/event.html', {
-        'event_rows': event_rows[:30],
-        'active_count': active_count,
-        'upcoming_count': upcoming_count,
-        'completed_count': completed_count,
-        'category_names': category_names,
-        'department_names': department_names,
+        'event_rows':             event_rows,
+        'active_count':           active_count,
+        'upcoming_count':         upcoming_count,
+        'completed_count':        completed_count,
+        'category_names':         category_names,
+        'department_names':       department_names,
         'create_category_options': create_category_options,
         'create_division_options': create_division_options,
-        'selected_category': category_filter,
-        'selected_status': status_filter,
-        'search_query': search_query,
-        'schedule_filter': schedule_filter,
+        'selected_category':      category_filter,
+        'selected_status':        status_filter,
+        'search_query':           search_query,
+        'schedule_filter':        schedule_filter,
     })
 
 
 @login_required
 @user_passes_test(lambda user: user.is_staff, login_url='login')
-@login_required
-@user_passes_test(lambda user: user.is_staff, login_url='login')
 def admin_edit_event(request, event_id):
-    """Update an existing session event by its id."""
+    """Update an existing Event in the database."""
     if request.method != 'POST':
         return redirect('admin_manage_events')
 
-    events = request.session.get('admin_events', [])
-    idx = next((i for i, e in enumerate(events) if e.get('id') == event_id), None)
-    if idx is None:
-        messages.error(request, 'Event not found.')
-        return redirect('admin_manage_events')
+    ev = get_object_or_404(Event, id=event_id)
 
     event_name = request.POST.get('event_name', '').strip()
-    category = request.POST.get('category', '').strip()
+    category   = request.POST.get('category', '').strip()
     event_date = request.POST.get('event_date', '').strip()
-    venue = request.POST.get('venue', '').strip()
+    venue      = request.POST.get('venue', '').strip()
 
     if not event_name or not category or not event_date or not venue:
         messages.error(request, 'Event name, category, date, and venue are required.')
         return redirect('admin_manage_events')
 
-    try:
-        dt = datetime.strptime(event_date, '%Y-%m-%d')
-        schedule_label = dt.strftime('%B %d, %Y')
-    except ValueError:
-        schedule_label = event_date
+    def _int_or_none(val):
+        try:
+            return int(val) if val else None
+        except (ValueError, TypeError):
+            return None
 
-    # Preserve the original id and status; update everything else
-    events[idx].update({
-        'name': event_name[:80],
-        'category': category,
-        'division': request.POST.get('division', '').strip(),
-        'department': request.POST.get('department', '').strip(),
-        'schedule_label': schedule_label,
-        'event_date': event_date,
-        'event_time': request.POST.get('event_time', '').strip(),
-        'venue': venue,
-        'faculty_in_charge': request.POST.get('faculty_in_charge', '').strip(),
-        'student_in_charge': request.POST.get('student_in_charge', '').strip(),
-        'max_participants': request.POST.get('max_participants', '').strip(),
-        'num_teams': request.POST.get('num_teams', '').strip(),
-        'mechanics': request.POST.get('mechanics', '').strip(),
-        'scoring_criteria': request.POST.get('scoring_criteria', '').strip(),
-    })
-    request.session['admin_events'] = events
-    request.session.modified = True
+    event_time_str = request.POST.get('event_time', '').strip()
+    event_time_val = ev.event_time
+    if event_time_str:
+        try:
+            from datetime import time as dt_time
+            parts = event_time_str.split(':')
+            event_time_val = dt_time(int(parts[0]), int(parts[1]))
+        except (ValueError, IndexError):
+            event_time_val = None
+
+    ev.name              = event_name[:200]
+    ev.category          = category
+    ev.division          = request.POST.get('division', '').strip()
+    ev.department        = request.POST.get('department', '').strip()
+    ev.event_date        = event_date
+    ev.event_time        = event_time_val
+    ev.venue             = venue
+    ev.max_participants  = _int_or_none(request.POST.get('max_participants', ''))
+    ev.num_teams         = _int_or_none(request.POST.get('num_teams', ''))
+    ev.faculty_in_charge = request.POST.get('faculty_in_charge', '').strip()
+    ev.student_in_charge = request.POST.get('student_in_charge', '').strip()
+    ev.mechanics         = request.POST.get('mechanics', '').strip()
+    ev.scoring_criteria  = request.POST.get('scoring_criteria', '').strip()
+    ev.save()
 
     messages.success(request, f'Event "{event_name}" updated successfully.')
     return redirect('admin_manage_events')
@@ -674,23 +681,15 @@ def admin_edit_event(request, event_id):
 @login_required
 @user_passes_test(lambda user: user.is_staff, login_url='login')
 def admin_delete_event(request, event_id):
-    """Remove a session event by its id."""
+    """Delete an Event from the database."""
     if request.method != 'POST':
         return redirect('admin_manage_events')
 
-    events = request.session.get('admin_events', [])
-    original_count = len(events)
-    events = [e for e in events if e.get('id') != event_id]
-
-    if len(events) == original_count:
-        messages.error(request, 'Event not found.')
-    else:
-        request.session['admin_events'] = events
-        request.session.modified = True
-        messages.success(request, 'Event deleted successfully.')
-
+    ev = get_object_or_404(Event, id=event_id)
+    name = ev.name
+    ev.delete()
+    messages.success(request, f'Event "{name}" deleted successfully.')
     return redirect('admin_manage_events')
-
 
 @login_required
 @user_passes_test(lambda user: user.is_staff, login_url='login')
@@ -700,7 +699,9 @@ def admin_event_progress(request):
     category_filter = request.GET.get('category', 'all').strip().lower()
     search_query = request.GET.get('q', '').strip()
 
-    all_rows = get_session_events(request)
+    all_rows = list(Event.objects.all()[:80])
+    # Convert ORM objects to dicts for template compatibility
+    all_rows = [{'id': e.id, 'name': e.name, 'category': e.category, 'venue': e.venue, 'schedule_label': e.schedule_label, 'status': e.status} for e in Event.objects.all()[:80]]
     event_rows = list(all_rows)
 
     if search_query:
@@ -1489,3 +1490,4 @@ def superadmin_activity_logs(request):
 def logout_view(request):
     logout(request)
     return redirect('login')
+
