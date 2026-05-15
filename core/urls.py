@@ -16,6 +16,8 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path
+from django.conf import settings
+from django.conf.urls.static import static
 from .views import (
     admin_departments,
     admin_dashboard,
@@ -28,6 +30,9 @@ from .views import (
     admin_manage_events,
     activate_admin,
     admin_create_department,
+    admin_view_department,
+    admin_edit_department,
+    admin_delete_department,
     create_assignment_account,
     create_admin,
     deactivate_admin,
@@ -62,6 +67,9 @@ urlpatterns = [
     path('admin/ocr/', admin_ocr, name='admin_ocr'),
     path('admin/manage-account/', admin_manage_account, name='admin_manage_account'),
     path('admin/departments/create/', admin_create_department, name='admin_create_department'),
+    path('admin/departments/<int:dept_id>/view/', admin_view_department, name='admin_view_department'),
+    path('admin/departments/<int:dept_id>/edit/', admin_edit_department, name='admin_edit_department'),
+    path('admin/departments/<int:dept_id>/delete/', admin_delete_department, name='admin_delete_department'),
     path('admin/accounts/create/', create_assignment_account, name='create_assignment_account'),
     path('admin/accounts/<int:account_id>/update/', update_assignment_account, name='update_assignment_account'),
     path('admin/accounts/<int:account_id>/delete/', delete_assignment_account, name='delete_assignment_account'),
@@ -76,4 +84,4 @@ urlpatterns = [
     path('super-admin/admins/<int:admin_id>/deactivate/', deactivate_admin, name='deactivate_admin'),
     path('logout/', logout_view, name='logout'),
     path('admin/', admin.site.urls),
-]
+] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

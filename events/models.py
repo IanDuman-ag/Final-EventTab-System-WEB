@@ -66,6 +66,7 @@ class Department(models.Model):
     code = models.CharField(max_length=50, unique=True)
     unit_number = models.CharField(max_length=50, blank=True, default='')
     delegation_color = models.CharField(max_length=20, default='#022068')
+    logo = models.ImageField(upload_to='department_logos/', null=True, blank=True)
     head = models.CharField(max_length=200, blank=True, default='')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_ACTIVE)
     remarks = models.TextField(blank=True, default='')

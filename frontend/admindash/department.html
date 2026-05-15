@@ -79,10 +79,7 @@
                 <span class="stat-strip-label">With dean</span>
                 <strong>{{ with_dean_count|default:"0" }}</strong>
               </li>
-              <li>
-                <span class="stat-strip-label">Students (non-staff)</span>
-                <strong>{{ total_students_count|default:"0" }}</strong>
-              </li>
+
               <li>
                 <span class="stat-strip-label">Shown</span>
                 <strong>{{ visible_department_count|default:"0" }}</strong>
@@ -122,8 +119,8 @@
                 <tr>
                   <th>Department</th>
                   <th>Dean</th>
-                  <th>Est. Year</th>
-                  <th>Students</th>
+                  <th>Unit No.</th>
+                  <th>Status</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -132,7 +129,11 @@
                   <tr>
                     <td>
                       <div class="department-cell">
-                        <span class="department-avatar">{{ row.short_name|slice:":1" }}</span>
+                        {% if row.logo %}
+                          <img src="{{ row.logo }}" alt="{{ row.short_name }}" class="department-avatar" style="object-fit: cover;">
+                        {% else %}
+                          <span class="department-avatar">{{ row.short_name|slice:":2" }}</span>
+                        {% endif %}
                         <div>
                           <strong>{{ row.name }}</strong>
                           <small>{{ row.description }}</small>
@@ -140,14 +141,14 @@
                       </div>
                     </td>
                     <td>{{ row.dean }}</td>
-                    <td>{{ row.est_year }}</td>
-                    <td>{{ row.students }}</td>
+                    <td>{{ row.unit_number|default:"--" }}</td>
+                    <td><span class="view-badge {{ row.status }}">{{ row.status|title }}</span></td>
                     <td>
                       <div class="table-actions">
-                        <button class="ok" type="button" aria-label="Approve">✓</button>
-                        <button class="edit" type="button" aria-label="Edit">✎</button>
-                        <button class="view" type="button" aria-label="View">◉</button>
-                        <button class="delete" type="button" aria-label="Delete">🗑</button>
+                        <button class="ok" type="button" aria-label="Approve" data-id="{{ row.id }}">✓</button>
+                        <button class="edit" type="button" aria-label="Edit" data-id="{{ row.id }}" data-name="{{ row.name|escapejs }}" data-code="{{ row.code|escapejs }}" data-unit="{{ row.unit_number|escapejs }}" data-color="{{ row.color|escapejs }}" data-head="{{ row.head|escapejs }}" data-status="{{ row.status|escapejs }}" data-remarks="{{ row.remarks|escapejs }}">✎</button>
+                        <button class="view" type="button" aria-label="View" data-id="{{ row.id }}">◉</button>
+                        <button class="delete" type="button" aria-label="Delete" data-id="{{ row.id }}" data-name="{{ row.name|escapejs }}">🗑</button>
                       </div>
                     </td>
                   </tr>
@@ -198,7 +199,7 @@
         <h3>Create Department</h3>
         <button class="close-modal" id="closeModalBtn" type="button">&times;</button>
       </div>
-      <form class="modal-form" id="createDeptForm" action="{% url 'admin_create_department' %}" method="POST">
+      <form class="modal-form" id="createDeptForm" action="{% url 'admin_create_department' %}" method="POST" enctype="multipart/form-data">
         {% csrf_token %}
         <div class="modal-body">
           <div class="form-grid">
@@ -234,6 +235,10 @@
               </select>
             </div>
             <div class="form-group full-width">
+              <label for="deptLogo">Department Logo</label>
+              <input type="file" id="deptLogo" name="logo" accept="image/*">
+            </div>
+            <div class="form-group full-width">
               <label for="deptRemarks">Remarks</label>
               <textarea id="deptRemarks" name="remarks" rows="3" placeholder="Additional notes..."></textarea>
             </div>
@@ -247,58 +252,340 @@
     </div>
   </div>
 
+  <!-- Edit Department Modal -->
+  <div class="modal-overlay" id="editDeptModal">
+    <div class="modal-container">
+      <div class="modal-header">
+        <h3>Edit Department</h3>
+        <button class="close-modal" id="closeEditModalBtn" type="button">&times;</button>
+      </div>
+      <form class="modal-form" id="editDeptForm" method="POST" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="editDeptName">Department Name</label>
+              <input type="text" id="editDeptName" name="name" required>
+            </div>
+            <div class="form-group">
+              <label for="editDeptCode">Department Code</label>
+              <input type="text" id="editDeptCode" name="code" required>
+            </div>
+            <div class="form-group">
+              <label for="editUnitNumber">Unit Number</label>
+              <input type="number" id="editUnitNumber" name="unit_number">
+            </div>
+            <div class="form-group">
+              <label for="editDelegationColor">Delegation Color</label>
+              <div class="color-input-wrap">
+                <input type="color" id="editDelegationColor" name="color">
+                <span class="color-hex" id="editColorHex">#022068</span>
+              </div>
+            </div>
+            <div class="form-group full-width">
+              <label for="editDeptHead">Department Head</label>
+              <input type="text" id="editDeptHead" name="head">
+            </div>
+            <div class="form-group full-width">
+              <label for="editDeptStatus">Status</label>
+              <select id="editDeptStatus" name="status">
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+                <option value="archived">Archived</option>
+              </select>
+            </div>
+            <div class="form-group full-width">
+              <label for="editDeptLogo">Department Logo</label>
+              <input type="file" id="editDeptLogo" name="logo" accept="image/*">
+            </div>
+            <div class="form-group full-width">
+              <label for="editDeptRemarks">Remarks</label>
+              <textarea id="editDeptRemarks" name="remarks" rows="3"></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-cancel" id="cancelEditModalBtn" type="button">Cancel</button>
+          <button class="btn-save" type="submit">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Delete Department Modal -->
+  <div class="modal-overlay" id="deleteDeptModal">
+    <div class="modal-container delete-container">
+      <div class="modal-header">
+        <h3>Delete Department</h3>
+        <button class="close-modal" id="closeDeleteModalBtn" type="button">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p>Are you sure you want to delete <strong id="deleteDeptName"></strong>? This action cannot be undone.</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-cancel" id="cancelDeleteModalBtn" type="button">Cancel</button>
+        <button class="btn-delete-confirm" id="confirmDeleteBtn" type="button">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- View Department Modal -->
+  <div class="modal-overlay" id="viewDeptModal">
+    <div class="modal-container view-container">
+      <div class="modal-header">
+        <h3>Department Details</h3>
+        <button class="close-modal" id="closeViewModalBtn" type="button">&times;</button>
+      </div>
+      <div class="modal-body view-details" id="viewDeptDetails">
+        <div class="loading-spinner">Loading...</div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-cancel" id="closeViewModalFooterBtn" type="button">Close</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     document.addEventListener('DOMContentLoaded', () => {
-      const modal = document.getElementById('deptModal');
-      const openBtn = document.getElementById('openModalBtn');
-      const closeBtn = document.getElementById('closeModalBtn');
-      const cancelBtn = document.getElementById('cancelModalBtn');
-      const colorInput = document.getElementById('delegationColor');
-      const colorHex = document.querySelector('.color-hex');
+      // Create Modal elements
+      const createModal = document.getElementById('deptModal');
+      const openCreateBtn = document.getElementById('openModalBtn');
+      const closeCreateBtn = document.getElementById('closeModalBtn');
+      const cancelCreateBtn = document.getElementById('cancelModalBtn');
+      const createColorInput = document.getElementById('delegationColor');
+      const createColorHex = document.querySelector('.color-hex');
 
-      const toggleModal = (show) => {
+      // Edit Modal elements
+      const editModal = document.getElementById('editDeptModal');
+      const closeEditBtn = document.getElementById('closeEditModalBtn');
+      const cancelEditBtn = document.getElementById('cancelEditModalBtn');
+      const editForm = document.getElementById('editDeptForm');
+      const editColorInput = document.getElementById('editDelegationColor');
+      const editColorHex = document.getElementById('editColorHex');
+
+      // Delete Modal elements
+      const deleteModal = document.getElementById('deleteDeptModal');
+      const closeDeleteBtn = document.getElementById('closeDeleteModalBtn');
+      const cancelDeleteBtn = document.getElementById('cancelDeleteModalBtn');
+      const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
+      const deleteDeptNameSpan = document.getElementById('deleteDeptName');
+      let deptIdToDelete = null;
+
+      // View Modal elements
+      const viewModal = document.getElementById('viewDeptModal');
+      const closeViewBtn = document.getElementById('closeViewModalBtn');
+      const closeViewFooterBtn = document.getElementById('closeViewModalFooterBtn');
+      const viewDetailsContainer = document.getElementById('viewDeptDetails');
+
+      // Helper function to toggle modals
+      const toggleModal = (modal, show) => {
+        if (!modal) return;
         modal.classList.toggle('active', show);
-        if (show) document.body.style.overflow = 'hidden';
-        else document.body.style.overflow = '';
+        document.body.style.overflow = show ? 'hidden' : '';
       };
 
-      openBtn.addEventListener('click', () => toggleModal(true));
-      [closeBtn, cancelBtn].forEach(btn => btn.addEventListener('click', () => toggleModal(false)));
-      
-      modal.addEventListener('click', (e) => {
-        if (e.target === modal) toggleModal(false);
+      // Close modal on outside click for all modals
+      document.querySelectorAll('.modal-overlay').forEach(modal => {
+        modal.addEventListener('click', (e) => {
+          if (e.target === modal) toggleModal(modal, false);
+        });
       });
 
-      colorInput.addEventListener('input', (e) => {
-        colorHex.textContent = e.target.value.toUpperCase();
-      });
+      // --- Create Department Logic ---
+      if (openCreateBtn) openCreateBtn.addEventListener('click', () => toggleModal(createModal, true));
+      if (closeCreateBtn) closeCreateBtn.addEventListener('click', () => toggleModal(createModal, false));
+      if (cancelCreateBtn) cancelCreateBtn.addEventListener('click', () => toggleModal(createModal, false));
 
-      document.getElementById('createDeptForm').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const form = e.target;
-        const formData = new FormData(form);
-        const data = Object.fromEntries(formData.entries());
+      if (createColorInput) {
+        createColorInput.addEventListener('input', (e) => {
+          if (createColorHex) createColorHex.textContent = e.target.value.toUpperCase();
+        });
+      }
 
-        try {
-          const response = await fetch(form.action, {
-            method: 'POST',
-            headers: {
-              'X-CSRFToken': formData.get('csrfmiddlewaretoken'),
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(data)
-          });
+      const createForm = document.getElementById('createDeptForm');
+      if (createForm) {
+        createForm.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const form = e.target;
+          const formData = new FormData(form);
 
-          const result = await response.json();
-          if (result.success) {
-            alert(result.message);
-            location.reload(); 
-          } else {
-            alert('Error: ' + result.message);
+          try {
+            const response = await fetch(form.action, {
+              method: 'POST',
+              headers: {
+                'X-CSRFToken': formData.get('csrfmiddlewaretoken')
+              },
+              body: formData // Send FormData directly to handle files
+            });
+
+            const result = await response.json();
+            if (result.success) {
+              alert(result.message);
+              location.reload(); 
+            } else {
+              alert('Error: ' + result.message);
+            }
+          } catch (error) {
+            alert('Failed to create department: ' + error.message);
           }
-        } catch (error) {
-          alert('Failed to create department: ' + error.message);
-        }
+        });
+      }
+
+      // --- Edit Department Logic ---
+      if (closeEditBtn) closeEditBtn.addEventListener('click', () => toggleModal(editModal, false));
+      if (cancelEditBtn) cancelEditBtn.addEventListener('click', () => toggleModal(editModal, false));
+
+      if (editColorInput) {
+        editColorInput.addEventListener('input', (e) => {
+          if (editColorHex) editColorHex.textContent = e.target.value.toUpperCase();
+        });
+      }
+
+      document.querySelectorAll('.table-actions .edit').forEach(btn => {
+        btn.addEventListener('click', function() {
+          const id = this.getAttribute('data-id');
+          editForm.action = `/admin/departments/${id}/edit/`;
+          
+          document.getElementById('editDeptName').value = this.getAttribute('data-name');
+          document.getElementById('editDeptCode').value = this.getAttribute('data-code');
+          document.getElementById('editUnitNumber').value = this.getAttribute('data-unit');
+          
+          const color = this.getAttribute('data-color') || '#022068';
+          editColorInput.value = color;
+          editColorHex.textContent = color.toUpperCase();
+          
+          document.getElementById('editDeptHead').value = this.getAttribute('data-head');
+          document.getElementById('editDeptStatus').value = this.getAttribute('data-status');
+          document.getElementById('editDeptRemarks').value = this.getAttribute('data-remarks');
+          
+          toggleModal(editModal, true);
+        });
+      });
+
+      if (editForm) {
+        editForm.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const form = e.target;
+          const formData = new FormData(form);
+
+          try {
+            const response = await fetch(form.action, {
+              method: 'POST',
+              headers: {
+                'X-CSRFToken': formData.get('csrfmiddlewaretoken')
+              },
+              body: formData
+            });
+
+            const result = await response.json();
+            if (result.success) {
+              alert(result.message);
+              location.reload();
+            } else {
+              alert('Error: ' + result.message);
+            }
+          } catch (error) {
+            alert('Failed to update department: ' + error.message);
+          }
+        });
+      }
+
+      // --- Delete Department Logic ---
+      if (closeDeleteBtn) closeDeleteBtn.addEventListener('click', () => toggleModal(deleteModal, false));
+      if (cancelDeleteBtn) cancelDeleteBtn.addEventListener('click', () => toggleModal(deleteModal, false));
+
+      document.querySelectorAll('.table-actions .delete').forEach(btn => {
+        btn.addEventListener('click', function() {
+          deptIdToDelete = this.getAttribute('data-id');
+          deleteDeptNameSpan.textContent = this.getAttribute('data-name');
+          toggleModal(deleteModal, true);
+        });
+      });
+
+      if (confirmDeleteBtn) {
+        confirmDeleteBtn.addEventListener('click', async () => {
+          if (!deptIdToDelete) return;
+          try {
+            const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+            const response = await fetch(`/admin/departments/${deptIdToDelete}/delete/`, {
+              method: 'POST',
+              headers: {
+                'X-CSRFToken': csrfToken,
+                'Content-Type': 'application/json'
+              }
+            });
+
+            const result = await response.json();
+            if (result.success) {
+              alert(result.message);
+              location.reload();
+            } else {
+              alert('Error: ' + result.message);
+            }
+          } catch (error) {
+            alert('Failed to delete department: ' + error.message);
+          }
+          toggleModal(deleteModal, false);
+        });
+      }
+
+      // --- View Department Logic ---
+      if (closeViewBtn) closeViewBtn.addEventListener('click', () => toggleModal(viewModal, false));
+      if (closeViewFooterBtn) closeViewFooterBtn.addEventListener('click', () => toggleModal(viewModal, false));
+
+      document.querySelectorAll('.table-actions .view').forEach(btn => {
+        btn.addEventListener('click', async function() {
+          const id = this.getAttribute('data-id');
+          toggleModal(viewModal, true);
+          viewDetailsContainer.innerHTML = '<div class="loading-spinner">Loading...</div>';
+
+          try {
+            const response = await fetch(`/admin/departments/${id}/view/`);
+            if (!response.ok) throw new Error('Network response was not ok');
+            const data = await response.json();
+            
+            viewDetailsContainer.innerHTML = `
+              <div class="view-header-details">
+                ${data.logo ? `<img src="${data.logo}" alt="${data.name} Logo" class="view-logo">` : `<div class="view-avatar" style="background-color: ${data.delegation_color}">${data.code.substring(0,2)}</div>`}
+                <div>
+                  <h4>${data.name}</h4>
+                  <span class="view-badge ${data.status}">${data.status.toUpperCase()}</span>
+                </div>
+              </div>
+              <div class="view-grid">
+                <div class="view-item">
+                  <span class="view-label">Code</span>
+                  <span class="view-value">${data.code}</span>
+                </div>
+                <div class="view-item">
+                  <span class="view-label">Unit Number</span>
+                  <span class="view-value">${data.unit_number || '--'}</span>
+                </div>
+                <div class="view-item">
+                  <span class="view-label">Head/Dean</span>
+                  <span class="view-value">${data.head || 'Not Assigned'}</span>
+                </div>
+                <div class="view-item">
+                  <span class="view-label">Students</span>
+                  <span class="view-value">${data.students}</span>
+                </div>
+                <div class="view-item">
+                  <span class="view-label">Color</span>
+                  <span class="view-value" style="display: flex; align-items: center; gap: 8px;">
+                    <span style="width: 16px; height: 16px; border-radius: 4px; background-color: ${data.delegation_color};"></span>
+                    ${data.delegation_color}
+                  </span>
+                </div>
+              </div>
+              <div class="view-item" style="margin-top: 16px;">
+                <span class="view-label">Remarks</span>
+                <p class="view-value">${data.remarks || 'No remarks added.'}</p>
+              </div>
+            `;
+          } catch (error) {
+            viewDetailsContainer.innerHTML = `<div class="error-msg">Failed to load details: ${error.message}</div>`;
+          }
+        });
       });
     });
   </script>

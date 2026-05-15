@@ -229,7 +229,12 @@ def get_department_rows():
                 'est_year': dept.unit_number or '--',
                 'students': student_count,
                 'color': dept.delegation_color,
-                'status': dept.status
+                'status': dept.status,
+                'logo': dept.logo.url if dept.logo else None,
+                'code': dept.code,
+                'unit_number': dept.unit_number,
+                'head': dept.head,
+                'remarks': dept.remarks,
             })
 
     return department_rows
@@ -274,7 +279,79 @@ def admin_create_department(request):
             }
         )
         
-        return JsonResponse({'success': True, 'message': f'Department {name} created.'})
+        return JsonResponse({'success': True, 'message': f'Department {name} created.', 'id': dept.id})
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': str(e)}, status=500)
+
+
+@login_required
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def admin_view_department(request, dept_id):
+    """Return department detail as JSON for the View modal."""
+    dept = get_object_or_404(Department, id=dept_id)
+    try:
+        group = Group.objects.get(name=dept.name)
+        student_count = group.user_set.filter(is_staff=False, is_superuser=False).count()
+    except Group.DoesNotExist:
+        student_count = 0
+    return JsonResponse({
+        'id': dept.id,
+        'name': dept.name,
+        'code': dept.code,
+        'unit_number': dept.unit_number,
+        'delegation_color': dept.delegation_color,
+        'head': dept.head,
+        'status': dept.status,
+        'remarks': dept.remarks,
+        'students': student_count,
+        'logo': dept.logo.url if dept.logo else None,
+    })
+
+
+@login_required
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def admin_edit_department(request, dept_id):
+    """Update an existing Department (supports logo upload via multipart)."""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': 'Invalid request method.'}, status=400)
+
+    dept = get_object_or_404(Department, id=dept_id)
+    try:
+        name = request.POST.get('name', '').strip()
+        code = request.POST.get('code', '').strip()
+        if not name or not code:
+            return JsonResponse({'success': False, 'message': 'Name and Code are required.'}, status=400)
+
+        dept.name = name
+        dept.code = code
+        dept.unit_number = request.POST.get('unit_number', '').strip()
+        dept.delegation_color = request.POST.get('color', dept.delegation_color)
+        dept.head = request.POST.get('head', '').strip()
+        dept.status = request.POST.get('status', dept.status)
+        dept.remarks = request.POST.get('remarks', '').strip()
+
+        if 'logo' in request.FILES:
+            dept.logo = request.FILES['logo']
+
+        dept.save()
+        Group.objects.get_or_create(name=name)
+        return JsonResponse({'success': True, 'message': f'Department {name} updated.'})
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': str(e)}, status=500)
+
+
+@login_required
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def admin_delete_department(request, dept_id):
+    """Delete a Department."""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': 'Invalid request method.'}, status=400)
+
+    dept = get_object_or_404(Department, id=dept_id)
+    name = dept.name
+    try:
+        dept.delete()
+        return JsonResponse({'success': True, 'message': f'Department {name} deleted.'})
     except Exception as e:
         return JsonResponse({'success': False, 'message': str(e)}, status=500)
 
