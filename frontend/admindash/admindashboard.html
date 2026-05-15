@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Assign Accounts - EventTab</title>
-  <link rel="stylesheet" href="{% static 'admindash/admindashboard.css' %}?v=20260511b">
+  <link rel="stylesheet" href="{% static 'admindash/admindashboard.css' %}?v=20260515cal">
 </head>
 <body class="admin-dashboard-page admin-dashboard-home">
   <div class="dashboard-shell">
@@ -77,7 +77,7 @@
         <section class="dashboard-metrics" aria-label="Dashboard metrics">
           <article class="metric-card metric-primary">
             <span class="metric-label">Ongoing Games</span>
-            <strong>{{ active_user_count|default:"12" }}</strong>
+            <strong>{{ ongoing_count|default:"0" }}</strong>
             <div class="metric-tags">
               <span>Basketball</span>
               <span>Volleyball</span>
@@ -86,75 +86,189 @@
           </article>
           <article class="metric-card">
             <span class="metric-label">Total Events</span>
-            <strong>{{ total_user_count|default:"48" }}</strong>
+            <strong>{{ total_events_count|default:"0" }}</strong>
             <small>Across all categories</small>
           </article>
           <article class="metric-card">
             <span class="metric-label">Completed</span>
-            <strong>{{ filtered_user_count|default:"24" }}</strong>
-            <div class="progress-track"><span></span></div>
-            <small>50% progress</small>
+            <strong>{{ completed_events_count|default:"0" }}</strong>
+            <div class="progress-track"><span style="width:{{ completed_pct|default:0 }}%"></span></div>
+            <small>{{ completed_pct|default:"0" }}% progress</small>
           </article>
         </section>
 
-        <section class="dashboard-table-card" aria-label="Upcoming events">
-          <div class="dashboard-table-header">
-            <h3>Upcoming Events</h3>
-            <form method="get" class="dashboard-filter-form">
-              <select name="role" aria-label="Category filter">
-                <option value="all" {% if selected_role == 'all' %}selected{% endif %}>All Categories</option>
-                <option value="tabulator" {% if selected_role == 'tabulator' %}selected{% endif %}>Sports</option>
-                <option value="judge" {% if selected_role == 'judge' %}selected{% endif %}>Academic</option>
-              </select>
-            </form>
+        <!-- ═══════ EVENT CALENDAR ═══════ -->
+        <section class="cal-card" aria-label="Event calendar" id="eventCalendarSection">
+          <div class="cal-header">
+            <h3 class="cal-title">Event Calendar</h3>
+            <div class="cal-nav">
+              <button type="button" class="cal-nav-btn" id="calPrev" aria-label="Previous month">
+                <svg viewBox="0 0 24 24"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+              </button>
+              <span class="cal-month-label" id="calMonthLabel"></span>
+              <button type="button" class="cal-nav-btn" id="calNext" aria-label="Next month">
+                <svg viewBox="0 0 24 24"><path d="M8.59 16.59 10 18l6-6-6-6-1.41 1.41L13.17 12z"/></svg>
+              </button>
+              <button type="button" class="cal-today-btn" id="calToday">Today</button>
+            </div>
           </div>
 
-          <div class="table-wrap">
-            <table class="dashboard-events-table">
-              <thead>
-                <tr>
-                  <th>Event Details</th>
-                  <th>Date &amp; Venue</th>
-                  <th>Category</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for row in account_rows|slice:":4" %}
-                  <tr>
-                    <td>
-                      <div class="event-detail-cell">
-                        <span class="event-thumb">{{ row.initials }}</span>
-                        <div>
-                          <strong>{{ row.full_name|default:"Quiz Bee" }}</strong>
-                          <small>{{ row.role|default:"Academic" }} Event</small>
-                        </div>
-                      </div>
-                    </td>
-                    <td>
-                      <div class="event-meta">
-                        <strong>{{ row.contact|default:"Oct 24, 2024" }}</strong>
-                        <small>{{ row.user.email|default:"Smart Room 201" }}</small>
-                      </div>
-                    </td>
-                    <td><span class="category-pill">{{ row.role|default:"Academic" }}</span></td>
-                    <td>
-                      <span class="status-pill {% if row.status_key == 'active' %}active{% else %}inactive{% endif %}">
-                        {% if row.status_key == 'active' %}Active{% else %}Pending{% endif %}
-                      </span>
-                    </td>
-                  </tr>
-                {% empty %}
-                  <tr>
-                    <td colspan="4" class="empty-state">No upcoming events available.</td>
-                  </tr>
-                {% endfor %}
-              </tbody>
-            </table>
+          <div class="cal-grid-wrap">
+            <div class="cal-weekdays">
+              <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+            </div>
+            <div class="cal-days" id="calDays"></div>
+          </div>
+
+          <!-- Day detail popover -->
+          <div class="cal-popover hidden" id="calPopover">
+            <div class="cal-popover-header">
+              <strong id="calPopoverDate"></strong>
+              <button type="button" class="cal-popover-close" id="calPopoverClose">&times;</button>
+            </div>
+            <div class="cal-popover-body" id="calPopoverBody"></div>
+          </div>
+
+          <!-- Legend -->
+          <div class="cal-legend">
+            <span class="cal-legend-item"><span class="cal-dot dot-upcoming"></span>Upcoming</span>
+            <span class="cal-legend-item"><span class="cal-dot dot-active"></span>Active</span>
+            <span class="cal-legend-item"><span class="cal-dot dot-completed"></span>Completed</span>
           </div>
         </section>
       </main>
     </div>
   </div>
+
+  <script>
+  (function () {
+    /* ── Data from Django ── */
+    const EVENTS = JSON.parse('{{ events_json|escapejs }}');
+
+    /* ── Index events by date string (YYYY-MM-DD) ── */
+    const eventsByDate = {};
+    EVENTS.forEach(ev => {
+      if (!ev.date) return;
+      (eventsByDate[ev.date] = eventsByDate[ev.date] || []).push(ev);
+    });
+
+    /* ── DOM refs ── */
+    const $days       = document.getElementById('calDays');
+    const $label      = document.getElementById('calMonthLabel');
+    const $prev       = document.getElementById('calPrev');
+    const $next       = document.getElementById('calNext');
+    const $today      = document.getElementById('calToday');
+    const $popover    = document.getElementById('calPopover');
+    const $popDate    = document.getElementById('calPopoverDate');
+    const $popBody    = document.getElementById('calPopoverBody');
+    const $popClose   = document.getElementById('calPopoverClose');
+
+    const MONTH_NAMES = ['January','February','March','April','May','June',
+                         'July','August','September','October','November','December'];
+
+    const STATUS_CLASS = { upcoming: 'dot-upcoming', active: 'dot-active', completed: 'dot-completed' };
+    const STATUS_LABEL = { upcoming: 'Upcoming', active: 'Active', completed: 'Completed' };
+
+    let viewYear, viewMonth;   // 0-indexed month
+
+    /* ── Helpers ── */
+    function pad(n) { return String(n).padStart(2, '0'); }
+    function dateKey(y, m, d) { return `${y}-${pad(m + 1)}-${pad(d)}`; }
+
+    function todayKey() {
+      const t = new Date();
+      return dateKey(t.getFullYear(), t.getMonth(), t.getDate());
+    }
+
+    /* ── Render calendar grid ── */
+    function render() {
+      $label.textContent = `${MONTH_NAMES[viewMonth]} ${viewYear}`;
+      $days.innerHTML = '';
+
+      const firstDay  = new Date(viewYear, viewMonth, 1).getDay();   // 0=Sun
+      const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+      const tk = todayKey();
+
+      // Leading blanks
+      for (let i = 0; i < firstDay; i++) {
+        const blank = document.createElement('span');
+        blank.className = 'cal-day-cell cal-blank';
+        $days.appendChild(blank);
+      }
+
+      // Day cells
+      for (let d = 1; d <= daysInMonth; d++) {
+        const key  = dateKey(viewYear, viewMonth, d);
+        const evts = eventsByDate[key] || [];
+        const cell = document.createElement('button');
+        cell.type = 'button';
+        cell.className = 'cal-day-cell';
+        if (key === tk) cell.classList.add('cal-today');
+        if (evts.length) cell.classList.add('cal-has-events');
+
+        cell.innerHTML = `<span class="cal-day-num">${d}</span>`;
+
+        // Render up to 3 dots
+        if (evts.length) {
+          const dotsWrap = document.createElement('span');
+          dotsWrap.className = 'cal-day-dots';
+          const unique = [...new Set(evts.map(e => e.status))];
+          unique.slice(0, 3).forEach(s => {
+            const dot = document.createElement('span');
+            dot.className = 'cal-dot ' + (STATUS_CLASS[s] || 'dot-upcoming');
+            dotsWrap.appendChild(dot);
+          });
+          cell.appendChild(dotsWrap);
+        }
+
+        cell.addEventListener('click', () => showPopover(key, evts, cell));
+        $days.appendChild(cell);
+      }
+    }
+
+    /* ── Popover ── */
+    function showPopover(dateStr, events, anchor) {
+      if (!events.length) {
+        $popover.classList.add('hidden');
+        return;
+      }
+
+      const d = new Date(dateStr + 'T00:00:00');
+      $popDate.textContent = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+
+      $popBody.innerHTML = events.map(ev => `
+        <div class="cal-ev-row">
+          <span class="cal-dot ${STATUS_CLASS[ev.status] || 'dot-upcoming'}"></span>
+          <div class="cal-ev-info">
+            <strong>${escapeHtml(ev.title)}</strong>
+            <small>${escapeHtml(ev.category)}${ev.time ? ' · ' + ev.time : ''}${ev.venue ? ' · ' + escapeHtml(ev.venue) : ''}</small>
+          </div>
+          <span class="cal-ev-badge cal-badge-${ev.status}">${STATUS_LABEL[ev.status] || ev.status}</span>
+        </div>
+      `).join('');
+
+      $popover.classList.remove('hidden');
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str || '';
+      return div.innerHTML;
+    }
+
+    $popClose.addEventListener('click', () => $popover.classList.add('hidden'));
+
+    /* ── Navigation ── */
+    $prev.addEventListener('click', () => { viewMonth--; if (viewMonth < 0) { viewMonth = 11; viewYear--; } $popover.classList.add('hidden'); render(); });
+    $next.addEventListener('click', () => { viewMonth++; if (viewMonth > 11) { viewMonth = 0; viewYear++; } $popover.classList.add('hidden'); render(); });
+    $today.addEventListener('click', () => { const t = new Date(); viewYear = t.getFullYear(); viewMonth = t.getMonth(); $popover.classList.add('hidden'); render(); });
+
+    /* ── Init ── */
+    const now = new Date();
+    viewYear  = now.getFullYear();
+    viewMonth = now.getMonth();
+    render();
+  })();
+  </script>
 </body>
 </html>

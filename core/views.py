@@ -401,7 +401,28 @@ def login_view(request):
 @login_required(login_url='login')
 @user_passes_test(lambda user: user.is_staff, login_url='login')
 def admin_dashboard(request):
-    return render(request, 'admindash/admindashboard.html', get_assignment_account_context(request))
+    ctx = get_assignment_account_context(request)
+    # Add event stats for the dashboard metrics
+    all_events = Event.objects.all()
+    ctx['ongoing_count'] = all_events.filter(status=Event.STATUS_ACTIVE).count()
+    ctx['total_events_count'] = all_events.count()
+    ctx['completed_events_count'] = all_events.filter(status=Event.STATUS_COMPLETED).count()
+    total = ctx['total_events_count'] or 1
+    ctx['completed_pct'] = int(ctx['completed_events_count'] / total * 100)
+    # Serialize events for the calendar (rendered as JSON in template)
+    events_json = []
+    for ev in all_events:
+        events_json.append({
+            'id': ev.id,
+            'title': ev.name,
+            'date': ev.event_date.strftime('%Y-%m-%d') if ev.event_date else '',
+            'time': ev.event_time.strftime('%H:%M') if ev.event_time else '',
+            'category': ev.category,
+            'venue': ev.venue,
+            'status': ev.status,
+        })
+    ctx['events_json'] = json.dumps(events_json)
+    return render(request, 'admindash/admindashboard.html', ctx)
 
 
 @login_required(login_url='login')
