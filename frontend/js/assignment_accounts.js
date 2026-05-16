@@ -7,12 +7,11 @@ document.addEventListener('DOMContentLoaded', function () {
   const modalSubtitle = document.getElementById('assignment-modal-subtitle');
 
   const accountId = document.getElementById('assignment-account-id');
-  const fullName = document.getElementById('assignment-full-name');
   const username = document.getElementById('assignment-username');
   const email = document.getElementById('assignment-email');
   const password = document.getElementById('assignment-password');
   const role = document.getElementById('assignment-role');
-  const isActive = document.getElementById('assignment-is-active');
+  const statusSelect = document.getElementById('assignment-status');
 
   if (!openButton || !modal || !form) {
     return;
@@ -35,8 +34,8 @@ document.addEventListener('DOMContentLoaded', function () {
   document.querySelectorAll('.delete-account').forEach(function (button) {
     button.addEventListener('click', async function () {
       const row = button.closest('tr');
-      const name = row ? row.dataset.fullName : 'this account';
-      const confirmed = window.confirm(`Delete ${name}? This action cannot be undone.`);
+      const name = row ? (row.dataset.username || row.dataset.fullName || 'this account') : 'this account';
+      const confirmed = window.confirm('Delete ' + name + '? This action cannot be undone.');
       if (!confirmed) {
         return;
       }
@@ -72,17 +71,18 @@ document.addEventListener('DOMContentLoaded', function () {
     event.preventDefault();
 
     const editing = Boolean(accountId.value);
+    const isActive = statusSelect.value === 'active';
     const payload = {
-      full_name: fullName.value.trim(),
+      full_name: username.value.trim(),
       username: username.value.trim(),
       email: email.value.trim(),
       password: password.value,
       role: role.value,
-      is_active: isActive.checked,
+      is_active: isActive,
     };
 
-    if (!payload.full_name || !payload.username || !payload.email || (!editing && !payload.password)) {
-      showToast('Full name, username, email, and password are required for new accounts.', 'warning');
+    if (!payload.username || !payload.email || (!editing && !payload.password)) {
+      showToast('Username, email, and password are required for new accounts.', 'warning');
       return;
     }
 
@@ -107,13 +107,12 @@ document.addEventListener('DOMContentLoaded', function () {
   function openCreateModal() {
     modal.dataset.endpoint = openButton.dataset.createUrl;
     accountId.value = '';
-    fullName.value = '';
     username.value = '';
     email.value = '';
     password.value = '';
     role.value = 'Tabulator';
-    isActive.checked = true;
-    modalTitle.textContent = 'New Account';
+    statusSelect.value = 'active';
+    modalTitle.textContent = 'Create Account';
     modalSubtitle.textContent = 'Create a tabulator or judge account for event scoring access.';
     submitButton.disabled = false;
     submitButton.textContent = 'Create Account';
@@ -124,14 +123,13 @@ document.addEventListener('DOMContentLoaded', function () {
   function openEditModal(row, endpoint) {
     modal.dataset.endpoint = endpoint;
     accountId.value = row.dataset.accountId || '';
-    fullName.value = row.dataset.fullName || '';
     username.value = row.dataset.username || '';
     email.value = row.dataset.email || '';
     password.value = '';
     role.value = row.dataset.role || 'Tabulator';
-    isActive.checked = row.dataset.status === 'active';
+    statusSelect.value = row.dataset.status === 'active' ? 'active' : 'deactive';
     modalTitle.textContent = 'Edit Account';
-    modalSubtitle.textContent = 'Update the role, login details, and active status for this account.';
+    modalSubtitle.textContent = 'Update the role, login details, and status for this account.';
     submitButton.disabled = false;
     submitButton.textContent = 'Save Account';
     password.required = false;
@@ -141,7 +139,7 @@ document.addEventListener('DOMContentLoaded', function () {
   function openModal() {
     modal.classList.remove('hidden');
     modal.setAttribute('aria-hidden', 'false');
-    fullName.focus();
+    username.focus();
   }
 
   function closeModal() {
@@ -201,7 +199,11 @@ function showToast(message, type) {
   toast.className = `toast-message ${type || 'success'}`;
   toast.textContent = message;
   document.body.appendChild(toast);
+  // Trigger reflow so the animation plays
+  toast.offsetHeight;
+  toast.classList.add('visible');
   setTimeout(function () {
-    toast.remove();
+    toast.classList.remove('visible');
+    setTimeout(function () { toast.remove(); }, 350);
   }, 3500);
 }

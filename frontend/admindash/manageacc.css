@@ -1,5 +1,47 @@
-@import url("admindashboard.css?v=20260511a");
+@import url("admindashboard.css?v=20260515cal");
 
 .manage-account-page .side-nav a.active {
+  color: #ffffff;
+}
+
+/* ── Toast notification — top center ── */
+.toast-message {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-30px);
+  right: auto;
+  z-index: 9999;
+  max-width: 480px;
+  width: max-content;
+  padding: 14px 24px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 800;
+  text-align: center;
+  box-shadow: 0 14px 36px rgba(2, 22, 56, 0.22);
+  opacity: 0;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  pointer-events: none;
+}
+
+.toast-message.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+  pointer-events: auto;
+}
+
+.toast-message.success {
+  background: #2af385;
+  color: #0a2340;
+}
+
+.toast-message.warning {
+  background: #ffdf23;
+  color: #0a2340;
+}
+
+.toast-message.error {
+  background: #f04955;
   color: #ffffff;
 }
