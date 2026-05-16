@@ -36,10 +36,19 @@
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
   margin-bottom: 12px;
-  max-width: 520px;
+  max-width: 680px;
+}
+
+.stat-card--total {
+  border-left: 3px solid #022068;
+}
+
+.stat-icon--total {
+  background: #dbeafe;
+  color: #022068;
 }
 
 .stat-card {
@@ -142,10 +151,14 @@
   display: none;
 }
 
+.advanced-filters {
+  position: relative;
+}
+
 .advanced-filters[open] .filters {
   position: absolute;
-  right: 20px;
-  top: 210px;
+  right: 0;
+  top: calc(100% + 8px);
   width: min(640px, calc(100vw - 56px));
   z-index: 40;
   padding: 10px;

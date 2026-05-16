@@ -97,6 +97,12 @@
           <div class="account-toolbar">
             <form class="account-filters" method="get" role="search">
               <input type="text" name="q" value="{{ search_query }}" placeholder="Search accounts" aria-label="Search accounts">
+              <select name="dept" aria-label="Department">
+                <option value="all" {% if selected_dept == 'all' %}selected{% endif %}>All Departments</option>
+                {% for dept_code in department_options %}
+                  <option value="{{ dept_code }}" {% if selected_dept == dept_code %}selected{% endif %}>{{ dept_code }}</option>
+                {% endfor %}
+              </select>
               <select name="role" aria-label="Role">
                 <option value="all" {% if selected_role == 'all' %}selected{% endif %}>All Roles</option>
                 <option value="tabulator" {% if selected_role == 'tabulator' %}selected{% endif %}>Tabulator</option>
@@ -105,7 +111,7 @@
               <select name="status" aria-label="Status">
                 <option value="all" {% if selected_status == 'all' %}selected{% endif %}>All Status</option>
                 <option value="active" {% if selected_status == 'active' %}selected{% endif %}>Active</option>
-                <option value="inactive" {% if selected_status == 'inactive' %}selected{% endif %}>Inactive</option>
+                <option value="inactive" {% if selected_status == 'inactive' %}selected{% endif %}>Deactivated</option>
               </select>
               <button type="submit" aria-label="Apply filters">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17Z"></path></svg>
@@ -125,6 +131,7 @@
                   <th>Username</th>
                   <th>Email</th>
                   <th>Contact</th>
+                  <th>Dept Code</th>
                   <th>Role</th>
                   <th>Status</th>
                   <th>Actions</th>
@@ -149,6 +156,7 @@
                     <td data-label="Username">{{ row.user.username }}</td>
                     <td data-label="Email">{{ row.user.email|default:"No email" }}</td>
                     <td data-label="Contact">{{ row.contact }}</td>
+                    <td data-label="Dept Code">{{ row.department_code|default:"—" }}</td>
                     <td data-label="Role"><span class="role-label">{{ row.role }}</span></td>
                     <td data-label="Status">
                       <span class="status-pill {{ row.status_key }}">{{ row.status }}</span>
@@ -178,7 +186,7 @@
                   </tr>
                 {% empty %}
                   <tr>
-                    <td colspan="7" class="empty-state">No tabulator or judge accounts found.</td>
+                    <td colspan="8" class="empty-state">No tabulator or judge accounts found.</td>
                   </tr>
                 {% endfor %}
               </tbody>
@@ -189,12 +197,12 @@
             <span>Showing {{ start_index }} entries of total {{ filtered_user_count|default:"0" }} records</span>
             <div class="pagination-controls">
               {% if page_obj.has_previous %}
-                <a href="?q={{ search_query|urlencode }}&role={{ selected_role }}&status={{ selected_status }}&page={{ page_obj.previous_page_number }}" aria-label="Previous page">Previous</a>
+                <a href="?q={{ search_query|urlencode }}&role={{ selected_role }}&status={{ selected_status }}&dept={{ selected_dept }}&page={{ page_obj.previous_page_number }}" aria-label="Previous page">Previous</a>
               {% else %}
                 <span class="disabled">Previous</span>
               {% endif %}
               {% if page_obj.has_next %}
-                <a class="primary" href="?q={{ search_query|urlencode }}&role={{ selected_role }}&status={{ selected_status }}&page={{ page_obj.next_page_number }}" aria-label="Next page">Next</a>
+                <a class="primary" href="?q={{ search_query|urlencode }}&role={{ selected_role }}&status={{ selected_status }}&dept={{ selected_dept }}&page={{ page_obj.next_page_number }}" aria-label="Next page">Next</a>
               {% else %}
                 <span class="disabled primary">Next</span>
               {% endif %}

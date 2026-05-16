@@ -81,6 +81,13 @@
         </section>
 
         <section class="stats-grid" aria-label="Event summaries">
+          <article class="stat-card stat-card--total">
+            <div class="stat-icon stat-icon--total">📋</div>
+            <div>
+              <strong>{{ total_events_count|default:"0" }}</strong>
+              <small>Total Events</small>
+            </div>
+          </article>
           <article class="stat-card">
             <div class="stat-icon">⚡</div>
             <div>
@@ -138,7 +145,8 @@
                 <tr>
                   <th>Type</th>
                   <th>Category</th>
-                  <th>Schedule</th>
+                  <th>Date</th>
+                  <th>Time</th>
                   <th>Venue</th>
                   <th>Actions</th>
                 </tr>
@@ -159,6 +167,7 @@
                     </td>
                     <td>{{ row.category }}</td>
                     <td>{{ row.schedule_label }}</td>
+                    <td>{{ row.event_time|default:"—" }}</td>
                     <td>{{ row.venue }}</td>
                     <td>
                       <div class="action-buttons">
@@ -176,7 +185,7 @@
                   </tr>
                 {% empty %}
                   <tr>
-                    <td colspan="5" class="empty-state">No events yet. Click "Create Event" to add one.</td>
+                    <td colspan="6" class="empty-state">No events yet. Click "Create Event" to add one.</td>
                   </tr>
                 {% endfor %}
               </tbody>

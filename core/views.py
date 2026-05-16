@@ -122,17 +122,31 @@ def get_assignment_account_rows():
         .order_by('id')
     )
 
+    # Build lookup: department name (lowered) -> department code
+    dept_lookup = {}
+    for dept in Department.objects.all():
+        dept_lookup[dept.name.lower()] = dept.code
+
     account_rows = []
     for user in assignment_users:
         role = get_assignment_role(user)
         if role is None:
             continue
 
+        # Match user's groups against department names to find their dept code
+        dept_code = ''
+        for group in user.groups.all():
+            gname = group.name.lower()
+            if gname in dept_lookup:
+                dept_code = dept_lookup[gname]
+                break
+
         full_name = user.get_full_name().strip() or user.username
         account_rows.append({
             'user': user,
             'full_name': full_name,
             'role': role,
+            'department_code': dept_code,
             'status': 'Active' if user.is_active else 'Inactive',
             'status_key': 'active' if user.is_active else 'inactive',
             'contact': 'Not set',
@@ -145,6 +159,7 @@ def get_assignment_account_rows():
 def get_assignment_account_context(request):
     status_filter = request.GET.get('status', 'all').strip().lower()
     role_filter = request.GET.get('role', 'all').strip().lower()
+    dept_filter = request.GET.get('dept', 'all').strip()
     search_query = request.GET.get('q', '').strip()
 
     account_rows = get_assignment_account_rows()
@@ -159,6 +174,7 @@ def get_assignment_account_context(request):
             or query_lower in row['user'].username.lower()
             or query_lower in (row['user'].email or '').lower()
             or query_lower in row['role'].lower()
+            or query_lower in row['department_code'].lower()
         ]
 
     if role_filter != 'all':
@@ -166,6 +182,14 @@ def get_assignment_account_context(request):
 
     if status_filter != 'all':
         account_rows = [row for row in account_rows if row['status_key'] == status_filter]
+
+    if dept_filter != 'all':
+        account_rows = [row for row in account_rows if row['department_code'].lower() == dept_filter.lower()]
+
+    # Department codes for the filter dropdown
+    department_options = list(
+        Department.objects.values_list('code', flat=True).order_by('code')
+    )
 
     paginator = Paginator(account_rows, 10)
     page_obj = paginator.get_page(request.GET.get('page', 1))
@@ -179,7 +203,9 @@ def get_assignment_account_context(request):
         'active_user_count': active_user_count,
         'selected_status': status_filter,
         'selected_role': role_filter,
+        'selected_dept': dept_filter,
         'search_query': search_query,
+        'department_options': department_options,
         'page_obj': page_obj,
         'start_index': start_index,
         'end_index': end_index,
@@ -768,6 +794,7 @@ def admin_manage_events(request):
     active_count    = all_events.filter(status=Event.STATUS_ACTIVE).count()
     upcoming_count  = all_events.filter(status=Event.STATUS_UPCOMING).count()
     completed_count = all_events.filter(status=Event.STATUS_COMPLETED).count()
+    total_events_count = all_events.count()
     category_names  = sorted(all_events.values_list('category', flat=True).distinct()) or ['Sports', 'Esports', 'Pageant']
 
     department_names = list(Group.objects.order_by('name').values_list('name', flat=True))
@@ -779,6 +806,7 @@ def admin_manage_events(request):
         'active_count':           active_count,
         'upcoming_count':         upcoming_count,
         'completed_count':        completed_count,
+        'total_events_count':     total_events_count,
         'category_names':         category_names,
         'department_names':       department_names,
         'create_category_options': create_category_options,
