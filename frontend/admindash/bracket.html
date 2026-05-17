@@ -1,0 +1,318 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Brackets - EventTab</title>
+  <link rel="stylesheet" href="{% static 'admindash/bracket.css' %}?v=20260516a">
+</head>
+<body class="admin-dashboard-page bracket-page">
+  <div class="dashboard-shell">
+    <aside class="sidebar" aria-label="Admin navigation">
+      <div class="brand">
+        <h1>EventTab</h1>
+        <span>Admin Portal</span>
+      </div>
+
+      <nav class="side-nav">
+        <a href="{% url 'admin_dashboard' %}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm9 0h7v7h-7v-7Z"></path></svg>
+          <span>Dashboard</span>
+        </a>
+        <a href="{% url 'admin_manage_events' %}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2v2H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2H7Zm12 8H5V7h14v3Zm-8 3H7v4h4v-4Z"></path></svg>
+          <span>Manage Events</span>
+        </a>
+        <a href="{% url 'admin_manage_account' %}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 11c1.66 0 3-1.57 3-3.5S17.66 4 16 4s-3 1.57-3 3.5 1.34 3.5 3 3.5ZM8 11c1.66 0 3-1.57 3-3.5S9.66 4 8 4 5 5.57 5 7.5 6.34 11 8 11Zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 14.17 10.33 13 8 13Zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5Z"></path></svg>
+          <span>Manage Account</span>
+        </a>
+        <a href="{% url 'admin_departments' %}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V9h5V3h6v8h5v10H4Zm2-2h3v-3H6v3Zm0-5h3v-3H6v3Zm5 5h2v-3h-2v3Zm0-5h2v-3h-2v3Zm0-5h2V5h-2v4Zm4 10h3v-3h-3v3Zm0-5h3v-1h-3v1Z"></path></svg>
+          <span>Departments</span>
+        </a>
+        <a class="active" href="{% url 'admin_brackets' %}" aria-current="page">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 4h4v4H2V4Zm0 6h4v4H2v-4Zm0 6h4v4H2v-4ZM8 5h2v2h2v4h-2v2H8v-2H6V9h2V5Zm6 2h2v2h2v2h-2v2h-2v-2h-2V9h2V7Zm4 2h4v2h-4V9ZM8 17h2v-2h2v-2h2v2h2v2h2v2h4v2h-4v-2h-2v-2h-2v2h-2v-2H8v-2Z"></path></svg>
+          <span>Brackets</span>
+        </a>
+        <a href="{% url 'admin_event_progress' %}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19h14v2H5v-2Zm1-8h3v6H6v-6Zm5-6h3v12h-3V5Zm5 4h3v8h-3V9Z"></path></svg>
+          <span>Results</span>
+        </a>
+        <a href="{% url 'admin_scoresheets' %}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zm0 16H5V5h14v14zM7 7h10v2H7V7zm0 4h10v2H7v-2zm0 4h7v2H7v-2z"></path></svg>
+          <span>Scoresheet</span>
+        </a>
+        <a href="{% url 'admin_ocr' %}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h9l5 5v15H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Zm8 1.5V8h4.5L14 3.5ZM8 12h8v2H8v-2Zm0 4h8v2H8v-2Z"></path></svg>
+          <span>OCR Processing</span>
+        </a>
+        <a href="{% url 'admin_dashboard' %}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4V4Zm2 2v12h12V6H6Zm2 2h8v2H8V8Zm0 4h5v2H8v-2Z"></path></svg>
+          <span>Generate Report</span>
+        </a>
+      </nav>
+
+      <a class="logout-link" href="{% url 'logout' %}">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17v-3H3v-4h7V7l5 5-5 5Zm2-14h8v18h-8v-2h6V5h-6V3Z"></path></svg>
+        <span>Logout</span>
+      </a>
+    </aside>
+
+    <div class="content-area">
+      <header class="topbar">
+        <span class="topbar-spacer" aria-hidden="true"></span>
+        <div class="topbar-actions">
+          <button class="icon-button" type="button" aria-label="Notifications">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm8-6-2-2v-5a6 6 0 1 0-12 0v5l-2 2v1h16v-1Z"></path></svg>
+          </button>
+          <div class="profile-avatar" aria-label="{{ request.user.username }}">{{ request.user.username|default:"AD"|slice:":2"|upper }}</div>
+        </div>
+      </header>
+
+      <main class="main-content">
+        <section class="bracket-title-band">
+          <h3>BRACKETS</h3>
+        </section>
+
+        <section class="bracket-stats" aria-label="Bracket summaries">
+          <article class="bracket-stat-card">
+            <div class="stat-icon">📋</div>
+            <div>
+              <strong>{{ total_events|default:"0" }}</strong>
+              <small>Total Events</small>
+            </div>
+          </article>
+          <article class="bracket-stat-card">
+            <div class="stat-icon">⚡</div>
+            <div>
+              <strong>{{ active_count|default:"0" }}</strong>
+              <small>Active Now</small>
+            </div>
+          </article>
+          <article class="bracket-stat-card">
+            <div class="stat-icon">◔</div>
+            <div>
+              <strong>{{ upcoming_count|default:"0" }}</strong>
+              <small>Upcoming</small>
+            </div>
+          </article>
+        </section>
+
+        <section class="bracket-table-card">
+          <div class="bracket-table-header">
+            <h3>Event Brackets</h3>
+            <button type="button" class="btn-create-bracket" id="openCreateBracketBtn">Create Bracket</button>
+          </div>
+
+          <div class="bracket-table-wrap">
+            <table class="bracket-events-table">
+              <thead>
+                <tr>
+                  <th>Event</th>
+                  <th>Category</th>
+                  <th>Division</th>
+                  <th>Teams</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in event_rows %}
+                  <tr>
+                    <td>
+                      <div class="bracket-event-name">
+                        <strong>{{ row.name }}</strong>
+                        <span>{{ row.schedule_label }}</span>
+                      </div>
+                    </td>
+                    <td>{{ row.category }}</td>
+                    <td>{{ row.division|default:"—" }}</td>
+                    <td>{{ row.num_teams|default:"—" }}</td>
+                    <td>
+                      <span class="bracket-status {{ row.status }}">
+                        {% if row.status == 'active' %}Active
+                        {% elif row.status == 'upcoming' %}Upcoming
+                        {% else %}Completed
+                        {% endif %}
+                      </span>
+                    </td>
+                    <td>
+                      <button type="button" class="btn-view-bracket" data-id="{{ row.id }}">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5ZM12 17a5 5 0 1 1 0-10 5 5 0 0 1 0 10Zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"></path></svg>
+                        View Bracket
+                      </button>
+                    </td>
+                  </tr>
+                {% empty %}
+                  <tr>
+                    <td colspan="6" class="bracket-empty-state">No events with brackets yet. Create events first from Manage Events.</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- Create Bracket Modal -->
+  <div class="bracket-modal-overlay" id="createBracketModal" aria-hidden="true">
+    <div class="bracket-modal-container" role="dialog" aria-modal="true" aria-labelledby="create-bracket-title">
+      <div class="bracket-modal-header">
+        <h3 id="create-bracket-title">Create Bracket</h3>
+        <button class="bracket-close-modal" id="closeBracketBtn" type="button" aria-label="Close">&times;</button>
+      </div>
+      <form class="bracket-modal-form" id="createBracketForm">
+        <div class="bracket-modal-body">
+          <div class="form-row">
+            <div class="form-group full-width">
+              <label for="bracket_event">Select Event <span class="required">*</span></label>
+              <select id="bracket_event" name="event" required>
+                <option value="">Select Event</option>
+                {% for row in event_rows %}
+                <option value="{{ row.id }}" data-category="{{ row.category }}" data-division="{{ row.division|default:'' }}">{{ row.name }} ({{ row.category }})</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="event_category">Category</label>
+              <input type="text" id="event_category" name="category" placeholder="Auto-filled from Event" readonly>
+            </div>
+            <div class="form-group">
+              <label for="event_division">Division</label>
+              <input type="text" id="event_division" name="division" placeholder="Auto-filled from Event" readonly>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="bracket_round">Round</label>
+              <select id="bracket_round" name="round">
+                <option value="Elimination">Elimination</option>
+                <option value="Quarter Finals">Quarter Finals</option>
+                <option value="Semi Finals">Semi Finals</option>
+                <option value="Finals">Finals</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="tournament_format">Tournament Format <span class="required">*</span></label>
+              <select id="tournament_format" name="tournament_format" required>
+                <option value="">Select Format</option>
+                <option value="Single Elimination">Single Elimination</option>
+                <option value="Double Elimination">Double Elimination</option>
+                <option value="Round Robin">Round Robin</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="teams-section">
+            <div class="teams-header">
+              <label>Teams</label>
+              <button type="button" class="btn-create-team" id="addTeamBtn">
+                <svg viewBox="0 0 24 24" aria-hidden="true" width="14" height="14"><path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"></path></svg>
+                Create Team
+              </button>
+            </div>
+            <div id="teamsContainer" class="teams-container">
+              <!-- Team fields will be appended here -->
+            </div>
+          </div>
+        </div>
+        <div class="bracket-modal-footer">
+          <button type="button" class="btn-cancel" id="cancelBracketBtn">Cancel</button>
+          <button type="submit" class="btn-save">Save Bracket</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const modal = document.getElementById('createBracketModal');
+      const openBtn = document.getElementById('openCreateBracketBtn');
+      const closeBtn = document.getElementById('closeBracketBtn');
+      const cancelBtn = document.getElementById('cancelBracketBtn');
+      const addTeamBtn = document.getElementById('addTeamBtn');
+      const teamsContainer = document.getElementById('teamsContainer');
+      const eventSelect = document.getElementById('bracket_event');
+      const categoryInput = document.getElementById('event_category');
+      const divisionInput = document.getElementById('event_division');
+      let teamIndex = 0;
+
+      function openModal() {
+        modal.classList.add('active');
+        modal.setAttribute('aria-hidden', 'false');
+        if (teamsContainer.children.length === 0) {
+          addTeamField(); // Add at least one team field by default
+        }
+      }
+
+      function closeModal() {
+        modal.classList.remove('active');
+        modal.setAttribute('aria-hidden', 'true');
+      }
+
+      // Auto-fill category and division based on selected event
+      eventSelect.addEventListener('change', function() {
+        const selectedOption = this.options[this.selectedIndex];
+        if (selectedOption && selectedOption.value) {
+          categoryInput.value = selectedOption.getAttribute('data-category') || '';
+          divisionInput.value = selectedOption.getAttribute('data-division') || '';
+        } else {
+          categoryInput.value = '';
+          divisionInput.value = '';
+        }
+      });
+
+      function addTeamField() {
+        teamIndex++;
+        const teamHtml = `
+          <div class="team-item" id="team-item-${teamIndex}">
+            <button type="button" class="team-item-remove" onclick="document.getElementById('team-item-${teamIndex}').remove()" aria-label="Remove Team">
+              <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"></path></svg>
+            </button>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Team Name <span class="required">*</span></label>
+                <input type="text" name="team_name[]" required placeholder="e.g. Blue Falcons">
+              </div>
+              <div class="form-group">
+                <label>Department <span class="required">*</span></label>
+                <select name="team_department[]" required>
+                  <option value="">Select Department</option>
+                  {% for dept in departments %}
+                  <option value="{{ dept.id }}">{{ dept.name }} ({{ dept.code }})</option>
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
+            <div class="form-group" style="margin-top: 8px;">
+              <label>Members</label>
+              <textarea name="team_members[]" rows="2" placeholder="Enter member names separated by commas..."></textarea>
+            </div>
+          </div>
+        `;
+        teamsContainer.insertAdjacentHTML('beforeend', teamHtml);
+      }
+
+      addTeamBtn.addEventListener('click', addTeamField);
+      openBtn.addEventListener('click', openModal);
+      closeBtn.addEventListener('click', closeModal);
+      cancelBtn.addEventListener('click', closeModal);
+
+      // Close on backdrop click
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          closeModal();
+        }
+      });
+    });
+  </script>
+</body>
+</html>

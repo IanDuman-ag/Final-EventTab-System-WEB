@@ -884,6 +884,42 @@ def admin_delete_event(request, event_id):
     messages.success(request, f'Event "{name}" deleted successfully.')
     return redirect('admin_manage_events')
 
+
+@login_required
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def admin_brackets(request):
+    """Display the tournament brackets management page."""
+    all_events = Event.objects.all()
+    event_rows = []
+    for ev in all_events[:50]:
+        event_rows.append({
+            'id': ev.id,
+            'name': ev.name,
+            'category': ev.category,
+            'division': ev.division,
+            'department': ev.department,
+            'schedule_label': ev.schedule_label,
+            'event_date': ev.event_date.strftime('%Y-%m-%d') if ev.event_date else '',
+            'event_time': ev.event_time_str,
+            'venue': ev.venue,
+            'status': ev.status,
+            'num_teams': str(ev.num_teams) if ev.num_teams else '',
+        })
+
+    total_events = all_events.count()
+    active_count = all_events.filter(status=Event.STATUS_ACTIVE).count()
+    upcoming_count = all_events.filter(status=Event.STATUS_UPCOMING).count()
+    
+    departments = Department.objects.all()
+
+    return render(request, 'admindash/bracket.html', {
+        'event_rows': event_rows,
+        'total_events': total_events,
+        'active_count': active_count,
+        'upcoming_count': upcoming_count,
+        'departments': departments,
+    })
+
 @login_required
 @user_passes_test(lambda user: user.is_staff, login_url='login')
 def admin_event_progress(request):
