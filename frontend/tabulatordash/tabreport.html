@@ -1,0 +1,361 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tabulator Reports — EventTab</title>
+  <link rel="stylesheet" href="{% static 'tabulatordash/tabdashboard.css' %}?v=20260517a">
+  <style>
+    /* —— Reports Interface Custom Styling —— */
+    .tab-table-card {
+      background: #fff;
+      border-radius: 14px;
+      border: 1px solid #e8ecf1;
+      box-shadow: 0 4px 14px rgba(15, 23, 42, 0.05);
+      overflow: hidden;
+      margin-top: 24px;
+    }
+
+    .tab-table-head {
+      padding: 20px 24px;
+      border-bottom: 1px solid #eef1f5;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .tab-table-title {
+      font-size: 16px;
+      font-weight: 800;
+      color: #0f172a;
+    }
+
+    .tab-table-container {
+      overflow-x: auto;
+    }
+
+    .tab-data-table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+    }
+
+    .tab-data-table th {
+      background: #f8fafc;
+      padding: 14px 24px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: #64748b;
+      letter-spacing: 0.05em;
+      border-bottom: 1px solid #eef1f5;
+    }
+
+    .tab-data-table td {
+      padding: 16px 24px;
+      font-size: 14px;
+      color: #334155;
+      border-bottom: 1px solid #f1f5f9;
+      vertical-align: middle;
+    }
+
+    .tab-data-table tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .tab-data-table tr:hover td {
+      background: #fafbfc;
+    }
+
+    .event-info-name {
+      font-weight: 700;
+      color: #0f172a;
+    }
+
+    .event-info-cat {
+      font-size: 12px;
+      color: #64748b;
+      margin-top: 2px;
+    }
+
+    /* —— Progress bar —— */
+    .progress-container {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .progress-track {
+      flex: 1;
+      height: 6px;
+      background: #e2e8f0;
+      border-radius: 999px;
+      overflow: hidden;
+      min-width: 80px;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: #10b981;
+      border-radius: 999px;
+    }
+
+    .progress-val {
+      font-size: 12px;
+      font-weight: 700;
+      color: #475569;
+    }
+
+    /* —— Export action buttons —— */
+    .export-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .export-btn {
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid #e2e8f0;
+      background: #fff;
+      color: #475569;
+      transition: all 0.15s ease;
+    }
+
+    .export-btn:hover {
+      background: #f8fafc;
+      border-color: #cbd5e1;
+      color: #0f172a;
+    }
+
+    .export-btn--pdf:hover {
+      background: #fef2f2;
+      border-color: #fca5a5;
+      color: #b91c1c;
+    }
+
+    .export-btn--excel:hover {
+      background: #ecfdf5;
+      border-color: #a7f3d0;
+      color: #047857;
+    }
+
+    .export-btn svg {
+      width: 14px;
+      height: 14px;
+      fill: currentColor;
+    }
+
+    /* —— Export Status toast —— */
+    .export-status-toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #0f172a;
+      color: #fff;
+      padding: 14px 20px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+      display: none;
+      align-items: center;
+      gap: 10px;
+      z-index: 1000;
+      animation: slideInUp 0.25s ease-out;
+    }
+
+    @keyframes slideInUp {
+      from { transform: translateY(20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+  </style>
+</head>
+<body class="tabulator-dashboard-page">
+  <div class="tab-shell">
+    <!-- —— Synchronized Sidebar —— -->
+    <aside class="tab-sidebar" aria-label="Tabulator navigation">
+      <div class="tab-brand">
+        <h1>EventTab</h1>
+        <span>Tabulator Portal</span>
+      </div>
+
+      <nav class="tab-nav">
+        <a class="tab-nav-link" href="{% url 'tabulator_dashboard' %}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm9 0h7v7h-7v-7Z"></path></svg>
+          <span>Dashboard</span>
+        </a>
+        <a class="tab-nav-link" href="{% url 'tabulator_assigned' %}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2Zm0 16H5V10h14v10Zm0-12H5V6h14v2Z"></path></svg>
+          <span>Assigned Events</span>
+        </a>
+        <a class="tab-nav-link" href="{% url 'tabulator_scoresheets' %}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Zm0 16H5V5h14v14zM7 7h10v2H7V7zm0 4h10v2H7v-2zm0 4h7v2H7v-2z"></path></svg>
+          <span>Scoresheets</span>
+        </a>
+        <a class="tab-nav-link" href="{% url 'tabulator_ocr_upload' %}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z"></path></svg>
+          <span>OCR Upload</span>
+        </a>
+        <a class="tab-nav-link is-active" href="{% url 'tabulator_reports' %}" aria-current="page">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-9 14H7v-2h3v2zm3-4H7v-2h6v2zm3-4H7V7h9v2z"></path></svg>
+          <span>Reports</span>
+        </a>
+      </nav>
+
+      <a class="tab-logout" href="{% url 'logout' %}">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17v-3H3v-4h7V7l5 5-5 5Zm2-14h8v18h-8v-2h6V5h-6V3Z"></path></svg>
+        <span>Logout</span>
+      </a>
+    </aside>
+
+    <div class="tab-main">
+      <header class="tab-topbar">
+        <span class="tab-topbar-spacer" aria-hidden="true"></span>
+        <div class="tab-topbar-actions">
+          <button class="tab-icon-btn" type="button" aria-label="Notifications">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm8-6-2-2v-5a6 6 0 1 0-12 0v5l-2 2v1h16v-1Z"></path></svg>
+          </button>
+          <div class="tab-avatar" aria-label="{{ request.user.username }}">
+            {{ request.user.username|default:"TB"|slice:":2"|upper }}
+          </div>
+        </div>
+      </header>
+
+      <main class="tab-content">
+        <header class="tab-page-head">
+          <h2 class="tab-page-title">Tabulator Reports & Outputs</h2>
+          <p class="tab-page-sub">
+            Review and export complete rankings, stats, and scoresheet summaries for your verified events.
+          </p>
+        </header>
+
+        <!-- KPI Metrics cards -->
+        <section class="tab-stats" aria-label="Overview statistics">
+          <article class="tab-stat tab-stat--hero">
+            <span class="tab-stat-label">Assigned Events</span>
+            <strong class="tab-stat-value">{{ assigned_count }}</strong>
+          </article>
+          <article class="tab-stat tab-stat--card">
+            <div class="tab-stat-icon tab-stat-icon--ok" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"></path></svg>
+            </div>
+            <span class="tab-stat-label tab-stat-label--muted">Completed Verification</span>
+            <strong class="tab-stat-value tab-stat-value--dark">{{ completed_count }}</strong>
+          </article>
+          <article class="tab-stat tab-stat--card">
+            <div class="tab-stat-icon tab-stat-icon--warn" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"></path></svg>
+            </div>
+            <span class="tab-stat-label tab-stat-label--muted">Validation Accuracy</span>
+            <strong class="tab-stat-value tab-stat-value--dark">{{ accuracy_rate }}%</strong>
+          </article>
+        </section>
+
+        <!-- Assigned Events Reports Table -->
+        <div class="tab-table-card">
+          <div class="tab-table-head">
+            <h3 class="tab-table-title">Export Results & Sheets</h3>
+          </div>
+
+          <div class="tab-table-container">
+            <table class="tab-data-table">
+              <thead>
+                <tr>
+                  <th>Event details</th>
+                  <th>Date Scheduled</th>
+                  <th>Completion Progress</th>
+                  <th>Status</th>
+                  <th>Available Exports</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for item in assigned_events %}
+                <tr>
+                  <td>
+                    <div class="event-info-name">{{ item.name }}</div>
+                    <div class="event-info-cat">{{ item.category }}</div>
+                  </td>
+                  <td>{{ item.date }}</td>
+                  <td>
+                    <div class="progress-container">
+                      <div class="progress-track">
+                        <div class="progress-fill" style="width: {{ item.completion }};"></div>
+                      </div>
+                      <span class="progress-val">{{ item.completion }}</span>
+                    </div>
+                  </td>
+                  <td>
+                    <span class="tab-pill {% if item.completion == '100%' %}tab-pill--academic{% else %}tab-pill--esports{% endif %}">
+                      {{ item.status }}
+                    </span>
+                  </td>
+                  <td>
+                    <div class="export-actions">
+                      <button type="button" class="export-btn export-btn--pdf" onclick="triggerReportDownload('{{ item.name }}', 'pdf')">
+                        <svg viewBox="0 0 24 24"><path d="M20 2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8.5 7.5c0 .83-.67 1.5-1.5 1.5H9v2H7.5V7H10c.83 0 1.5.67 1.5 1.5v1zm5 2c0 .83-.67 1.5-1.5 1.5h-2.5V7H15c.83 0 1.5.67 1.5 1.5v3zm4-3.5h-3v1.5h2V11h-2v2h-1.5V7h4.5v1.5zM9 8.5H10v1H9v-1zm5.5 1.5H15v1.5h-.5V10zM4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6z"></path></svg>
+                        Export PDF
+                      </button>
+                      <button type="button" class="export-btn export-btn--excel" onclick="triggerReportDownload('{{ item.name }}', 'excel')">
+                        <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-4 6h-4v2h4v2h-4v2h4v2H9V7h6v2z"></path></svg>
+                        Export Excel
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- Dynamic Native Downloader Form -->
+  <form id="hidden-export-form" method="post" action="{% url 'generate_superadmin_report' %}" style="display: none;">
+    {% csrf_token %}
+    <input type="hidden" name="event" id="hidden-event-name">
+    <input type="hidden" name="format" id="hidden-export-format">
+    <input type="hidden" name="report_type" value="summary">
+    <input type="hidden" name="department" value="all">
+  </form>
+
+  <div id="toast" class="export-status-toast">
+    <div class="spinner" style="width: 16px; height: 16px; border-width: 2px;"></div>
+    <span id="toast-text">Preparing export file...</span>
+  </div>
+
+  <script>
+    function triggerReportDownload(eventName, format) {
+      const toast = document.getElementById('toast');
+      const toastText = document.getElementById('toast-text');
+      const form = document.getElementById('hidden-export-form');
+      const eventInput = document.getElementById('hidden-event-name');
+      const formatInput = document.getElementById('hidden-export-format');
+
+      eventInput.value = eventName;
+      formatInput.value = format;
+
+      // Show toast
+      toast.style.display = 'flex';
+      toastText.textContent = `Preparing your ${format.toUpperCase()} report...`;
+
+      setTimeout(() => {
+        toastText.textContent = 'Starting download...';
+        form.submit();
+        
+        setTimeout(() => {
+          toast.style.display = 'none';
+        }, 1500);
+      }, 1000);
+    }
+  </script>
+</body>
+</html>

@@ -1360,6 +1360,59 @@ def tabulator_scoresheets(request):
     })
 
 
+@login_required(login_url='login')
+@user_passes_test(lambda u: user_has_role(u, 'tabulator'), login_url='login')
+def tabulator_ocr_upload(request):
+    """Tabulator OCR Upload page"""
+    from events.models import Event
+    events = list(Event.objects.all().order_by('-event_date').values_list('name', flat=True))
+    if not events:
+        events = ['National Science Decathlon 2024', 'Regional Athletics Meet 2024']
+
+    return render(request, 'tabulatordash/ocr.html', {
+        'display_name': _tabulator_display_name(request.user),
+        'events': events,
+    })
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda u: user_has_role(u, 'tabulator'), login_url='login')
+def tabulator_reports(request):
+    """Tabulator Reports and Metrics page"""
+    from events.models import Event
+    # Gathers mock/live statistics for tabulator
+    assigned_count = 5
+    completed_count = 3
+    accuracy_rate = 98.4
+
+    assigned_events = []
+    events_qs = Event.objects.all().order_by('-event_date')
+    for event in events_qs:
+        assigned_events.append({
+            'name': event.name,
+            'category': event.category,
+            'date': event.event_date.strftime('%b %d, %Y'),
+            'status': event.get_status_display(),
+            'completion': '100%' if event.status == 'completed' else '60%',
+        })
+
+    # Default fallback data if empty
+    if not assigned_events:
+        assigned_events = [
+            {'name': 'National Science Decathlon 2024', 'category': 'Academic', 'date': 'Oct 24, 2024', 'status': 'Active', 'completion': '80%'},
+            {'name': 'Regional Athletics Meet 2024', 'category': 'Sports', 'date': 'Nov 12, 2024', 'status': 'Upcoming', 'completion': '0%'},
+            {'name': 'Spelling Bee Finals', 'category': 'Academic', 'date': 'May 15, 2026', 'status': 'Completed', 'completion': '100%'},
+        ]
+
+    return render(request, 'tabulatordash/tabreport.html', {
+        'display_name': _tabulator_display_name(request.user),
+        'assigned_count': assigned_count,
+        'completed_count': completed_count,
+        'accuracy_rate': accuracy_rate,
+        'assigned_events': assigned_events,
+    })
+
+
 @login_required
 @user_passes_test(lambda user: user.is_superuser, login_url='login')
 def superadmin_dashboard(request):

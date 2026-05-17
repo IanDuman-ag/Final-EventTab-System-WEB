@@ -1,0 +1,551 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OCR Verification — EventTab</title>
+  <link rel="stylesheet" href="{% static 'tabulatordash/tabdashboard.css' %}?v=20260517a">
+  <style>
+    /* —— OCR Custom Layout Elements —— */
+    .ocr-split-layout {
+      display: grid;
+      grid-template-columns: 1.1fr 1fr;
+      gap: 24px;
+      margin-top: 10px;
+    }
+
+    @media (max-width: 960px) {
+      .ocr-split-layout {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .ocr-card {
+      background: #fff;
+      border-radius: 14px;
+      border: 1px solid #e8ecf1;
+      box-shadow: 0 4px 14px rgba(15, 23, 42, 0.05);
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .ocr-card-head {
+      margin-bottom: 20px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #f1f5f9;
+    }
+
+    .ocr-card-title {
+      font-size: 16px;
+      font-weight: 800;
+      color: #0f172a;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* —— Dropzone Area —— */
+    .dropzone-container {
+      border: 2px dashed #cbd5e1;
+      border-radius: 12px;
+      padding: 40px 20px;
+      text-align: center;
+      background: #f8fafc;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+    }
+
+    .dropzone-container:hover, .dropzone-container.drag-over {
+      border-color: #0b74ff;
+      background: #f0f7ff;
+    }
+
+    .dropzone-icon {
+      width: 48px;
+      height: 48px;
+      background: #f1f5f9;
+      border-radius: 50%;
+      color: #64748b;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+    }
+
+    .dropzone-container:hover .dropzone-icon {
+      background: #0b74ff;
+      color: #fff;
+      transform: translateY(-2px);
+    }
+
+    .dropzone-icon svg {
+      width: 24px;
+      height: 24px;
+      fill: currentColor;
+    }
+
+    .dropzone-text h4 {
+      font-size: 14px;
+      font-weight: 700;
+      color: #334155;
+      margin-bottom: 4px;
+    }
+
+    .dropzone-text p {
+      font-size: 12px;
+      color: #64748b;
+    }
+
+    .file-input {
+      display: none;
+    }
+
+    /* —— Live Image Preview —— */
+    .preview-container {
+      display: none;
+      width: 100%;
+      margin-top: 16px;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid #e2e8f0;
+      position: relative;
+    }
+
+    .preview-img {
+      width: 100%;
+      max-height: 380px;
+      object-fit: contain;
+      display: block;
+      background: #000;
+    }
+
+    .remove-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(15, 23, 42, 0.75);
+      color: #fff;
+      border: 0;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      backdrop-filter: blur(4px);
+    }
+
+    .remove-btn:hover {
+      background: #ef4444;
+    }
+
+    /* —— OCR Status Overlay —— */
+    .ocr-loader {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 12px;
+      padding: 30px;
+      border-radius: 12px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      margin-top: 16px;
+    }
+
+    .spinner {
+      width: 28px;
+      height: 28px;
+      border: 3px solid #e2e8f0;
+      border-top-color: #0b74ff;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .ocr-loader p {
+      font-size: 13px;
+      font-weight: 600;
+      color: #475569;
+    }
+
+    /* —— Verification Fields Form —— */
+    .ocr-form {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .ocr-field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .ocr-field span {
+      font-size: 12px;
+      font-weight: 700;
+      color: #475569;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+
+    .ocr-input {
+      width: 100%;
+      padding: 10px 14px;
+      border-radius: 8px;
+      border: 1px solid #cbd5e1;
+      font-size: 14px;
+      color: #0f172a;
+      background: #fff;
+      transition: all 0.15s ease;
+    }
+
+    .ocr-input:focus {
+      outline: 0;
+      border-color: #0b74ff;
+      box-shadow: 0 0 0 3px rgba(11, 116, 255, 0.15);
+    }
+
+    .ocr-input:disabled {
+      background: #f1f5f9;
+      color: #64748b;
+      cursor: not-allowed;
+    }
+
+    .ocr-row-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .submit-btn {
+      width: 100%;
+      padding: 12px 18px;
+      border-radius: 8px;
+      background: #0b74ff;
+      color: #fff;
+      border: 0;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: background 0.15s ease;
+      margin-top: 10px;
+    }
+
+    .submit-btn:hover {
+      background: #0558d9;
+    }
+
+    .submit-btn:disabled {
+      background: #cbd5e1;
+      cursor: not-allowed;
+    }
+
+    .toast-msg {
+      display: none;
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      margin-top: 16px;
+      animation: fadeIn 0.2s ease;
+    }
+
+    .toast-msg--success {
+      background: #d1fae5;
+      color: #065f46;
+      border: 1px solid #a7f3d0;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body class="tabulator-dashboard-page">
+  <div class="tab-shell">
+    <!-- —— Synchronized Sidebar —— -->
+    <aside class="tab-sidebar" aria-label="Tabulator navigation">
+      <div class="tab-brand">
+        <h1>EventTab</h1>
+        <span>Tabulator Portal</span>
+      </div>
+
+      <nav class="tab-nav">
+        <a class="tab-nav-link" href="{% url 'tabulator_dashboard' %}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm9 0h7v7h-7v-7Z"></path></svg>
+          <span>Dashboard</span>
+        </a>
+        <a class="tab-nav-link" href="{% url 'tabulator_assigned' %}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2Zm0 16H5V10h14v10Zm0-12H5V6h14v2Z"></path></svg>
+          <span>Assigned Events</span>
+        </a>
+        <a class="tab-nav-link" href="{% url 'tabulator_scoresheets' %}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Zm0 16H5V5h14v14zM7 7h10v2H7V7zm0 4h10v2H7v-2zm0 4h7v2H7v-2z"></path></svg>
+          <span>Scoresheets</span>
+        </a>
+        <a class="tab-nav-link is-active" href="{% url 'tabulator_ocr_upload' %}" aria-current="page">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z"></path></svg>
+          <span>OCR Upload</span>
+        </a>
+        <a class="tab-nav-link" href="{% url 'tabulator_reports' %}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-9 14H7v-2h3v2zm3-4H7v-2h6v2zm3-4H7V7h9v2z"></path></svg>
+          <span>Reports</span>
+        </a>
+      </nav>
+
+      <a class="tab-logout" href="{% url 'logout' %}">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17v-3H3v-4h7V7l5 5-5 5Zm2-14h8v18h-8v-2h6V5h-6V3Z"></path></svg>
+        <span>Logout</span>
+      </a>
+    </aside>
+
+    <div class="tab-main">
+      <header class="tab-topbar">
+        <span class="tab-topbar-spacer" aria-hidden="true"></span>
+        <div class="tab-topbar-actions">
+          <button class="tab-icon-btn" type="button" aria-label="Notifications">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm8-6-2-2v-5a6 6 0 1 0-12 0v5l-2 2v1h16v-1Z"></path></svg>
+          </button>
+          <div class="tab-avatar" aria-label="{{ request.user.username }}">
+            {{ request.user.username|default:"TB"|slice:":2"|upper }}
+          </div>
+        </div>
+      </header>
+
+      <main class="tab-content">
+        <header class="tab-page-head">
+          <h2 class="tab-page-title">OCR Upload & Verification</h2>
+          <p class="tab-page-sub">
+            Upload printed scoresheet scans to instantly parse event rankings using optical character recognition.
+          </p>
+        </header>
+
+        <div class="ocr-split-layout">
+          <!-- —— LEFT SIDE: DOCUMENT UPLOAD & PREVIEW —— -->
+          <div class="ocr-card">
+            <div class="ocr-card-head">
+              <h3 class="ocr-card-title">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 7V3.5L18.5 9H13z"></path></svg>
+                Scoresheet Scanned Copy
+              </h3>
+            </div>
+
+            <div id="dropzone" class="dropzone-container">
+              <div class="dropzone-icon">
+                <svg viewBox="0 0 24 24"><path d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"></path></svg>
+              </div>
+              <div class="dropzone-text">
+                <h4>Drag & drop printed scoresheet scan</h4>
+                <p>Supports PNG, JPG or PDF formats (Max 8MB)</p>
+              </div>
+              <input type="file" id="file-selector" class="file-input" accept="image/*,application/pdf">
+            </div>
+
+            <!-- Upload Preview Area -->
+            <div id="preview-box" class="preview-container">
+              <button id="btn-remove" class="remove-btn" type="button">Remove</button>
+              <img id="img-preview" class="preview-img" src="" alt="Scoresheet Preview">
+            </div>
+
+            <!-- OCR Extraction Loader -->
+            <div id="ocr-loader-box" class="ocr-loader">
+              <div class="spinner"></div>
+              <p>Analyzing document with OCR Engine...</p>
+            </div>
+          </div>
+
+          <!-- —— RIGHT SIDE: VERIFICATION FORM —— -->
+          <div class="ocr-card">
+            <div class="ocr-card-head">
+              <h3 class="ocr-card-title">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 0 0 0-1.41l-2.34-2.34a.996.996 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"></path></svg>
+                OCR Detected Results
+              </h3>
+            </div>
+
+            <form id="ocr-verification-form" class="ocr-form">
+              <div class="ocr-field">
+                <span>Select Event Association</span>
+                <select name="event" id="ocr-event-select" class="ocr-input" required>
+                  {% for event in events %}
+                    <option>{{ event }}</option>
+                  {% empty %}
+                    <option>No events available</option>
+                  {% endfor %}
+                </select>
+              </div>
+
+              <div class="ocr-row-grid">
+                <div class="ocr-field">
+                  <span>Team A Score</span>
+                  <input type="number" step="0.01" id="ocr-score-a" class="ocr-input" placeholder="--" disabled required>
+                </div>
+                <div class="ocr-field">
+                  <span>Team B Score</span>
+                  <input type="number" step="0.01" id="ocr-score-b" class="ocr-input" placeholder="--" disabled required>
+                </div>
+              </div>
+
+              <div class="ocr-field">
+                <span>Declared Winner</span>
+                <input type="text" id="ocr-winner" class="ocr-input" placeholder="Awaiting extraction..." disabled required>
+              </div>
+
+              <div class="ocr-field">
+                <span>Remarks / Discrepancies</span>
+                <textarea id="ocr-remarks" class="ocr-input" rows="3" placeholder="Awaiting extraction..." disabled></textarea>
+              </div>
+
+              <button type="submit" id="btn-submit-verification" class="submit-btn" disabled>
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"></path></svg>
+                Submit Verified Scoresheet
+              </button>
+            </form>
+
+            <div id="verification-toast" class="toast-msg toast-msg--success" role="alert">
+              Scoresheet successfully verified and submitted to the queue!
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const dropzone = document.getElementById('dropzone');
+      const fileSelector = document.getElementById('file-selector');
+      const previewBox = document.getElementById('preview-box');
+      const imgPreview = document.getElementById('img-preview');
+      const btnRemove = document.getElementById('btn-remove');
+      const ocrLoader = document.getElementById('ocr-loader-box');
+
+      // Form inputs
+      const ocrForm = document.getElementById('ocr-verification-form');
+      const scoreAInput = document.getElementById('ocr-score-a');
+      const scoreBInput = document.getElementById('ocr-score-b');
+      const winnerInput = document.getElementById('ocr-winner');
+      const remarksInput = document.getElementById('ocr-remarks');
+      const btnSubmit = document.getElementById('btn-submit-verification');
+      const toastMsg = document.getElementById('verification-toast');
+
+      // Click dropzone to open native selector
+      dropzone.addEventListener('click', () => fileSelector.click());
+
+      // Drag and drop events
+      dropzone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropzone.classList.add('drag-over');
+      });
+
+      dropzone.addEventListener('dragleave', () => {
+        dropzone.classList.remove('drag-over');
+      });
+
+      dropzone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropzone.classList.remove('drag-over');
+        if (e.dataTransfer.files.length > 0) {
+          handleFileSelection(e.dataTransfer.files[0]);
+        }
+      });
+
+      fileSelector.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) {
+          handleFileSelection(e.target.files[0]);
+        }
+      });
+
+      function handleFileSelection(file) {
+        // Hide dropzone
+        dropzone.style.display = 'none';
+        
+        // Show loader
+        ocrLoader.style.display = 'flex';
+        
+        // Read file preview
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          imgPreview.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+
+        // Mock high-performance OCR analysis extraction
+        setTimeout(() => {
+          ocrLoader.style.display = 'none';
+          previewBox.style.display = 'block';
+
+          // Autofill extracted parameters
+          scoreAInput.disabled = false;
+          scoreBInput.disabled = false;
+          winnerInput.disabled = false;
+          remarksInput.disabled = false;
+          btnSubmit.disabled = false;
+
+          // Mock parsed data
+          scoreAInput.value = 92.50;
+          scoreBInput.value = 88.00;
+          winnerInput.value = 'Quantum Physicists';
+          remarksInput.value = 'Extracted high-fidelity match scores directly from OCR.';
+        }, 1800);
+      }
+
+      btnRemove.addEventListener('click', () => {
+        // Reset preview
+        previewBox.style.display = 'none';
+        imgPreview.src = '';
+        dropzone.style.display = 'flex';
+        fileSelector.value = '';
+
+        // Lock form inputs again
+        scoreAInput.value = '';
+        scoreBInput.value = '';
+        winnerInput.value = '';
+        remarksInput.value = '';
+        scoreAInput.disabled = true;
+        scoreBInput.disabled = true;
+        winnerInput.disabled = true;
+        remarksInput.disabled = true;
+        btnSubmit.disabled = true;
+        toastMsg.style.display = 'none';
+      });
+
+      ocrForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        btnSubmit.disabled = true;
+        btnSubmit.innerHTML = 'Submitting...';
+
+        setTimeout(() => {
+          btnSubmit.disabled = false;
+          btnSubmit.innerHTML = `
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"></path></svg>
+            Submit Verified Scoresheet
+          `;
+          toastMsg.style.display = 'block';
+          
+          setTimeout(() => {
+            // Auto remove/reset after successful save
+            btnRemove.click();
+          }, 3000);
+        }, 1000);
+      });
+    });
+  </script>
+</body>
+</html>
