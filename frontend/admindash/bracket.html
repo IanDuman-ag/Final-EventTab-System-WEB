@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Brackets - EventTab</title>
-  <link rel="stylesheet" href="{% static 'admindash/bracket.css' %}?v=20260516a">
+  <link rel="stylesheet" href="{% static 'admindash/bracket.css' %}?v=20260517a">
 </head>
 <body class="admin-dashboard-page bracket-page">
   <div class="dashboard-shell">
@@ -208,6 +208,37 @@
             </div>
           </div>
 
+          <div class="form-row">
+            <div class="form-group">
+              <label for="seeding_method">Seeding Method</label>
+              <select id="seeding_method" name="seeding_method">
+                <option value="department_balanced">Department Balanced</option>
+                <option value="random">Random</option>
+                <option value="strict">Strict Seed</option>
+              </select>
+            </div>
+            <div class="form-group" style="display: flex; align-items: flex-end; padding-bottom: 10px;">
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                <input type="checkbox" id="avoid_same_department" name="avoid_same_department" checked>
+                Avoid Same Department First Round
+              </label>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="match_interval">Match Interval (Mins)</label>
+              <input type="number" id="match_interval" name="match_interval" value="60" min="15" step="15">
+            </div>
+            <div class="form-group">
+              <label for="default_bye">Default Bye Assignment</label>
+              <select id="default_bye" name="default_bye">
+                <option value="highest_seed">Highest Seed</option>
+                <option value="random">Random</option>
+              </select>
+            </div>
+          </div>
+
           <div class="teams-section">
             <div class="teams-header">
               <label>Teams</label>
@@ -293,7 +324,7 @@
             <button type="button" class="team-item-remove" onclick="document.getElementById('team-item-${teamIndex}').remove()" aria-label="Remove Team">
               <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"></path></svg>
             </button>
-            <div class="form-row">
+            <div class="form-row" style="grid-template-columns: 2fr 2fr 1fr;">
               <div class="form-group">
                 <label>Team Name <span class="required">*</span></label>
                 <input type="text" name="team_name[]" required placeholder="e.g. Blue Falcons">
@@ -306,6 +337,10 @@
                   <option value="{{ dept.id }}">{{ dept.name }} ({{ dept.code }})</option>
                   {% endfor %}
                 </select>
+              </div>
+              <div class="form-group">
+                <label>Seed</label>
+                <input type="number" name="team_seed[]" min="1" placeholder="Seed">
               </div>
             </div>
             <div class="form-group" style="margin-top: 8px;">
@@ -365,10 +400,13 @@
         const teamNames = formData.getAll('team_name[]');
         const teamDepts = formData.getAll('team_department[]');
         const teamMembers = formData.getAll('team_members[]');
+        const teamSeeds = formData.getAll('team_seed[]');
         
         const teams = teamNames.map((name, index) => ({
-           name: name,
+           team_name: name,
            department: teamDepts[index],
+           team_number: index + 1,
+           seed_number: parseInt(teamSeeds[index]) || (index + 1),
            members: teamMembers[index]
         }));
         
@@ -377,10 +415,51 @@
            return;
         }
 
+        const selectedEventOption = eventSelect.options[eventSelect.selectedIndex];
+
         const payload = {
-           event: eventId,
-           tournament_format: formatType,
-           teams: teams
+           event: {
+             event_id: eventId,
+             event_name: selectedEventOption ? selectedEventOption.text.split(' (')[0] : '',
+             category: categoryInput.value,
+             division: divisionInput.value,
+             tournament_format: formatType,
+             status: "Draft"
+           },
+           teams: teams,
+           seeding: {
+             method: formData.get('seeding_method'),
+             avoid_same_department_first_round: formData.get('avoid_same_department') === 'on'
+           },
+           match_settings: {
+             match_interval_minutes: parseInt(formData.get('match_interval')),
+             default_bye_assignment: formData.get('default_bye'),
+             status_options: ["Pending", "Ongoing", "Completed", "Forfeit"]
+           },
+           bracket_rules: {
+             double_elimination: {
+               winner_advances_to: "next_winner_match",
+               loser_advances_to: "next_loser_match",
+               eliminate_after_losses: 2
+             },
+             single_elimination: {
+               winner_advances_to: "next_match",
+               loser_eliminated: true
+             }
+           },
+           match_fields: [
+             "game_number", "round_name", "team_a", "team_b", "team_a_source",
+             "team_b_source", "date", "time", "venue", "score_team_a",
+             "score_team_b", "winner", "loser", "status", "remarks"
+           ],
+           features: {
+             auto_generate_bracket: true,
+             auto_advance_winner_loser: true,
+             handle_byes: true,
+             bracket_lock_after_first_match: true,
+             notifications: true,
+             export_options: ["PDF", "Excel"]
+           }
         };
         
         const submitBtn = form.querySelector('.btn-save');

@@ -50,16 +50,6 @@ def generate_single_elimination(event, teams, round_name_prefix="Round"):
             round_matches[r].append(m)
             match_number -= 1
 
-    # Link matches
-    for r in range(num_rounds - 1):
-        for i, m in enumerate(round_matches[r]):
-            # The teams coming into this match are winners of round_matches[r+1][2i] and round_matches[r+1][2i+1]
-            # m.next_match_winner is what we set on the children
-            child1 = round_matches[r+1][2*i]
-            child2 = round_matches[r+1][2*i + 1]
-            child1.next_match_winner = m
-            child2.next_match_winner = m
-            
     # Save all matches (we have to save them from final upwards, or save all and then update foreign keys)
     # Actually, the easiest is to save all, then update the next_match_winner
     all_created_matches = []

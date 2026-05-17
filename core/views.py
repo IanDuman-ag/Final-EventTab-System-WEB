@@ -1833,8 +1833,9 @@ def admin_generate_bracket(request):
         from events.bracket_generator import generate_single_elimination, generate_double_elimination, generate_round_robin
         
         data = json.loads(request.body)
-        event_id = data.get('event')
-        format_type = data.get('tournament_format')
+        event_data = data.get('event')
+        event_id = event_data.get('event_id') if isinstance(event_data, dict) else event_data
+        format_type = event_data.get('tournament_format') if isinstance(event_data, dict) else data.get('tournament_format')
         teams_data = data.get('teams', [])
         
         if not event_id or not format_type or not teams_data:
@@ -1853,12 +1854,15 @@ def admin_generate_bracket(request):
             dept_id = team_data.get('department')
             department = Department.objects.get(id=dept_id) if dept_id else None
             
+            name = team_data.get('team_name') or team_data.get('name') or f'Team {index+1}'
+            seed = team_data.get('seed_number', index + 1)
+            
             team = BracketTeam.objects.create(
                 event=event,
-                name=team_data.get('name', f'Team {index+1}'),
+                name=name,
                 department=department,
                 members=team_data.get('members', ''),
-                seed=index + 1
+                seed=seed
             )
             bracket_teams.append(team)
             

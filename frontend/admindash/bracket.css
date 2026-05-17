@@ -322,6 +322,13 @@
   color: #ff4757;
 }
 
+.bracket-modal-form {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex: 1;
+}
+
 .bracket-modal-body {
   padding: 20px 24px;
   overflow-y: auto;
