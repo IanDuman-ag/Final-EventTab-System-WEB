@@ -118,7 +118,6 @@ class BracketMatch(models.Model):
     loser = models.ForeignKey(BracketTeam, on_delete=models.SET_NULL, null=True, blank=True, related_name='matches_lost')
     next_match_winner = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='previous_matches_winner')
     next_match_loser = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='previous_matches_loser')
-    
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
     match_date = models.DateField(null=True, blank=True)
     match_time = models.TimeField(null=True, blank=True)
@@ -135,3 +134,36 @@ class BracketMatch(models.Model):
 
     def __str__(self):
         return f"{self.event.name} - Match {self.match_number} ({self.round_name})"
+
+class ScoreSheet(models.Model):
+    STATUS_PENDING = 'pending'
+    STATUS_CONFIRMED = 'confirmed'
+    STATUS_FINALIZED = 'finalized'
+    STATUS_CHOICES = [
+        (STATUS_PENDING, 'Pending'),
+        (STATUS_CONFIRMED, 'Confirmed'),
+        (STATUS_FINALIZED, 'Finalized'),
+    ]
+
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='scoresheets')
+    match = models.ForeignKey(BracketMatch, on_delete=models.CASCADE, related_name='scoresheets')
+    tabulator = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='submitted_scoresheets')
+    
+    score_team_a = models.DecimalField(max_digits=8, decimal_places=2, default=0.00)
+    score_team_b = models.DecimalField(max_digits=8, decimal_places=2, default=0.00)
+    winner = models.ForeignKey(BracketTeam, on_delete=models.SET_NULL, null=True, blank=True, related_name='won_scoresheets')
+    
+    judges_names = models.CharField(max_length=500, blank=True, default='')
+    remarks = models.TextField(blank=True, default='')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
+    
+    ocr_image = models.ImageField(upload_to='scoresheets/ocr/', null=True, blank=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Scoresheet: {self.match.event.name} - Match {self.match.match_number} ({self.get_status_display()})"

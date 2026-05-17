@@ -734,41 +734,7 @@ def get_session_events(request):
     return []
 
 
-def _event_progress_meta(status_key):
-    """Map internal status to lifecycle labels (SYSTEM_FLOW event statuses)."""
-    mapping = {
-        'upcoming': {
-            'progress_label': 'Upcoming',
-            'progress_detail': 'Event is scheduled for a future date.',
-            'progress_pct': 35,
-            'stage_current': 2,
-        },
-        'ongoing': {
-            'progress_label': 'Ongoing',
-            'progress_detail': 'Event date is today; monitor event activity and submissions.',
-            'progress_pct': 65,
-            'stage_current': 4,
-        },
-        'active': {
-            'progress_label': 'Ongoing',
-            'progress_detail': 'Event date is today; monitor event activity and submissions.',
-            'progress_pct': 65,
-            'stage_current': 4,
-        },
-        'completed': {
-            'progress_label': 'Completed',
-            'progress_detail': 'Event closed; results may be published or archived.',
-            'progress_pct': 100,
-            'stage_current': 6,
-        },
-        'inactive': {
-            'progress_label': 'Deactivated',
-            'progress_detail': 'Event is hidden from active operations until it is activated.',
-            'progress_pct': 0,
-            'stage_current': 1,
-        },
-    }
-    return mapping.get(status_key, mapping['ongoing'])
+
 
 
 @login_required
@@ -1009,70 +975,7 @@ def admin_brackets(request):
         'departments': departments,
     })
 
-@login_required
-@user_passes_test(lambda user: user.is_staff, login_url='login')
-def admin_event_progress(request):
-    """Monitor event lifecycle progress (aligned with SYSTEM_FLOW.md event statuses)."""
-    status_filter = request.GET.get('status', 'all').strip().lower()
-    if status_filter == Event.STATUS_ACTIVE:
-        status_filter = 'ongoing'
-    category_filter = request.GET.get('category', 'all').strip().lower()
-    search_query = request.GET.get('q', '').strip()
 
-    today = timezone.localdate()
-    all_rows = []
-    for event in Event.objects.all()[:80]:
-        status_meta = get_event_status_meta(event, today)
-        all_rows.append({
-            'id': event.id,
-            'name': event.name,
-            'category': event.category,
-            'venue': event.venue,
-            'schedule_label': event.schedule_label,
-            'status': status_meta['status'],
-            'status_label': status_meta['status_label'],
-        })
-    event_rows = list(all_rows)
-
-    if search_query:
-        q_lower = search_query.lower()
-        event_rows = [
-            row for row in event_rows
-            if q_lower in row['name'].lower()
-            or q_lower in row['category'].lower()
-            or q_lower in row['venue'].lower()
-        ]
-
-    if category_filter != 'all':
-        event_rows = [row for row in event_rows if row['category'].lower() == category_filter]
-
-    if status_filter != 'all':
-        event_rows = [row for row in event_rows if row['status'] == status_filter]
-
-    active_count = sum(1 for row in all_rows if row['status'] == 'ongoing')
-    upcoming_count = sum(1 for row in all_rows if row['status'] == 'upcoming')
-    completed_count = sum(1 for row in all_rows if row['status'] == 'completed')
-    category_names = sorted({row['category'] for row in all_rows}) or ['Sports', 'Esports', 'Pageant']
-
-    progress_rows = []
-    for row in event_rows[:40]:
-        meta = _event_progress_meta(row['status'])
-        progress_rows.append({**row, **meta})
-
-    progress_stage_labels = ['Draft', 'Upcoming', 'Ongoing', 'Tabulation', 'Completed', 'Archived']
-
-    return render(request, 'admindash/result.html', {
-        'progress_rows': progress_rows,
-        'active_count': active_count,
-        'upcoming_count': upcoming_count,
-        'completed_count': completed_count,
-        'total_tracked': len(all_rows),
-        'category_names': category_names,
-        'selected_category': category_filter,
-        'selected_status': status_filter,
-        'search_query': search_query,
-        'progress_stage_labels': progress_stage_labels,
-    })
 
 
 def get_tabulator_activity_score_rows(limit=60):
@@ -1122,28 +1025,183 @@ def get_tabulator_activity_score_rows(limit=60):
 @login_required(login_url='login')
 @user_passes_test(lambda user: user.is_staff, login_url='login')
 def admin_scoresheets(request):
+    from events.models import ScoreSheet, Event, BracketMatch
+    from django.db import models
+
+    # Auto-generate mock scoresheets for testing if none exist
+    if ScoreSheet.objects.count() == 0:
+        import datetime
+        from events.models import BracketTeam, Department
+        
+        # If there are no bracket matches, let's create a mock event, teams, and matches
+        if BracketMatch.objects.count() == 0:
+            event = Event.objects.first()
+            if not event:
+                event = Event.objects.create(
+                    name="Intramural Sports 2026",
+                    category="Sports",
+                    event_date=datetime.date.today(),
+                    venue="University Gymnasium",
+                    status="active"
+                )
+            
+            # Fetch or create departments
+            depts = list(Department.objects.all()[:4])
+            if len(depts) < 4:
+                names = ["College of Engineering", "College of Science", "College of Business", "College of Arts"]
+                codes = ["COE", "COS", "COB", "COA"]
+                for i, name in enumerate(names):
+                    if len(depts) < 4 and not Department.objects.filter(code=codes[i]).exists():
+                        d = Department.objects.create(name=name, code=codes[i])
+                        depts.append(d)
+            
+            # Create bracket teams
+            teams = []
+            for i, dept in enumerate(depts):
+                t = BracketTeam.objects.create(
+                    event=event,
+                    name=f"{dept.code} Tigers",
+                    department=dept,
+                    seed=i + 1
+                )
+                teams.append(t)
+            
+            # Generate brackets
+            from events.bracket_generator import generate_single_elimination
+            generate_single_elimination(event, teams)
+            
+        matches = BracketMatch.objects.filter(team_a__isnull=False, team_b__isnull=False)[:4]
+        for idx, match in enumerate(matches):
+            ScoreSheet.objects.create(
+                event=match.event,
+                match=match,
+                tabulator=request.user,
+                score_team_a=85.00 + (idx * 2.5),
+                score_team_b=82.00 + (idx * 1.5),
+                winner=match.team_a if idx % 2 == 0 else match.team_b,
+                judges_names="Judge Angela, Judge Brandon, Judge Carter",
+                remarks="Fair play, no penalties applied.",
+                status=ScoreSheet.STATUS_PENDING
+            )
+
+    # Get filters
+    event_id = request.GET.get('event')
+    status_filter = request.GET.get('status')
     search_query = request.GET.get('q', '').strip()
-    score_rows = get_tabulator_activity_score_rows()
+
+    scoresheets = ScoreSheet.objects.all().select_related(
+        'event', 'match', 'tabulator', 'winner', 'match__team_a', 'match__team_b'
+    )
+
+    if event_id:
+        scoresheets = scoresheets.filter(event_id=event_id)
+    if status_filter:
+        scoresheets = scoresheets.filter(status=status_filter)
     if search_query:
-        q_lower = search_query.lower()
-        score_rows = [
-            row for row in score_rows
-            if q_lower in row['tabulator'].lower()
-            or q_lower in row['item'].lower()
-            or q_lower in row['detail'].lower()
-        ]
+        scoresheets = scoresheets.filter(
+            models.Q(tabulator__username__icontains=search_query) |
+            models.Q(event__name__icontains=search_query) |
+            models.Q(match__round_name__icontains=search_query) |
+            models.Q(remarks__icontains=search_query) |
+            models.Q(judges_names__icontains=search_query)
+        )
+
+    events = Event.objects.all()
+
     return render(request, 'admindash/scoresheet.html', {
-        'score_rows': score_rows,
+        'scoresheets': scoresheets,
+        'events': events,
+        'selected_event': event_id,
+        'selected_status': status_filter,
         'search_query': search_query,
-        'submission_count': len(score_rows),
     })
 
 
 @login_required(login_url='login')
 @user_passes_test(lambda user: user.is_staff, login_url='login')
-def admin_ocr(request):
-    """Admin OCR: extract text from uploaded judge score card images (browser-side)."""
-    return render(request, 'admindash/ocr.html', {})
+def admin_approve_scoresheet(request, scoresheet_id):
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': 'POST request required.'}, status=400)
+
+    from events.models import ScoreSheet, BracketMatch
+    try:
+        scoresheet = ScoreSheet.objects.get(id=scoresheet_id)
+    except ScoreSheet.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'Scoresheet not found.'}, status=404)
+
+    if scoresheet.status != ScoreSheet.STATUS_PENDING:
+        return JsonResponse({'success': False, 'message': 'Scoresheet has already been processed.'}, status=400)
+
+    # Approve/finalize the scoresheet
+    scoresheet.status = ScoreSheet.STATUS_FINALIZED
+    scoresheet.save()
+
+    # Sync with BracketMatch
+    match = scoresheet.match
+    match.score_a = f"{scoresheet.score_team_a:.1f}"
+    match.score_b = f"{scoresheet.score_team_b:.1f}"
+    match.winner = scoresheet.winner
+
+    # Identify loser
+    if match.winner == match.team_a:
+        match.loser = match.team_b
+    else:
+        match.loser = match.team_a
+
+    match.status = BracketMatch.STATUS_COMPLETED
+    match.save()
+
+    # Advance winner to the next round if applicable
+    if match.next_match_winner:
+        next_m = match.next_match_winner
+        if next_m.team_a != match.winner and next_m.team_b != match.winner:
+            if next_m.team_a is None:
+                next_m.team_a = match.winner
+            elif next_m.team_b is None:
+                next_m.team_b = match.winner
+            next_m.save()
+
+    # Advance loser to loser bracket if double elimination (if next_match_loser exists)
+    if match.next_match_loser:
+        next_l = match.next_match_loser
+        if next_l.team_a != match.loser and next_l.team_b != match.loser:
+            if next_l.team_a is None:
+                next_l.team_a = match.loser
+            elif next_l.team_b is None:
+                next_l.team_b = match.loser
+            next_l.save()
+
+    return JsonResponse({
+        'success': True,
+        'message': f'Scoresheet for Match {match.match_number} approved successfully. Bracket updated.'
+    })
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def admin_discrepancy_scoresheet(request, scoresheet_id):
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': 'POST request required.'}, status=400)
+
+    from events.models import ScoreSheet
+    try:
+        scoresheet = ScoreSheet.objects.get(id=scoresheet_id)
+    except ScoreSheet.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'Scoresheet not found.'}, status=404)
+
+    remarks = request.POST.get('remarks', '').strip()
+    scoresheet.status = ScoreSheet.STATUS_PENDING
+    scoresheet.remarks = remarks
+    scoresheet.save()
+
+    return JsonResponse({
+        'success': True,
+        'message': 'Scoresheet marked with discrepancies and sent back to tabulators.'
+    })
+
+
+
+
 
 
 def _tabulator_display_name(user):
