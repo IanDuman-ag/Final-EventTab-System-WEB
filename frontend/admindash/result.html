@@ -108,9 +108,10 @@
               <input type="search" name="q" value="{{ search_query }}" placeholder="Search name, category, venue" aria-label="Search">
               <select name="status" aria-label="Phase filter">
                 <option value="all" {% if selected_status == 'all' %}selected{% endif %}>All phases</option>
-                <option value="upcoming" {% if selected_status == 'upcoming' %}selected{% endif %}>Setup</option>
-                <option value="active" {% if selected_status == 'active' %}selected{% endif %}>Active (judging)</option>
+                <option value="upcoming" {% if selected_status == 'upcoming' %}selected{% endif %}>Upcoming</option>
+                <option value="ongoing" {% if selected_status == 'ongoing' %}selected{% endif %}>Ongoing</option>
                 <option value="completed" {% if selected_status == 'completed' %}selected{% endif %}>Completed</option>
+                <option value="inactive" {% if selected_status == 'inactive' %}selected{% endif %}>Deactivated</option>
               </select>
               <select name="category" aria-label="Category">
                 <option value="all">All categories</option>
@@ -122,7 +123,7 @@
             </form>
           </div>
 
-          <p class="results-stage-legend" aria-hidden="true">Stages: Draft · Setup · Active · Tabulation · Completed · Archived</p>
+          <p class="results-stage-legend" aria-hidden="true">Stages: Draft · Upcoming · Ongoing · Tabulation · Completed · Archived</p>
 
           <div class="table-wrap">
             <table class="results-table">

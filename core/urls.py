@@ -20,6 +20,8 @@ from django.conf import settings
 from django.conf.urls.static import static
 from .views import (
     admin_brackets,
+    admin_generate_bracket,
+    admin_view_bracket,
     admin_departments,
     admin_dashboard,
     admin_delete_event,
@@ -68,6 +70,8 @@ urlpatterns = [
     path('admin/ocr/', admin_ocr, name='admin_ocr'),
     path('admin/manage-account/', admin_manage_account, name='admin_manage_account'),
     path('admin/brackets/', admin_brackets, name='admin_brackets'),
+    path('admin/brackets/generate/', admin_generate_bracket, name='admin_generate_bracket'),
+    path('admin/brackets/<int:event_id>/view/', admin_view_bracket, name='admin_view_bracket'),
     path('admin/departments/create/', admin_create_department, name='admin_create_department'),
     path('admin/departments/<int:dept_id>/view/', admin_view_department, name='admin_view_department'),
     path('admin/departments/<int:dept_id>/edit/', admin_edit_department, name='admin_edit_department'),

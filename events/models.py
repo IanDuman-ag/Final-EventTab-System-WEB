@@ -8,12 +8,13 @@ class Event(models.Model):
     STATUS_UPCOMING   = 'upcoming'
     STATUS_ACTIVE     = 'active'
     STATUS_COMPLETED  = 'completed'
+    STATUS_INACTIVE   = 'inactive'
     STATUS_CHOICES = [
         (STATUS_UPCOMING,  'Upcoming'),
         (STATUS_ACTIVE,    'Active'),
         (STATUS_COMPLETED, 'Completed'),
+        (STATUS_INACTIVE,  'Deactivated'),
     ]
-
     name               = models.CharField(max_length=200)
     category           = models.CharField(max_length=100)
     division           = models.CharField(max_length=100, blank=True, default='')
@@ -21,6 +22,7 @@ class Event(models.Model):
     event_date         = models.DateField()
     event_time         = models.TimeField(null=True, blank=True)
     venue              = models.CharField(max_length=200)
+    image              = models.ImageField(upload_to='event_images/', null=True, blank=True)
     status             = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_UPCOMING)
     max_participants   = models.PositiveIntegerField(null=True, blank=True)
     num_teams          = models.PositiveIntegerField(null=True, blank=True)
@@ -78,3 +80,58 @@ class Department(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.code})"
+
+class BracketTeam(models.Model):
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='bracket_teams')
+    name = models.CharField(max_length=200)
+    department = models.ForeignKey(Department, on_delete=models.SET_NULL, null=True, blank=True, related_name='bracket_teams')
+    members = models.TextField(blank=True, default='')
+    seed = models.PositiveIntegerField(default=0)
+    loss_count = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['seed', 'name']
+
+    def __str__(self):
+        return self.name
+
+class BracketMatch(models.Model):
+    STATUS_PENDING = 'pending'
+    STATUS_ONGOING = 'ongoing'
+    STATUS_COMPLETED = 'completed'
+    STATUS_FORFEIT = 'forfeit'
+    STATUS_CHOICES = [
+        (STATUS_PENDING, 'Pending'),
+        (STATUS_ONGOING, 'Ongoing'),
+        (STATUS_COMPLETED, 'Completed'),
+        (STATUS_FORFEIT, 'Forfeit'),
+    ]
+
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='bracket_matches')
+    match_number = models.PositiveIntegerField()
+    round_name = models.CharField(max_length=100)
+    team_a = models.ForeignKey(BracketTeam, on_delete=models.SET_NULL, null=True, blank=True, related_name='matches_as_a')
+    team_b = models.ForeignKey(BracketTeam, on_delete=models.SET_NULL, null=True, blank=True, related_name='matches_as_b')
+    winner = models.ForeignKey(BracketTeam, on_delete=models.SET_NULL, null=True, blank=True, related_name='matches_won')
+    loser = models.ForeignKey(BracketTeam, on_delete=models.SET_NULL, null=True, blank=True, related_name='matches_lost')
+    next_match_winner = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='previous_matches_winner')
+    next_match_loser = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='previous_matches_loser')
+    
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
+    match_date = models.DateField(null=True, blank=True)
+    match_time = models.TimeField(null=True, blank=True)
+    venue = models.CharField(max_length=200, blank=True, default='')
+    score_a = models.CharField(max_length=50, blank=True, default='')
+    score_b = models.CharField(max_length=50, blank=True, default='')
+    remarks = models.TextField(blank=True, default='')
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['match_number']
+
+    def __str__(self):
+        return f"{self.event.name} - Match {self.match_number} ({self.round_name})"

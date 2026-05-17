@@ -493,9 +493,19 @@ select {
   box-shadow: 0 0 4px rgba(16, 185, 129, 0.4);
 }
 
+.dot-ongoing {
+  background: #10b981;
+  box-shadow: 0 0 4px rgba(16, 185, 129, 0.4);
+}
+
 .dot-completed {
   background: #94a3b8;
   box-shadow: 0 0 4px rgba(148, 163, 184, 0.3);
+}
+
+.dot-inactive {
+  background: #ef4444;
+  box-shadow: 0 0 4px rgba(239, 68, 68, 0.35);
 }
 
 /* ── Popover ── */
@@ -636,9 +646,19 @@ select {
   color: #065f46;
 }
 
+.cal-badge-ongoing {
+  background: #d1fae5;
+  color: #065f46;
+}
+
 .cal-badge-completed {
   background: #e2e8f0;
   color: #475569;
+}
+
+.cal-badge-inactive {
+  background: #fee2e2;
+  color: #991b1b;
 }
 
 /* Legend */

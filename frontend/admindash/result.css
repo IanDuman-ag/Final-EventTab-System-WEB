@@ -241,9 +241,19 @@
   color: #067a45;
 }
 
+.phase-ongoing {
+  background: #d4f5e4;
+  color: #067a45;
+}
+
 .phase-completed {
   background: #eef0f4;
   color: #4a5568;
+}
+
+.phase-inactive {
+  background: #fee2e2;
+  color: #991b1b;
 }
 
 .phase-detail {

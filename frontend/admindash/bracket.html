@@ -88,7 +88,7 @@
             <div class="stat-icon">⚡</div>
             <div>
               <strong>{{ active_count|default:"0" }}</strong>
-              <small>Active Now</small>
+              <small>Ongoing</small>
             </div>
           </article>
           <article class="bracket-stat-card">
@@ -132,10 +132,7 @@
                     <td>{{ row.num_teams|default:"—" }}</td>
                     <td>
                       <span class="bracket-status {{ row.status }}">
-                        {% if row.status == 'active' %}Active
-                        {% elif row.status == 'upcoming' %}Upcoming
-                        {% else %}Completed
-                        {% endif %}
+                        {{ row.status_label }}
                       </span>
                     </td>
                     <td>
@@ -232,6 +229,21 @@
     </div>
   </div>
 
+  <!-- View Bracket Modal -->
+  <div class="bracket-modal-overlay" id="viewBracketModal" aria-hidden="true">
+    <div class="bracket-modal-container" role="dialog" aria-modal="true" aria-labelledby="view-bracket-title" style="max-width: 900px; width: 90%;">
+      <div class="bracket-modal-header">
+        <h3 id="view-bracket-title">View Bracket</h3>
+        <button class="bracket-close-modal" id="closeViewBracketBtn" type="button" aria-label="Close">&times;</button>
+      </div>
+      <div class="bracket-modal-body" style="overflow-x: auto;">
+        <div id="bracketVisualizer" style="display: flex; gap: 40px; padding: 20px; min-width: max-content;">
+          <!-- Rounds will be generated here -->
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script>
     document.addEventListener('DOMContentLoaded', () => {
       const modal = document.getElementById('createBracketModal');
@@ -243,6 +255,7 @@
       const eventSelect = document.getElementById('bracket_event');
       const categoryInput = document.getElementById('event_category');
       const divisionInput = document.getElementById('event_division');
+      const form = document.getElementById('createBracketForm');
       let teamIndex = 0;
 
       function openModal() {
@@ -256,6 +269,9 @@
       function closeModal() {
         modal.classList.remove('active');
         modal.setAttribute('aria-hidden', 'true');
+        form.reset();
+        teamsContainer.innerHTML = '';
+        teamIndex = 0;
       }
 
       // Auto-fill category and division based on selected event
@@ -312,6 +328,199 @@
           closeModal();
         }
       });
+
+      // Show toast notification function
+      function showToast(message, isError = false) {
+        const toast = document.createElement('div');
+        toast.className = 'toast ' + (isError ? 'toast-error' : 'toast-success');
+        toast.textContent = message;
+        // Position at top-center as per previous instructions
+        toast.style.position = 'fixed';
+        toast.style.top = '20px';
+        toast.style.left = '50%';
+        toast.style.transform = 'translateX(-50%)';
+        toast.style.padding = '12px 24px';
+        toast.style.borderRadius = '4px';
+        toast.style.backgroundColor = isError ? '#ef4444' : '#10b981';
+        toast.style.color = '#fff';
+        toast.style.zIndex = '9999';
+        toast.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)';
+        document.body.appendChild(toast);
+        
+        setTimeout(() => {
+          toast.style.opacity = '0';
+          toast.style.transition = 'opacity 0.3s ease';
+          setTimeout(() => document.body.removeChild(toast), 300);
+        }, 3000);
+      }
+
+      // Handle Form Submission
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const formData = new FormData(form);
+        const eventId = formData.get('event');
+        const formatType = formData.get('tournament_format');
+        
+        const teamNames = formData.getAll('team_name[]');
+        const teamDepts = formData.getAll('team_department[]');
+        const teamMembers = formData.getAll('team_members[]');
+        
+        const teams = teamNames.map((name, index) => ({
+           name: name,
+           department: teamDepts[index],
+           members: teamMembers[index]
+        }));
+        
+        if (teams.length < 2) {
+           showToast('Please add at least 2 teams.', true);
+           return;
+        }
+
+        const payload = {
+           event: eventId,
+           tournament_format: formatType,
+           teams: teams
+        };
+        
+        const submitBtn = form.querySelector('.btn-save');
+        const originalText = submitBtn.textContent;
+        submitBtn.textContent = 'Generating...';
+        submitBtn.disabled = true;
+
+        try {
+            const response = await fetch('{% url "admin_generate_bracket" %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: JSON.stringify(payload)
+            });
+            
+            const result = await response.json();
+            if (result.success) {
+                showToast(result.message);
+                closeModal();
+                // We'll reload the page to see the updated brackets for now
+                setTimeout(() => window.location.reload(), 1500);
+            } else {
+                showToast(result.message, true);
+            }
+        } catch (error) {
+            showToast('Network error occurred.', true);
+            console.error(error);
+        } finally {
+            submitBtn.textContent = originalText;
+            submitBtn.disabled = false;
+        }
+      });
+
+      // View Bracket Logic
+      const viewModal = document.getElementById('viewBracketModal');
+      const closeViewBtn = document.getElementById('closeViewBracketBtn');
+      const visualizer = document.getElementById('bracketVisualizer');
+
+      function closeViewModal() {
+        viewModal.classList.remove('active');
+        viewModal.setAttribute('aria-hidden', 'true');
+        visualizer.innerHTML = '';
+      }
+
+      closeViewBtn.addEventListener('click', closeViewModal);
+      
+      viewModal.addEventListener('click', (e) => {
+        if (e.target === viewModal) {
+          closeViewModal();
+        }
+      });
+
+      document.querySelectorAll('.btn-view-bracket').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const eventId = btn.getAttribute('data-id');
+          try {
+            const response = await fetch(`/admin/brackets/${eventId}/view/`);
+            const data = await response.json();
+            
+            if (data.success) {
+              renderBracket(data.matches);
+              viewModal.classList.add('active');
+              viewModal.setAttribute('aria-hidden', 'false');
+            } else {
+              showToast(data.message || 'Failed to load bracket', true);
+            }
+          } catch (err) {
+            console.error(err);
+            showToast('Error loading bracket.', true);
+          }
+        });
+      });
+
+      function renderBracket(matches) {
+        visualizer.innerHTML = '';
+        if (!matches || matches.length === 0) {
+           visualizer.innerHTML = '<p style="color: #64748b;">No bracket generated for this event yet.</p>';
+           return;
+        }
+
+        // Group matches by round name
+        const rounds = {};
+        matches.forEach(m => {
+           if (!rounds[m.round_name]) rounds[m.round_name] = [];
+           rounds[m.round_name].push(m);
+        });
+
+        // Basic tree rendering via flexbox columns
+        for (const [roundName, roundMatches] of Object.entries(rounds)) {
+           const col = document.createElement('div');
+           col.style.display = 'flex';
+           col.style.flexDirection = 'column';
+           col.style.justifyContent = 'space-around';
+           col.style.gap = '20px';
+           col.style.minWidth = '200px';
+
+           const title = document.createElement('h4');
+           title.textContent = roundName;
+           title.style.textAlign = 'center';
+           title.style.marginBottom = '20px';
+           title.style.color = '#1e293b';
+           col.appendChild(title);
+
+           roundMatches.forEach(m => {
+              const matchCard = document.createElement('div');
+              matchCard.style.border = '1px solid #cbd5e1';
+              matchCard.style.borderRadius = '6px';
+              matchCard.style.background = '#fff';
+              matchCard.style.padding = '10px';
+              matchCard.style.boxShadow = '0 1px 3px rgba(0,0,0,0.05)';
+              
+              const teamA = document.createElement('div');
+              teamA.textContent = m.team_a;
+              teamA.style.padding = '4px 8px';
+              teamA.style.borderBottom = '1px solid #e2e8f0';
+              if (m.winner && m.winner === m.team_a) teamA.style.fontWeight = 'bold';
+              
+              const teamB = document.createElement('div');
+              teamB.textContent = m.team_b;
+              teamB.style.padding = '4px 8px';
+              if (m.winner && m.winner === m.team_b) teamB.style.fontWeight = 'bold';
+
+              const meta = document.createElement('div');
+              meta.textContent = 'Match ' + m.match_number + ' - ' + m.status;
+              meta.style.fontSize = '0.75rem';
+              meta.style.color = '#94a3b8';
+              meta.style.marginTop = '8px';
+              meta.style.textAlign = 'right';
+
+              matchCard.appendChild(teamA);
+              matchCard.appendChild(teamB);
+              matchCard.appendChild(meta);
+              col.appendChild(matchCard);
+           });
+           
+           visualizer.appendChild(col);
+        }
+      }
     });
   </script>
 </body>

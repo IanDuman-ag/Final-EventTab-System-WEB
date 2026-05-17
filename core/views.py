@@ -32,6 +32,55 @@ ASSIGNMENT_GROUP_ALIASES = {
     'judge': 'Judge',
     'judges': 'Judge',
 }
+RESERVED_DEPARTMENT_NAMES = {'admin', 'tabulator', 'judge', 'judges', 'viewers'}
+
+
+def normalize_event_availability_status(status):
+    status = (status or Event.STATUS_ACTIVE).strip().lower()
+    if status in {Event.STATUS_INACTIVE, 'deactivate', 'deactivated'}:
+        return Event.STATUS_INACTIVE
+    return Event.STATUS_ACTIVE
+
+
+def get_event_status_meta(event, today=None):
+    today = today or timezone.localdate()
+    availability_status = normalize_event_availability_status(event.status)
+
+    if availability_status == Event.STATUS_INACTIVE:
+        return {
+            'status': Event.STATUS_INACTIVE,
+            'status_label': 'Deactivated',
+            'availability_status': Event.STATUS_INACTIVE,
+        }
+
+    if event.event_date and event.event_date > today:
+        status = Event.STATUS_UPCOMING
+        label = 'Upcoming'
+    elif event.event_date and event.event_date < today:
+        status = Event.STATUS_COMPLETED
+        label = 'Completed'
+    else:
+        status = 'ongoing'
+        label = 'Ongoing'
+
+    return {
+        'status': status,
+        'status_label': label,
+        'availability_status': Event.STATUS_ACTIVE,
+    }
+
+
+def get_event_status_counts(events, today=None):
+    today = today or timezone.localdate()
+    counts = {
+        'upcoming': 0,
+        'ongoing': 0,
+        'completed': 0,
+        'inactive': 0,
+    }
+    for event in events:
+        counts[get_event_status_meta(event, today)['status']] += 1
+    return counts
 
 
 def authenticate_email(request, email, password):
@@ -342,6 +391,7 @@ def admin_edit_department(request, dept_id):
         return JsonResponse({'success': False, 'message': 'Invalid request method.'}, status=400)
 
     dept = get_object_or_404(Department, id=dept_id)
+    old_name = dept.name
     try:
         name = request.POST.get('name', '').strip()
         code = request.POST.get('code', '').strip()
@@ -361,6 +411,9 @@ def admin_edit_department(request, dept_id):
 
         dept.save()
         Group.objects.get_or_create(name=name)
+        if old_name != name:
+            replacement_name = '' if name.lower() in RESERVED_DEPARTMENT_NAMES else name
+            Event.objects.filter(department__iexact=old_name).update(department=replacement_name)
         return JsonResponse({'success': True, 'message': f'Department {name} updated.'})
     except Exception as e:
         return JsonResponse({'success': False, 'message': str(e)}, status=500)
@@ -376,6 +429,7 @@ def admin_delete_department(request, dept_id):
     dept = get_object_or_404(Department, id=dept_id)
     name = dept.name
     try:
+        Event.objects.filter(department__iexact=name).update(department='')
         dept.delete()
         return JsonResponse({'success': True, 'message': f'Department {name} deleted.'})
     except Exception as e:
@@ -429,15 +483,18 @@ def login_view(request):
 def admin_dashboard(request):
     ctx = get_assignment_account_context(request)
     # Add event stats for the dashboard metrics
-    all_events = Event.objects.all()
-    ctx['ongoing_count'] = all_events.filter(status=Event.STATUS_ACTIVE).count()
-    ctx['total_events_count'] = all_events.count()
-    ctx['completed_events_count'] = all_events.filter(status=Event.STATUS_COMPLETED).count()
+    all_events = list(Event.objects.all())
+    today = timezone.localdate()
+    status_counts = get_event_status_counts(all_events, today)
+    ctx['ongoing_count'] = status_counts['ongoing']
+    ctx['total_events_count'] = len(all_events)
+    ctx['completed_events_count'] = status_counts['completed']
     total = ctx['total_events_count'] or 1
     ctx['completed_pct'] = int(ctx['completed_events_count'] / total * 100)
     # Serialize events for the calendar (rendered as JSON in template)
     events_json = []
     for ev in all_events:
+        status_meta = get_event_status_meta(ev, today)
         events_json.append({
             'id': ev.id,
             'title': ev.name,
@@ -445,7 +502,9 @@ def admin_dashboard(request):
             'time': ev.event_time.strftime('%H:%M') if ev.event_time else '',
             'category': ev.category,
             'venue': ev.venue,
-            'status': ev.status,
+            'status': status_meta['status'],
+            'status_label': status_meta['status_label'],
+            'availability_status': status_meta['availability_status'],
         })
     ctx['events_json'] = json.dumps(events_json)
     return render(request, 'admindash/admindashboard.html', ctx)
@@ -679,14 +738,20 @@ def _event_progress_meta(status_key):
     """Map internal status to lifecycle labels (SYSTEM_FLOW event statuses)."""
     mapping = {
         'upcoming': {
-            'progress_label': 'Setup',
-            'progress_detail': 'Categories and schedule configured; not yet judging.',
+            'progress_label': 'Upcoming',
+            'progress_detail': 'Event is scheduled for a future date.',
             'progress_pct': 35,
             'stage_current': 2,
         },
+        'ongoing': {
+            'progress_label': 'Ongoing',
+            'progress_detail': 'Event date is today; monitor event activity and submissions.',
+            'progress_pct': 65,
+            'stage_current': 4,
+        },
         'active': {
-            'progress_label': 'Active (Judging)',
-            'progress_detail': 'Judges may submit scores; monitor submissions.',
+            'progress_label': 'Ongoing',
+            'progress_detail': 'Event date is today; monitor event activity and submissions.',
             'progress_pct': 65,
             'stage_current': 4,
         },
@@ -696,8 +761,14 @@ def _event_progress_meta(status_key):
             'progress_pct': 100,
             'stage_current': 6,
         },
+        'inactive': {
+            'progress_label': 'Deactivated',
+            'progress_detail': 'Event is hidden from active operations until it is activated.',
+            'progress_pct': 0,
+            'stage_current': 1,
+        },
     }
-    return mapping.get(status_key, mapping['active'])
+    return mapping.get(status_key, mapping['ongoing'])
 
 
 @login_required
@@ -733,11 +804,12 @@ def admin_manage_events(request):
             name              = event_name[:200],
             category          = category,
             division          = request.POST.get('division', '').strip(),
-            department        = request.POST.get('department', '').strip(),
+            department        = '',
             event_date        = event_date,
             event_time        = event_time_val,
             venue             = venue,
-            status            = Event.STATUS_UPCOMING,
+            image             = request.FILES.get('event_image'),
+            status            = normalize_event_availability_status(request.POST.get('status', 'active')),
             max_participants  = _int_or_none(request.POST.get('max_participants', '')),
             num_teams         = _int_or_none(request.POST.get('num_teams', '')),
             faculty_in_charge = request.POST.get('faculty_in_charge', '').strip(),
@@ -750,6 +822,8 @@ def admin_manage_events(request):
         return redirect('admin_manage_events')
 
     status_filter   = request.GET.get('status', 'all').strip().lower()
+    if status_filter == Event.STATUS_ACTIVE:
+        status_filter = 'ongoing'
     category_filter = request.GET.get('category', 'all').strip().lower()
     schedule_filter = request.GET.get('schedule', '').strip().lower()
     search_query    = request.GET.get('q', '').strip()
@@ -764,24 +838,29 @@ def admin_manage_events(request):
         )
     if category_filter != 'all':
         event_qs = event_qs.filter(category__iexact=category_filter)
-    if status_filter != 'all':
-        event_qs = event_qs.filter(status=status_filter)
     if schedule_filter:
         event_qs = event_qs.filter(event_date__icontains=schedule_filter)
 
+    today = timezone.localdate()
     event_rows = []
-    for ev in event_qs[:30]:
+    for ev in event_qs:
+        status_meta = get_event_status_meta(ev, today)
+        if status_filter != 'all' and status_meta['status'] != status_filter:
+            continue
+
         event_rows.append({
             'id':               ev.id,
             'name':             ev.name,
             'category':         ev.category,
             'division':         ev.division,
-            'department':       ev.department,
             'schedule_label':   ev.schedule_label,
             'event_date':       ev.event_date.strftime('%Y-%m-%d') if ev.event_date else '',
             'event_time':       ev.event_time_str,
             'venue':            ev.venue,
-            'status':           ev.status,
+            'image_url':        ev.image.url if ev.image else '',
+            'status':           status_meta['status'],
+            'status_label':     status_meta['status_label'],
+            'availability_status': status_meta['availability_status'],
             'max_participants': str(ev.max_participants) if ev.max_participants else '',
             'num_teams':        str(ev.num_teams) if ev.num_teams else '',
             'faculty_in_charge': ev.faculty_in_charge,
@@ -789,26 +868,29 @@ def admin_manage_events(request):
             'mechanics':        ev.mechanics,
             'scoring_criteria': ev.scoring_criteria,
         })
+        if len(event_rows) >= 30:
+            break
 
-    all_events = Event.objects.all()
-    active_count    = all_events.filter(status=Event.STATUS_ACTIVE).count()
-    upcoming_count  = all_events.filter(status=Event.STATUS_UPCOMING).count()
-    completed_count = all_events.filter(status=Event.STATUS_COMPLETED).count()
-    total_events_count = all_events.count()
-    category_names  = sorted(all_events.values_list('category', flat=True).distinct()) or ['Sports', 'Esports', 'Pageant']
+    all_events = list(Event.objects.all())
+    status_counts = get_event_status_counts(all_events, today)
+    active_count    = status_counts['ongoing']
+    upcoming_count  = status_counts['upcoming']
+    completed_count = status_counts['completed']
+    inactive_count  = status_counts['inactive']
+    total_events_count = len(all_events)
+    category_names  = sorted({ev.category for ev in all_events if ev.category}) or ['Sports', 'Esports', 'Pageant']
 
-    department_names = list(Group.objects.order_by('name').values_list('name', flat=True))
     create_category_options = sorted(set(category_names) | {'Academic', 'Sports', 'Esports', 'Socio-cultural', 'Pageant'})
-    create_division_options = ['College', 'Senior High School', 'Junior High School', 'Elementary']
+    create_division_options = ['Men', 'Women', 'Mixed']
 
     return render(request, 'admindash/event.html', {
         'event_rows':             event_rows,
         'active_count':           active_count,
         'upcoming_count':         upcoming_count,
         'completed_count':        completed_count,
+        'inactive_count':         inactive_count,
         'total_events_count':     total_events_count,
         'category_names':         category_names,
-        'department_names':       department_names,
         'create_category_options': create_category_options,
         'create_division_options': create_division_options,
         'selected_category':      category_filter,
@@ -855,10 +937,13 @@ def admin_edit_event(request, event_id):
     ev.name              = event_name[:200]
     ev.category          = category
     ev.division          = request.POST.get('division', '').strip()
-    ev.department        = request.POST.get('department', '').strip()
+    ev.department        = ''
     ev.event_date        = event_date
     ev.event_time        = event_time_val
     ev.venue             = venue
+    if 'event_image' in request.FILES:
+        ev.image = request.FILES.get('event_image')
+    ev.status            = normalize_event_availability_status(request.POST.get('status', 'active'))
     ev.max_participants  = _int_or_none(request.POST.get('max_participants', ''))
     ev.num_teams         = _int_or_none(request.POST.get('num_teams', ''))
     ev.faculty_in_charge = request.POST.get('faculty_in_charge', '').strip()
@@ -889,9 +974,11 @@ def admin_delete_event(request, event_id):
 @user_passes_test(lambda user: user.is_staff, login_url='login')
 def admin_brackets(request):
     """Display the tournament brackets management page."""
-    all_events = Event.objects.all()
+    all_events = list(Event.objects.all())
+    today = timezone.localdate()
     event_rows = []
     for ev in all_events[:50]:
+        status_meta = get_event_status_meta(ev, today)
         event_rows.append({
             'id': ev.id,
             'name': ev.name,
@@ -902,13 +989,15 @@ def admin_brackets(request):
             'event_date': ev.event_date.strftime('%Y-%m-%d') if ev.event_date else '',
             'event_time': ev.event_time_str,
             'venue': ev.venue,
-            'status': ev.status,
+            'status': status_meta['status'],
+            'status_label': status_meta['status_label'],
             'num_teams': str(ev.num_teams) if ev.num_teams else '',
         })
 
-    total_events = all_events.count()
-    active_count = all_events.filter(status=Event.STATUS_ACTIVE).count()
-    upcoming_count = all_events.filter(status=Event.STATUS_UPCOMING).count()
+    status_counts = get_event_status_counts(all_events, today)
+    total_events = len(all_events)
+    active_count = status_counts['ongoing']
+    upcoming_count = status_counts['upcoming']
     
     departments = Department.objects.all()
 
@@ -925,12 +1014,24 @@ def admin_brackets(request):
 def admin_event_progress(request):
     """Monitor event lifecycle progress (aligned with SYSTEM_FLOW.md event statuses)."""
     status_filter = request.GET.get('status', 'all').strip().lower()
+    if status_filter == Event.STATUS_ACTIVE:
+        status_filter = 'ongoing'
     category_filter = request.GET.get('category', 'all').strip().lower()
     search_query = request.GET.get('q', '').strip()
 
-    all_rows = list(Event.objects.all()[:80])
-    # Convert ORM objects to dicts for template compatibility
-    all_rows = [{'id': e.id, 'name': e.name, 'category': e.category, 'venue': e.venue, 'schedule_label': e.schedule_label, 'status': e.status} for e in Event.objects.all()[:80]]
+    today = timezone.localdate()
+    all_rows = []
+    for event in Event.objects.all()[:80]:
+        status_meta = get_event_status_meta(event, today)
+        all_rows.append({
+            'id': event.id,
+            'name': event.name,
+            'category': event.category,
+            'venue': event.venue,
+            'schedule_label': event.schedule_label,
+            'status': status_meta['status'],
+            'status_label': status_meta['status_label'],
+        })
     event_rows = list(all_rows)
 
     if search_query:
@@ -948,7 +1049,7 @@ def admin_event_progress(request):
     if status_filter != 'all':
         event_rows = [row for row in event_rows if row['status'] == status_filter]
 
-    active_count = sum(1 for row in all_rows if row['status'] == 'active')
+    active_count = sum(1 for row in all_rows if row['status'] == 'ongoing')
     upcoming_count = sum(1 for row in all_rows if row['status'] == 'upcoming')
     completed_count = sum(1 for row in all_rows if row['status'] == 'completed')
     category_names = sorted({row['category'] for row in all_rows}) or ['Sports', 'Esports', 'Pageant']
@@ -958,7 +1059,7 @@ def admin_event_progress(request):
         meta = _event_progress_meta(row['status'])
         progress_rows.append({**row, **meta})
 
-    progress_stage_labels = ['Draft', 'Setup', 'Active', 'Tabulation', 'Completed', 'Archived']
+    progress_stage_labels = ['Draft', 'Upcoming', 'Ongoing', 'Tabulation', 'Completed', 'Archived']
 
     return render(request, 'admindash/result.html', {
         'progress_rows': progress_rows,
@@ -1720,3 +1821,88 @@ def logout_view(request):
     logout(request)
     return redirect('login')
 
+@login_required
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def admin_generate_bracket(request):
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': 'Invalid request method'}, status=400)
+        
+    try:
+        import json
+        from events.models import Event, Department, BracketTeam, BracketMatch
+        from events.bracket_generator import generate_single_elimination, generate_double_elimination, generate_round_robin
+        
+        data = json.loads(request.body)
+        event_id = data.get('event')
+        format_type = data.get('tournament_format')
+        teams_data = data.get('teams', [])
+        
+        if not event_id or not format_type or not teams_data:
+            return JsonResponse({'success': False, 'message': 'Event, format, and teams are required.'}, status=400)
+            
+        event = get_object_or_404(Event, id=event_id)
+        
+        # Check if matches already exist for this event
+        if BracketMatch.objects.filter(event=event).exists():
+             BracketMatch.objects.filter(event=event).delete()
+             BracketTeam.objects.filter(event=event).delete()
+        
+        # Create Teams
+        bracket_teams = []
+        for index, team_data in enumerate(teams_data):
+            dept_id = team_data.get('department')
+            department = Department.objects.get(id=dept_id) if dept_id else None
+            
+            team = BracketTeam.objects.create(
+                event=event,
+                name=team_data.get('name', f'Team {index+1}'),
+                department=department,
+                members=team_data.get('members', ''),
+                seed=index + 1
+            )
+            bracket_teams.append(team)
+            
+        # Generate matches based on format
+        if format_type == 'Single Elimination':
+            generate_single_elimination(event, bracket_teams)
+        elif format_type == 'Double Elimination':
+            generate_double_elimination(event, bracket_teams)
+        elif format_type == 'Round Robin':
+            generate_round_robin(event, bracket_teams)
+        else:
+            return JsonResponse({'success': False, 'message': 'Unsupported tournament format.'}, status=400)
+            
+        return JsonResponse({'success': True, 'message': 'Bracket generated successfully.'})
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': str(e)}, status=500)
+
+@login_required
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def admin_view_bracket(request, event_id):
+    if request.method != 'GET':
+        return JsonResponse({'success': False, 'message': 'Invalid method'}, status=400)
+    try:
+        from events.models import Event, BracketMatch
+        event = get_object_or_404(Event, id=event_id)
+        matches = BracketMatch.objects.filter(event=event).select_related('team_a', 'team_b', 'winner')
+        
+        matches_data = []
+        for m in matches:
+            matches_data.append({
+                'id': m.id,
+                'match_number': m.match_number,
+                'round_name': m.round_name,
+                'team_a': m.team_a.name if m.team_a else 'TBD',
+                'team_b': m.team_b.name if m.team_b else 'TBD',
+                'team_a_id': m.team_a.id if m.team_a else None,
+                'team_b_id': m.team_b.id if m.team_b else None,
+                'winner': m.winner.name if m.winner else None,
+                'score_a': m.score_a,
+                'score_b': m.score_b,
+                'status': m.status,
+                'next_match_winner_id': m.next_match_winner.id if m.next_match_winner else None
+            })
+            
+        return JsonResponse({'success': True, 'matches': matches_data, 'format': 'Unknown (Requires Event Format Tracking)'})
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': str(e)}, status=500)

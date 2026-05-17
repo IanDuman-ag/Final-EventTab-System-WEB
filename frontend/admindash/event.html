@@ -96,7 +96,7 @@
             <div class="stat-icon">⚡</div>
             <div>
               <strong>{{ active_count|default:"0" }}</strong>
-              <small>Active Now</small>
+              <small>Ongoing</small>
             </div>
           </article>
           <article class="stat-card">
@@ -131,9 +131,10 @@
                   </select>
                   <select name="status" aria-label="Status">
                     <option value="all" {% if selected_status == 'all' %}selected{% endif %}>All Status</option>
-                    <option value="active" {% if selected_status == 'active' %}selected{% endif %}>Active</option>
                     <option value="upcoming" {% if selected_status == 'upcoming' %}selected{% endif %}>Upcoming</option>
+                    <option value="ongoing" {% if selected_status == 'ongoing' %}selected{% endif %}>Ongoing</option>
                     <option value="completed" {% if selected_status == 'completed' %}selected{% endif %}>Completed</option>
+                    <option value="inactive" {% if selected_status == 'inactive' %}selected{% endif %}>Deactivated</option>
                   </select>
                   <input type="text" name="schedule" value="{{ schedule_filter }}" placeholder="Schedule (optional)">
                   <button type="submit">Apply</button>
@@ -161,12 +162,7 @@
                     <td>
                       <div class="event-name">
                         <strong>{{ row.name }}</strong>
-                        <span>
-                          {% if row.status == 'active' %}Active (Judging)
-                          {% elif row.status == 'upcoming' %}Setup
-                          {% else %}Completed
-                          {% endif %}
-                        </span>
+                        <span>{{ row.status_label }}</span>
                       </div>
                     </td>
                     <td>{{ row.category }}</td>
@@ -201,7 +197,7 @@
   </div>
 
   <dialog id="create-event-dialog" class="create-event-dialog" aria-labelledby="create-event-title">
-    <form class="create-event-form" method="post" action="{% url 'admin_manage_events' %}">
+    <form class="create-event-form" method="post" enctype="multipart/form-data" action="{% url 'admin_manage_events' %}">
       {% csrf_token %}
       <input type="hidden" name="form_action" value="create_event">
       <header class="create-event-dialog-head">
@@ -232,12 +228,10 @@
           </select>
         </label>
         <label class="create-event-field">
-          <span class="create-event-label">Department</span>
-          <select name="department">
-            <option value="">Select department</option>
-            {% for dept in department_names %}
-            <option value="{{ dept }}">{{ dept }}</option>
-            {% endfor %}
+          <span class="create-event-label">Status</span>
+          <select name="status" required>
+            <option value="active" selected>Activate</option>
+            <option value="inactive">Deactivate</option>
           </select>
         </label>
         <label class="create-event-field">
@@ -276,6 +270,10 @@
           <span class="create-event-label">Scoring Criteria</span>
           <textarea name="scoring_criteria" rows="4" maxlength="8000" placeholder="How judges score and weighting…" required></textarea>
         </label>
+        <label class="create-event-field create-event-field--full">
+          <span class="create-event-label">Event Image</span>
+          <input type="file" name="event_image" accept="image/*">
+        </label>
       </div>
       <footer class="create-event-actions">
         <button type="button" class="create-event-cancel" id="cancel-create-event">Cancel</button>
@@ -303,10 +301,6 @@
         <div class="view-field">
           <span class="create-event-label">Division</span>
           <p id="vd-division"></p>
-        </div>
-        <div class="view-field">
-          <span class="create-event-label">Department</span>
-          <p id="vd-department"></p>
         </div>
         <div class="view-field">
           <span class="create-event-label">Date</span>
@@ -348,6 +342,10 @@
           <span class="create-event-label">Scoring Criteria</span>
           <p id="vd-scoring"></p>
         </div>
+        <div class="view-field view-field--full" id="vd-image-container" style="display: none;">
+          <span class="create-event-label">Event Image</span>
+          <img id="vd-image" src="" alt="Event Image" style="max-width: 100%; height: auto; margin-top: 0.5rem; border-radius: 4px;">
+        </div>
       </div>
       <footer class="create-event-actions">
         <button type="button" class="create-event-cancel" id="cancel-view-event">Close</button>
@@ -357,7 +355,7 @@
 
   <!-- ── Edit Event Dialog ────────────────────────────────────────── -->
   <dialog id="edit-event-dialog" class="create-event-dialog" aria-labelledby="edit-event-title">
-    <form class="create-event-form" method="post" id="edit-event-form">
+    <form class="create-event-form" method="post" enctype="multipart/form-data" id="edit-event-form">
       {% csrf_token %}
       <input type="hidden" name="form_action" value="edit_event">
       <header class="create-event-dialog-head">
@@ -388,12 +386,10 @@
           </select>
         </label>
         <label class="create-event-field">
-          <span class="create-event-label">Department</span>
-          <select name="department" id="edit-department">
-            <option value="">Select department</option>
-            {% for dept in department_names %}
-            <option value="{{ dept }}">{{ dept }}</option>
-            {% endfor %}
+          <span class="create-event-label">Status</span>
+          <select name="status" id="edit-status" required>
+            <option value="active">Activate</option>
+            <option value="inactive">Deactivate</option>
           </select>
         </label>
         <label class="create-event-field">
@@ -431,6 +427,10 @@
         <label class="create-event-field create-event-field--full">
           <span class="create-event-label">Scoring Criteria</span>
           <textarea name="scoring_criteria" id="edit-scoring-criteria" rows="4" maxlength="8000"></textarea>
+        </label>
+        <label class="create-event-field create-event-field--full">
+          <span class="create-event-label">Event Image</span>
+          <input type="file" name="event_image" id="edit-event-image" accept="image/*">
         </label>
       </div>
       <footer class="create-event-actions">
@@ -489,18 +489,20 @@
       name: "{{ row.name|escapejs }}",
       category: "{{ row.category|escapejs }}",
       division: "{{ row.division|escapejs }}",
-      department: "{{ row.department|escapejs }}",
       schedule_label: "{{ row.schedule_label|escapejs }}",
       event_date: "{{ row.event_date|escapejs }}",
       event_time: "{{ row.event_time|escapejs }}",
       venue: "{{ row.venue|escapejs }}",
       status: "{{ row.status|escapejs }}",
+      status_label: "{{ row.status_label|escapejs }}",
+      availability_status: "{{ row.availability_status|escapejs }}",
       max_participants: "{{ row.max_participants|escapejs }}",
       num_teams: "{{ row.num_teams|escapejs }}",
       faculty_in_charge: "{{ row.faculty_in_charge|escapejs }}",
       student_in_charge: "{{ row.student_in_charge|escapejs }}",
       mechanics: "{{ row.mechanics|escapejs }}",
-      scoring_criteria: "{{ row.scoring_criteria|escapejs }}"
+      scoring_criteria: "{{ row.scoring_criteria|escapejs }}",
+      image_url: "{{ row.image_url|escapejs }}"
     };
     {% endfor %}
 
@@ -527,17 +529,22 @@
         document.getElementById('vd-name').textContent          = ev.name || '—';
         document.getElementById('vd-category').textContent      = ev.category || '—';
         document.getElementById('vd-division').textContent      = ev.division || '—';
-        document.getElementById('vd-department').textContent    = ev.department || '—';
         document.getElementById('vd-date').textContent          = ev.schedule_label || '—';
         document.getElementById('vd-time').textContent          = ev.event_time || '—';
         document.getElementById('vd-venue').textContent         = ev.venue || '—';
-        document.getElementById('vd-status').textContent        = ev.status === 'active' ? 'Active (Judging)' : ev.status === 'upcoming' ? 'Setup / Upcoming' : 'Completed';
+        document.getElementById('vd-status').textContent        = ev.status_label || '—';
         document.getElementById('vd-max-participants').textContent = ev.max_participants || '—';
         document.getElementById('vd-num-teams').textContent     = ev.num_teams || '—';
         document.getElementById('vd-faculty').textContent       = ev.faculty_in_charge || '—';
         document.getElementById('vd-student').textContent       = ev.student_in_charge || '—';
         document.getElementById('vd-mechanics').textContent     = ev.mechanics || '—';
         document.getElementById('vd-scoring').textContent       = ev.scoring_criteria || '—';
+        if (ev.image_url) {
+          document.getElementById('vd-image').src = ev.image_url;
+          document.getElementById('vd-image-container').style.display = 'block';
+        } else {
+          document.getElementById('vd-image-container').style.display = 'none';
+        }
         openDialog(viewDlg);
       });
     });
@@ -558,7 +565,7 @@
         document.getElementById('edit-event-name').value        = ev.name || '';
         setSelectValue(document.getElementById('edit-category'), ev.category);
         setSelectValue(document.getElementById('edit-division'), ev.division);
-        setSelectValue(document.getElementById('edit-department'), ev.department);
+        setSelectValue(document.getElementById('edit-status'), ev.availability_status || 'active');
         document.getElementById('edit-max-participants').value  = ev.max_participants || '';
         document.getElementById('edit-num-teams').value         = ev.num_teams || '';
         document.getElementById('edit-faculty').value           = ev.faculty_in_charge || '';
