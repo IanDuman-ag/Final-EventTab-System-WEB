@@ -130,12 +130,7 @@
                       Name {% if sort == 'username' %}{% if dir == 'asc' %}↑{% else %}↓{% endif %}{% endif %}
                     </a>
                   </th>
-                  <th>
-                    <a class="sort-link" href="?q={{ search_query|urlencode }}&department={{ selected_department|urlencode }}&role={{ selected_role|urlencode }}&status={{ selected_status|urlencode }}&sort=department&dir={% if sort == 'department' and dir == 'asc' %}desc{% else %}asc{% endif %}">
-                      Department
-                      {% if sort == 'department' %}{% if dir == 'asc' %}↑{% else %}↓{% endif %}{% endif %}
-                    </a>
-                  </th>
+
                   <th>
                     <a class="sort-link" href="?q={{ search_query|urlencode }}&department={{ selected_department|urlencode }}&role={{ selected_role|urlencode }}&status={{ selected_status|urlencode }}&sort=role&dir={% if sort == 'role' and dir == 'asc' %}desc{% else %}asc{% endif %}">
                       Role {% if sort == 'role' %}{% if dir == 'asc' %}↑{% else %}↓{% endif %}{% endif %}
@@ -176,7 +171,7 @@
                         </div>
                       </div>
                     </td>
-                    <td data-label="Department / Course">{{ row.department }}</td>
+
                     <td data-label="Role">
                       <span class="role-badge {% if row.role == 'Super Admin' %}super-role{% endif %}">{{ row.role }}</span>
                     </td>
@@ -212,7 +207,7 @@
                   </tr>
                 {% empty %}
                   <tr>
-                    <td class="empty-state" colspan="7">No admin accounts found for your current filters.</td>
+                    <td class="empty-state" colspan="6">No admin accounts found for your current filters.</td>
                   </tr>
                 {% endfor %}
               </tbody>
@@ -283,15 +278,7 @@
               <option value="System">System</option>
             </select>
           </label>
-          <label>
-            Department
-            <select id="modal-department">
-              <option value="">Unassigned</option>
-              {% for department in departments %}
-                <option value="{{ department.name }}">{{ department.name }}</option>
-              {% endfor %}
-            </select>
-          </label>
+
         </div>
         <label class="photo-upload">
           <span>Users Photo</span>
@@ -310,6 +297,6 @@
     </div>
   </div>
 
-  <script src="{% static 'js/admin_actions.js' %}"></script>
+  <script src="{% static 'js/admin_actions.js' %}?v=20260517a"></script>
 </body>
 </html>

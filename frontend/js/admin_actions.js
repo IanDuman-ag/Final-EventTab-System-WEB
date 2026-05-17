@@ -11,7 +11,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const modalEmail = document.getElementById('modal-email');
   const modalPassword = document.getElementById('modal-password');
   const modalRole = document.getElementById('modal-role');
-  const modalDepartment = document.getElementById('modal-department');
+
   const modalIsActive = document.getElementById('modal-is-active');
 
   if (!adminModal || !modalForm || !createButton) {
@@ -37,7 +37,7 @@ document.addEventListener('DOMContentLoaded', function () {
       email: modalEmail.value.trim(),
       password: modalPassword.value,
       role: modalRole.value,
-      department: modalDepartment.value,
+      department: '',
       is_active: modalIsActive.checked,
     };
 
@@ -73,7 +73,7 @@ document.addEventListener('DOMContentLoaded', function () {
     modalEmail.value = '';
     modalPassword.value = '';
     modalRole.value = 'Admin';
-    modalDepartment.value = '';
+
     modalIsActive.checked = true;
     submitButton.disabled = false;
     submitButton.style.display = 'inline-flex';

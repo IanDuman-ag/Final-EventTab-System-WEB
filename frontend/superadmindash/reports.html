@@ -104,7 +104,7 @@
             <span class="decor-dot" aria-hidden="true"></span>
           </div>
 
-          <form id="report-generator-form" class="generator-form" action="#" method="post">
+          <form id="report-generator-form" class="generator-form" action="{% url 'generate_superadmin_report' %}" method="post">
             {% csrf_token %}
             <div class="form-row">
               <label>
@@ -234,6 +234,6 @@
       </main>
     </div>
   </div>
-  <script src="{% static 'js/reports.js' %}"></script>
+  <script src="{% static 'js/reports.js' %}?v=20260517a"></script>
 </body>
 </html>

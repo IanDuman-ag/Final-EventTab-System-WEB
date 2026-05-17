@@ -35,10 +35,13 @@ document.addEventListener('DOMContentLoaded', function () {
     statusEl.textContent = 'Preparing report export...';
 
     setTimeout(function () {
-      const fileName = `${selectedEvent.replace(/\s+/g, '_')}_report.${selectedFormat === 'EXCEL' ? 'xlsx' : 'pdf'}`;
-      statusEl.textContent = `Report ready: ${fileName}. You can now download or regenerate.`;
-      generateBtn.disabled = false;
-      generateBtn.textContent = 'Generate Report';
+      statusEl.textContent = 'Report generated successfully! Starting download...';
+      form.submit();
+      
+      // Reload after download starts to refresh history table and counts
+      setTimeout(function () {
+        window.location.reload();
+      }, 1800);
     }, 1200);
   });
 });

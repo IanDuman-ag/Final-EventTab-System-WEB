@@ -1686,6 +1686,7 @@ def superadmin_admins(request):
 @login_required
 @user_passes_test(lambda user: user.is_superuser, login_url='login')
 def superadmin_reports(request):
+    from django.contrib.admin.models import LogEntry, DELETION, CHANGE
     activity_log_count = LogEntry.objects.count()
     if activity_log_count >= 1000:
         activity_log_count_label = f'{activity_log_count // 1000}k+'
@@ -1695,27 +1696,34 @@ def superadmin_reports(request):
     department_names = list(
         Group.objects.exclude(name__in=['Admin', 'Tabulator', 'Judge', 'Judges', 'Viewers']).order_by('name').values_list('name', flat=True)
     )
-    total_events_count = 1
+    
+    # Dynamic Event Loading
+    events = list(Event.objects.all().order_by('-event_date').values_list('name', flat=True))
+    if not events:
+        events = ['National Science Decathlon 2024']
+
+    total_events_count = Event.objects.count() or 1
     critical_logs_count = LogEntry.objects.filter(action_flag=DELETION).count()
-    reports_generated_count = LogEntry.objects.filter(change_message__icontains='report').count()
-    latest_report_log = LogEntry.objects.filter(change_message__icontains='report').order_by('-action_time').first()
+    reports_generated_count = LogEntry.objects.filter(change_message__icontains='generated').count()
+    latest_report_log = LogEntry.objects.filter(change_message__icontains='generated').order_by('-action_time').first()
     last_export_label = latest_report_log.action_time.strftime('%b %d, %Y') if latest_report_log else 'Never'
 
     recent_report_rows = []
-    recent_logs = LogEntry.objects.select_related('user').order_by('-action_time')[:5]
+    recent_logs = LogEntry.objects.filter(change_message__icontains='generated').select_related('user').order_by('-action_time')[:5]
     for log in recent_logs:
+        export_format = 'Excel' if 'EXCEL' in log.change_message.upper() else 'PDF'
         recent_report_rows.append({
             'name': log.object_repr or 'System Report',
             'created_by': log.user.username if log.user else 'System',
             'created_at': log.action_time.strftime('%b %d, %Y %I:%M %p'),
-            'format': 'PDF',
+            'format': export_format,
             'status': 'Ready',
         })
 
     return render(request, 'reports.html', {
         'activity_log_count': activity_log_count,
         'activity_log_count_label': activity_log_count_label,
-        'events': ['National Science Decathlon 2024'],
+        'events': events,
         'department_names': department_names,
         'total_events_count': total_events_count,
         'critical_logs_count': critical_logs_count,
@@ -1723,6 +1731,76 @@ def superadmin_reports(request):
         'last_export_label': last_export_label,
         'recent_report_rows': recent_report_rows,
     })
+
+
+@login_required
+@user_passes_test(lambda user: user.is_superuser, login_url='login')
+def generate_superadmin_report(request):
+    if request.method != 'POST':
+        return HttpResponseNotAllowed(['POST'])
+
+    from django.contrib.admin.models import LogEntry, CHANGE
+    from django.contrib.contenttypes.models import ContentType
+    from django.contrib import messages
+    from datetime import datetime
+
+    event_name = request.POST.get('event', '').strip()
+    report_type = request.POST.get('report_type', 'summary').strip()
+    department = request.POST.get('department', 'all').strip()
+    export_format = request.POST.get('format', 'pdf').strip().lower()
+
+    start_date_str = request.POST.get('start_date', '').strip()
+    end_date_str = request.POST.get('end_date', '').strip()
+
+    start_date = None
+    end_date = None
+    if start_date_str:
+        try:
+            start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        except ValueError:
+            pass
+    if end_date_str:
+        try:
+            end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+        except ValueError:
+            pass
+
+    included_metrics = request.POST.getlist('metrics')
+
+    if not event_name or event_name == 'No events available':
+        messages.error(request, 'Please select a valid event before generating a report.')
+        return redirect('superadmin_reports')
+
+    event_obj = Event.objects.filter(name=event_name).first()
+    event_content_type = ContentType.objects.get_for_model(Event)
+
+    # Log dynamic django administrative action to record export in history - autoreload
+    LogEntry.objects.create(
+        user=request.user,
+        content_type_id=event_content_type.id,
+        object_id=str(event_obj.id) if event_obj else '1',
+        object_repr=f"{event_name} {report_type.title()} Report"[:200],
+        action_flag=CHANGE,
+        change_message=f"Generated {export_format.upper()} report."
+    )
+
+    if export_format == 'excel':
+        from core.reports_generator import generate_excel_report
+        excel_stream = generate_excel_report(event_name, department, start_date, end_date, included_metrics)
+        filename = f"{event_name.replace(' ', '_')}_{report_type}_Report_{datetime.now().strftime('%Y%m%d')}.xlsx"
+        response = HttpResponse(
+            excel_stream.read(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+    else:
+        from core.reports_generator import generate_pdf_report
+        pdf_stream = generate_pdf_report(event_name, department, start_date, end_date, included_metrics)
+        filename = f"{event_name.replace(' ', '_')}_{report_type}_Report_{datetime.now().strftime('%Y%m%d')}.pdf"
+        response = HttpResponse(pdf_stream.read(), content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
 
 
 @login_required
