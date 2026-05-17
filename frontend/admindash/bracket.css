@@ -199,9 +199,9 @@
   color: #991b1b;
 }
 
-/* View bracket button */
-.btn-view-bracket {
-  min-width: 100px;
+/* View, Edit, Delete bracket buttons */
+.btn-view-bracket, .btn-edit-bracket, .btn-delete-bracket {
+  min-width: 32px;
   height: 28px;
   border-radius: 6px;
   border: 1px solid #022068;
@@ -219,11 +219,23 @@
   transition: filter 0.15s ease;
 }
 
-.btn-view-bracket:hover {
+.btn-edit-bracket {
+  background: #eef4ff;
+  border: 1px solid #c3d9ff;
+  color: #022068;
+}
+
+.btn-delete-bracket {
+  background: #fee2e2;
+  border: 1px solid #fca5a5;
+  color: #dc2626;
+}
+
+.btn-view-bracket:hover, .btn-edit-bracket:hover, .btn-delete-bracket:hover {
   filter: brightness(1.12);
 }
 
-.btn-view-bracket svg {
+.btn-view-bracket svg, .btn-edit-bracket svg, .btn-delete-bracket svg {
   width: 12px;
   height: 12px;
   fill: currentColor;

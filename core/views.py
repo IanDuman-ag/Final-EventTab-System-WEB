@@ -1910,3 +1910,38 @@ def admin_view_bracket(request, event_id):
         return JsonResponse({'success': True, 'matches': matches_data, 'format': 'Unknown (Requires Event Format Tracking)'})
     except Exception as e:
         return JsonResponse({'success': False, 'message': str(e)}, status=500)
+
+@login_required
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def admin_delete_bracket(request, event_id):
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': 'Invalid method'}, status=400)
+    try:
+        from events.models import Event, BracketMatch, BracketTeam
+        event = get_object_or_404(Event, id=event_id)
+        BracketMatch.objects.filter(event=event).delete()
+        BracketTeam.objects.filter(event=event).delete()
+        return JsonResponse({'success': True, 'message': 'Bracket deleted successfully.'})
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': str(e)}, status=500)
+
+@login_required
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def admin_get_bracket_teams(request, event_id):
+    if request.method != 'GET':
+        return JsonResponse({'success': False, 'message': 'Invalid method'}, status=400)
+    try:
+        from events.models import Event, BracketTeam
+        event = get_object_or_404(Event, id=event_id)
+        teams = BracketTeam.objects.filter(event=event).order_by('seed')
+        teams_data = []
+        for t in teams:
+            teams_data.append({
+                'name': t.name,
+                'department_id': t.department.id if t.department else '',
+                'seed': t.seed,
+                'members': t.members
+            })
+        return JsonResponse({'success': True, 'teams': teams_data})
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': str(e)}, status=500)
