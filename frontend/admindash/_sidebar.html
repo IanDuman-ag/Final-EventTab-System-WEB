@@ -49,7 +49,7 @@
       <span>Analytics</span>
       <span class="v2-pill v2-pill--new">New</span>
     </a>
-    <a class="{% if active == 'reports' %}active{% endif %}" href="{% url 'admin_dashboard' %}" {% if active == 'reports' %}aria-current="page"{% endif %}>
+    <a class="{% if active == 'reports' %}active{% endif %}" href="{% url 'admin_generate_report' %}" {% if active == 'reports' %}aria-current="page"{% endif %}>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 4h16v16H4V4Zm2 2v12h12V6H6Zm2 2h8v2H8V8Zm0 4h5v2H8v-2Z"/></svg>
       <span>Generate Report</span>
     </a>

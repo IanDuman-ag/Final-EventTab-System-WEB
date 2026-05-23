@@ -18,7 +18,7 @@ from datetime import datetime, timedelta
 from events.models import (
     Event, Department,
     Portion, CandidateNumber, Contestant, JudgeAssignment,
-    ScoringCriterion, Chairperson,
+    ScoringCriterion, Chairperson, BracketMatch,
 )
 from events.mobile_sync import (
     delete_mobile_for_event,
@@ -792,6 +792,175 @@ def admin_analytics(request):
         'avg_events_per_participant': avg_events_per_participant,
         'avg_minutes_per_event': avg_minutes_per_event,
         'avg_hours_per_event': round(avg_minutes_per_event / 60, 1),
+        'date_range_label': today.replace(day=1).strftime('%b 1') + ' – ' + today.strftime('%b %d, %Y'),
+    })
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def admin_generate_report(request):
+    """Generate Report page — admin-level, uses existing report generator."""
+    from datetime import timedelta as _td
+    from django.contrib.admin.models import LogEntry, CHANGE
+    from django.contrib.contenttypes.models import ContentType
+
+    all_events = list(Event.objects.all().order_by('-event_date'))
+    today = timezone.localdate()
+    status_counts = get_event_status_counts(all_events, today)
+
+    # Summary metrics for the preview panel
+    total_events = len(all_events)
+    total_participants = sum(int(ev.max_participants or 0) for ev in all_events)
+    total_teams = sum(int(ev.num_teams or 0) for ev in all_events)
+    total_matches = BracketMatch.objects.count()
+    completed_events = status_counts['completed']
+    completion_rate = int(round(completed_events / total_events * 100)) if total_events else 0
+
+    # Category breakdown
+    cat_data = {}
+    for ev in all_events:
+        cat = (ev.category or 'Other').strip() or 'Other'
+        if cat not in cat_data:
+            cat_data[cat] = {'count': 0, 'participants': 0}
+        cat_data[cat]['count'] += 1
+        cat_data[cat]['participants'] += int(ev.max_participants or 0)
+    top_categories = sorted(
+        [{'name': k, 'count': v['count'], 'participants': v['participants']} for k, v in cat_data.items()],
+        key=lambda x: x['participants'], reverse=True
+    )[:5]
+    total_part_for_pct = total_participants or 1
+    for c in top_categories:
+        c['pct'] = int(round(c['participants'] / total_part_for_pct * 100))
+
+    # Event summary table (top 5)
+    event_summary = []
+    for ev in all_events[:5]:
+        sm = get_event_status_meta(ev, today)
+        event_summary.append({
+            'name': ev.name,
+            'category': ev.category,
+            'status': sm['status'],
+            'status_label': sm['status_label'],
+            'participants': ev.max_participants or 0,
+            'teams': ev.num_teams or 0,
+            'matches': BracketMatch.objects.filter(event=ev).count(),
+        })
+
+    # Weekly events chart (last 8 weeks)
+    chart_labels = []
+    chart_events = []
+    for i in range(7, -1, -1):
+        week_end = today - _td(days=i * 7)
+        week_start = week_end - _td(days=6)
+        evs_in_week = [e for e in all_events if e.event_date and week_start <= e.event_date <= week_end]
+        chart_labels.append(week_end.strftime('%b %d'))
+        chart_events.append(len(evs_in_week))
+
+    # Departments and categories for filter dropdowns
+    departments = list(Department.objects.values_list('name', flat=True).order_by('name'))
+    category_names = sorted({ev.category for ev in all_events if ev.category})
+    division_names = sorted({ev.division for ev in all_events if ev.division})
+
+    # Handle POST — generate & export
+    if request.method == 'POST':
+        report_type = request.POST.get('report_type', 'event_summary').strip()
+        export_format = request.POST.get('export_format', 'pdf').strip().lower()
+        event_filter = request.POST.get('event_filter', '').strip()
+        dept_filter = request.POST.get('dept_filter', '').strip()
+        cat_filter = request.POST.get('cat_filter', '').strip()
+        status_filter = request.POST.get('status_filter', '').strip()
+        start_date_str = request.POST.get('start_date', '').strip()
+        end_date_str = request.POST.get('end_date', '').strip()
+        included_metrics = request.POST.getlist('metrics')
+
+        # Log the export action
+        event_ct = ContentType.objects.get_for_model(Event)
+        LogEntry.objects.create(
+            user=request.user,
+            content_type_id=event_ct.id,
+            object_id='0',
+            object_repr=f'{report_type.replace("_", " ").title()} Report'[:200],
+            action_flag=CHANGE,
+            change_message=f'Generated {export_format.upper()} report.',
+        )
+
+        # Delegate to existing report generator
+        from datetime import datetime as _dt
+        start_date = None
+        end_date = None
+        if start_date_str:
+            try:
+                start_date = _dt.strptime(start_date_str, '%Y-%m-%d').date()
+            except ValueError:
+                pass
+        if end_date_str:
+            try:
+                end_date = _dt.strptime(end_date_str, '%Y-%m-%d').date()
+            except ValueError:
+                pass
+
+        event_name = event_filter or (all_events[0].name if all_events else '')
+        dept_name = dept_filter or 'all'
+
+        try:
+            if export_format in ('xlsx', 'excel'):
+                from core.reports_generator import generate_excel_report
+                stream = generate_excel_report(event_name, dept_name, start_date, end_date, included_metrics)
+                fname = f'EventTab_{report_type}_{today.strftime("%Y%m%d")}.xlsx'
+                resp = HttpResponse(
+                    stream.read(),
+                    content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                )
+                resp['Content-Disposition'] = f'attachment; filename="{fname}"'
+                return resp
+            elif export_format == 'csv':
+                import csv as _csv
+                import io
+                output = io.StringIO()
+                writer = _csv.writer(output)
+                writer.writerow(['Event Name', 'Category', 'Status', 'Participants', 'Teams', 'Date'])
+                for ev in all_events:
+                    sm = get_event_status_meta(ev, today)
+                    writer.writerow([ev.name, ev.category, sm['status_label'],
+                                     ev.max_participants or 0, ev.num_teams or 0,
+                                     ev.event_date.strftime('%Y-%m-%d') if ev.event_date else ''])
+                fname = f'EventTab_{report_type}_{today.strftime("%Y%m%d")}.csv'
+                resp = HttpResponse(output.getvalue(), content_type='text/csv')
+                resp['Content-Disposition'] = f'attachment; filename="{fname}"'
+                return resp
+            else:
+                from core.reports_generator import generate_pdf_report
+                stream = generate_pdf_report(event_name, dept_name, start_date, end_date, included_metrics)
+                fname = f'EventTab_{report_type}_{today.strftime("%Y%m%d")}.pdf'
+                resp = HttpResponse(stream.read(), content_type='application/pdf')
+                resp['Content-Disposition'] = f'attachment; filename="{fname}"'
+                return resp
+        except Exception as e:
+            messages.error(request, f'Report generation failed: {e}')
+            return redirect('admin_generate_report')
+
+    return render(request, 'admindash/generatereport.html', {
+        'all_events': all_events,
+        'total_events': total_events,
+        'total_participants': total_participants,
+        'total_teams': total_teams,
+        'total_matches': total_matches,
+        'completed_events': completed_events,
+        'completion_rate': completion_rate,
+        'status_counts': status_counts,
+        'top_categories': top_categories,
+        'event_summary': event_summary,
+        'chart_labels_json': json.dumps(chart_labels),
+        'chart_events_json': json.dumps(chart_events),
+        'status_counts_json': json.dumps({
+            'ongoing': status_counts['ongoing'],
+            'upcoming': status_counts['upcoming'],
+            'completed': status_counts['completed'],
+            'cancelled': status_counts['inactive'],
+        }),
+        'departments': departments,
+        'category_names': category_names,
+        'division_names': division_names,
         'date_range_label': today.replace(day=1).strftime('%b 1') + ' – ' + today.strftime('%b %d, %Y'),
     })
 

@@ -6,19 +6,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Generate Report - EventTab</title>
   <link rel="stylesheet" href="{% static 'admindash/admindashboard.css' %}?v=20260524c">
-  <link rel="stylesheet" href="{% static 'admindash/generatereport.css' %}?v=20260524a">
+  <link rel="stylesheet" href="{% static 'admindash/generatereport.css' %}?v=20260524b">
 </head>
 <body class="admin-dashboard-page admin-dashboard-v2 admin-generate-report-page">
   <div class="dashboard-shell">
-
     {% include 'admindash/_sidebar.html' with active='reports' %}
-
     <div class="content-area v2-content">
-
       <header class="v2-topbar">
         <div>
           <h2 class="v2-welcome">Generate Report</h2>
-          <p class="v2-subtitle">Export event analytics, scoresheets, and brackets in your preferred format.</p>
+          <p class="v2-subtitle">Create professional reports and export actionable insights for your tournaments.</p>
         </div>
         <div class="v2-topbar-right">
           <button class="v2-bell" type="button" aria-label="Notifications">
@@ -27,70 +24,520 @@
           </button>
         </div>
       </header>
+      <main class="v2-main rpt-main">
+        {% if messages %}
+        <ul class="events-flash" role="list" aria-live="polite">
+          {% for message in messages %}
+          <li class="events-flash-item {% if message.tags %}{{ message.tags }}{% endif %}">{{ message }}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
 
-      <main class="v2-main">
-        <section class="v2-card">
-          <header class="v2-card-head">
-            <h3>Report Options</h3>
-          </header>
-
-          <div class="report-grid">
-            <article class="report-card">
-              <div class="report-icon report-icon--blue">📊</div>
-              <h4>Events Report</h4>
-              <p>Full list of events, statuses, participants, and venues.</p>
-              <div class="report-actions">
-                <button type="button" class="report-btn">Export PDF</button>
-                <button type="button" class="report-btn report-btn--secondary">Export Excel</button>
-              </div>
-            </article>
-
-            <article class="report-card">
-              <div class="report-icon report-icon--green">🏆</div>
-              <h4>Bracket Results</h4>
-              <p>Tournament brackets, match outcomes, and team standings.</p>
-              <div class="report-actions">
-                <button type="button" class="report-btn">Export PDF</button>
-                <button type="button" class="report-btn report-btn--secondary">Export Excel</button>
-              </div>
-            </article>
-
-            <article class="report-card">
-              <div class="report-icon report-icon--purple">📋</div>
-              <h4>Scoresheets</h4>
-              <p>Approved scoresheets with judge details and scores.</p>
-              <div class="report-actions">
-                <button type="button" class="report-btn">Export PDF</button>
-                <button type="button" class="report-btn report-btn--secondary">Export Excel</button>
-              </div>
-            </article>
-
-            <article class="report-card">
-              <div class="report-icon report-icon--orange">👥</div>
-              <h4>Participants Report</h4>
-              <p>Department-level participation breakdowns and totals.</p>
-              <div class="report-actions">
-                <button type="button" class="report-btn">Export PDF</button>
-                <button type="button" class="report-btn report-btn--secondary">Export Excel</button>
-              </div>
-            </article>
+        <!-- ── Progress Steps ─────────────────────────────────────── -->
+        <section class="rpt-steps">
+          <div class="rpt-step active" data-step="1">
+            <span class="rpt-step-num">1</span>
+            <div><strong>Report Type</strong><small>Choose what to report</small></div>
           </div>
-
-          <p class="report-hint">
-            <span class="info-icon" aria-hidden="true">ℹ</span>
-            Reports are generated from your live event database. Coming soon: scheduled email reports.
-          </p>
+          <div class="rpt-step-line"></div>
+          <div class="rpt-step" data-step="2">
+            <span class="rpt-step-num">2</span>
+            <div><strong>Filters</strong><small>Select data to include</small></div>
+          </div>
+          <div class="rpt-step-line"></div>
+          <div class="rpt-step" data-step="3">
+            <span class="rpt-step-num">3</span>
+            <div><strong>Customize</strong><small>Choose columns &amp; metrics</small></div>
+          </div>
+          <div class="rpt-step-line"></div>
+          <div class="rpt-step" data-step="4">
+            <span class="rpt-step-num">4</span>
+            <div><strong>Preview</strong><small>Review your report</small></div>
+          </div>
+          <div class="rpt-step-line"></div>
+          <div class="rpt-step" data-step="5">
+            <span class="rpt-step-num">5</span>
+            <div><strong>Export</strong><small>Download or schedule</small></div>
+          </div>
         </section>
+
+        <form method="post" action="{% url 'admin_generate_report' %}" id="reportForm">
+          {% csrf_token %}
+          <div class="rpt-layout">
+            <!-- ── LEFT COLUMN ──────────────────────────────────────── -->
+            <div class="rpt-left">
+
+              <!-- Step 1: Report Type -->
+              <section class="rpt-section">
+                <h3 class="rpt-section-title">1. Choose Report Type</h3>
+                <p class="rpt-section-sub">Select the type of report you want to generate.</p>
+                <div class="rpt-type-grid">
+                  <label class="rpt-type-card active" data-type="event_summary">
+                    <input type="radio" name="report_type" value="event_summary" checked hidden>
+                    <span class="rpt-type-icon" style="background:#dbeafe;color:#1e40af">📅</span>
+                    <strong>Event Summary</strong>
+                    <small>Overview of events, participants, teams, and match summary.</small>
+                  </label>
+                  <label class="rpt-type-card" data-type="match_results">
+                    <input type="radio" name="report_type" value="match_results" hidden>
+                    <span class="rpt-type-icon" style="background:#d1fae5;color:#065f46">🏆</span>
+                    <strong>Match Results</strong>
+                    <small>Detailed results and scores of all matches.</small>
+                  </label>
+                  <label class="rpt-type-card" data-type="participant_performance">
+                    <input type="radio" name="report_type" value="participant_performance" hidden>
+                    <span class="rpt-type-icon" style="background:#ede9fe;color:#5b21b6">👥</span>
+                    <strong>Participant Performance</strong>
+                    <small>Performance and statistics by participants.</small>
+                  </label>
+                  <label class="rpt-type-card" data-type="teams_performance">
+                    <input type="radio" name="report_type" value="teams_performance" hidden>
+                    <span class="rpt-type-icon" style="background:#ffedd5;color:#9a3412">🤝</span>
+                    <strong>Teams Performance</strong>
+                    <small>Team standings, performance and comparison.</small>
+                  </label>
+                  <label class="rpt-type-card" data-type="judge_performance">
+                    <input type="radio" name="report_type" value="judge_performance" hidden>
+                    <span class="rpt-type-icon" style="background:#fef3c7;color:#92400e">⚖️</span>
+                    <strong>Judge Performance</strong>
+                    <small>Judges activity and scoring summary.</small>
+                  </label>
+                  <label class="rpt-type-card" data-type="department_performance">
+                    <input type="radio" name="report_type" value="department_performance" hidden>
+                    <span class="rpt-type-icon" style="background:#fee2e2;color:#991b1b">🏛️</span>
+                    <strong>Department Performance</strong>
+                    <small>Performance and participation by departments.</small>
+                  </label>
+                  <label class="rpt-type-card" data-type="scoresheet_audit">
+                    <input type="radio" name="report_type" value="scoresheet_audit" hidden>
+                    <span class="rpt-type-icon" style="background:#e0e7ff;color:#3730a3">📋</span>
+                    <strong>Scoresheet Audit Report</strong>
+                    <small>Track scoresheet approvals and changes.</small>
+                  </label>
+                  <label class="rpt-type-card" data-type="custom">
+                    <input type="radio" name="report_type" value="custom" hidden>
+                    <span class="rpt-type-icon" style="background:#f1f5f9;color:#475569">⚙️</span>
+                    <strong>Custom Report</strong>
+                    <small>Build your own report with custom metrics.</small>
+                  </label>
+                </div>
+              </section>
+
+              <!-- Step 2: Filters -->
+              <section class="rpt-section">
+                <h3 class="rpt-section-title">2. Apply Filters</h3>
+                <p class="rpt-section-sub">Narrow down the data for your report.</p>
+                <div class="rpt-filters-grid">
+                  <div class="rpt-filter-group">
+                    <label>Event</label>
+                    <select name="event_filter">
+                      <option value="">All Events</option>
+                      {% for ev in all_events %}
+                      <option value="{{ ev.name }}">{{ ev.name }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                  <div class="rpt-filter-group">
+                    <label>Date Range</label>
+                    <div class="rpt-date-range">
+                      <input type="date" name="start_date" placeholder="Start">
+                      <span>–</span>
+                      <input type="date" name="end_date" placeholder="End">
+                    </div>
+                  </div>
+                  <div class="rpt-filter-group">
+                    <label>Round</label>
+                    <select name="round_filter">
+                      <option value="">All Rounds</option>
+                      <option>Elimination</option>
+                      <option>Quarterfinals</option>
+                      <option>Semifinals</option>
+                      <option>Finals</option>
+                    </select>
+                  </div>
+                  <div class="rpt-filter-group">
+                    <label>Department</label>
+                    <select name="dept_filter">
+                      <option value="">All Departments</option>
+                      {% for dept in departments %}
+                      <option value="{{ dept }}">{{ dept }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                  <div class="rpt-filter-group">
+                    <label>Category</label>
+                    <select name="cat_filter">
+                      <option value="">All Categories</option>
+                      {% for cat in category_names %}
+                      <option value="{{ cat }}">{{ cat }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                  <div class="rpt-filter-group">
+                    <label>Division</label>
+                    <select name="div_filter">
+                      <option value="">All Divisions</option>
+                      {% for div in division_names %}
+                      <option value="{{ div }}">{{ div }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                  <div class="rpt-filter-group">
+                    <label>Status</label>
+                    <select name="status_filter">
+                      <option value="">All Statuses</option>
+                      <option value="upcoming">Upcoming</option>
+                      <option value="ongoing">Ongoing</option>
+                      <option value="completed">Completed</option>
+                      <option value="inactive">Deactivated</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="rpt-extra-filters">
+                  <strong>Additional Filters</strong>
+                  <div class="rpt-check-row">
+                    <label class="rpt-check"><input type="checkbox" name="metrics" value="archived"> Include archived events</label>
+                    <label class="rpt-check"><input type="checkbox" name="metrics" value="completed_only" checked> Only completed matches</label>
+                    <label class="rpt-check"><input type="checkbox" name="metrics" value="group_by_dept" checked> Group by department</label>
+                    <label class="rpt-check"><input type="checkbox" name="metrics" value="cancelled"> Include cancelled matches</label>
+                    <label class="rpt-check"><input type="checkbox" name="metrics" value="disqualified"> Include disqualified participants</label>
+                    <label class="rpt-check"><input type="checkbox" name="metrics" value="zero_values" checked> Include zero values</label>
+                  </div>
+                </div>
+              </section>
+
+              <!-- Step 3: Customize -->
+              <section class="rpt-section">
+                <h3 class="rpt-section-title">3. Customize Report</h3>
+                <p class="rpt-section-sub">Choose columns, metrics and sort order.</p>
+                <div class="rpt-columns-bar">
+                  <div class="rpt-columns-chips" id="columnsChips">
+                    <span class="rpt-chip">Event Name <button type="button" data-col="event_name">×</button></span>
+                    <span class="rpt-chip">Category <button type="button" data-col="category">×</button></span>
+                    <span class="rpt-chip">Participants <button type="button" data-col="participants">×</button></span>
+                    <span class="rpt-chip">Teams <button type="button" data-col="teams">×</button></span>
+                    <span class="rpt-chip">Matches <button type="button" data-col="matches">×</button></span>
+                    <span class="rpt-chip">Win Rate (%) <button type="button" data-col="win_rate">×</button></span>
+                    <span class="rpt-chip">Completion Rate (%) <button type="button" data-col="completion_rate">×</button></span>
+                    <button type="button" class="rpt-add-metric" id="addMetricBtn">+ Add Metric</button>
+                  </div>
+                </div>
+                <div class="rpt-sort-row">
+                  <div class="rpt-filter-group">
+                    <label>Sort By</label>
+                    <select name="sort_by">
+                      <option>Event Name</option>
+                      <option>Participants</option>
+                      <option>Teams</option>
+                      <option>Date</option>
+                    </select>
+                  </div>
+                  <div class="rpt-filter-group">
+                    <label>Sort Order</label>
+                    <select name="sort_order">
+                      <option>Ascending</option>
+                      <option>Descending</option>
+                    </select>
+                  </div>
+                  <div class="rpt-filter-group">
+                    <label>Group By (Optional)</label>
+                    <select name="group_by">
+                      <option value="">None</option>
+                      <option>Department</option>
+                      <option>Category</option>
+                      <option>Division</option>
+                    </select>
+                  </div>
+                  <div class="rpt-filter-group rpt-check-inline">
+                    <label class="rpt-check"><input type="checkbox" name="show_subtotals" checked> Show Subtotals</label>
+                  </div>
+                </div>
+              </section>
+
+              <!-- Footer actions -->
+              <div class="rpt-footer-actions">
+                <a href="{% url 'admin_dashboard' %}" class="rpt-cancel-btn">Cancel</a>
+              </div>
+            </div><!-- /rpt-left -->
+
+            <!-- ── RIGHT COLUMN: Preview + Export ──────────────────── -->
+            <div class="rpt-right">
+              <!-- Step 4: Preview -->
+              <section class="rpt-section rpt-preview-section">
+                <div class="rpt-preview-head">
+                  <h3 class="rpt-section-title">4. Report Preview</h3>
+                  <span class="rpt-sample-tag">Sample Data</span>
+                </div>
+                <p class="rpt-section-sub">This is a preview of your report based on current selections.</p>
+                <div class="rpt-preview-card">
+                  <div class="rpt-preview-brand">
+                    <div>
+                      <strong class="rpt-preview-title">Event Summary Report</strong>
+                      <small>{{ date_range_label }}</small>
+                    </div>
+                    <div class="rpt-preview-logo">
+                      <strong>EventTab</strong><small>ADMIN PORTAL</small>
+                    </div>
+                  </div>
+                  <!-- Metric pills -->
+                  <div class="rpt-preview-metrics">
+                    <div class="rpt-pm rpt-pm--blue">
+                      <strong>{{ total_events }}</strong><small>Events</small>
+                    </div>
+                    <div class="rpt-pm rpt-pm--green">
+                      <strong>{{ total_participants }}</strong><small>Participants</small>
+                    </div>
+                    <div class="rpt-pm rpt-pm--purple">
+                      <strong>{{ total_teams }}</strong><small>Teams</small>
+                    </div>
+                    <div class="rpt-pm rpt-pm--orange">
+                      <strong>{{ total_matches }}</strong><small>Matches</small>
+                    </div>
+                    <div class="rpt-pm rpt-pm--gold">
+                      <strong>{{ completion_rate }}%</strong><small>Avg. Completion</small>
+                    </div>
+                  </div>
+                  <!-- Mini charts row -->
+                  <div class="rpt-mini-charts">
+                    <div class="rpt-mini-chart-card">
+                      <strong>Events by Status</strong>
+                      <div class="rpt-doughnut-wrap">
+                        <canvas id="previewDoughnut" width="120" height="120"></canvas>
+                        <div class="rpt-doughnut-center">
+                          <strong>{{ total_events }}</strong><small>Total</small>
+                        </div>
+                      </div>
+                      <ul class="rpt-status-legend">
+                        <li><span style="background:#10b981"></span>Completed {{ status_counts.completed }} ({% if total_events %}{{ status_counts.completed|floatformat:0 }}{% else %}0{% endif %}%)</li>
+                        <li><span style="background:#2563eb"></span>Ongoing {{ status_counts.ongoing }}</li>
+                        <li><span style="background:#fbbf24"></span>Upcoming {{ status_counts.upcoming }}</li>
+                        <li><span style="background:#ef4444"></span>Cancelled {{ status_counts.inactive }}</li>
+                      </ul>
+                    </div>
+                    <div class="rpt-mini-chart-card">
+                      <strong>Events Over Time</strong>
+                      <canvas id="previewLine" height="120"></canvas>
+                    </div>
+                  </div>
+                  <!-- Top categories -->
+                  <div class="rpt-preview-cats">
+                    <div class="rpt-preview-cats-col">
+                      <strong>Top Categories</strong>
+                      {% for cat in top_categories %}
+                      <div class="rpt-cat-row">
+                        <span class="rpt-cat-name">{{ cat.name }}</span>
+                        <div class="rpt-cat-bar"><span style="width:{{ cat.pct }}%"></span></div>
+                        <span class="rpt-cat-val">{{ cat.participants }}</span>
+                      </div>
+                      {% endfor %}
+                    </div>
+                    <div class="rpt-preview-cats-col">
+                      <strong>Event Summary (Top 5)</strong>
+                      <table class="rpt-summary-table">
+                        <thead><tr><th>EVENT</th><th>STATUS</th><th>PARTICIPANTS</th><th>TEAMS</th><th>MATCHES</th></tr></thead>
+                        <tbody>
+                          {% for ev in event_summary %}
+                          <tr>
+                            <td>{{ ev.name|truncatechars:18 }}</td>
+                            <td><span class="v2-pill v2-pill--{{ ev.status }}">{{ ev.status_label }}</span></td>
+                            <td>{{ ev.participants }}</td>
+                            <td>{{ ev.teams }}</td>
+                            <td>{{ ev.matches }}</td>
+                          </tr>
+                          {% empty %}
+                          <tr><td colspan="5" style="text-align:center;color:#94a3b8">No events yet.</td></tr>
+                          {% endfor %}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                  <p class="rpt-preview-note">Note: Preview shows sample data. Actual report may vary.</p>
+                </div>
+              </section>
+
+              <!-- Step 5: Export -->
+              <section class="rpt-section">
+                <h3 class="rpt-section-title">5. Export Report</h3>
+                <p class="rpt-section-sub">Choose format and delivery option.</p>
+                <div class="rpt-export-row">
+                  <div>
+                    <strong class="rpt-export-label">Export Format</strong>
+                    <div class="rpt-format-btns">
+                      <label class="rpt-format-btn active">
+                        <input type="radio" name="export_format" value="pdf" checked hidden>
+                        <span>📄 PDF</span>
+                      </label>
+                      <label class="rpt-format-btn">
+                        <input type="radio" name="export_format" value="csv" hidden>
+                        <span>📊 CSV</span>
+                      </label>
+                      <label class="rpt-format-btn">
+                        <input type="radio" name="export_format" value="xlsx" hidden>
+                        <span>📗 Excel (XLSX)</span>
+                      </label>
+                    </div>
+                  </div>
+                  <div>
+                    <strong class="rpt-export-label">Delivery Option</strong>
+                    <div class="rpt-delivery-opts">
+                      <label class="rpt-check"><input type="radio" name="delivery" value="download" checked> Download Now</label>
+                      <label class="rpt-check rpt-check--disabled"><input type="radio" name="delivery" value="schedule" disabled> Schedule Report <small>(coming soon)</small></label>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <!-- Export action buttons -->
+              <div class="rpt-export-actions">
+                <button type="button" class="rpt-save-template-btn" id="saveTemplateBtn">
+                  <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7l-4-4Zm-5 16a3 3 0 1 1 0-6 3 3 0 0 1 0 6Zm3-10H5V5h10v4Z"/></svg>
+                  Save as Template
+                </button>
+                <button type="submit" class="rpt-generate-btn" id="generateBtn">
+                  <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M5 20h14v-2H5v2Zm7-18-5 5h3v6h4v-6h3l-5-5Z"/></svg>
+                  Generate &amp; Export
+                  <svg viewBox="0 0 24 24" width="12" height="12"><path fill="currentColor" d="M7 10l5 5 5-5z"/></svg>
+                </button>
+              </div>
+            </div><!-- /rpt-right -->
+          </div><!-- /rpt-layout -->
+        </form>
       </main>
     </div>
   </div>
 
   <script>
-    document.querySelectorAll('.report-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        alert('Report generation will be wired up to the export endpoint shortly.');
-      });
+  const CHART_LABELS = {{ chart_labels_json|safe }};
+  const CHART_EVENTS = {{ chart_events_json|safe }};
+  const STATUS_COUNTS = {{ status_counts_json|safe }};
+
+  /* ── Report type card selection ── */
+  document.querySelectorAll('.rpt-type-card').forEach(card => {
+    card.addEventListener('click', () => {
+      document.querySelectorAll('.rpt-type-card').forEach(c => c.classList.remove('active'));
+      card.classList.add('active');
+      card.querySelector('input[type=radio]').checked = true;
     });
+  });
+
+  /* ── Format button selection ── */
+  document.querySelectorAll('.rpt-format-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.rpt-format-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+
+  /* ── Column chip removal ── */
+  document.querySelectorAll('.rpt-chip button').forEach(btn => {
+    btn.addEventListener('click', () => btn.closest('.rpt-chip').remove());
+  });
+
+  /* ── Add metric ── */
+  document.getElementById('addMetricBtn').addEventListener('click', () => {
+    const name = prompt('Enter metric name (e.g. Win Rate):');
+    if (!name || !name.trim()) return;
+    const chip = document.createElement('span');
+    chip.className = 'rpt-chip';
+    chip.innerHTML = name.trim() + ' <button type="button">×</button>';
+    chip.querySelector('button').addEventListener('click', () => chip.remove());
+    document.getElementById('columnsChips').insertBefore(chip, document.getElementById('addMetricBtn'));
+  });
+
+  /* ── Save as Template (localStorage) ── */
+  document.getElementById('saveTemplateBtn').addEventListener('click', () => {
+    const form = document.getElementById('reportForm');
+    const data = new FormData(form);
+    const template = {};
+    for (const [k, v] of data.entries()) template[k] = v;
+    localStorage.setItem('eventtabs:report:template', JSON.stringify(template));
+    alert('Template saved! It will be pre-filled next time you open this page.');
+  });
+
+  /* ── Restore template on load ── */
+  (function () {
+    try {
+      const saved = JSON.parse(localStorage.getItem('eventtabs:report:template') || 'null');
+      if (!saved) return;
+      const form = document.getElementById('reportForm');
+      Object.entries(saved).forEach(([k, v]) => {
+        const el = form.querySelector(`[name="${k}"]`);
+        if (el && el.type !== 'radio' && el.type !== 'checkbox') el.value = v;
+      });
+    } catch (e) {}
+  })();
+
+  /* ── Preview doughnut ── */
+  (function () {
+    const cv = document.getElementById('previewDoughnut');
+    if (!cv) return;
+    const ctx = cv.getContext('2d');
+    const segments = [
+      { value: STATUS_COUNTS.completed || 0, color: '#10b981' },
+      { value: STATUS_COUNTS.ongoing   || 0, color: '#2563eb' },
+      { value: STATUS_COUNTS.upcoming  || 0, color: '#fbbf24' },
+      { value: STATUS_COUNTS.cancelled || 0, color: '#ef4444' },
+    ];
+    const total = segments.reduce((s, x) => s + x.value, 0);
+    const cx = cv.width / 2, cy = cv.height / 2;
+    const r = Math.min(cx, cy) - 6;
+    let start = -Math.PI / 2;
+    if (total === 0) {
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fillStyle = '#e2e8f0'; ctx.fill();
+    } else {
+      segments.forEach(seg => {
+        if (!seg.value) return;
+        const angle = (seg.value / total) * Math.PI * 2;
+        ctx.beginPath(); ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, r, start, start + angle);
+        ctx.closePath(); ctx.fillStyle = seg.color; ctx.fill();
+        start += angle;
+      });
+    }
+    ctx.beginPath(); ctx.arc(cx, cy, r * 0.6, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffffff'; ctx.fill();
+  })();
+
+  /* ── Preview line chart ── */
+  (function () {
+    const cv = document.getElementById('previewLine');
+    if (!cv) return;
+    function draw() {
+      cv.width = cv.offsetWidth; cv.height = 120;
+      const ctx = cv.getContext('2d');
+      ctx.clearRect(0, 0, cv.width, cv.height);
+      const W = cv.width, H = cv.height;
+      const padL = 24, padR = 8, padT = 10, padB = 20;
+      const innerW = W - padL - padR, innerH = H - padT - padB;
+      const maxV = Math.max(20, ...CHART_EVENTS, 1);
+      const stepX = CHART_LABELS.length > 1 ? innerW / (CHART_LABELS.length - 1) : 0;
+      ctx.strokeStyle = '#f1f5f9'; ctx.lineWidth = 1;
+      for (let i = 0; i <= 3; i++) {
+        const y = padT + (innerH / 3) * i;
+        ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
+      }
+      ctx.fillStyle = '#94a3b8'; ctx.font = '9px system-ui'; ctx.textAlign = 'center';
+      CHART_LABELS.forEach((label, i) => {
+        if (label) ctx.fillText(label, padL + stepX * i, H - 6);
+      });
+      ctx.beginPath();
+      CHART_EVENTS.forEach((v, i) => {
+        const x = padL + stepX * i, y = padT + innerH - (v / maxV) * innerH;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+      ctx.lineTo(padL + stepX * (CHART_EVENTS.length - 1), padT + innerH);
+      ctx.lineTo(padL, padT + innerH); ctx.closePath();
+      ctx.fillStyle = 'rgba(37,99,235,0.10)'; ctx.fill();
+      ctx.beginPath();
+      CHART_EVENTS.forEach((v, i) => {
+        const x = padL + stepX * i, y = padT + innerH - (v / maxV) * innerH;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+      ctx.strokeStyle = '#2563eb'; ctx.lineWidth = 2; ctx.stroke();
+    }
+    draw(); window.addEventListener('resize', draw);
+  })();
   </script>
 </body>
 </html>
