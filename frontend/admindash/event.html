@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Manage Events - EventTab</title>
-  <link rel="stylesheet" href="{% static 'admindash/event.css' %}?v=20260514c">
+  <link rel="stylesheet" href="{% static 'admindash/event.css' %}?v=20260523d">
 </head>
 <body class="admin-dashboard-page manage-events-page">
   <div class="dashboard-shell">
@@ -155,6 +155,9 @@
                       <div class="event-name">
                         <strong>{{ row.name }}</strong>
                         <span>{{ row.status_label }}</span>
+                        {% if row.mobile_published %}
+                          <span class="mobile-sync-badge" title="Available on judge mobile app">Mobile</span>
+                        {% endif %}
                       </div>
                     </td>
                     <td>{{ row.category }}</td>
@@ -188,6 +191,7 @@
     </div>
   </div>
 
+  <!-- ── Create Event Dialog ─────────────────────────────────────── -->
   <dialog id="create-event-dialog" class="create-event-dialog" aria-labelledby="create-event-title">
     <form class="create-event-form" method="post" enctype="multipart/form-data" action="{% url 'admin_manage_events' %}">
       {% csrf_token %}
@@ -258,10 +262,35 @@
           <span class="create-event-label">Mechanics/Rules</span>
           <textarea name="mechanics" rows="4" maxlength="8000" placeholder="Eligibility, rounds, equipment, conduct…" required></textarea>
         </label>
-        <label class="create-event-field create-event-field--full">
-          <span class="create-event-label">Scoring Criteria</span>
-          <textarea name="scoring_criteria" rows="4" maxlength="8000" placeholder="How judges score and weighting…" required></textarea>
-        </label>
+        <div class="create-event-field create-event-field--full">
+          <div class="scoring-builder" data-builder-id="create">
+            <div class="scoring-builder-head">
+              <span class="scoring-builder-title">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 7v6c0 4.5 3.4 8.5 8 9 4.6-.5 8-4.5 8-9V7l-8-4Z"/></svg>
+                SCORING CRITERIA
+              </span>
+            </div>
+            <p class="scoring-builder-info">
+              <span class="scoring-info-icon" aria-hidden="true">ℹ</span>
+              Create the criteria and set the weight/points for each. Total weight should equal 100%.
+            </p>
+            <label class="scoring-field">
+              <span class="scoring-field-label">Scoring Type</span>
+              <select class="scoring-type">
+                <option value="percentage" selected>Percentage (Total = 100%)</option>
+                <option value="points">Points (any total)</option>
+              </select>
+            </label>
+            <div class="scoring-list-label">Criteria List</div>
+            <div class="scoring-list"></div>
+            <button type="button" class="scoring-add-btn">+ Add Criteria</button>
+            <div class="scoring-total">
+              <span>Total Weight</span>
+              <span class="scoring-total-value">0%</span>
+            </div>
+          </div>
+          <textarea name="scoring_criteria" class="scoring-data" hidden></textarea>
+        </div>
         <label class="create-event-field create-event-field--full">
           <span class="create-event-label">Event Image</span>
           <input type="file" name="event_image" accept="image/*">
@@ -269,6 +298,7 @@
       </div>
       <footer class="create-event-actions">
         <button type="button" class="create-event-cancel" id="cancel-create-event">Cancel</button>
+        <p class="create-event-hint">Events are automatically published to the judge mobile app after creation.</p>
         <button type="submit" class="create-event-submit">Create event</button>
       </footer>
     </form>
@@ -332,7 +362,8 @@
         </div>
         <div class="view-field view-field--full">
           <span class="create-event-label">Scoring Criteria</span>
-          <p id="vd-scoring"></p>
+          <div id="vd-scoring-list" class="scoring-view-list"></div>
+          <p id="vd-scoring" hidden></p>
         </div>
         <div class="view-field view-field--full" id="vd-image-container" style="display: none;">
           <span class="create-event-label">Event Image</span>
@@ -416,10 +447,35 @@
           <span class="create-event-label">Mechanics/Rules</span>
           <textarea name="mechanics" id="edit-mechanics" rows="4" maxlength="8000"></textarea>
         </label>
-        <label class="create-event-field create-event-field--full">
-          <span class="create-event-label">Scoring Criteria</span>
-          <textarea name="scoring_criteria" id="edit-scoring-criteria" rows="4" maxlength="8000"></textarea>
-        </label>
+        <div class="create-event-field create-event-field--full">
+          <div class="scoring-builder" data-builder-id="edit">
+            <div class="scoring-builder-head">
+              <span class="scoring-builder-title">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 7v6c0 4.5 3.4 8.5 8 9 4.6-.5 8-4.5 8-9V7l-8-4Z"/></svg>
+                SCORING CRITERIA
+              </span>
+            </div>
+            <p class="scoring-builder-info">
+              <span class="scoring-info-icon" aria-hidden="true">ℹ</span>
+              Create the criteria and set the weight/points for each. Total weight should equal 100%.
+            </p>
+            <label class="scoring-field">
+              <span class="scoring-field-label">Scoring Type</span>
+              <select class="scoring-type">
+                <option value="percentage" selected>Percentage (Total = 100%)</option>
+                <option value="points">Points (any total)</option>
+              </select>
+            </label>
+            <div class="scoring-list-label">Criteria List</div>
+            <div class="scoring-list"></div>
+            <button type="button" class="scoring-add-btn">+ Add Criteria</button>
+            <div class="scoring-total">
+              <span>Total Weight</span>
+              <span class="scoring-total-value">0%</span>
+            </div>
+          </div>
+          <textarea name="scoring_criteria" id="edit-scoring-criteria" class="scoring-data" hidden></textarea>
+        </div>
         <label class="create-event-field create-event-field--full">
           <span class="create-event-label">Event Image</span>
           <input type="file" name="event_image" id="edit-event-image" accept="image/*">
@@ -451,86 +507,227 @@
     </div>
   </dialog>
 
+  {{ event_rows|json_script:"event-rows-data" }}
+
   <script>
   (function () {
     /* ── Helpers ─────────────────────────────────────────────────── */
     function openDialog(dlg) {
+      if (!dlg) return;
       if (typeof dlg.showModal === 'function') dlg.showModal();
       else dlg.setAttribute('open', '');
     }
     function closeDialog(dlg) {
+      if (!dlg) return;
       if (typeof dlg.close === 'function') dlg.close();
       else dlg.removeAttribute('open');
     }
     function setSelectValue(sel, val) {
+      if (!sel) return;
       for (var i = 0; i < sel.options.length; i++) {
         if (sel.options[i].value === val) { sel.selectedIndex = i; return; }
       }
-      // value not in list — add a temporary option
       var opt = document.createElement('option');
       opt.value = val; opt.textContent = val;
       sel.appendChild(opt);
       sel.value = val;
     }
 
-    /* ── Event data embedded from Django template ────────────────── */
+    /* ── Event data (safe JSON from server) ─────────────────────── */
     var EVENT_DATA = {};
-    {% for row in event_rows %}
-    EVENT_DATA[{{ row.id }}] = {
-      id: {{ row.id }},
-      name: "{{ row.name|escapejs }}",
-      category: "{{ row.category|escapejs }}",
-      division: "{{ row.division|escapejs }}",
-      schedule_label: "{{ row.schedule_label|escapejs }}",
-      event_date: "{{ row.event_date|escapejs }}",
-      event_time: "{{ row.event_time|escapejs }}",
-      venue: "{{ row.venue|escapejs }}",
-      status: "{{ row.status|escapejs }}",
-      status_label: "{{ row.status_label|escapejs }}",
-      availability_status: "{{ row.availability_status|escapejs }}",
-      max_participants: "{{ row.max_participants|escapejs }}",
-      num_teams: "{{ row.num_teams|escapejs }}",
-      faculty_in_charge: "{{ row.faculty_in_charge|escapejs }}",
-      student_in_charge: "{{ row.student_in_charge|escapejs }}",
-      mechanics: "{{ row.mechanics|escapejs }}",
-      scoring_criteria: "{{ row.scoring_criteria|escapejs }}",
-      image_url: "{{ row.image_url|escapejs }}"
-    };
-    {% endfor %}
+    try {
+      var dataEl = document.getElementById('event-rows-data');
+      if (dataEl && dataEl.textContent) {
+        var rows = JSON.parse(dataEl.textContent);
+        rows.forEach(function (row) { EVENT_DATA[row.id] = row; });
+      }
+    } catch (e) {
+      console.error('Failed to parse event data:', e);
+    }
+
+    /* ─────────────────────────────────────────────────────────────
+       Scoring criteria builder (used by Create + Edit dialogs)
+       Stores criteria as JSON inside the existing scoring_criteria
+       textarea so no backend changes are needed.
+       ───────────────────────────────────────────────────────────── */
+    var DEFAULT_CRITERIA = [
+      { name: 'Content / Presentation', description: 'Measure the quality and organization of the information.', weight: 30 },
+      { name: 'Originality',            description: 'Evaluate the innovativeness of the design and how well it presents ideas.', weight: 20 },
+      { name: 'Creativity',             description: 'Judge the uniqueness of the information depicted.', weight: 20 },
+      { name: 'Appearance',             description: 'Examine the entry for attractiveness, neatness, scale, and balance.', weight: 20 },
+    ];
+
+    function escHtml(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function parseScoringValue(raw) {
+      /* Try JSON first; fall back to legacy plain text. */
+      if (!raw) return { type: 'percentage', criteria: [] };
+      var trimmed = String(raw).trim();
+      if (trimmed.charAt(0) === '{' || trimmed.charAt(0) === '[') {
+        try {
+          var parsed = JSON.parse(trimmed);
+          if (Array.isArray(parsed)) return { type: 'percentage', criteria: parsed };
+          return {
+            type: parsed.type || 'percentage',
+            criteria: Array.isArray(parsed.criteria) ? parsed.criteria : [],
+            legacy_text: parsed.legacy_text || ''
+          };
+        } catch (e) { /* fall through */ }
+      }
+      /* Legacy free-text — keep it visible in a single criterion */
+      return { type: 'percentage', criteria: [], legacy_text: trimmed };
+    }
+
+    function renderCriterionRow(crit, idx) {
+      return '<div class="scoring-row" data-idx="' + idx + '">' +
+        '<span class="scoring-grip" aria-hidden="true">::</span>' +
+        '<div class="scoring-row-fields">' +
+          '<input type="text" class="scoring-name" placeholder="Criterion name" value="' + escHtml(crit.name || '') + '">' +
+          '<textarea class="scoring-desc" rows="2" placeholder="Description (optional)">' + escHtml(crit.description || '') + '</textarea>' +
+        '</div>' +
+        '<div class="scoring-weight-wrap">' +
+          '<input type="number" class="scoring-weight" min="0" max="100" step="1" value="' + (crit.weight != null ? crit.weight : 0) + '">' +
+          '<span class="scoring-weight-suffix">%</span>' +
+        '</div>' +
+        '<button type="button" class="scoring-remove" aria-label="Remove criterion">×</button>' +
+      '</div>';
+    }
+
+    function setupScoringBuilder(builder) {
+      if (!builder || builder.dataset.initialized === '1') return;
+      builder.dataset.initialized = '1';
+
+      var listEl   = builder.querySelector('.scoring-list');
+      var addBtn   = builder.querySelector('.scoring-add-btn');
+      var typeSel  = builder.querySelector('.scoring-type');
+      var totalEl  = builder.querySelector('.scoring-total-value');
+      /* Find the hidden textarea — it sits next to the builder */
+      var dataEl   = builder.parentElement.querySelector('.scoring-data');
+
+      function syncToHiddenField() {
+        var rows = listEl.querySelectorAll('.scoring-row');
+        var criteria = [];
+        var total = 0;
+        rows.forEach(function (row) {
+          var name   = row.querySelector('.scoring-name').value.trim();
+          var desc   = row.querySelector('.scoring-desc').value.trim();
+          var weight = parseFloat(row.querySelector('.scoring-weight').value) || 0;
+          if (name) {
+            criteria.push({ name: name, description: desc, weight: weight });
+            total += weight;
+          }
+        });
+        var payload = { type: typeSel.value || 'percentage', criteria: criteria };
+        if (dataEl) dataEl.value = JSON.stringify(payload);
+
+        var rounded = Math.round(total * 100) / 100;
+        var suffix = (typeSel.value === 'points') ? ' pts' : '%';
+        totalEl.textContent = rounded + suffix;
+        totalEl.classList.toggle('total-ok',    typeSel.value === 'percentage' && rounded === 100);
+        totalEl.classList.toggle('total-warn',  typeSel.value === 'percentage' && rounded !== 100);
+      }
+
+      function renderList(criteria) {
+        listEl.innerHTML = criteria.map(renderCriterionRow).join('');
+        wireRowEvents();
+        syncToHiddenField();
+      }
+
+      function wireRowEvents() {
+        listEl.querySelectorAll('.scoring-row').forEach(function (row) {
+          row.querySelectorAll('input, textarea').forEach(function (input) {
+            input.addEventListener('input', syncToHiddenField);
+          });
+          var rm = row.querySelector('.scoring-remove');
+          if (rm) {
+            rm.addEventListener('click', function () {
+              row.remove();
+              syncToHiddenField();
+            });
+          }
+        });
+      }
+
+      addBtn.addEventListener('click', function () {
+        var idx = listEl.querySelectorAll('.scoring-row').length;
+        var temp = document.createElement('div');
+        temp.innerHTML = renderCriterionRow({ name: '', description: '', weight: 0 }, idx);
+        var newRow = temp.firstChild;
+        listEl.appendChild(newRow);
+        wireRowEvents();
+        syncToHiddenField();
+        var firstInput = newRow.querySelector('.scoring-name');
+        if (firstInput) firstInput.focus();
+      });
+
+      typeSel.addEventListener('change', syncToHiddenField);
+
+      /* Expose loaders for the create / edit flow */
+      builder._loadValue = function (raw) {
+        var parsed = parseScoringValue(raw);
+        typeSel.value = parsed.type === 'points' ? 'points' : 'percentage';
+        var criteria = parsed.criteria.length ? parsed.criteria : (parsed.legacy_text ? [{ name: 'Criteria', description: parsed.legacy_text, weight: 100 }] : DEFAULT_CRITERIA.slice());
+        renderList(criteria);
+      };
+      builder._reset = function () {
+        typeSel.value = 'percentage';
+        renderList(DEFAULT_CRITERIA.slice());
+      };
+
+      /* Initial render with defaults */
+      renderList(DEFAULT_CRITERIA.slice());
+    }
+
+    var createBuilder = document.querySelector('.scoring-builder[data-builder-id="create"]');
+    var editBuilder   = document.querySelector('.scoring-builder[data-builder-id="edit"]');
+    setupScoringBuilder(createBuilder);
+    setupScoringBuilder(editBuilder);
 
     /* ── Create dialog ───────────────────────────────────────────── */
     var createDlg  = document.getElementById('create-event-dialog');
     var openCreate = document.getElementById('open-create-event');
     if (createDlg && openCreate) {
-      openCreate.addEventListener('click', function () { openDialog(createDlg); });
-      document.getElementById('close-create-event').addEventListener('click', function () { closeDialog(createDlg); });
-      document.getElementById('cancel-create-event').addEventListener('click', function () { closeDialog(createDlg); });
+      openCreate.addEventListener('click', function () {
+        if (createBuilder && createBuilder._reset) createBuilder._reset();
+        openDialog(createDlg);
+      });
+      var closeCreateBtn = document.getElementById('close-create-event');
+      var cancelCreateBtn = document.getElementById('cancel-create-event');
+      if (closeCreateBtn) closeCreateBtn.addEventListener('click', function () { closeDialog(createDlg); });
+      if (cancelCreateBtn) cancelCreateBtn.addEventListener('click', function () { closeDialog(createDlg); });
       createDlg.addEventListener('click', function (e) { if (e.target === createDlg) closeDialog(createDlg); });
     }
 
     /* ── View dialog ─────────────────────────────────────────────── */
     var viewDlg = document.getElementById('view-event-dialog');
-    document.getElementById('close-view-event').addEventListener('click', function () { closeDialog(viewDlg); });
-    document.getElementById('cancel-view-event').addEventListener('click', function () { closeDialog(viewDlg); });
-    viewDlg.addEventListener('click', function (e) { if (e.target === viewDlg) closeDialog(viewDlg); });
+    var closeViewBtn = document.getElementById('close-view-event');
+    var cancelViewBtn = document.getElementById('cancel-view-event');
+
+    if (closeViewBtn) closeViewBtn.addEventListener('click', function () { closeDialog(viewDlg); });
+    if (cancelViewBtn) cancelViewBtn.addEventListener('click', function () { closeDialog(viewDlg); });
+    if (viewDlg) viewDlg.addEventListener('click', function (e) { if (e.target === viewDlg) closeDialog(viewDlg); });
 
     document.querySelectorAll('.btn-view-event').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var ev = EVENT_DATA[parseInt(btn.dataset.id, 10)];
         if (!ev) return;
-        document.getElementById('vd-name').textContent          = ev.name || '—';
-        document.getElementById('vd-category').textContent      = ev.category || '—';
-        document.getElementById('vd-division').textContent      = ev.division || '—';
-        document.getElementById('vd-date').textContent          = ev.schedule_label || '—';
-        document.getElementById('vd-time').textContent          = ev.event_time || '—';
-        document.getElementById('vd-venue').textContent         = ev.venue || '—';
-        document.getElementById('vd-status').textContent        = ev.status_label || '—';
+        document.getElementById('vd-name').textContent             = ev.name || '—';
+        document.getElementById('vd-category').textContent         = ev.category || '—';
+        document.getElementById('vd-division').textContent         = ev.division || '—';
+        document.getElementById('vd-date').textContent             = ev.schedule_label || '—';
+        document.getElementById('vd-time').textContent             = ev.event_time || '—';
+        document.getElementById('vd-venue').textContent            = ev.venue || '—';
+        document.getElementById('vd-status').textContent           = ev.status_label || '—';
         document.getElementById('vd-max-participants').textContent = ev.max_participants || '—';
-        document.getElementById('vd-num-teams').textContent     = ev.num_teams || '—';
-        document.getElementById('vd-faculty').textContent       = ev.faculty_in_charge || '—';
-        document.getElementById('vd-student').textContent       = ev.student_in_charge || '—';
-        document.getElementById('vd-mechanics').textContent     = ev.mechanics || '—';
-        document.getElementById('vd-scoring').textContent       = ev.scoring_criteria || '—';
+        document.getElementById('vd-num-teams').textContent        = ev.num_teams || '—';
+        document.getElementById('vd-faculty').textContent          = ev.faculty_in_charge || '—';
+        document.getElementById('vd-student').textContent          = ev.student_in_charge || '—';
+        document.getElementById('vd-mechanics').textContent        = ev.mechanics || '—';
+        renderScoringView(ev.scoring_criteria || '');
         if (ev.image_url) {
           document.getElementById('vd-image').src = ev.image_url;
           document.getElementById('vd-image-container').style.display = 'block';
@@ -541,18 +738,50 @@
       });
     });
 
+    function renderScoringView(raw) {
+      var listEl = document.getElementById('vd-scoring-list');
+      if (!listEl) return;
+      var parsed = parseScoringValue(raw);
+      if (parsed.criteria && parsed.criteria.length) {
+        var total = 0;
+        var html = '<ul class="scoring-view-items">';
+        parsed.criteria.forEach(function (c) {
+          var w = parseFloat(c.weight) || 0;
+          total += w;
+          var suffix = parsed.type === 'points' ? ' pts' : '%';
+          html += '<li class="scoring-view-item">' +
+            '<div class="scoring-view-text">' +
+              '<strong>' + escHtml(c.name || '—') + '</strong>' +
+              (c.description ? '<p>' + escHtml(c.description) + '</p>' : '') +
+            '</div>' +
+            '<span class="scoring-view-weight">' + w + suffix + '</span>' +
+          '</li>';
+        });
+        html += '</ul>';
+        var totalSuffix = parsed.type === 'points' ? ' pts' : '%';
+        html += '<div class="scoring-view-total"><span>Total</span><span>' + (Math.round(total * 100) / 100) + totalSuffix + '</span></div>';
+        listEl.innerHTML = html;
+      } else if (parsed.legacy_text) {
+        listEl.innerHTML = '<p class="scoring-view-legacy">' + escHtml(parsed.legacy_text) + '</p>';
+      } else {
+        listEl.innerHTML = '<p class="scoring-view-empty">—</p>';
+      }
+    }
+
     /* ── Edit dialog ─────────────────────────────────────────────── */
     var editDlg  = document.getElementById('edit-event-dialog');
     var editForm = document.getElementById('edit-event-form');
-    document.getElementById('close-edit-event').addEventListener('click', function () { closeDialog(editDlg); });
-    document.getElementById('cancel-edit-event').addEventListener('click', function () { closeDialog(editDlg); });
-    editDlg.addEventListener('click', function (e) { if (e.target === editDlg) closeDialog(editDlg); });
+    var closeEditBtn = document.getElementById('close-edit-event');
+    var cancelEditBtn = document.getElementById('cancel-edit-event');
+
+    if (closeEditBtn) closeEditBtn.addEventListener('click', function () { closeDialog(editDlg); });
+    if (cancelEditBtn) cancelEditBtn.addEventListener('click', function () { closeDialog(editDlg); });
+    if (editDlg) editDlg.addEventListener('click', function (e) { if (e.target === editDlg) closeDialog(editDlg); });
 
     document.querySelectorAll('.btn-edit-event').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var ev = EVENT_DATA[parseInt(btn.dataset.id, 10)];
-        if (!ev) return;
-        // Set form action to the edit URL for this event
+        if (!ev || !editForm) return;
         editForm.action = '/admin/events/' + ev.id + '/edit/';
         document.getElementById('edit-event-name').value        = ev.name || '';
         setSelectValue(document.getElementById('edit-category'), ev.category);
@@ -566,7 +795,11 @@
         document.getElementById('edit-event-time').value        = ev.event_time || '';
         document.getElementById('edit-venue').value             = ev.venue || '';
         document.getElementById('edit-mechanics').value         = ev.mechanics || '';
-        document.getElementById('edit-scoring-criteria').value  = ev.scoring_criteria || '';
+        if (editBuilder && editBuilder._loadValue) {
+          editBuilder._loadValue(ev.scoring_criteria || '');
+        } else {
+          document.getElementById('edit-scoring-criteria').value = ev.scoring_criteria || '';
+        }
         openDialog(editDlg);
       });
     });
@@ -574,14 +807,17 @@
     /* ── Delete dialog ───────────────────────────────────────────── */
     var deleteDlg  = document.getElementById('delete-event-dialog');
     var deleteForm = document.getElementById('delete-event-form');
-    document.getElementById('cancel-delete-event').addEventListener('click', function () { closeDialog(deleteDlg); });
-    deleteDlg.addEventListener('click', function (e) { if (e.target === deleteDlg) closeDialog(deleteDlg); });
+    var cancelDeleteBtn = document.getElementById('cancel-delete-event');
+
+    if (cancelDeleteBtn) cancelDeleteBtn.addEventListener('click', function () { closeDialog(deleteDlg); });
+    if (deleteDlg) deleteDlg.addEventListener('click', function (e) { if (e.target === deleteDlg) closeDialog(deleteDlg); });
 
     document.querySelectorAll('.btn-delete-event').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var ev = EVENT_DATA[parseInt(btn.dataset.id, 10)];
-        if (!ev) return;
-        document.getElementById('delete-event-name').textContent = ev.name;
+        if (!ev || !deleteForm) return;
+        var nameEl = document.getElementById('delete-event-name');
+        if (nameEl) nameEl.textContent = ev.name;
         deleteForm.action = '/admin/events/' + ev.id + '/delete/';
         openDialog(deleteDlg);
       });

@@ -10,8 +10,8 @@ python-decouple==3.8
 # Pillow for Image Processing (if needed for user avatars, event images)
 # Pillow==10.3.0  # Commented out due to build issues on Python 3.14
 
-# Django REST Framework (if you plan to build APIs)
-# djangorestframework==3.15.1  # Optional - install when needed
+# Django REST Framework (mobile judge + viewer apps)
+djangorestframework==3.16.1
 
 # CORS Headers (for API access from frontend)
 # django-cors-headers==4.3.1  # Optional - install when needed

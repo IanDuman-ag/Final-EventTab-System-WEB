@@ -15,15 +15,22 @@ import json
 import csv
 from datetime import datetime, timedelta
 
-from events.models import Event, Department
+from events.models import (
+    Event, Department,
+    Portion, CandidateNumber, Contestant, JudgeAssignment,
+    ScoringCriterion, Chairperson,
+)
+from events.mobile_sync import (
+    delete_mobile_for_event,
+    sync_event_to_mobile,
+    sync_judge_to_mobile_events,
+)
 
 
 ROLE_CHOICES = {
     'super-admin': 'Super Admin',
     'admin': 'Admin',
     'tabulator': 'Tabulator',
-    'judge': 'Judge',
-    'viewers': 'Viewers',
 }
 
 ASSIGNMENT_ROLE_LABELS = {'Tabulator', 'Judge'}
@@ -103,7 +110,7 @@ def user_has_role(user, role):
     if role == 'admin':
         return user.is_staff or user.groups.filter(name__iexact='Admin').exists()
 
-    return user.groups.filter(name__iexact=ROLE_CHOICES[role]).exists()
+    return user.groups.filter(name__iexact=ROLE_CHOICES.get(role, '')).exists()
 
 
 def get_admin_rows():
@@ -636,6 +643,8 @@ def create_assignment_account(request):
         )
         _apply_assignment_role(user, role_label, payload['is_active'])
         user.save()
+        if role_label == 'Judge':
+            sync_judge_to_mobile_events(user)
 
         LogEntry.objects.create(
             user=request.user,
@@ -685,6 +694,8 @@ def update_assignment_account(request, account_id):
             account_user.set_password(payload['password'])
         _apply_assignment_role(account_user, role_label, payload['is_active'])
         account_user.save()
+        if role_label == 'Judge':
+            sync_judge_to_mobile_events(account_user)
 
         LogEntry.objects.create(
             user=request.user,
@@ -766,7 +777,7 @@ def admin_manage_events(request):
             except (ValueError, IndexError):
                 event_time_val = None
 
-        Event.objects.create(
+        event = Event.objects.create(
             name              = event_name[:200],
             category          = category,
             division          = request.POST.get('division', '').strip(),
@@ -784,7 +795,8 @@ def admin_manage_events(request):
             scoring_criteria  = request.POST.get('scoring_criteria', '').strip(),
             created_by        = request.user,
         )
-        messages.success(request, f'Event "{event_name}" created successfully.')
+        sync_event_to_mobile(event)
+        messages.success(request, f'Event "{event_name}" created and published to the judge mobile app.')
         return redirect('admin_manage_events')
 
     status_filter   = request.GET.get('status', 'all').strip().lower()
@@ -833,6 +845,7 @@ def admin_manage_events(request):
             'student_in_charge': ev.student_in_charge,
             'mechanics':        ev.mechanics,
             'scoring_criteria': ev.scoring_criteria,
+            'mobile_published': ev.judging_event is not None,
         })
         if len(event_rows) >= 30:
             break
@@ -863,6 +876,22 @@ def admin_manage_events(request):
         'selected_status':        status_filter,
         'search_query':           search_query,
         'schedule_filter':        schedule_filter,
+        'tab_data': {
+            'portion':     _serialize_tab_records(Portion),
+            'candidate':   _serialize_tab_records(CandidateNumber),
+            'contestant':  _serialize_tab_records(Contestant),
+            'judges':      _serialize_tab_records(JudgeAssignment),
+            'criteria':    _serialize_tab_records(ScoringCriterion),
+            'chairperson': _serialize_tab_records(Chairperson),
+        },
+        'tab_labels': [
+            ('portion',     'Portion',      'Portions'),
+            ('candidate',   'Candidate',    'Candidates'),
+            ('contestant',  'Contestant',   'Contestants'),
+            ('judges',      'Judge',        'Judges'),
+            ('criteria',    'Criterion',    'Criteria'),
+            ('chairperson', 'Chairperson',  'Chairpersons'),
+        ],
     })
 
 
@@ -917,8 +946,9 @@ def admin_edit_event(request, event_id):
     ev.mechanics         = request.POST.get('mechanics', '').strip()
     ev.scoring_criteria  = request.POST.get('scoring_criteria', '').strip()
     ev.save()
+    sync_event_to_mobile(ev)
 
-    messages.success(request, f'Event "{event_name}" updated successfully.')
+    messages.success(request, f'Event "{event_name}" updated and synced to the judge mobile app.')
     return redirect('admin_manage_events')
 
 
@@ -931,9 +961,139 @@ def admin_delete_event(request, event_id):
 
     ev = get_object_or_404(Event, id=event_id)
     name = ev.name
+    delete_mobile_for_event(ev)
     ev.delete()
     messages.success(request, f'Event "{name}" deleted successfully.')
     return redirect('admin_manage_events')
+
+
+# ──────────────────────────────────────────────────────────────────
+# Tab record CRUD (Portion, Candidate No., Contestant, Judges,
+# Criteria, Chairperson). All share the same simple shape:
+# name + date_start + date_end + notes.
+# ──────────────────────────────────────────────────────────────────
+
+TAB_MODEL_MAP = {
+    'portion': Portion,
+    'candidate': CandidateNumber,
+    'contestant': Contestant,
+    'judges': JudgeAssignment,
+    'criteria': ScoringCriterion,
+    'chairperson': Chairperson,
+}
+
+
+def _get_tab_model_or_404(tab_key):
+    """Return the model class for a tab key, or raise 404."""
+    model = TAB_MODEL_MAP.get(tab_key)
+    if model is None:
+        from django.http import Http404
+        raise Http404(f'Unknown tab: {tab_key}')
+    return model
+
+
+def _serialize_tab_records(model):
+    """Serialize all records of a tab model for JSON consumption."""
+    rows = []
+    for rec in model.objects.all():
+        rows.append({
+            'id': rec.id,
+            'name': rec.name,
+            'date_start': rec.date_start.strftime('%Y-%m-%d') if rec.date_start else '',
+            'date_end': rec.date_end.strftime('%Y-%m-%d') if rec.date_end else '',
+            'date_start_label': rec.date_start.strftime('%B %d, %Y') if rec.date_start else '—',
+            'date_end_label': rec.date_end.strftime('%B %d, %Y') if rec.date_end else '—',
+            'notes': rec.notes or '',
+        })
+    return rows
+
+
+def _parse_date_or_none(value):
+    """Parse YYYY-MM-DD string to a date, or None."""
+    if not value:
+        return None
+    try:
+        return datetime.strptime(value.strip(), '%Y-%m-%d').date()
+    except (ValueError, TypeError):
+        return None
+
+
+@login_required
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def admin_tab_create(request, tab_key):
+    """Create a new tab record (Portion / Contestant / etc.)."""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': 'Invalid request method.'}, status=400)
+
+    model = _get_tab_model_or_404(tab_key)
+    name = (request.POST.get('name') or '').strip()
+    if not name:
+        return JsonResponse({'success': False, 'message': 'Name is required.'}, status=400)
+
+    rec = model.objects.create(
+        name=name[:200],
+        date_start=_parse_date_or_none(request.POST.get('date_start', '')),
+        date_end=_parse_date_or_none(request.POST.get('date_end', '')),
+        notes=(request.POST.get('notes') or '').strip(),
+    )
+    return JsonResponse({
+        'success': True,
+        'message': f'{name} created.',
+        'id': rec.id,
+        'name': rec.name,
+        'date_start': rec.date_start.strftime('%Y-%m-%d') if rec.date_start else '',
+        'date_end': rec.date_end.strftime('%Y-%m-%d') if rec.date_end else '',
+        'date_start_label': rec.date_start.strftime('%B %d, %Y') if rec.date_start else '—',
+        'date_end_label': rec.date_end.strftime('%B %d, %Y') if rec.date_end else '—',
+        'notes': rec.notes,
+    })
+
+
+@login_required
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def admin_tab_update(request, tab_key, record_id):
+    """Update an existing tab record."""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': 'Invalid request method.'}, status=400)
+
+    model = _get_tab_model_or_404(tab_key)
+    rec = get_object_or_404(model, id=record_id)
+
+    name = (request.POST.get('name') or '').strip()
+    if not name:
+        return JsonResponse({'success': False, 'message': 'Name is required.'}, status=400)
+
+    rec.name = name[:200]
+    rec.date_start = _parse_date_or_none(request.POST.get('date_start', ''))
+    rec.date_end = _parse_date_or_none(request.POST.get('date_end', ''))
+    rec.notes = (request.POST.get('notes') or '').strip()
+    rec.save()
+
+    return JsonResponse({
+        'success': True,
+        'message': f'{name} updated.',
+        'id': rec.id,
+        'name': rec.name,
+        'date_start': rec.date_start.strftime('%Y-%m-%d') if rec.date_start else '',
+        'date_end': rec.date_end.strftime('%Y-%m-%d') if rec.date_end else '',
+        'date_start_label': rec.date_start.strftime('%B %d, %Y') if rec.date_start else '—',
+        'date_end_label': rec.date_end.strftime('%B %d, %Y') if rec.date_end else '—',
+        'notes': rec.notes,
+    })
+
+
+@login_required
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def admin_tab_delete(request, tab_key, record_id):
+    """Delete a tab record."""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': 'Invalid request method.'}, status=400)
+
+    model = _get_tab_model_or_404(tab_key)
+    rec = get_object_or_404(model, id=record_id)
+    name = rec.name
+    rec.delete()
+    return JsonResponse({'success': True, 'message': f'{name} deleted.'})
 
 
 @login_required
@@ -2064,8 +2224,9 @@ def admin_generate_bracket(request):
             generate_round_robin(event, bracket_teams)
         else:
             return JsonResponse({'success': False, 'message': 'Unsupported tournament format.'}, status=400)
-            
-        return JsonResponse({'success': True, 'message': 'Bracket generated successfully.'})
+
+        sync_event_to_mobile(event)
+        return JsonResponse({'success': True, 'message': 'Bracket generated and synced to the judge mobile app.'})
     except Exception as e:
         return JsonResponse({'success': False, 'message': str(e)}, status=500)
 

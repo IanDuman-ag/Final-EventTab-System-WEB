@@ -38,6 +38,13 @@ class Event(models.Model):
     )
     created_at         = models.DateTimeField(auto_now_add=True)
     updated_at         = models.DateTimeField(auto_now=True)
+    judging_event      = models.OneToOneField(
+        'JudgingEvent',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='portal_event',
+    )
 
     class Meta:
         ordering = ['-created_at']
@@ -167,3 +174,143 @@ class ScoreSheet(models.Model):
 
     def __str__(self):
         return f"Scoresheet: {self.match.event.name} - Match {self.match.match_number} ({self.get_status_display()})"
+
+
+class EventCategory(models.Model):
+    CATEGORY_CHOICES = [
+        ('academic', 'Academic Event'),
+        ('esports', 'Esports Event'),
+        ('sports', 'Sports Event'),
+        ('socio_cultural', 'Socio Cultural'),
+    ]
+    name = models.CharField(max_length=100)
+    category_type = models.CharField(max_length=30, choices=CATEGORY_CHOICES, default='academic')
+    description = models.TextField(blank=True)
+    icon = models.CharField(max_length=50, default='school')
+    color = models.CharField(max_length=7, default='#2196F3')
+
+    class Meta:
+        verbose_name_plural = 'Event Categories'
+
+    def __str__(self):
+        return self.name
+
+
+class JudgingEvent(models.Model):
+    STATUS_CHOICES = [
+        ('upcoming', 'Upcoming'),
+        ('active', 'Active'),
+        ('completed', 'Completed'),
+    ]
+    title = models.CharField(max_length=200)
+    category = models.ForeignKey(EventCategory, on_delete=models.CASCADE, related_name='events')
+    date = models.DateField()
+    time = models.TimeField()
+    venue = models.CharField(max_length=200)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='upcoming')
+    description = models.TextField(blank=True)
+    assigned_judges = models.ManyToManyField(User, blank=True, related_name='assigned_judging_events')
+
+    class Meta:
+        ordering = ['date', 'time']
+
+    def __str__(self):
+        return self.title
+
+
+class Criterion(models.Model):
+    event = models.ForeignKey(JudgingEvent, on_delete=models.CASCADE, related_name='criteria')
+    name = models.CharField(max_length=100)
+    description = models.CharField(max_length=200, blank=True)
+    max_score = models.DecimalField(max_digits=5, decimal_places=1)
+    weight_percent = models.DecimalField(max_digits=5, decimal_places=1)
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ['order']
+
+    def __str__(self):
+        return f'{self.event.title} - {self.name}'
+
+
+class Candidate(models.Model):
+    event = models.ForeignKey(JudgingEvent, on_delete=models.CASCADE, related_name='candidates')
+    name = models.CharField(max_length=200)
+    number = models.PositiveIntegerField()
+    photo = models.ImageField(upload_to='candidates/', null=True, blank=True)
+    description = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ['number']
+        unique_together = ['event', 'number']
+
+    def __str__(self):
+        return f'#{self.number} {self.name}'
+
+
+class JudgeScore(models.Model):
+    judge = models.ForeignKey(User, on_delete=models.CASCADE, related_name='judge_scores')
+    candidate = models.ForeignKey(Candidate, on_delete=models.CASCADE, related_name='scores')
+    criterion = models.ForeignKey(Criterion, on_delete=models.CASCADE, related_name='scores')
+    score = models.DecimalField(max_digits=5, decimal_places=1)
+    is_locked = models.BooleanField(default=False)
+    submitted_at = models.DateTimeField(null=True, blank=True)
+    verification_id = models.CharField(max_length=50, blank=True)
+
+    class Meta:
+        unique_together = ['judge', 'candidate', 'criterion']
+
+    def __str__(self):
+        return f'{self.judge.username} - {self.candidate.name} - {self.criterion.name}: {self.score}'
+
+
+# ──────────────────────────────────────────────────────────────────
+# Tab Models — used by the tabbed Manage Events page (Phase 2)
+# Each tab has its own simple model with name + 2 dates.
+# ──────────────────────────────────────────────────────────────────
+
+class TabRecordBase(models.Model):
+    """Abstract base for all tab records (Portion, Candidate No., etc.)."""
+    name = models.CharField(max_length=200)
+    date_start = models.DateField(null=True, blank=True)
+    date_end = models.DateField(null=True, blank=True)
+    notes = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        abstract = True
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return self.name
+
+
+class Portion(TabRecordBase):
+    """A portion / round of an event (e.g. Talent, Q&A)."""
+    pass
+
+
+class CandidateNumber(TabRecordBase):
+    """A candidate number assignment."""
+    pass
+
+
+class Contestant(TabRecordBase):
+    """An individual contestant participating in events."""
+    pass
+
+
+class JudgeAssignment(TabRecordBase):
+    """A judge assignment record (for the tabbed UI)."""
+    pass
+
+
+class ScoringCriterion(TabRecordBase):
+    """A scoring criterion entry."""
+    pass
+
+
+class Chairperson(TabRecordBase):
+    """A chairperson assigned to oversee an event/portion."""
+    pass

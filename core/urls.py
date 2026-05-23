@@ -15,9 +15,10 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path
+from django.urls import include, path
 from django.conf import settings
 from django.conf.urls.static import static
+from .api_views import health_check
 from .views import (
     admin_brackets,
     admin_generate_bracket,
@@ -28,6 +29,9 @@ from .views import (
     admin_dashboard,
     admin_delete_event,
     admin_edit_event,
+    admin_tab_create,
+    admin_tab_update,
+    admin_tab_delete,
     admin_scoresheets,
     admin_approve_scoresheet,
     admin_discrepancy_scoresheet,
@@ -60,6 +64,9 @@ from .views import (
 )
 
 urlpatterns = [
+    path('api/health/', health_check, name='health_check'),
+    path('api/auth/', include('accounts.urls')),
+    path('api/events/', include('events.api_urls')),
     path('', login_view, name='home'),
     path('login/', login_view, name='login'),
     path('tabulator/dashboard/', tabulator_dashboard, name='tabulator_dashboard'),
@@ -72,6 +79,9 @@ urlpatterns = [
     path('admin/events/', admin_manage_events, name='admin_manage_events'),
     path('admin/events/<int:event_id>/edit/', admin_edit_event, name='admin_edit_event'),
     path('admin/events/<int:event_id>/delete/', admin_delete_event, name='admin_delete_event'),
+    path('admin/events/tab/<str:tab_key>/create/', admin_tab_create, name='admin_tab_create'),
+    path('admin/events/tab/<str:tab_key>/<int:record_id>/update/', admin_tab_update, name='admin_tab_update'),
+    path('admin/events/tab/<str:tab_key>/<int:record_id>/delete/', admin_tab_delete, name='admin_tab_delete'),
     path('admin/scoresheets/', admin_scoresheets, name='admin_scoresheets'),
     path('admin/scoresheets/<int:scoresheet_id>/approve/', admin_approve_scoresheet, name='admin_approve_scoresheet'),
     path('admin/scoresheets/<int:scoresheet_id>/discrepancy/', admin_discrepancy_scoresheet, name='admin_discrepancy_scoresheet'),

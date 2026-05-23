@@ -113,7 +113,7 @@ document.addEventListener('DOMContentLoaded', function () {
     role.value = 'Tabulator';
     statusSelect.value = 'active';
     modalTitle.textContent = 'Create Account';
-    modalSubtitle.textContent = 'Create a tabulator or judge account for event scoring access.';
+    modalSubtitle.textContent = 'Create a tabulator or judge account. Judges use the email and password on the mobile app.';
     submitButton.disabled = false;
     submitButton.textContent = 'Create Account';
     password.required = true;
@@ -129,7 +129,7 @@ document.addEventListener('DOMContentLoaded', function () {
     role.value = row.dataset.role || 'Tabulator';
     statusSelect.value = row.dataset.status === 'active' ? 'active' : 'deactive';
     modalTitle.textContent = 'Edit Account';
-    modalSubtitle.textContent = 'Update the role, login details, and status for this account.';
+    modalSubtitle.textContent = 'Update role and login details. Judges sign in on mobile with the email and password below.';
     submitButton.disabled = false;
     submitButton.textContent = 'Save Account';
     password.required = false;
