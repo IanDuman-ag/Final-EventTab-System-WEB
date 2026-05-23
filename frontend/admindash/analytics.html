@@ -1,0 +1,634 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Analytics - EventTab</title>
+  <link rel="stylesheet" href="{% static 'admindash/admindashboard.css' %}?v=20260524c">
+  <link rel="stylesheet" href="{% static 'admindash/analytics.css' %}?v=20260524a">
+</head>
+<body class="admin-dashboard-page admin-dashboard-v2 admin-analytics-page">
+  <div class="dashboard-shell">
+
+    {% include 'admindash/_sidebar.html' with active='analytics' %}
+
+    <div class="content-area v2-content">
+
+      <header class="v2-topbar">
+        <div class="v2-analytics-head">
+          <span class="v2-analytics-icon" aria-hidden="true">📊</span>
+          <div>
+            <h2 class="v2-welcome">Analytics Overview</h2>
+            <p class="v2-subtitle">Insights and performance metrics for all events.</p>
+          </div>
+        </div>
+        <div class="v2-topbar-right">
+          <span class="v2-date-pill">
+            <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2Zm0 16H5V10h14v10ZM5 8V6h14v2H5Z"/></svg>
+            {{ date_range_label }}
+            <svg viewBox="0 0 24 24" width="12" height="12"><path fill="currentColor" d="M7 10l5 5 5-5z"/></svg>
+          </span>
+          <button class="v2-bell" type="button" aria-label="Notifications">
+            <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm8-6-2-2v-5a6 6 0 1 0-12 0v5l-2 2v1h16v-1Z"/></svg>
+            <span class="v2-bell-dot"></span>
+          </button>
+        </div>
+      </header>
+
+      <main class="v2-main">
+
+        <!-- ── Top metric cards (5) ───────────────────────────────── -->
+        <section class="anal-metrics">
+          <article class="anal-metric">
+            <div class="anal-metric-icon anal-icon--blue">
+              <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2Zm0 16H5V10h14v10ZM5 8V6h14v2H5Z"/></svg>
+            </div>
+            <div class="anal-metric-body">
+              <span class="anal-metric-label">TOTAL EVENTS</span>
+              <strong>{{ total_events|default:"0" }}</strong>
+              <small class="anal-metric-good">▲ 28% vs last period</small>
+            </div>
+          </article>
+
+          <article class="anal-metric">
+            <div class="anal-metric-icon anal-icon--green">
+              <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M16 11c1.66 0 3-1.57 3-3.5S17.66 4 16 4s-3 1.57-3 3.5 1.34 3.5 3 3.5ZM8 11c1.66 0 3-1.57 3-3.5S9.66 4 8 4 5 5.57 5 7.5 6.34 11 8 11Zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 14.17 10.33 13 8 13Zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5Z"/></svg>
+            </div>
+            <div class="anal-metric-body">
+              <span class="anal-metric-label">TOTAL PARTICIPANTS</span>
+              <strong>{{ total_participants|default:"0" }}</strong>
+              <small class="anal-metric-good">▲ 24% vs last period</small>
+            </div>
+          </article>
+
+          <article class="anal-metric">
+            <div class="anal-metric-icon anal-icon--purple">
+              <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4Zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4Z"/></svg>
+            </div>
+            <div class="anal-metric-body">
+              <span class="anal-metric-label">TOTAL TEAMS</span>
+              <strong>{{ total_teams|default:"0" }}</strong>
+              <small class="anal-metric-good">▲ 18% vs last period</small>
+            </div>
+          </article>
+
+          <article class="anal-metric">
+            <div class="anal-metric-icon anal-icon--orange">
+              <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 2 4 5v6.09c0 5.05 3.41 9.76 8 10.91 4.59-1.15 8-5.86 8-10.91V5l-8-3z"/></svg>
+            </div>
+            <div class="anal-metric-body">
+              <span class="anal-metric-label">COMPLETED EVENTS</span>
+              <strong>{{ completed_events|default:"0" }}</strong>
+              <small class="anal-metric-good">▲ 25% vs last period</small>
+            </div>
+          </article>
+
+          <article class="anal-metric">
+            <div class="anal-metric-icon anal-icon--blue">
+              <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M7 5h10v2H7V5Zm0 12h10v2H7v-2Zm-3-6h16v2H4v-2Z"/></svg>
+            </div>
+            <div class="anal-metric-body">
+              <span class="anal-metric-label">PARTICIPATION RATE</span>
+              <strong>{{ participation_rate|default:"0" }}%</strong>
+              <small class="anal-metric-good">▲ 5% vs last period</small>
+            </div>
+          </article>
+        </section>
+
+        <!-- ── Charts row 1 ───────────────────────────────────────── -->
+        <section class="anal-row anal-row--3">
+          <article class="v2-card anal-chart-tall">
+            <header class="v2-card-head">
+              <h3>Events &amp; Participants Over Time</h3>
+              <select class="v2-select"><option>Daily</option></select>
+            </header>
+            <div class="v2-legend">
+              <span class="v2-legend-item"><span class="v2-legend-dot" style="background:#2563eb"></span>Events Created</span>
+              <span class="v2-legend-item"><span class="v2-legend-dot" style="background:#10b981"></span>Participants</span>
+            </div>
+            <canvas id="dailyOverviewChart" height="240"></canvas>
+          </article>
+
+          <article class="v2-card anal-doughnut">
+            <header class="v2-card-head"><h3>Events by Status</h3></header>
+            <div class="v2-doughnut-wrap">
+              <canvas id="statusDoughnut" width="170" height="170"></canvas>
+              <div class="v2-doughnut-center">
+                <strong id="doughnutTotal">0</strong>
+                <small>Total</small>
+              </div>
+            </div>
+            <ul class="v2-status-list" id="statusList"></ul>
+          </article>
+
+          <article class="v2-card v2-categories-card">
+            <header class="v2-card-head">
+              <h3>Top Categories</h3>
+              <select class="v2-select"><option>By Participants</option></select>
+            </header>
+            <ul class="v2-cat-list">
+              {% for cat in top_categories %}
+              <li class="v2-cat-row">
+                <div class="v2-cat-row-head">
+                  <span class="v2-cat-name">{{ cat.name }}</span>
+                  <span class="v2-cat-meta">{{ cat.participants }} ({{ cat.pct }}%)</span>
+                </div>
+                <div class="v2-cat-bar">
+                  <span class="v2-cat-fill v2-cat-fill--{{ forloop.counter }}" style="width: {{ cat.pct }}%"></span>
+                </div>
+              </li>
+              {% empty %}
+              <li class="v2-cat-empty">No category data yet.</li>
+              {% endfor %}
+            </ul>
+          </article>
+        </section>
+
+        <!-- ── Charts row 2: dept / completion / monthly avg ───── -->
+        <section class="anal-row anal-row--3">
+          <article class="v2-card">
+            <header class="v2-card-head">
+              <h3>Participation by Department</h3>
+              <select class="v2-select"><option>By Participants</option></select>
+            </header>
+            <canvas id="deptBars" height="240"></canvas>
+          </article>
+
+          <article class="v2-card">
+            <header class="v2-card-head">
+              <h3>Event Completion Rate</h3>
+              <select class="v2-select"><option>By Month</option></select>
+            </header>
+            <canvas id="completionLine" height="240"></canvas>
+          </article>
+
+          <article class="v2-card">
+            <header class="v2-card-head">
+              <h3>Average Participants per Event</h3>
+              <select class="v2-select"><option>By Month</option></select>
+            </header>
+            <canvas id="avgParticipantsBars" height="240"></canvas>
+          </article>
+        </section>
+
+        <!-- ── Performance + Engagement ─────────────────────────── -->
+        <section class="anal-row anal-row--2">
+          <article class="v2-card">
+            <header class="v2-card-head">
+              <h3>Event Performance</h3>
+              <select class="v2-select"><option>By Participants</option></select>
+            </header>
+            <div class="v2-table-wrap">
+              <table class="v2-table">
+                <thead>
+                  <tr>
+                    <th>EVENT NAME</th>
+                    <th>CATEGORY</th>
+                    <th>STATUS</th>
+                    <th>PARTICIPANTS</th>
+                    <th>TEAMS</th>
+                    <th>COMPLETION RATE</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for r in perf_rows %}
+                  <tr>
+                    <td><strong>{{ r.name }}</strong></td>
+                    <td>{{ r.category }}</td>
+                    <td><span class="v2-pill v2-pill--{{ r.status }}">{{ r.status_label }}</span></td>
+                    <td>{{ r.participants }}</td>
+                    <td>{{ r.teams }}</td>
+                    <td>
+                      <div class="anal-progress">
+                        <span class="anal-progress-fill" style="width:{{ r.completion }}%"></span>
+                      </div>
+                      <small class="anal-progress-text">{{ r.completion }}%</small>
+                    </td>
+                  </tr>
+                  {% empty %}
+                  <tr><td colspan="6" class="v2-empty">No event performance data yet.</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+              <div class="anal-view-all">
+                <a href="{% url 'admin_manage_events' %}">View all events →</a>
+              </div>
+            </div>
+          </article>
+
+          <article class="v2-card">
+            <header class="v2-card-head"><h3>Participant Engagement</h3></header>
+            <ul class="anal-engagement">
+              <li>
+                <span class="anal-eng-icon anal-icon--blue">
+                  <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M16 11c1.66 0 3-1.57 3-3.5S17.66 4 16 4s-3 1.57-3 3.5 1.34 3.5 3 3.5ZM8 11c1.66 0 3-1.57 3-3.5S9.66 4 8 4 5 5.57 5 7.5 6.34 11 8 11Zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 14.17 10.33 13 8 13Zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5Z"/></svg>
+                </span>
+                <div class="anal-eng-text">
+                  <strong>New Participants</strong>
+                  <small>Unique participants this period</small>
+                </div>
+                <div class="anal-eng-value">
+                  <span>{{ new_participants|default:"0" }}</span>
+                  <small class="anal-metric-good">▲ 19%</small>
+                </div>
+                <span class="anal-eng-spark anal-eng-spark--blue"></span>
+              </li>
+
+              <li>
+                <span class="anal-eng-icon anal-icon--green">
+                  <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12 5v6l5 3-1 1.7L10 12V5h2Zm0-2a9 9 0 1 0 9 9 9 9 0 0 0-9-9Z"/></svg>
+                </span>
+                <div class="anal-eng-text">
+                  <strong>Returning Participants</strong>
+                  <small>Participants from previous events</small>
+                </div>
+                <div class="anal-eng-value">
+                  <span>{{ returning_participants|default:"0" }}</span>
+                  <small class="anal-metric-good">▲ 15%</small>
+                </div>
+                <span class="anal-eng-spark anal-eng-spark--green"></span>
+              </li>
+
+              <li>
+                <span class="anal-eng-icon anal-icon--purple">
+                  <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12 2 4 5v6c0 4.5 3.4 8.5 8 9 4.6-.5 8-4.5 8-9V5l-8-3Z"/></svg>
+                </span>
+                <div class="anal-eng-text">
+                  <strong>Avg. Events per Participant</strong>
+                  <small>Average events joined</small>
+                </div>
+                <div class="anal-eng-value">
+                  <span>{{ avg_events_per_participant }}</span>
+                  <small class="anal-metric-good">▲ 12%</small>
+                </div>
+                <span class="anal-eng-spark anal-eng-spark--purple"></span>
+              </li>
+
+              <li>
+                <span class="anal-eng-icon anal-icon--orange">
+                  <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm1 11h-4v-2h2V7h2Z"/></svg>
+                </span>
+                <div class="anal-eng-text">
+                  <strong>Avg. Time per Event</strong>
+                  <small>Average duration of events</small>
+                </div>
+                <div class="anal-eng-value">
+                  <span>{{ avg_hours_per_event }} hrs</span>
+                  <small class="anal-metric-bad">▼ 5%</small>
+                </div>
+                <span class="anal-eng-spark anal-eng-spark--orange"></span>
+              </li>
+            </ul>
+          </article>
+        </section>
+
+        <!-- ── Footer info banner ──────────────────────────────── -->
+        <section class="anal-foot-banner">
+          <span class="info-icon">ℹ</span>
+          <span>All analytics are based on the selected date range ({{ date_range_label }}).</span>
+          <button type="button" class="anal-export-btn">
+            <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M5 20h14v-2H5v2Zm7-18-5 5h3v6h4v-6h3l-5-5Z"/></svg>
+            Export Analytics
+          </button>
+        </section>
+
+      </main>
+    </div>
+  </div>
+
+  <script>
+  /* ── Server data ── */
+  const DAILY_LABELS = {{ daily_labels_json|safe }};
+  const DAILY_EVENTS = {{ daily_events_json|safe }};
+  const DAILY_PARTS  = {{ daily_participants_json|safe }};
+  const COMPLETION_LABELS = {{ completion_labels_json|safe }};
+  const COMPLETION_RATES  = {{ completion_rates_json|safe }};
+  const MONTHLY_AVG_LABELS = {{ monthly_avg_labels_json|safe }};
+  const MONTHLY_AVG_VALUES = {{ monthly_avg_participants_json|safe }};
+  const STATUS_DOUGHNUT = {{ status_doughnut_json|safe }};
+  const DEPT_ROWS = {{ dept_rows_json|safe }};
+
+  /* ── Reusable canvas helpers ── */
+  function clearCanvas(cv) {
+    const ctx = cv.getContext('2d');
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    return ctx;
+  }
+  function fitCanvas(cv, h) {
+    cv.width = cv.offsetWidth;
+    cv.height = h;
+  }
+
+  /* ── Daily overview (line, dual axis) ── */
+  (function () {
+    const cv = document.getElementById('dailyOverviewChart');
+    if (!cv) return;
+
+    function draw() {
+      fitCanvas(cv, 280);
+      const ctx = clearCanvas(cv);
+      const W = cv.width, H = cv.height;
+      const padL = 40, padR = 50, padT = 16, padB = 36;
+      const innerW = W - padL - padR;
+      const innerH = H - padT - padB;
+
+      const maxE = Math.max(20, ...DAILY_EVENTS, 1);
+      const maxP = Math.max(400, ...DAILY_PARTS, 1);
+
+      ctx.strokeStyle = '#f1f5f9';
+      ctx.lineWidth = 1;
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '11px system-ui, sans-serif';
+      ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+      const yTicks = 5;
+      for (let i = 0; i <= yTicks; i++) {
+        const y = padT + (innerH / yTicks) * i;
+        ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
+        ctx.fillText(Math.round(maxE - (maxE / yTicks) * i), padL - 6, y);
+        ctx.textAlign = 'left';
+        ctx.fillText(Math.round(maxP - (maxP / yTicks) * i), W - padR + 6, y);
+        ctx.textAlign = 'right';
+      }
+
+      const stepX = DAILY_LABELS.length > 1 ? innerW / (DAILY_LABELS.length - 1) : 0;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#94a3b8';
+      DAILY_LABELS.forEach((label, i) => {
+        if (label) ctx.fillText(label, padL + stepX * i, H - 14);
+      });
+
+      function plotSeries(data, max, color, fill) {
+        if (!data.length) return;
+        ctx.beginPath();
+        data.forEach((v, i) => {
+          const x = padL + stepX * i;
+          const y = padT + innerH - (v / max) * innerH;
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        });
+        ctx.lineTo(padL + stepX * (data.length - 1), padT + innerH);
+        ctx.lineTo(padL, padT + innerH);
+        ctx.closePath();
+        ctx.fillStyle = fill;
+        ctx.fill();
+
+        ctx.beginPath();
+        data.forEach((v, i) => {
+          const x = padL + stepX * i;
+          const y = padT + innerH - (v / max) * innerH;
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        });
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+      }
+      plotSeries(DAILY_EVENTS, maxE, '#2563eb', 'rgba(37, 99, 235, 0.10)');
+      plotSeries(DAILY_PARTS,  maxP, '#10b981', 'rgba(16, 185, 129, 0.10)');
+    }
+    draw();
+    window.addEventListener('resize', draw);
+  })();
+
+  /* ── Status doughnut ── */
+  (function () {
+    const cv = document.getElementById('statusDoughnut');
+    if (!cv) return;
+    const ctx = cv.getContext('2d');
+    const segments = [
+      { label: 'Ongoing',   value: STATUS_DOUGHNUT.ongoing   || 0, color: '#2563eb' },
+      { label: 'Upcoming',  value: STATUS_DOUGHNUT.upcoming  || 0, color: '#fbbf24' },
+      { label: 'Completed', value: STATUS_DOUGHNUT.completed || 0, color: '#10b981' },
+      { label: 'Cancelled', value: STATUS_DOUGHNUT.cancelled || 0, color: '#94a3b8' },
+    ];
+    const total = segments.reduce((s, x) => s + x.value, 0);
+    document.getElementById('doughnutTotal').textContent = total;
+
+    const cx = cv.width / 2, cy = cv.height / 2;
+    const r = Math.min(cx, cy) - 8;
+    const inner = r * 0.62;
+    let start = -Math.PI / 2;
+
+    if (total === 0) {
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fillStyle = '#e2e8f0'; ctx.fill();
+      ctx.beginPath(); ctx.arc(cx, cy, inner, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff'; ctx.fill();
+    } else {
+      segments.forEach(seg => {
+        if (!seg.value) return;
+        const angle = (seg.value / total) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, r, start, start + angle);
+        ctx.closePath();
+        ctx.fillStyle = seg.color;
+        ctx.fill();
+        start += angle;
+      });
+      ctx.beginPath(); ctx.arc(cx, cy, inner, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff'; ctx.fill();
+    }
+
+    const list = document.getElementById('statusList');
+    if (list) {
+      list.innerHTML = segments.map(s => {
+        const pct = total ? Math.round(s.value / total * 100) : 0;
+        return '<li><span class="v2-status-dot" style="background:' + s.color + '"></span>' +
+          '<span class="v2-status-label">' + s.label + '</span>' +
+          '<strong>' + s.value + '</strong>' +
+          '<span class="v2-status-pct">(' + pct + '%)</span></li>';
+      }).join('');
+    }
+  })();
+
+  /* ── Department vertical bar chart ── */
+  (function () {
+    const cv = document.getElementById('deptBars');
+    if (!cv) return;
+    function draw() {
+      fitCanvas(cv, 280);
+      const ctx = clearCanvas(cv);
+      const W = cv.width, H = cv.height;
+      const padL = 40, padR = 16, padT = 24, padB = 38;
+      const innerW = W - padL - padR;
+      const innerH = H - padT - padB;
+
+      const colors = ['#2563eb', '#10b981', '#a855f7', '#f97316', '#fbbf24', '#94a3b8'];
+      if (!DEPT_ROWS.length) {
+        ctx.fillStyle = '#94a3b8'; ctx.font = '13px system-ui'; ctx.textAlign = 'center';
+        ctx.fillText('No department data yet.', W / 2, H / 2);
+        return;
+      }
+      const maxV = Math.max(...DEPT_ROWS.map(d => d.participants), 1);
+      const barW = innerW / DEPT_ROWS.length * 0.6;
+      const gap  = innerW / DEPT_ROWS.length * 0.4;
+
+      ctx.strokeStyle = '#f1f5f9';
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '11px system-ui';
+      ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+      for (let i = 0; i <= 4; i++) {
+        const y = padT + innerH - (innerH / 4) * i;
+        ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
+        ctx.fillText(Math.round((maxV / 4) * i), padL - 6, y);
+      }
+
+      DEPT_ROWS.forEach((d, i) => {
+        const x = padL + gap / 2 + i * (barW + gap);
+        const h = (d.participants / maxV) * innerH;
+        const y = padT + innerH - h;
+        ctx.fillStyle = colors[i % colors.length];
+        const radius = 4;
+        ctx.beginPath();
+        ctx.moveTo(x, y + h);
+        ctx.lineTo(x, y + radius);
+        ctx.quadraticCurveTo(x, y, x + radius, y);
+        ctx.lineTo(x + barW - radius, y);
+        ctx.quadraticCurveTo(x + barW, y, x + barW, y + radius);
+        ctx.lineTo(x + barW, y + h);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = '#1f2937';
+        ctx.font = '600 11px system-ui';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(d.participants, x + barW / 2, y - 4);
+
+        ctx.fillStyle = '#64748b';
+        ctx.font = '11px system-ui';
+        ctx.textBaseline = 'top';
+        ctx.fillText(d.name, x + barW / 2, padT + innerH + 6);
+      });
+    }
+    draw();
+    window.addEventListener('resize', draw);
+  })();
+
+  /* ── Completion rate (line, percentage) ── */
+  (function () {
+    const cv = document.getElementById('completionLine');
+    if (!cv) return;
+    function draw() {
+      fitCanvas(cv, 280);
+      const ctx = clearCanvas(cv);
+      const W = cv.width, H = cv.height;
+      const padL = 40, padR = 16, padT = 18, padB = 32;
+      const innerW = W - padL - padR;
+      const innerH = H - padT - padB;
+      const max = 100;
+
+      ctx.strokeStyle = '#f1f5f9';
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '11px system-ui';
+      ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+      for (let i = 0; i <= 5; i++) {
+        const y = padT + innerH - (innerH / 5) * i;
+        ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
+        ctx.fillText(Math.round((max / 5) * i) + '%', padL - 6, y);
+      }
+
+      if (!COMPLETION_RATES.length) return;
+      const stepX = COMPLETION_LABELS.length > 1 ? innerW / (COMPLETION_LABELS.length - 1) : 0;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#94a3b8';
+      COMPLETION_LABELS.forEach((label, i) => {
+        ctx.fillText(label, padL + stepX * i, H - 14);
+      });
+
+      ctx.beginPath();
+      COMPLETION_RATES.forEach((v, i) => {
+        const x = padL + stepX * i;
+        const y = padT + innerH - (v / max) * innerH;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+      ctx.lineTo(padL + stepX * (COMPLETION_RATES.length - 1), padT + innerH);
+      ctx.lineTo(padL, padT + innerH);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(37, 99, 235, 0.10)';
+      ctx.fill();
+
+      ctx.beginPath();
+      COMPLETION_RATES.forEach((v, i) => {
+        const x = padL + stepX * i;
+        const y = padT + innerH - (v / max) * innerH;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+      ctx.strokeStyle = '#2563eb';
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+
+      ctx.fillStyle = '#2563eb';
+      COMPLETION_RATES.forEach((v, i) => {
+        const x = padL + stepX * i;
+        const y = padT + innerH - (v / max) * innerH;
+        ctx.beginPath(); ctx.arc(x, y, 3.5, 0, Math.PI * 2); ctx.fill();
+      });
+    }
+    draw();
+    window.addEventListener('resize', draw);
+  })();
+
+  /* ── Average participants per event (vertical bars) ── */
+  (function () {
+    const cv = document.getElementById('avgParticipantsBars');
+    if (!cv) return;
+    function draw() {
+      fitCanvas(cv, 280);
+      const ctx = clearCanvas(cv);
+      const W = cv.width, H = cv.height;
+      const padL = 40, padR = 16, padT = 24, padB = 38;
+      const innerW = W - padL - padR;
+      const innerH = H - padT - padB;
+
+      const colors = ['#2563eb', '#10b981', '#a855f7', '#f97316', '#fbbf24', '#60a5fa'];
+      const data = MONTHLY_AVG_VALUES;
+      const labels = MONTHLY_AVG_LABELS;
+      const maxV = Math.max(...data, 1) * 1.1;
+
+      ctx.strokeStyle = '#f1f5f9';
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '11px system-ui';
+      ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+      for (let i = 0; i <= 4; i++) {
+        const y = padT + innerH - (innerH / 4) * i;
+        ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
+        ctx.fillText(Math.round((maxV / 4) * i), padL - 6, y);
+      }
+
+      const barW = data.length ? innerW / data.length * 0.6 : 0;
+      const gap  = data.length ? innerW / data.length * 0.4 : 0;
+      data.forEach((v, i) => {
+        const x = padL + gap / 2 + i * (barW + gap);
+        const h = (v / maxV) * innerH;
+        const y = padT + innerH - h;
+        ctx.fillStyle = colors[i % colors.length];
+        const radius = 4;
+        ctx.beginPath();
+        ctx.moveTo(x, y + h);
+        ctx.lineTo(x, y + radius);
+        ctx.quadraticCurveTo(x, y, x + radius, y);
+        ctx.lineTo(x + barW - radius, y);
+        ctx.quadraticCurveTo(x + barW, y, x + barW, y + radius);
+        ctx.lineTo(x + barW, y + h);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = '#1f2937';
+        ctx.font = '600 11px system-ui';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(v, x + barW / 2, y - 4);
+
+        ctx.fillStyle = '#64748b';
+        ctx.font = '11px system-ui';
+        ctx.textBaseline = 'top';
+        ctx.fillText(labels[i] || '', x + barW / 2, padT + innerH + 6);
+      });
+    }
+    draw();
+    window.addEventListener('resize', draw);
+  })();
+  </script>
+</body>
+</html>

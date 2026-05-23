@@ -1,0 +1,70 @@
+{% load static %}
+{% comment %}
+  Shared admin sidebar (v2). Include from any admindash page:
+    {% include 'admindash/_sidebar.html' with active='dashboard' %}
+
+  Pass `active` as one of:
+    dashboard, events, accounts, departments, brackets, scoresheets,
+    analytics, reports
+{% endcomment %}
+<aside class="sidebar v2-sidebar" aria-label="Admin navigation">
+  <div class="brand v2-brand">
+    <h1>EventTab</h1>
+    <span>ADMIN PORTAL</span>
+  </div>
+
+  <nav class="side-nav v2-nav">
+    <a class="{% if active == 'dashboard' %}active{% endif %}" href="{% url 'admin_dashboard' %}" {% if active == 'dashboard' %}aria-current="page"{% endif %}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm9 0h7v7h-7v-7Z"/></svg>
+      <span>Dashboard</span>
+    </a>
+
+    <div class="v2-nav-section">MANAGE</div>
+
+    <a class="{% if active == 'events' %}active{% endif %}" href="{% url 'admin_manage_events' %}" {% if active == 'events' %}aria-current="page"{% endif %}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 2v2H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2H7Zm12 8H5V7h14v3Zm-8 3H7v4h4v-4Z"/></svg>
+      <span>Manage Events</span>
+    </a>
+    <a class="{% if active == 'accounts' %}active{% endif %}" href="{% url 'admin_manage_account' %}" {% if active == 'accounts' %}aria-current="page"{% endif %}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M16 11c1.66 0 3-1.57 3-3.5S17.66 4 16 4s-3 1.57-3 3.5 1.34 3.5 3 3.5ZM8 11c1.66 0 3-1.57 3-3.5S9.66 4 8 4 5 5.57 5 7.5 6.34 11 8 11Zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 14.17 10.33 13 8 13Zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5Z"/></svg>
+      <span>Manage Account</span>
+    </a>
+    <a class="{% if active == 'departments' %}active{% endif %}" href="{% url 'admin_departments' %}" {% if active == 'departments' %}aria-current="page"{% endif %}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 21V9h5V3h6v8h5v10H4Zm2-2h3v-3H6v3Zm0-5h3v-3H6v3Zm5 5h2v-3h-2v3Zm0-5h2v-3h-2v3Zm0-5h2V5h-2v4Zm4 10h3v-3h-3v3Zm0-5h3v-1h-3v1Z"/></svg>
+      <span>Departments</span>
+    </a>
+    <a class="{% if active == 'brackets' %}active{% endif %}" href="{% url 'admin_brackets' %}" {% if active == 'brackets' %}aria-current="page"{% endif %}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M2 4h4v4H2V4Zm0 6h4v4H2v-4Zm0 6h4v4H2v-4ZM8 5h2v2h2v4h-2v2H8v-2H6V9h2V5Zm6 2h2v2h2v2h-2v2h-2v-2h-2V9h2V7Zm4 2h4v2h-4V9ZM8 17h2v-2h2v-2h2v2h2v2h2v2h4v2h-4v-2h-2v-2h-2v2h-2v-2H8v-2Z"/></svg>
+      <span>Brackets</span>
+    </a>
+    <a class="{% if active == 'scoresheets' %}active{% endif %}" href="{% url 'admin_scoresheets' %}" {% if active == 'scoresheets' %}aria-current="page"{% endif %}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zm0 16H5V5h14v14zM7 7h10v2H7V7zm0 4h10v2H7v-2zm0 4h7v2H7v-2z"/></svg>
+      <span>Scoresheet</span>
+    </a>
+
+    <div class="v2-nav-section">REPORTS</div>
+
+    <a class="{% if active == 'analytics' %}active{% endif %}" href="{% url 'admin_analytics' %}" {% if active == 'analytics' %}aria-current="page"{% endif %}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 3v18h18V3H3Zm16 16H5V5h14v14ZM7 17h2v-7H7v7Zm4 0h2V7h-2v10Zm4 0h2v-4h-2v4Z"/></svg>
+      <span>Analytics</span>
+      <span class="v2-pill v2-pill--new">New</span>
+    </a>
+    <a class="{% if active == 'reports' %}active{% endif %}" href="{% url 'admin_dashboard' %}" {% if active == 'reports' %}aria-current="page"{% endif %}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 4h16v16H4V4Zm2 2v12h12V6H6Zm2 2h8v2H8V8Zm0 4h5v2H8v-2Z"/></svg>
+      <span>Generate Report</span>
+    </a>
+  </nav>
+
+  <div class="v2-user-card">
+    <div class="v2-user-avatar">{{ request.user.username|default:"AD"|slice:":2"|upper }}</div>
+    <div class="v2-user-info">
+      <strong>{{ request.user.get_full_name|default:request.user.username|default:"Admin" }}</strong>
+      <small>Admin Portal</small>
+    </div>
+  </div>
+
+  <a class="v2-logout" href="{% url 'logout' %}">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M10 17v-3H3v-4h7V7l5 5-5 5Zm2-14h8v18h-8v-2h6V5h-6V3Z"/></svg>
+    <span>Logout</span>
+  </a>
+</aside>

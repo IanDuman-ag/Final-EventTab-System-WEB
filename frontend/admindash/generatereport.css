@@ -1,0 +1,120 @@
+/* ─────────────────────────────────────────────────────────────
+   Generate Report page — uses v2 layout from admindashboard.css
+   ───────────────────────────────────────────────────────────── */
+
+.admin-generate-report-page .v2-main {
+  padding: 0 28px 28px;
+}
+
+.report-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.report-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.report-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.06);
+}
+
+.report-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+}
+
+.report-icon--blue   { background: #dbeafe; }
+.report-icon--green  { background: #d1fae5; }
+.report-icon--purple { background: #ede9fe; }
+.report-icon--orange { background: #ffedd5; }
+
+.report-card h4 {
+  margin: 0;
+  font-size: 15px;
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.report-card p {
+  margin: 0;
+  color: #64748b;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.report-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.report-btn {
+  flex: 1;
+  background: #2563eb;
+  color: #ffffff;
+  border: 0;
+  padding: 8px 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background-color 0.12s ease;
+}
+
+.report-btn:hover {
+  background: #1d4ed8;
+}
+
+.report-btn--secondary {
+  background: #ffffff;
+  color: #2563eb;
+  border: 1px solid #cbd5e1;
+}
+
+.report-btn--secondary:hover {
+  background: #f8fafc;
+  border-color: #93c5fd;
+}
+
+.report-hint {
+  margin: 18px 0 0;
+  padding: 12px 14px;
+  background: #eff6ff;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  color: #1e40af;
+  font-size: 12.5px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.report-hint .info-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #2563eb;
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}

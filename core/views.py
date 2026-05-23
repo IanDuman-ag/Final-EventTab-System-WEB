@@ -494,10 +494,136 @@ def admin_dashboard(request):
     today = timezone.localdate()
     status_counts = get_event_status_counts(all_events, today)
     ctx['ongoing_count'] = status_counts['ongoing']
+    ctx['upcoming_count'] = status_counts['upcoming']
     ctx['total_events_count'] = len(all_events)
     ctx['completed_events_count'] = status_counts['completed']
+    ctx['inactive_count'] = status_counts['inactive']
     total = ctx['total_events_count'] or 1
     ctx['completed_pct'] = int(ctx['completed_events_count'] / total * 100)
+
+    # Total participants and teams across all events
+    total_participants = sum(int(ev.max_participants or 0) for ev in all_events)
+    total_teams = sum(int(ev.num_teams or 0) for ev in all_events)
+    ctx['total_participants'] = total_participants
+    ctx['total_teams'] = total_teams
+
+    # Top categories breakdown (count of events + sum of participants per category)
+    cat_data = {}
+    for ev in all_events:
+        cat = (ev.category or 'Other').strip() or 'Other'
+        if cat not in cat_data:
+            cat_data[cat] = {'count': 0, 'participants': 0}
+        cat_data[cat]['count'] += 1
+        cat_data[cat]['participants'] += int(ev.max_participants or 0)
+    top_categories = sorted(
+        [{'name': k, 'count': v['count'], 'participants': v['participants']} for k, v in cat_data.items()],
+        key=lambda x: x['participants'], reverse=True
+    )[:5]
+    total_part_for_pct = total_participants or 1
+    for c in top_categories:
+        c['pct'] = int(round(c['participants'] / total_part_for_pct * 100))
+    ctx['top_categories'] = top_categories
+
+    # Recent events (last 5 by date desc)
+    recent = sorted(all_events, key=lambda e: (e.event_date or today), reverse=True)[:5]
+    recent_events = []
+    for ev in recent:
+        sm = get_event_status_meta(ev, today)
+        recent_events.append({
+            'id': ev.id,
+            'name': ev.name,
+            'category': ev.category,
+            'status': sm['status'],
+            'status_label': sm['status_label'],
+            'num_teams': ev.num_teams or 0,
+            'max_participants': ev.max_participants or 0,
+            'date_label': ev.event_date.strftime('%b %d, %Y') if ev.event_date else '—',
+        })
+    ctx['recent_events'] = recent_events
+
+    # Upcoming events list
+    upcoming_list = []
+    for ev in all_events:
+        if ev.event_date and ev.event_date >= today:
+            days_left = (ev.event_date - today).days
+            upcoming_list.append({
+                'id': ev.id,
+                'name': ev.name,
+                'category': ev.category,
+                'num_teams': ev.num_teams or 0,
+                'day': ev.event_date.day,
+                'month_short': ev.event_date.strftime('%b').upper(),
+                'days_left': days_left,
+            })
+    upcoming_list.sort(key=lambda x: x['days_left'])
+    ctx['upcoming_events_list'] = upcoming_list[:5]
+
+    # Recent activity from Django LogEntry (last 5)
+    recent_actions = LogEntry.objects.select_related('user').order_by('-action_time')[:5]
+    activity_rows = []
+    for action in recent_actions:
+        delta = timezone.now() - action.action_time
+        if delta.days >= 1:
+            ago = f'{delta.days}d ago'
+        elif delta.seconds >= 3600:
+            ago = f'{delta.seconds // 3600}h ago'
+        elif delta.seconds >= 60:
+            ago = f'{delta.seconds // 60}m ago'
+        else:
+            ago = 'just now'
+        activity_rows.append({
+            'message': action.change_message or f'{action.get_action_flag_display()} {action.object_repr}',
+            'object_repr': action.object_repr,
+            'user': action.user.get_full_name() or action.user.username if action.user else 'System',
+            'ago': ago,
+        })
+    ctx['recent_activity'] = activity_rows
+
+    # Events overview chart (last 8 weeks: events created + total participants per week)
+    from datetime import timedelta as _td
+    chart_labels = []
+    chart_events = []
+    chart_parts = []
+    for i in range(7, -1, -1):
+        week_end = today - _td(days=i * 7)
+        week_start = week_end - _td(days=6)
+        evs_in_week = [e for e in all_events if e.event_date and week_start <= e.event_date <= week_end]
+        chart_labels.append(week_end.strftime('%b %d'))
+        chart_events.append(len(evs_in_week))
+        chart_parts.append(sum(int(e.max_participants or 0) for e in evs_in_week))
+    ctx['chart_labels_json'] = json.dumps(chart_labels)
+    ctx['chart_events_json'] = json.dumps(chart_events)
+    ctx['chart_participants_json'] = json.dumps(chart_parts)
+
+    # Status doughnut data
+    ctx['status_counts_json'] = json.dumps({
+        'ongoing': status_counts['ongoing'],
+        'upcoming': status_counts['upcoming'],
+        'completed': status_counts['completed'],
+        'cancelled': status_counts['inactive'],
+    })
+
+    # Participation heatmap (5 weeks × 7 days, count of events per day)
+    heatmap_weeks = []
+    for w in range(4, -1, -1):
+        week_end = today - _td(days=w * 7)
+        week_start = week_end - _td(days=6)
+        days = []
+        for d in range(7):
+            day_date = week_start + _td(days=d)
+            count = sum(1 for e in all_events if e.event_date == day_date)
+            days.append({'date': day_date.strftime('%Y-%m-%d'), 'count': count})
+        heatmap_weeks.append({
+            'label_start': week_start.strftime('%b %d'),
+            'label_end': week_end.strftime('%b %d'),
+            'days': days,
+        })
+    ctx['heatmap_weeks'] = heatmap_weeks
+
+    # Today's date label for the topbar pill
+    ctx['today_range_label'] = today.strftime('%b %d, %Y')
+    ctx['month_range_label'] = today.replace(day=1).strftime('%b 1') + ' – ' + today.strftime('%b %d, %Y')
+
     # Serialize events for the calendar (rendered as JSON in template)
     events_json = []
     for ev in all_events:
@@ -521,6 +647,153 @@ def admin_dashboard(request):
 @user_passes_test(lambda user: user.is_staff, login_url='login')
 def admin_manage_account(request):
     return render(request, 'admindash/manageacc.html', get_assignment_account_context(request))
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def admin_analytics(request):
+    """Analytics overview page (dashboard with deeper metrics)."""
+    from datetime import timedelta as _td
+    from collections import OrderedDict
+
+    all_events = list(Event.objects.all())
+    today = timezone.localdate()
+    status_counts = get_event_status_counts(all_events, today)
+
+    total_events = len(all_events)
+    total_participants = sum(int(ev.max_participants or 0) for ev in all_events)
+    total_teams = sum(int(ev.num_teams or 0) for ev in all_events)
+    completed_events = status_counts['completed']
+    participation_rate = int(round(completed_events / total_events * 100)) if total_events else 0
+
+    # Top categories by participants
+    cat_data = {}
+    for ev in all_events:
+        cat = (ev.category or 'Other').strip() or 'Other'
+        if cat not in cat_data:
+            cat_data[cat] = {'count': 0, 'participants': 0}
+        cat_data[cat]['count'] += 1
+        cat_data[cat]['participants'] += int(ev.max_participants or 0)
+    top_categories = sorted(
+        [{'name': k, 'count': v['count'], 'participants': v['participants']} for k, v in cat_data.items()],
+        key=lambda x: x['participants'], reverse=True
+    )[:5]
+    total_part_for_pct = total_participants or 1
+    for c in top_categories:
+        c['pct'] = int(round(c['participants'] / total_part_for_pct * 100))
+
+    # Participation by Department (sum of participants from events whose
+    # department code matches; falls back to event count if none match)
+    dept_rows = []
+    departments = Department.objects.all()
+    for dept in departments:
+        evs = [e for e in all_events if (e.department or '').lower() == dept.name.lower() or (e.department or '').lower() == dept.code.lower()]
+        participants = sum(int(e.max_participants or 0) for e in evs)
+        teams = sum(int(e.num_teams or 0) for e in evs)
+        dept_rows.append({
+            'name': dept.name[:14],
+            'participants': participants,
+            'teams': teams,
+        })
+    dept_rows.sort(key=lambda x: x['participants'], reverse=True)
+    dept_rows = dept_rows[:6]
+
+    # Daily series for "Events & Participants Over Time" — last 31 days
+    daily_labels = []
+    daily_events = []
+    daily_participants = []
+    for i in range(30, -1, -1):
+        day = today - _td(days=i)
+        evs = [e for e in all_events if e.event_date == day]
+        if i % 5 == 0 or i == 0:
+            daily_labels.append(day.strftime('%b %d'))
+        else:
+            daily_labels.append('')
+        daily_events.append(len(evs))
+        daily_participants.append(sum(int(e.max_participants or 0) for e in evs))
+
+    # Event Completion Rate (by month, last 6 months)
+    months = []
+    cursor = today.replace(day=1)
+    for _ in range(6):
+        months.append(cursor)
+        prev_month_end = cursor - _td(days=1)
+        cursor = prev_month_end.replace(day=1)
+    months.reverse()
+
+    completion_labels = []
+    completion_rates = []
+    monthly_total_labels = []
+    monthly_avg_participants = []
+    for m_start in months:
+        next_month = (m_start.replace(day=28) + _td(days=4)).replace(day=1)
+        m_end = next_month - _td(days=1)
+        in_month = [e for e in all_events if e.event_date and m_start <= e.event_date <= m_end]
+        total_in = len(in_month)
+        completed_in = sum(1 for e in in_month if get_event_status_meta(e, today)['status'] == 'completed')
+        rate = int(round(completed_in / total_in * 100)) if total_in else 0
+        completion_labels.append(m_start.strftime('%b'))
+        completion_rates.append(rate)
+
+        avg_p = int(round(sum(int(e.max_participants or 0) for e in in_month) / total_in)) if total_in else 0
+        monthly_total_labels.append(m_start.strftime('%b'))
+        monthly_avg_participants.append(avg_p)
+
+    # Status counts for doughnut
+    status_doughnut = {
+        'ongoing': status_counts['ongoing'],
+        'upcoming': status_counts['upcoming'],
+        'completed': status_counts['completed'],
+        'cancelled': status_counts['inactive'],
+    }
+
+    # Event performance table (top 5 by participants)
+    perf_rows = []
+    for ev in sorted(all_events, key=lambda e: int(e.max_participants or 0), reverse=True)[:5]:
+        sm = get_event_status_meta(ev, today)
+        completion = 100 if sm['status'] == 'completed' else (75 if sm['status'] == 'ongoing' else 0)
+        perf_rows.append({
+            'name': ev.name,
+            'category': ev.category,
+            'status': sm['status'],
+            'status_label': sm['status_label'],
+            'participants': ev.max_participants or 0,
+            'teams': ev.num_teams or 0,
+            'completion': completion,
+        })
+
+    # Participant Engagement metrics (computed from current data)
+    User = get_user_model()
+    new_participants = User.objects.filter(date_joined__gte=today - _td(days=30)).count()
+    returning_participants = max(total_participants - new_participants, 0)
+    avg_events_per_participant = round(total_events / total_participants, 2) if total_participants else 0
+    avg_minutes_per_event = 144  # ~2.4 hours; static placeholder until time-tracking exists
+
+    return render(request, 'admindash/analytics.html', {
+        'total_events': total_events,
+        'total_participants': total_participants,
+        'total_teams': total_teams,
+        'completed_events': completed_events,
+        'participation_rate': participation_rate,
+        'top_categories': top_categories,
+        'dept_rows': dept_rows,
+        'daily_labels_json': json.dumps(daily_labels),
+        'daily_events_json': json.dumps(daily_events),
+        'daily_participants_json': json.dumps(daily_participants),
+        'completion_labels_json': json.dumps(completion_labels),
+        'completion_rates_json': json.dumps(completion_rates),
+        'monthly_avg_labels_json': json.dumps(monthly_total_labels),
+        'monthly_avg_participants_json': json.dumps(monthly_avg_participants),
+        'status_doughnut_json': json.dumps(status_doughnut),
+        'dept_rows_json': json.dumps(dept_rows),
+        'perf_rows': perf_rows,
+        'new_participants': new_participants,
+        'returning_participants': returning_participants,
+        'avg_events_per_participant': avg_events_per_participant,
+        'avg_minutes_per_event': avg_minutes_per_event,
+        'avg_hours_per_event': round(avg_minutes_per_event / 60, 1),
+        'date_range_label': today.replace(day=1).strftime('%b 1') + ' – ' + today.strftime('%b %d, %Y'),
+    })
 
 
 @login_required(login_url='login')

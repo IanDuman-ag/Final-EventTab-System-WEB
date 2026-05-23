@@ -1,0 +1,96 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Generate Report - EventTab</title>
+  <link rel="stylesheet" href="{% static 'admindash/admindashboard.css' %}?v=20260524c">
+  <link rel="stylesheet" href="{% static 'admindash/generatereport.css' %}?v=20260524a">
+</head>
+<body class="admin-dashboard-page admin-dashboard-v2 admin-generate-report-page">
+  <div class="dashboard-shell">
+
+    {% include 'admindash/_sidebar.html' with active='reports' %}
+
+    <div class="content-area v2-content">
+
+      <header class="v2-topbar">
+        <div>
+          <h2 class="v2-welcome">Generate Report</h2>
+          <p class="v2-subtitle">Export event analytics, scoresheets, and brackets in your preferred format.</p>
+        </div>
+        <div class="v2-topbar-right">
+          <button class="v2-bell" type="button" aria-label="Notifications">
+            <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm8-6-2-2v-5a6 6 0 1 0-12 0v5l-2 2v1h16v-1Z"/></svg>
+            <span class="v2-bell-dot"></span>
+          </button>
+        </div>
+      </header>
+
+      <main class="v2-main">
+        <section class="v2-card">
+          <header class="v2-card-head">
+            <h3>Report Options</h3>
+          </header>
+
+          <div class="report-grid">
+            <article class="report-card">
+              <div class="report-icon report-icon--blue">📊</div>
+              <h4>Events Report</h4>
+              <p>Full list of events, statuses, participants, and venues.</p>
+              <div class="report-actions">
+                <button type="button" class="report-btn">Export PDF</button>
+                <button type="button" class="report-btn report-btn--secondary">Export Excel</button>
+              </div>
+            </article>
+
+            <article class="report-card">
+              <div class="report-icon report-icon--green">🏆</div>
+              <h4>Bracket Results</h4>
+              <p>Tournament brackets, match outcomes, and team standings.</p>
+              <div class="report-actions">
+                <button type="button" class="report-btn">Export PDF</button>
+                <button type="button" class="report-btn report-btn--secondary">Export Excel</button>
+              </div>
+            </article>
+
+            <article class="report-card">
+              <div class="report-icon report-icon--purple">📋</div>
+              <h4>Scoresheets</h4>
+              <p>Approved scoresheets with judge details and scores.</p>
+              <div class="report-actions">
+                <button type="button" class="report-btn">Export PDF</button>
+                <button type="button" class="report-btn report-btn--secondary">Export Excel</button>
+              </div>
+            </article>
+
+            <article class="report-card">
+              <div class="report-icon report-icon--orange">👥</div>
+              <h4>Participants Report</h4>
+              <p>Department-level participation breakdowns and totals.</p>
+              <div class="report-actions">
+                <button type="button" class="report-btn">Export PDF</button>
+                <button type="button" class="report-btn report-btn--secondary">Export Excel</button>
+              </div>
+            </article>
+          </div>
+
+          <p class="report-hint">
+            <span class="info-icon" aria-hidden="true">ℹ</span>
+            Reports are generated from your live event database. Coming soon: scheduled email reports.
+          </p>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    document.querySelectorAll('.report-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        alert('Report generation will be wired up to the export endpoint shortly.');
+      });
+    });
+  </script>
+</body>
+</html>

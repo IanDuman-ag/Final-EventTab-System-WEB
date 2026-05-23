@@ -4,286 +4,411 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Assign Accounts - EventTab</title>
-  <link rel="stylesheet" href="{% static 'admindash/admindashboard.css' %}?v=20260515cal">
+  <title>Admin Dashboard - EventTab</title>
+  <link rel="stylesheet" href="{% static 'admindash/admindashboard.css' %}?v=20260524c">
 </head>
-<body class="admin-dashboard-page admin-dashboard-home">
+<body class="admin-dashboard-page admin-dashboard-home admin-dashboard-v2">
   <div class="dashboard-shell">
-    <aside class="sidebar" aria-label="Admin navigation">
-      <div class="brand">
-        <h1>EventTab</h1>
-        <span>Admin Portal</span>
-      </div>
 
-      <nav class="side-nav">
-        <a class="active" href="{% url 'admin_dashboard' %}" aria-current="page">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm9 0h7v7h-7v-7Z"></path></svg>
-          <span>Dashboard</span>
-        </a>
-        <a href="{% url 'admin_manage_events' %}">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2v2H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2H7Zm12 8H5V7h14v3Zm-8 3H7v4h4v-4Z"></path></svg>
-          <span>Manage Events</span>
-        </a>
-        <a href="{% url 'admin_manage_account' %}">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 11c1.66 0 3-1.57 3-3.5S17.66 4 16 4s-3 1.57-3 3.5 1.34 3.5 3 3.5ZM8 11c1.66 0 3-1.57 3-3.5S9.66 4 8 4 5 5.57 5 7.5 6.34 11 8 11Zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 14.17 10.33 13 8 13Zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5Z"></path></svg>
-          <span>Manage Account</span>
-        </a>
-        <a href="{% url 'admin_departments' %}">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V9h5V3h6v8h5v10H4Zm2-2h3v-3H6v3Zm0-5h3v-3H6v3Zm5 5h2v-3h-2v3Zm0-5h2v-3h-2v3Zm0-5h2V5h-2v4Zm4 10h3v-3h-3v3Zm0-5h3v-1h-3v1Z"></path></svg>
-          <span>Departments</span>
-        </a>
-        <a href="{% url 'admin_brackets' %}">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 4h4v4H2V4Zm0 6h4v4H2v-4Zm0 6h4v4H2v-4ZM8 5h2v2h2v4h-2v2H8v-2H6V9h2V5Zm6 2h2v2h2v2h-2v2h-2v-2h-2V9h2V7Zm4 2h4v2h-4V9ZM8 17h2v-2h2v-2h2v2h2v2h2v2h4v2h-4v-2h-2v-2h-2v2h-2v-2H8v-2Z"></path></svg>
-          <span>Brackets</span>
-        </a>
-        <a href="{% url 'admin_scoresheets' %}">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zm0 16H5V5h14v14zM7 7h10v2H7V7zm0 4h10v2H7v-2zm0 4h7v2H7v-2z"></path></svg>
-          <span>Scoresheet</span>
-        </a>
-        <a href="{% url 'admin_dashboard' %}">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4V4Zm2 2v12h12V6H6Zm2 2h8v2H8V8Zm0 4h5v2H8v-2Z"></path></svg>
-          <span>Generate Report</span>
-        </a>
-      </nav>
+    <!-- ─────────────── Sidebar (Dark Navy) ─────────────── -->
+    {% include 'admindash/_sidebar.html' with active='dashboard' %}
 
-      <a class="logout-link" href="{% url 'logout' %}">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17v-3H3v-4h7V7l5 5-5 5Zm2-14h8v18h-8v-2h6V5h-6V3Z"></path></svg>
-        <span>Logout</span>
-      </a>
-    </aside>
+    <!-- ─────────────── Main Content ─────────────── -->
+    <div class="content-area v2-content">
 
-    <div class="content-area">
-      <header class="topbar">
-        <span class="topbar-spacer" aria-hidden="true"></span>
-        <div class="topbar-actions">
-          <button class="icon-button" type="button" aria-label="Notifications">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm8-6-2-2v-5a6 6 0 1 0-12 0v5l-2 2v1h16v-1Z"></path></svg>
+      <header class="v2-topbar">
+        <div>
+          <h2 class="v2-welcome">Welcome back, {{ request.user.first_name|default:"Admin" }}! <span aria-hidden="true">👋</span></h2>
+          <p class="v2-subtitle">Here's what's happening with your events today.</p>
+        </div>
+        <div class="v2-topbar-right">
+          <span class="v2-date-pill">
+            <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2Zm0 16H5V10h14v10ZM5 8V6h14v2H5Z"/></svg>
+            {{ month_range_label }}
+          </span>
+          <button class="v2-bell" type="button" aria-label="Notifications">
+            <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm8-6-2-2v-5a6 6 0 1 0-12 0v5l-2 2v1h16v-1Z"/></svg>
+            <span class="v2-bell-dot"></span>
           </button>
-          <div class="profile-avatar" aria-label="{{ request.user.username }}">
-            {{ request.user.username|default:"AD"|slice:":2"|upper }}
-          </div>
         </div>
       </header>
 
-      <main class="main-content dashboard-main">
-        <section class="dashboard-hero" aria-label="Dashboard heading">
-          <h2>ADMIN DASHBOARD</h2>
+      <main class="v2-main">
+
+        <!-- Top Metric Cards -->
+        <section class="v2-metrics">
+          <article class="v2-metric v2-metric--dark">
+            <div class="v2-metric-head">
+              <span class="v2-metric-icon v2-metric-icon--gold">🏆</span>
+              <span class="v2-metric-label">TOTAL EVENTS</span>
+            </div>
+            <strong class="v2-metric-value">{{ total_events_count|default:"0" }}</strong>
+            <small class="v2-metric-foot v2-metric-foot--good">▲ 20% vs last month</small>
+          </article>
+
+          <article class="v2-metric">
+            <div class="v2-metric-head">
+              <span class="v2-metric-icon v2-metric-icon--green">👥</span>
+              <span class="v2-metric-label">TOTAL TEAMS</span>
+            </div>
+            <strong class="v2-metric-value">{{ total_teams|default:"0" }}</strong>
+            <small class="v2-metric-foot v2-metric-foot--good">▲ 15% vs last month</small>
+          </article>
+
+          <article class="v2-metric">
+            <div class="v2-metric-head">
+              <span class="v2-metric-icon v2-metric-icon--purple">👤</span>
+              <span class="v2-metric-label">TOTAL PARTICIPANTS</span>
+            </div>
+            <strong class="v2-metric-value">{{ total_participants|default:"0" }}</strong>
+            <small class="v2-metric-foot v2-metric-foot--good">▲ 24% vs last month</small>
+          </article>
+
+          <article class="v2-metric">
+            <div class="v2-metric-head">
+              <span class="v2-metric-icon v2-metric-icon--orange">⚡</span>
+              <span class="v2-metric-label">ONGOING EVENTS</span>
+            </div>
+            <strong class="v2-metric-value">{{ ongoing_count|default:"0" }}</strong>
+            <small class="v2-metric-foot">● {{ upcoming_count|default:"0" }} starting soon</small>
+          </article>
         </section>
 
-        <section class="dashboard-metrics" aria-label="Dashboard metrics">
-          <article class="metric-card metric-primary">
-            <span class="metric-label">Ongoing Games</span>
-            <strong>{{ ongoing_count|default:"0" }}</strong>
-            <div class="metric-tags">
-              <span>Basketball</span>
-              <span>Volleyball</span>
-              <span>E-sports</span>
+        <!-- Charts Row -->
+        <section class="v2-charts">
+          <article class="v2-card v2-chart-card">
+            <header class="v2-card-head">
+              <h3>📈 Events Overview</h3>
+              <select class="v2-select"><option>All Events</option></select>
+            </header>
+            <div class="v2-legend">
+              <span class="v2-legend-item"><span class="v2-legend-dot" style="background:#2563eb"></span>Events Created</span>
+              <span class="v2-legend-item"><span class="v2-legend-dot" style="background:#10b981"></span>Participants</span>
             </div>
+            <canvas id="eventsOverviewChart" height="160"></canvas>
           </article>
-          <article class="metric-card">
-            <span class="metric-label">Total Events</span>
-            <strong>{{ total_events_count|default:"0" }}</strong>
-            <small>Across all categories</small>
+
+          <article class="v2-card v2-doughnut-card">
+            <header class="v2-card-head"><h3>Events by Status</h3></header>
+            <div class="v2-doughnut-wrap">
+              <canvas id="statusDoughnut" width="160" height="160"></canvas>
+              <div class="v2-doughnut-center">
+                <strong id="doughnutTotal">0</strong>
+                <small>Total</small>
+              </div>
+            </div>
+            <ul class="v2-status-list" id="statusList"></ul>
           </article>
-          <article class="metric-card">
-            <span class="metric-label">Completed</span>
-            <strong>{{ completed_events_count|default:"0" }}</strong>
-            <div class="progress-track"><span style="width:{{ completed_pct|default:0 }}%"></span></div>
-            <small>{{ completed_pct|default:"0" }}% progress</small>
+
+          <article class="v2-card v2-categories-card">
+            <header class="v2-card-head">
+              <h3>Top Categories</h3>
+              <select class="v2-select"><option>By Participants</option></select>
+            </header>
+            <ul class="v2-cat-list">
+              {% for cat in top_categories %}
+              <li class="v2-cat-row">
+                <div class="v2-cat-row-head">
+                  <span class="v2-cat-name">{{ cat.name }}</span>
+                  <span class="v2-cat-meta">{{ cat.participants }} ({{ cat.pct }}%)</span>
+                </div>
+                <div class="v2-cat-bar">
+                  <span class="v2-cat-fill v2-cat-fill--{{ forloop.counter }}" style="width: {{ cat.pct }}%"></span>
+                </div>
+              </li>
+              {% empty %}
+              <li class="v2-cat-empty">No category data yet.</li>
+              {% endfor %}
+            </ul>
           </article>
         </section>
 
-        <!-- ═══════ EVENT CALENDAR ═══════ -->
-        <section class="cal-card" aria-label="Event calendar" id="eventCalendarSection">
-          <div class="cal-header">
-            <h3 class="cal-title">Event Calendar</h3>
-            <div class="cal-nav">
-              <button type="button" class="cal-nav-btn" id="calPrev" aria-label="Previous month">
-                <svg viewBox="0 0 24 24"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
-              </button>
-              <span class="cal-month-label" id="calMonthLabel"></span>
-              <button type="button" class="cal-nav-btn" id="calNext" aria-label="Next month">
-                <svg viewBox="0 0 24 24"><path d="M8.59 16.59 10 18l6-6-6-6-1.41 1.41L13.17 12z"/></svg>
-              </button>
-              <button type="button" class="cal-today-btn" id="calToday">Today</button>
+        <!-- Recent events + activity -->
+        <section class="v2-mid-row">
+          <article class="v2-card v2-recent-events">
+            <header class="v2-card-head">
+              <h3>Recent Events</h3>
+              <a class="v2-view-all" href="{% url 'admin_manage_events' %}">View All</a>
+            </header>
+            <div class="v2-table-wrap">
+              <table class="v2-table">
+                <thead>
+                  <tr>
+                    <th>EVENT NAME</th>
+                    <th>CATEGORY</th>
+                    <th>STATUS</th>
+                    <th>TEAMS</th>
+                    <th>PARTICIPANTS</th>
+                    <th>DATE</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for ev in recent_events %}
+                  <tr>
+                    <td><strong>{{ ev.name }}</strong></td>
+                    <td>{{ ev.category }}</td>
+                    <td><span class="v2-pill v2-pill--{{ ev.status }}">{{ ev.status_label }}</span></td>
+                    <td>{{ ev.num_teams }}</td>
+                    <td>{{ ev.max_participants }}</td>
+                    <td>{{ ev.date_label }}</td>
+                  </tr>
+                  {% empty %}
+                  <tr><td colspan="6" class="v2-empty">No events yet.</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
             </div>
-          </div>
+          </article>
 
-          <div class="cal-grid-wrap">
-            <div class="cal-weekdays">
-              <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
-            </div>
-            <div class="cal-days" id="calDays"></div>
-          </div>
-
-          <!-- Day detail popover -->
-          <div class="cal-popover hidden" id="calPopover">
-            <div class="cal-popover-header">
-              <strong id="calPopoverDate"></strong>
-              <button type="button" class="cal-popover-close" id="calPopoverClose">&times;</button>
-            </div>
-            <div class="cal-popover-body" id="calPopoverBody"></div>
-          </div>
-
-          <!-- Legend -->
-          <div class="cal-legend">
-            <span class="cal-legend-item"><span class="cal-dot dot-upcoming"></span>Upcoming</span>
-            <span class="cal-legend-item"><span class="cal-dot dot-ongoing"></span>Ongoing</span>
-            <span class="cal-legend-item"><span class="cal-dot dot-completed"></span>Completed</span>
-            <span class="cal-legend-item"><span class="cal-dot dot-inactive"></span>Deactivated</span>
-          </div>
+          <article class="v2-card v2-activity">
+            <header class="v2-card-head">
+              <h3>Recent Activity</h3>
+              <a class="v2-view-all" href="#">View All</a>
+            </header>
+            <ul class="v2-activity-list">
+              {% for act in recent_activity %}
+              <li class="v2-activity-item">
+                <span class="v2-activity-icon v2-activity-icon--{{ forloop.counter }}">●</span>
+                <div class="v2-activity-text">
+                  <p>{{ act.message }}</p>
+                  <small>by {{ act.user }}</small>
+                </div>
+                <span class="v2-activity-ago">{{ act.ago }}</span>
+              </li>
+              {% empty %}
+              <li class="v2-activity-empty">No recent activity.</li>
+              {% endfor %}
+            </ul>
+          </article>
         </section>
+
+        <!-- Heatmap + Upcoming -->
+        <section class="v2-bottom-row">
+          <article class="v2-card v2-heatmap-card">
+            <header class="v2-card-head">
+              <h3>Participation Heatmap <span class="v2-info-icon" title="Number of events scheduled per day">ⓘ</span></h3>
+            </header>
+            <div class="v2-heatmap">
+              <div class="v2-heatmap-weekdays">
+                <span></span><span>SUN</span><span>MON</span><span>TUE</span><span>WED</span><span>THU</span><span>FRI</span><span>SAT</span>
+              </div>
+              {% for week in heatmap_weeks %}
+              <div class="v2-heatmap-row">
+                <span class="v2-heatmap-label">{{ week.label_start }} – {{ week.label_end }}</span>
+                {% for d in week.days %}
+                <span class="v2-heatmap-cell" data-count="{{ d.count }}" title="{{ d.date }}: {{ d.count }} event(s)"></span>
+                {% endfor %}
+              </div>
+              {% endfor %}
+            </div>
+            <div class="v2-heatmap-legend">
+              <span>Less</span>
+              <span class="v2-heatmap-cell" data-count="0"></span>
+              <span class="v2-heatmap-cell" data-count="1"></span>
+              <span class="v2-heatmap-cell" data-count="2"></span>
+              <span class="v2-heatmap-cell" data-count="3"></span>
+              <span class="v2-heatmap-cell" data-count="5"></span>
+              <span>More</span>
+            </div>
+          </article>
+
+          <article class="v2-card v2-upcoming-card">
+            <header class="v2-card-head">
+              <h3>Upcoming Events</h3>
+              <a class="v2-view-all" href="{% url 'admin_manage_events' %}">View All</a>
+            </header>
+            <ul class="v2-upcoming-list">
+              {% for ev in upcoming_events_list %}
+              <li class="v2-upcoming-item">
+                <div class="v2-date-block">
+                  <span class="v2-date-month">{{ ev.month_short }}</span>
+                  <strong class="v2-date-day">{{ ev.day }}</strong>
+                </div>
+                <div class="v2-upcoming-info">
+                  <strong>{{ ev.name }}</strong>
+                  <small>{{ ev.category }}{% if ev.num_teams %} · {{ ev.num_teams }} Teams{% endif %}</small>
+                </div>
+                <span class="v2-days-pill">{{ ev.days_left }} days left</span>
+              </li>
+              {% empty %}
+              <li class="v2-upcoming-empty">No upcoming events.</li>
+              {% endfor %}
+            </ul>
+          </article>
+        </section>
+
       </main>
     </div>
   </div>
 
   <script>
+  /* ── Server data ── */
+  const CHART_LABELS = {{ chart_labels_json|safe }};
+  const CHART_EVENTS = {{ chart_events_json|safe }};
+  const CHART_PARTS  = {{ chart_participants_json|safe }};
+  const STATUS_COUNTS = {{ status_counts_json|safe }};
+
+  /* ── Events Overview line chart (lightweight, no external libs) ── */
   (function () {
-    /* ── Data from Django ── */
-    const EVENTS = JSON.parse('{{ events_json|escapejs }}');
+    const cv = document.getElementById('eventsOverviewChart');
+    if (!cv) return;
+    const ctx = cv.getContext('2d');
 
-    /* ── Index events by date string (YYYY-MM-DD) ── */
-    const eventsByDate = {};
-    EVENTS.forEach(ev => {
-      if (!ev.date) return;
-      (eventsByDate[ev.date] = eventsByDate[ev.date] || []).push(ev);
+    function drawLineChart() {
+      const W = cv.width = cv.offsetWidth;
+      const H = cv.height = 200;
+      ctx.clearRect(0, 0, W, H);
+
+      const padL = 40, padR = 16, padT = 14, padB = 28;
+      const innerW = W - padL - padR;
+      const innerH = H - padT - padB;
+
+      const series = [
+        { data: CHART_EVENTS, color: '#2563eb', fill: 'rgba(37, 99, 235, 0.08)' },
+        { data: CHART_PARTS,  color: '#10b981', fill: 'rgba(16, 185, 129, 0.08)' },
+      ];
+
+      const allValues = [].concat(...series.map(s => s.data));
+      const maxV = Math.max(80, ...allValues, 1);
+
+      /* Grid lines */
+      ctx.strokeStyle = '#f1f5f9';
+      ctx.lineWidth = 1;
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '11px system-ui, sans-serif';
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      const yTicks = 4;
+      for (let i = 0; i <= yTicks; i++) {
+        const y = padT + (innerH / yTicks) * i;
+        const v = Math.round(maxV - (maxV / yTicks) * i);
+        ctx.beginPath();
+        ctx.moveTo(padL, y); ctx.lineTo(W - padR, y);
+        ctx.stroke();
+        ctx.fillText(v, padL - 6, y);
+      }
+
+      /* X labels */
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#94a3b8';
+      const stepX = CHART_LABELS.length > 1 ? innerW / (CHART_LABELS.length - 1) : 0;
+      CHART_LABELS.forEach((label, i) => {
+        ctx.fillText(label, padL + stepX * i, H - 10);
+      });
+
+      /* Plot lines */
+      series.forEach(s => {
+        if (!s.data.length) return;
+        ctx.beginPath();
+        s.data.forEach((v, i) => {
+          const x = padL + stepX * i;
+          const y = padT + innerH - (v / maxV) * innerH;
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        });
+        /* Filled area */
+        ctx.lineTo(padL + stepX * (s.data.length - 1), padT + innerH);
+        ctx.lineTo(padL, padT + innerH);
+        ctx.closePath();
+        ctx.fillStyle = s.fill;
+        ctx.fill();
+
+        /* Line */
+        ctx.beginPath();
+        s.data.forEach((v, i) => {
+          const x = padL + stepX * i;
+          const y = padT + innerH - (v / maxV) * innerH;
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        });
+        ctx.strokeStyle = s.color;
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+
+        /* Points */
+        ctx.fillStyle = s.color;
+        s.data.forEach((v, i) => {
+          const x = padL + stepX * i;
+          const y = padT + innerH - (v / maxV) * innerH;
+          ctx.beginPath();
+          ctx.arc(x, y, 3, 0, Math.PI * 2);
+          ctx.fill();
+        });
+      });
+    }
+    drawLineChart();
+    window.addEventListener('resize', drawLineChart);
+  })();
+
+  /* ── Status doughnut chart ── */
+  (function () {
+    const cv = document.getElementById('statusDoughnut');
+    if (!cv) return;
+    const ctx = cv.getContext('2d');
+
+    const segments = [
+      { key: 'ongoing',   label: 'Ongoing',   value: STATUS_COUNTS.ongoing   || 0, color: '#2563eb' },
+      { key: 'upcoming',  label: 'Upcoming',  value: STATUS_COUNTS.upcoming  || 0, color: '#fbbf24' },
+      { key: 'completed', label: 'Completed', value: STATUS_COUNTS.completed || 0, color: '#10b981' },
+      { key: 'cancelled', label: 'Cancelled', value: STATUS_COUNTS.cancelled || 0, color: '#ef4444' },
+    ];
+    const total = segments.reduce((s, x) => s + x.value, 0);
+    document.getElementById('doughnutTotal').textContent = total;
+
+    const cx = cv.width / 2, cy = cv.height / 2;
+    const r = Math.min(cx, cy) - 8;
+    const inner = r * 0.62;
+    let start = -Math.PI / 2;
+
+    if (total === 0) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fillStyle = '#e2e8f0';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(cx, cy, inner, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+    } else {
+      segments.forEach(seg => {
+        if (!seg.value) return;
+        const angle = (seg.value / total) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, r, start, start + angle);
+        ctx.closePath();
+        ctx.fillStyle = seg.color;
+        ctx.fill();
+        start += angle;
+      });
+      ctx.beginPath();
+      ctx.arc(cx, cy, inner, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+    }
+
+    /* Legend */
+    const list = document.getElementById('statusList');
+    if (list) {
+      list.innerHTML = segments.map(s => {
+        const pct = total ? Math.round(s.value / total * 100) : 0;
+        return '<li><span class="v2-status-dot" style="background:' + s.color + '"></span>' +
+          '<span class="v2-status-label">' + s.label + '</span>' +
+          '<strong>' + s.value + '</strong>' +
+          '<span class="v2-status-pct">(' + pct + '%)</span></li>';
+      }).join('');
+    }
+  })();
+
+  /* ── Heatmap shading ── */
+  (function () {
+    document.querySelectorAll('.v2-heatmap-cell').forEach(cell => {
+      const count = parseInt(cell.dataset.count) || 0;
+      let level = 0;
+      if (count === 1) level = 1;
+      else if (count === 2) level = 2;
+      else if (count === 3 || count === 4) level = 3;
+      else if (count >= 5) level = 4;
+      cell.classList.add('v2-heat-' + level);
     });
-
-    /* ── DOM refs ── */
-    const $days       = document.getElementById('calDays');
-    const $label      = document.getElementById('calMonthLabel');
-    const $prev       = document.getElementById('calPrev');
-    const $next       = document.getElementById('calNext');
-    const $today      = document.getElementById('calToday');
-    const $popover    = document.getElementById('calPopover');
-    const $popDate    = document.getElementById('calPopoverDate');
-    const $popBody    = document.getElementById('calPopoverBody');
-    const $popClose   = document.getElementById('calPopoverClose');
-
-    const MONTH_NAMES = ['January','February','March','April','May','June',
-                         'July','August','September','October','November','December'];
-
-    const STATUS_CLASS = { upcoming: 'dot-upcoming', ongoing: 'dot-ongoing', active: 'dot-ongoing', completed: 'dot-completed', inactive: 'dot-inactive' };
-    const STATUS_LABEL = { upcoming: 'Upcoming', ongoing: 'Ongoing', active: 'Ongoing', completed: 'Completed', inactive: 'Deactivated' };
-
-    let viewYear, viewMonth;   // 0-indexed month
-
-    /* ── Helpers ── */
-    function pad(n) { return String(n).padStart(2, '0'); }
-    function dateKey(y, m, d) { return `${y}-${pad(m + 1)}-${pad(d)}`; }
-
-    function todayKey() {
-      const t = new Date();
-      return dateKey(t.getFullYear(), t.getMonth(), t.getDate());
-    }
-
-    EVENTS.forEach(ev => {
-      if (ev.availability_status === 'inactive' || ev.status === 'inactive') {
-        ev.status = 'inactive';
-        ev.status_label = 'Deactivated';
-      } else if (!ev.date) {
-        ev.status = ev.status || 'upcoming';
-        ev.status_label = ev.status_label || STATUS_LABEL[ev.status] || ev.status;
-      } else if (ev.date > todayKey()) {
-        ev.status = 'upcoming';
-        ev.status_label = 'Upcoming';
-      } else if (ev.date < todayKey()) {
-        ev.status = 'completed';
-        ev.status_label = 'Completed';
-      } else {
-        ev.status = 'ongoing';
-        ev.status_label = 'Ongoing';
-      }
-    });
-
-    /* ── Render calendar grid ── */
-    function render() {
-      $label.textContent = `${MONTH_NAMES[viewMonth]} ${viewYear}`;
-      $days.innerHTML = '';
-
-      const firstDay  = new Date(viewYear, viewMonth, 1).getDay();   // 0=Sun
-      const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
-      const tk = todayKey();
-
-      // Leading blanks
-      for (let i = 0; i < firstDay; i++) {
-        const blank = document.createElement('span');
-        blank.className = 'cal-day-cell cal-blank';
-        $days.appendChild(blank);
-      }
-
-      // Day cells
-      for (let d = 1; d <= daysInMonth; d++) {
-        const key  = dateKey(viewYear, viewMonth, d);
-        const evts = eventsByDate[key] || [];
-        const cell = document.createElement('button');
-        cell.type = 'button';
-        cell.className = 'cal-day-cell';
-        if (key === tk) cell.classList.add('cal-today');
-        if (evts.length) cell.classList.add('cal-has-events');
-
-        cell.innerHTML = `<span class="cal-day-num">${d}</span>`;
-
-        // Render up to 3 dots
-        if (evts.length) {
-          const dotsWrap = document.createElement('span');
-          dotsWrap.className = 'cal-day-dots';
-          const unique = [...new Set(evts.map(e => e.status))];
-          unique.slice(0, 3).forEach(s => {
-            const dot = document.createElement('span');
-            dot.className = 'cal-dot ' + (STATUS_CLASS[s] || 'dot-upcoming');
-            dotsWrap.appendChild(dot);
-          });
-          cell.appendChild(dotsWrap);
-        }
-
-        cell.addEventListener('click', () => showPopover(key, evts, cell));
-        $days.appendChild(cell);
-      }
-    }
-
-    /* ── Popover ── */
-    function showPopover(dateStr, events, anchor) {
-      if (!events.length) {
-        $popover.classList.add('hidden');
-        return;
-      }
-
-      const d = new Date(dateStr + 'T00:00:00');
-      $popDate.textContent = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
-
-      $popBody.innerHTML = events.map(ev => `
-        <div class="cal-ev-row">
-          <span class="cal-dot ${STATUS_CLASS[ev.status] || 'dot-upcoming'}"></span>
-          <div class="cal-ev-info">
-            <strong>${escapeHtml(ev.title)}</strong>
-            <small>${escapeHtml(ev.category)}${ev.time ? ' · ' + ev.time : ''}${ev.venue ? ' · ' + escapeHtml(ev.venue) : ''}</small>
-          </div>
-          <span class="cal-ev-badge cal-badge-${ev.status}">${ev.status_label || STATUS_LABEL[ev.status] || ev.status}</span>
-        </div>
-      `).join('');
-
-      $popover.classList.remove('hidden');
-    }
-
-    function escapeHtml(str) {
-      const div = document.createElement('div');
-      div.textContent = str || '';
-      return div.innerHTML;
-    }
-
-    $popClose.addEventListener('click', () => $popover.classList.add('hidden'));
-
-    /* ── Navigation ── */
-    $prev.addEventListener('click', () => { viewMonth--; if (viewMonth < 0) { viewMonth = 11; viewYear--; } $popover.classList.add('hidden'); render(); });
-    $next.addEventListener('click', () => { viewMonth++; if (viewMonth > 11) { viewMonth = 0; viewYear++; } $popover.classList.add('hidden'); render(); });
-    $today.addEventListener('click', () => { const t = new Date(); viewYear = t.getFullYear(); viewMonth = t.getMonth(); $popover.classList.add('hidden'); render(); });
-
-    /* ── Init ── */
-    const now = new Date();
-    viewYear  = now.getFullYear();
-    viewMonth = now.getMonth();
-    render();
   })();
   </script>
 </body>
