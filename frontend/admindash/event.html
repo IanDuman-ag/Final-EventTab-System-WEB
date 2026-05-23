@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Manage Events - EventTab</title>
-  <link rel="stylesheet" href="{% static 'admindash/event.css' %}?v=20260524a">
+  <link rel="stylesheet" href="{% static 'admindash/event.css' %}?v=20260524b">
 </head>
 <body class="admin-dashboard-page manage-events-page admin-dashboard-v2">
   <div class="dashboard-shell">
@@ -222,6 +222,23 @@
           <textarea name="mechanics" rows="4" maxlength="8000" placeholder="Eligibility, rounds, equipment, conduct…" required></textarea>
         </label>
         <div class="create-event-field create-event-field--full">
+          <span class="create-event-label">Assigned Judges</span>
+          <div class="judge-select-wrap">
+            {% if judge_options %}
+              {% for judge in judge_options %}
+              <label class="judge-checkbox-item">
+                <input type="checkbox" name="assigned_judges" value="{{ judge.id }}">
+                <span class="judge-avatar">{{ judge.label|slice:":2"|upper }}</span>
+                <span class="judge-name">{{ judge.label }}</span>
+                <small class="judge-username">@{{ judge.username }}</small>
+              </label>
+              {% endfor %}
+            {% else %}
+              <p class="judge-empty">No judge accounts found. Create judge accounts in Manage Account first.</p>
+            {% endif %}
+          </div>
+        </div>
+        <div class="create-event-field create-event-field--full">
           <div class="scoring-builder" data-builder-id="create">
             <div class="scoring-builder-head">
               <span class="scoring-builder-title">
@@ -320,6 +337,10 @@
           <p id="vd-mechanics"></p>
         </div>
         <div class="view-field view-field--full">
+          <span class="create-event-label">Assigned Judges</span>
+          <div id="vd-judges" class="vd-judges-list"></div>
+        </div>
+        <div class="view-field view-field--full">
           <span class="create-event-label">Scoring Criteria</span>
           <div id="vd-scoring-list" class="scoring-view-list"></div>
           <p id="vd-scoring" hidden></p>
@@ -406,6 +427,23 @@
           <span class="create-event-label">Mechanics/Rules</span>
           <textarea name="mechanics" id="edit-mechanics" rows="4" maxlength="8000"></textarea>
         </label>
+        <div class="create-event-field create-event-field--full">
+          <span class="create-event-label">Assigned Judges</span>
+          <div class="judge-select-wrap" id="edit-judges-wrap">
+            {% if judge_options %}
+              {% for judge in judge_options %}
+              <label class="judge-checkbox-item">
+                <input type="checkbox" name="assigned_judges" value="{{ judge.id }}" class="edit-judge-checkbox" data-judge-id="{{ judge.id }}">
+                <span class="judge-avatar">{{ judge.label|slice:":2"|upper }}</span>
+                <span class="judge-name">{{ judge.label }}</span>
+                <small class="judge-username">@{{ judge.username }}</small>
+              </label>
+              {% endfor %}
+            {% else %}
+              <p class="judge-empty">No judge accounts found.</p>
+            {% endif %}
+          </div>
+        </div>
         <div class="create-event-field create-event-field--full">
           <div class="scoring-builder" data-builder-id="edit">
             <div class="scoring-builder-head">
@@ -686,6 +724,21 @@
         document.getElementById('vd-faculty').textContent          = ev.faculty_in_charge || '—';
         document.getElementById('vd-student').textContent          = ev.student_in_charge || '—';
         document.getElementById('vd-mechanics').textContent        = ev.mechanics || '—';
+        /* Assigned judges */
+        var judgesEl = document.getElementById('vd-judges');
+        if (judgesEl) {
+          if (ev.assigned_judges_display && ev.assigned_judges_display.trim()) {
+            var names = ev.assigned_judges_display.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+            judgesEl.innerHTML = names.map(function(n) {
+              return '<span class="vd-judge-chip">' +
+                '<span class="judge-avatar" aria-hidden="true">' + escHtml(n.slice(0, 2).toUpperCase()) + '</span>' +
+                escHtml(n) +
+              '</span>';
+            }).join('');
+          } else {
+            judgesEl.innerHTML = '<span class="vd-judge-none">No judges assigned</span>';
+          }
+        }
         renderScoringView(ev.scoring_criteria || '');
         if (ev.image_url) {
           document.getElementById('vd-image').src = ev.image_url;
@@ -754,6 +807,11 @@
         document.getElementById('edit-event-time').value        = ev.event_time || '';
         document.getElementById('edit-venue').value             = ev.venue || '';
         document.getElementById('edit-mechanics').value         = ev.mechanics || '';
+        /* Pre-check assigned judges */
+        var assignedIds = ev.assigned_judge_ids || [];
+        document.querySelectorAll('.edit-judge-checkbox').forEach(function (cb) {
+          cb.checked = assignedIds.indexOf(parseInt(cb.dataset.judgeId)) !== -1;
+        });
         if (editBuilder && editBuilder._loadValue) {
           editBuilder._loadValue(ev.scoring_criteria || '');
         } else {

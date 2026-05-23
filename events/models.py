@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models import Q
 from django.contrib.auth import get_user_model
 
 User = get_user_model()
@@ -44,6 +45,12 @@ class Event(models.Model):
         blank=True,
         on_delete=models.SET_NULL,
         related_name='portal_event',
+    )
+    assigned_judges    = models.ManyToManyField(
+        User,
+        blank=True,
+        related_name='judging_events',
+        limit_choices_to=Q(groups__name__iexact='Judge') | Q(groups__name__iexact='Judges'),
     )
 
     class Meta:

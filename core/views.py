@@ -1068,6 +1068,16 @@ def admin_manage_events(request):
             scoring_criteria  = request.POST.get('scoring_criteria', '').strip(),
             created_by        = request.user,
         )
+        # Save assigned judges (multi-select)
+        judge_ids = request.POST.getlist('assigned_judges')
+        if judge_ids:
+            User = get_user_model()
+            judges = User.objects.filter(
+                id__in=[int(j) for j in judge_ids if j.isdigit()],
+            ).filter(
+                Q(groups__name__iexact='Judge') | Q(groups__name__iexact='Judges')
+            )
+            event.assigned_judges.set(judges)
         sync_event_to_mobile(event)
         messages.success(request, f'Event "{event_name}" created and published to the judge mobile app.')
         return redirect('admin_manage_events')
@@ -1119,6 +1129,11 @@ def admin_manage_events(request):
             'mechanics':        ev.mechanics,
             'scoring_criteria': ev.scoring_criteria,
             'mobile_published': ev.judging_event is not None,
+            'assigned_judge_ids': list(ev.assigned_judges.values_list('id', flat=True)),
+            'assigned_judges_display': ', '.join(
+                u.get_full_name() or u.username
+                for u in ev.assigned_judges.all()
+            ),
         })
         if len(event_rows) >= 30:
             break
@@ -1135,6 +1150,18 @@ def admin_manage_events(request):
     create_category_options = sorted(set(category_names) | {'Academic', 'Sports', 'Esports', 'Socio-cultural', 'Pageant'})
     create_division_options = ['Men', 'Women', 'Mixed']
 
+    # All judge accounts for the assign-judges multi-select
+    User = get_user_model()
+    judge_accounts = list(
+        User.objects.filter(
+            Q(groups__name__iexact='Judge') | Q(groups__name__iexact='Judges')
+        ).distinct().order_by('first_name', 'last_name', 'username')
+    )
+    judge_options = [
+        {'id': u.id, 'label': u.get_full_name().strip() or u.username, 'username': u.username}
+        for u in judge_accounts
+    ]
+
     return render(request, 'admindash/event.html', {
         'event_rows':             event_rows,
         'active_count':           active_count,
@@ -1145,6 +1172,7 @@ def admin_manage_events(request):
         'category_names':         category_names,
         'create_category_options': create_category_options,
         'create_division_options': create_division_options,
+        'judge_options':          judge_options,
         'selected_category':      category_filter,
         'selected_status':        status_filter,
         'search_query':           search_query,
@@ -1219,6 +1247,15 @@ def admin_edit_event(request, event_id):
     ev.mechanics         = request.POST.get('mechanics', '').strip()
     ev.scoring_criteria  = request.POST.get('scoring_criteria', '').strip()
     ev.save()
+    # Save assigned judges
+    judge_ids = request.POST.getlist('assigned_judges')
+    User = get_user_model()
+    judges = User.objects.filter(
+        id__in=[int(j) for j in judge_ids if j.isdigit()],
+    ).filter(
+        Q(groups__name__iexact='Judge') | Q(groups__name__iexact='Judges')
+    ) if judge_ids else User.objects.none()
+    ev.assigned_judges.set(judges)
     sync_event_to_mobile(ev)
 
     messages.success(request, f'Event "{event_name}" updated and synced to the judge mobile app.')
