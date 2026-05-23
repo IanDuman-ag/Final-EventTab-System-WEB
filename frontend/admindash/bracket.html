@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Brackets - EventTab</title>
-  <link rel="stylesheet" href="{% static 'admindash/bracket.css' %}?v=20260523c">
+  <link rel="stylesheet" href="{% static 'admindash/bracket.css' %}?v=20260523d">
 </head>
 <body class="admin-dashboard-page bracket-page">
   <div class="dashboard-shell">
@@ -677,6 +677,7 @@
         form.reset();
         teams = [];
         teamIdCounter = 1;
+        bracketState = [];
         renderTeams();
         renderPreview();
       }
@@ -863,8 +864,12 @@
       }
 
       /* ─────────────────────────────────────────────────────────
-         Bracket preview generation
+         Bracket state — one entry per slot, keyed by round/match
+         Slot shape: { type: 'team'|'custom'|'bye'|null, team?, name?, manual? }
+         The admin's rounds list drives the column count.
          ───────────────────────────────────────────────────────── */
+      let bracketState = []; /* bracketState[roundIdx][matchIdx] = { a, b } */
+
       function shuffle(arr) {
         const a = arr.slice();
         for (let i = a.length - 1; i > 0; i--) {
@@ -877,8 +882,7 @@
       function pairTeamsForFirstRound(teamList, method) {
         const sorted = teamList.slice().sort((a, b) => (a.seed || 0) - (b.seed || 0));
         if (method === 'random') return shuffle(sorted);
-        if (method === 'strict') {
-          /* Highest seed vs lowest seed */
+        if (method === 'strict' || method === 'strict_seed') {
           const out = [];
           for (let i = 0, j = sorted.length - 1; i < j; i++, j--) {
             out.push(sorted[i]); out.push(sorted[j]);
@@ -886,8 +890,7 @@
           if (sorted.length % 2 === 1) out.push(sorted[Math.floor(sorted.length / 2)]);
           return out;
         }
-        /* department_balanced — best-effort */
-        return sorted;
+        return sorted; /* department_balanced — best-effort */
       }
 
       function nextPow2(n) {
@@ -896,37 +899,58 @@
         return p;
       }
 
-      function buildBracketStructure(teamList, method, format) {
-        const slots = nextPow2(Math.max(teamList.length, 2));
-        const ordered = pairTeamsForFirstRound(teamList, method);
-        const filled = ordered.concat(Array(slots - ordered.length).fill(null));
+      function rebuildBracketState() {
+        const numRounds = inlineLists.rounds.data.length;
+        if (numRounds === 0) { bracketState = []; return; }
 
-        const totalRounds = Math.log2(slots);
-        const rounds = [];
-        let prevWinners = filled.map(t => t ? { type: 'team', team: t } : { type: 'team', team: null });
-
-        for (let r = 0; r < totalRounds; r++) {
-          const matches = [];
-          for (let i = 0; i < prevWinners.length; i += 2) {
-            matches.push({ a: prevWinners[i], b: prevWinners[i + 1] });
-          }
-          rounds.push(matches);
-          prevWinners = matches.map(() => ({ type: 'tbd' }));
+        /* Round 1 capacity = nextPow2(team count) / 2; halve each round */
+        const slots = teams.length >= 2 ? nextPow2(teams.length) : 2;
+        const matchesPerRound = [];
+        let m = slots / 2;
+        for (let r = 0; r < numRounds; r++) {
+          matchesPerRound.push(Math.max(1, Math.floor(m)));
+          m = Math.max(1, m / 2);
         }
-        return { slots, totalRounds, rounds };
-      }
 
-      function roundLabel(roundIdx, totalRounds) {
-        if (roundIdx === totalRounds - 1) return 'FINAL';
-        if (roundIdx === totalRounds - 2) return 'SEMIFINALS';
-        if (roundIdx === totalRounds - 3) return 'QUARTERFINALS';
-        return 'ROUND ' + (roundIdx + 1);
+        /* Build new state, preserving manual assignments */
+        const newState = [];
+        for (let r = 0; r < numRounds; r++) {
+          newState.push([]);
+          for (let i = 0; i < matchesPerRound[r]; i++) {
+            const prev = (bracketState[r] && bracketState[r][i]) || { a: null, b: null };
+            newState[r].push({
+              a: (prev.a && prev.a.manual) ? prev.a : null,
+              b: (prev.b && prev.b.manual) ? prev.b : null,
+            });
+          }
+        }
+
+        /* Auto-seed round 1 from teams + active seeding (only empty slots) */
+        if (newState[0] && teams.length >= 2) {
+          const seedingActive = (inlineLists.seedings.data[0] || 'Random');
+          const method = seedingActive.toLowerCase().replace(/\s+/g, '_');
+          const ordered = pairTeamsForFirstRound(teams, method);
+          const filled = ordered.concat(Array(slots - ordered.length).fill(null));
+          let pos = 0;
+          for (let i = 0; i < newState[0].length; i++) {
+            if (!newState[0][i].a) {
+              newState[0][i].a = filled[pos] ? { type: 'team', team: filled[pos] } : { type: 'bye' };
+            }
+            pos++;
+            if (!newState[0][i].b) {
+              newState[0][i].b = filled[pos] ? { type: 'team', team: filled[pos] } : { type: 'bye' };
+            }
+            pos++;
+          }
+        }
+
+        bracketState = newState;
       }
 
       function renderPreview() {
         const format = formatSelect.value || 'Single Elimination';
-        const seedingActive = (inlineLists.seedings && inlineLists.seedings.data[0]) || 'Random';
-        const method = seedingActive.toLowerCase().replace(/\s+/g, '_');
+        const seedingActive = (inlineLists.seedings.data[0]) || 'Random';
+        const numRounds = inlineLists.rounds.data.length;
 
         document.getElementById('previewFormat').textContent = format;
         document.getElementById('previewTeams').textContent = teams.length;
@@ -934,44 +958,173 @@
         document.getElementById('sumFormat').textContent = format;
         document.getElementById('sumSeed').textContent = seedingActive;
         document.getElementById('sumInterval').textContent = (intervalInput.value || 60) + ' minutes';
+        document.getElementById('previewRounds').textContent = numRounds;
+        document.getElementById('sumRounds').textContent = numRounds;
 
+        if (numRounds === 0) {
+          previewCanvas.innerHTML = '<p class="preview-empty">Add at least one round in <strong>ROUNDS / STAGES</strong> to start.</p>';
+          return;
+        }
         if (teams.length < 2) {
           previewCanvas.innerHTML = '<p class="preview-empty">Add at least 2 teams to see the bracket preview.</p>';
-          document.getElementById('previewRounds').textContent = '0';
-          document.getElementById('sumRounds').textContent = '0';
           return;
         }
 
-        const { totalRounds, rounds } = buildBracketStructure(teams, method, format);
-        document.getElementById('previewRounds').textContent = totalRounds;
-        document.getElementById('sumRounds').textContent = totalRounds;
+        rebuildBracketState();
 
         let html = '<div class="preview-rounds">';
-        rounds.forEach((matches, rIdx) => {
+        bracketState.forEach((matches, rIdx) => {
+          const label = (inlineLists.rounds.data[rIdx] || ('Round ' + (rIdx + 1))).toUpperCase();
           html += '<div class="preview-round">';
-          html += '<div class="preview-round-title">' + roundLabel(rIdx, totalRounds) + '</div>';
+          html += '<div class="preview-round-title">' + escapeHtml(label) + '</div>';
           html += '<div class="preview-matches">';
-          matches.forEach(m => {
+          matches.forEach((match, mIdx) => {
             html += '<div class="preview-match">';
-            html += renderSlot(m.a);
+            html += renderClickableSlot(match.a, rIdx, mIdx, 'a');
             html += '<div class="preview-match-divider"></div>';
-            html += renderSlot(m.b);
+            html += renderClickableSlot(match.b, rIdx, mIdx, 'b');
             html += '</div>';
           });
           html += '</div></div>';
         });
         html += '</div>';
         previewCanvas.innerHTML = html;
+
+        wireSlotHandlers();
       }
 
-      function renderSlot(slot) {
-        if (!slot || slot.type === 'tbd') {
-          return '<div class="preview-slot preview-slot--tbd">TBD</div>';
+      function renderClickableSlot(slot, rIdx, mIdx, side) {
+        const dataAttrs = 'data-r="' + rIdx + '" data-m="' + mIdx + '" data-s="' + side + '"';
+        if (!slot) {
+          return '<button type="button" class="preview-slot preview-slot--tbd preview-slot--clickable" ' + dataAttrs + '>TBD</button>';
+        }
+        if (slot.type === 'bye') {
+          return '<button type="button" class="preview-slot preview-slot--bye preview-slot--clickable" ' + dataAttrs + '>BYE</button>';
         }
         if (slot.type === 'team' && slot.team) {
-          return '<div class="preview-slot"><span class="preview-seed">' + slot.team.seed + '</span><span class="preview-name">' + escapeHtml(slot.team.name) + '</span></div>';
+          return '<button type="button" class="preview-slot preview-slot--clickable" ' + dataAttrs + '>' +
+            '<span class="preview-seed">' + slot.team.seed + '</span>' +
+            '<span class="preview-name">' + escapeHtml(slot.team.name) + '</span>' +
+            '<span class="preview-clear" title="Click slot to change">⌄</span>' +
+          '</button>';
         }
-        return '<div class="preview-slot preview-slot--bye">BYE</div>';
+        if (slot.type === 'custom' && slot.name) {
+          return '<button type="button" class="preview-slot preview-slot--clickable" ' + dataAttrs + '>' +
+            '<span class="preview-name">' + escapeHtml(slot.name) + '</span>' +
+            '<span class="preview-clear" title="Click slot to change">⌄</span>' +
+          '</button>';
+        }
+        return '<button type="button" class="preview-slot preview-slot--tbd preview-slot--clickable" ' + dataAttrs + '>TBD</button>';
+      }
+
+      function wireSlotHandlers() {
+        previewCanvas.querySelectorAll('.preview-slot--clickable').forEach(btn => {
+          btn.addEventListener('click', e => {
+            e.stopPropagation();
+            openSlotPicker(btn);
+          });
+        });
+      }
+
+      /* ─────────────────────────────────────────────────────────
+         Slot picker — small floating menu to assign a team
+         ───────────────────────────────────────────────────────── */
+      let slotPickerEl = null;
+      let slotPickerTarget = null;
+
+      function ensureSlotPicker() {
+        if (slotPickerEl) return slotPickerEl;
+        slotPickerEl = document.createElement('div');
+        slotPickerEl.className = 'slot-picker';
+        slotPickerEl.style.display = 'none';
+        document.body.appendChild(slotPickerEl);
+        document.addEventListener('click', e => {
+          if (slotPickerEl && slotPickerEl.style.display === 'block' && !slotPickerEl.contains(e.target)) {
+            closeSlotPicker();
+          }
+        });
+        return slotPickerEl;
+      }
+
+      function openSlotPicker(targetBtn) {
+        ensureSlotPicker();
+        slotPickerTarget = targetBtn;
+        const r = parseInt(targetBtn.dataset.r);
+        const m = parseInt(targetBtn.dataset.m);
+        const side = targetBtn.dataset.s;
+
+        const teamRows = teams.length
+          ? teams.map(t => (
+              '<button type="button" class="slot-picker-team" data-team-id="' + t.id + '">' +
+                '<span class="preview-seed">' + t.seed + '</span>' +
+                '<span>' + escapeHtml(t.name) + '</span>' +
+              '</button>'
+            )).join('')
+          : '<p class="slot-picker-empty">No teams added yet.</p>';
+
+        slotPickerEl.innerHTML =
+          '<div class="slot-picker-head">Assign to ' + (inlineLists.rounds.data[r] || 'Round ' + (r + 1)) + ' &nbsp;·&nbsp; Match ' + (m + 1) + ' (' + side.toUpperCase() + ')</div>' +
+          '<div class="slot-picker-list">' + teamRows + '</div>' +
+          '<div class="slot-picker-divider"></div>' +
+          '<input type="text" class="slot-picker-custom" placeholder="Or type a custom team name…">' +
+          '<div class="slot-picker-actions">' +
+            '<button type="button" class="slot-picker-action" data-act="bye">Mark as BYE</button>' +
+            '<button type="button" class="slot-picker-action" data-act="clear">Clear (TBD)</button>' +
+            '<button type="button" class="slot-picker-action slot-picker-action--save" data-act="save-custom">Use Custom</button>' +
+          '</div>';
+
+        const rect = targetBtn.getBoundingClientRect();
+        slotPickerEl.style.display = 'block';
+        slotPickerEl.style.position = 'fixed';
+        const top = Math.min(rect.bottom + 6, window.innerHeight - 280);
+        const left = Math.min(rect.left, window.innerWidth - 280);
+        slotPickerEl.style.top = top + 'px';
+        slotPickerEl.style.left = left + 'px';
+
+        slotPickerEl.querySelectorAll('.slot-picker-team').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const id = parseInt(btn.dataset.teamId);
+            const t = teams.find(x => x.id === id);
+            if (!t) return;
+            assignSlot(r, m, side, { type: 'team', team: t, manual: true });
+            closeSlotPicker();
+          });
+        });
+        slotPickerEl.querySelectorAll('.slot-picker-action').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const act = btn.dataset.act;
+            if (act === 'bye') assignSlot(r, m, side, { type: 'bye', manual: true });
+            else if (act === 'clear') assignSlot(r, m, side, null);
+            else if (act === 'save-custom') {
+              const input = slotPickerEl.querySelector('.slot-picker-custom');
+              const val = (input.value || '').trim();
+              if (val) assignSlot(r, m, side, { type: 'custom', name: val, manual: true });
+            }
+            closeSlotPicker();
+          });
+        });
+        const customInput = slotPickerEl.querySelector('.slot-picker-custom');
+        customInput.addEventListener('keydown', e => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            const val = (customInput.value || '').trim();
+            if (val) {
+              assignSlot(r, m, side, { type: 'custom', name: val, manual: true });
+              closeSlotPicker();
+            }
+          }
+        });
+      }
+
+      function closeSlotPicker() {
+        if (slotPickerEl) slotPickerEl.style.display = 'none';
+        slotPickerTarget = null;
+      }
+
+      function assignSlot(r, m, side, slotValue) {
+        if (!bracketState[r] || !bracketState[r][m]) return;
+        bracketState[r][m][side] = slotValue;
+        renderPreview();
       }
 
       /* Live update preview when settings change */
@@ -982,6 +1135,15 @@
       regenerateBtn.addEventListener('click', () => {
         const seedingActive = (inlineLists.seedings && inlineLists.seedings.data[0]) || '';
         document.getElementById('previewMethodTag').textContent = /random/i.test(seedingActive) ? 'Randomized' : 'Seeded';
+        /* Clear all auto-assigned slots so they get reseeded */
+        bracketState.forEach((round, rIdx) => {
+          if (rIdx === 0) {
+            round.forEach(match => {
+              if (match.a && !match.a.manual) match.a = null;
+              if (match.b && !match.b.manual) match.b = null;
+            });
+          }
+        });
         renderPreview();
       });
 
@@ -1068,6 +1230,18 @@
         const activeRound   = (inlineLists.rounds.data[0]   || 'Elimination');
         const activeSeeding = (inlineLists.seedings.data[0] || 'Random');
         const seedingMethodKey = activeSeeding.toLowerCase().replace(/\s+/g, '_');
+
+        /* Serialize the bracket layout the admin built (round names + slot assignments) */
+        const bracket_layout = bracketState.map((roundMatches, rIdx) => ({
+          round_index: rIdx,
+          round_name: inlineLists.rounds.data[rIdx] || ('Round ' + (rIdx + 1)),
+          matches: roundMatches.map((match, mIdx) => ({
+            match_number: mIdx + 1,
+            team_a: serializeSlot(match.a),
+            team_b: serializeSlot(match.b),
+          })),
+        }));
+
         return {
           event: {
             event_id: eventId,
@@ -1078,6 +1252,8 @@
             status: status || 'Draft'
           },
           teams: teamsPayload,
+          bracket_layout: bracket_layout,
+          rounds_list: inlineLists.rounds.data.slice(),
           seeding: {
             method: seedingMethodKey,
             method_label: activeSeeding,
@@ -1099,6 +1275,14 @@
           match_fields: ['game_number', 'round_name', 'team_a', 'team_b', 'team_a_source', 'team_b_source', 'date', 'time', 'venue', 'score_team_a', 'score_team_b', 'winner', 'loser', 'status', 'remarks'],
           features: { auto_generate_bracket: true, auto_advance_winner_loser: true, handle_byes: true, bracket_lock_after_first_match: true, notifications: true, export_options: ['PDF', 'Excel'] }
         };
+      }
+
+      function serializeSlot(slot) {
+        if (!slot) return { type: 'tbd', name: 'TBD' };
+        if (slot.type === 'bye') return { type: 'bye', name: 'BYE' };
+        if (slot.type === 'team' && slot.team) return { type: 'team', team_id: slot.team.id, name: slot.team.name, seed: slot.team.seed };
+        if (slot.type === 'custom') return { type: 'custom', name: slot.name };
+        return { type: 'tbd', name: 'TBD' };
       }
 
       async function submitBracket(status) {
@@ -1206,11 +1390,10 @@
         }
 
         let html = '<div class="preview-rounds">';
-        roundOrder.forEach((roundName, rIdx) => {
+        roundOrder.forEach((roundName) => {
           html += '<div class="preview-round">';
-          /* Use server-supplied round name if it looks meaningful, otherwise derive */
-          const label = (roundName && roundName.toUpperCase() !== 'ELIMINATION') ? roundName.toUpperCase() : pickRoundLabel(rIdx, totalRounds);
-          html += '<div class="preview-round-title">' + escapeHtml(label) + '</div>';
+          /* Use exact round name as the admin entered it */
+          html += '<div class="preview-round-title">' + escapeHtml(roundName.toUpperCase()) + '</div>';
           html += '<div class="preview-matches">';
           rounds[roundName].forEach(m => {
             html += '<div class="preview-match">';

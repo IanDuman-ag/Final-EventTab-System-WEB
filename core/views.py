@@ -2199,6 +2199,7 @@ def admin_generate_bracket(request):
         
         # Create Teams
         bracket_teams = []
+        team_id_to_obj = {}
         for index, team_data in enumerate(teams_data):
             dept_id = team_data.get('department')
             department = Department.objects.get(id=dept_id) if dept_id else None
@@ -2214,16 +2215,52 @@ def admin_generate_bracket(request):
                 seed=seed
             )
             bracket_teams.append(team)
-            
-        # Generate matches based on format
-        if format_type == 'Single Elimination':
-            generate_single_elimination(event, bracket_teams)
-        elif format_type == 'Double Elimination':
-            generate_double_elimination(event, bracket_teams)
-        elif format_type == 'Round Robin':
-            generate_round_robin(event, bracket_teams)
+            team_id_to_obj[index] = team
+
+        # If admin supplied a bracket_layout, use it exactly as-is.
+        # Otherwise fall back to auto-generation by format.
+        bracket_layout = data.get('bracket_layout')
+        if bracket_layout and isinstance(bracket_layout, list) and len(bracket_layout) > 0:
+            # Map JS team_id -> BracketTeam by matching team name + seed
+            name_seed_map = {(t.name, t.seed): t for t in bracket_teams}
+
+            def resolve_team(slot):
+                """Return a BracketTeam or None for a layout slot."""
+                if not slot or not isinstance(slot, dict):
+                    return None
+                stype = slot.get('type')
+                if stype == 'team':
+                    name = slot.get('name')
+                    seed = slot.get('seed')
+                    return name_seed_map.get((name, seed))
+                # custom / bye / tbd → no DB team
+                return None
+
+            match_no = 1
+            for round_block in bracket_layout:
+                round_name = round_block.get('round_name') or 'Round'
+                for match in round_block.get('matches', []):
+                    a_team = resolve_team(match.get('team_a'))
+                    b_team = resolve_team(match.get('team_b'))
+                    BracketMatch.objects.create(
+                        event=event,
+                        match_number=match_no,
+                        round_name=round_name,
+                        team_a=a_team,
+                        team_b=b_team,
+                        status=BracketMatch.STATUS_PENDING,
+                    )
+                    match_no += 1
         else:
-            return JsonResponse({'success': False, 'message': 'Unsupported tournament format.'}, status=400)
+            # Generate matches based on format (legacy auto-mode)
+            if format_type == 'Single Elimination':
+                generate_single_elimination(event, bracket_teams)
+            elif format_type == 'Double Elimination':
+                generate_double_elimination(event, bracket_teams)
+            elif format_type == 'Round Robin':
+                generate_round_robin(event, bracket_teams)
+            else:
+                return JsonResponse({'success': False, 'message': 'Unsupported tournament format.'}, status=400)
 
         sync_event_to_mobile(event)
         return JsonResponse({'success': True, 'message': 'Bracket generated and synced to the judge mobile app.'})
