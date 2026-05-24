@@ -4,119 +4,378 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tabulator Overview — EventTab</title>
-  <link rel="stylesheet" href="{% static 'tabulatordash/tabdashboard.css' %}?v=20260514">
+  <title>Dashboard — EventTab Tabulator</title>
+  <link rel="stylesheet" href="{% static 'tabulatordash/tab_v2.css' %}?v=20260524a">
 </head>
-<body class="tabulator-dashboard-page">
-  <div class="tab-shell">
-    <aside class="tab-sidebar" aria-label="Tabulator navigation">
-      <div class="tab-brand">
-        <h1>EventTab</h1>
-        <span>Tabulator Portal</span>
-      </div>
+<body class="tab-v2">
+<div class="tab-shell">
 
-      <nav class="tab-nav">
-        <a class="tab-nav-link is-active" href="{% url 'tabulator_dashboard' %}" aria-current="page">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm9 0h7v7h-7v-7Z"></path></svg>
-          <span>Dashboard</span>
-        </a>
-        <a class="tab-nav-link" href="{% url 'tabulator_assigned' %}">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2Zm0 16H5V10h14v10Zm0-12H5V6h14v2Z"></path></svg>
-          <span>Assigned Events</span>
-        </a>
-        <a class="tab-nav-link" href="{% url 'tabulator_scoresheets' %}">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Zm0 16H5V5h14v14zM7 7h10v2H7V7zm0 4h10v2H7v-2zm0 4h7v2H7v-2z"></path></svg>
-          <span>Scoresheets</span>
-        </a>
-        <a class="tab-nav-link" href="{% url 'tabulator_ocr_upload' %}">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z"></path></svg>
-          <span>OCR Upload</span>
-        </a>
-        <a class="tab-nav-link" href="{% url 'tabulator_reports' %}">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-9 14H7v-2h3v2zm3-4H7v-2h6v2zm3-4H7V7h9v2z"></path></svg>
-          <span>Reports</span>
-        </a>
-      </nav>
-
-      <a class="tab-logout" href="{% url 'logout' %}">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17v-3H3v-4h7V7l5 5-5 5Zm2-14h8v18h-8v-2h6V5h-6V3Z"></path></svg>
-        <span>Logout</span>
+  <!-- ── Sidebar ─────────────────────────────────────────── -->
+  <aside class="tab-sidebar">
+    <div class="tab-brand"><h1>EventTab</h1><span>TABULATOR PORTAL</span></div>
+    <nav class="tab-nav">
+      <a class="tab-nav-link is-active" href="{% url 'tabulator_dashboard' %}" aria-current="page">
+        <svg viewBox="0 0 24 24"><path d="M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm9 0h7v7h-7v-7Z"/></svg>
+        <span>Dashboard</span>
       </a>
-    </aside>
+      <a class="tab-nav-link" href="{% url 'tabulator_assigned' %}">
+        <svg viewBox="0 0 24 24"><path d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2Zm0 16H5V10h14v10Zm0-12H5V6h14v2Z"/></svg>
+        <span>My Assignments</span>
+      </a>
+      <a class="tab-nav-link" href="{% url 'tabulator_scoresheets' %}">
+        <svg viewBox="0 0 24 24"><path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Zm0 16H5V5h14v14zM7 7h10v2H7V7zm0 4h10v2H7v-2zm0 4h7v2H7v-2z"/></svg>
+        <span>Score Sheets</span>
+      </a>
+      <div class="tab-nav-collapsible">
+        <button type="button" class="tab-nav-collapsible-btn" id="tabulationToggle">
+          <svg viewBox="0 0 24 24"><path d="M3 3v18h18V3H3Zm16 16H5V5h14v14ZM7 17h2v-7H7v7Zm4 0h2V7h-2v10Zm4 0h2v-4h-2v4Z"/></svg>
+          <span>Tabulation</span>
+          <svg class="chevron" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg>
+        </button>
+        <div class="tab-nav-sub" id="tabulationSub">
+          <a href="{% url 'tabulator_encode_score' %}">
+            <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2Zm-1 14-4-4 1.41-1.41L11 13.17l4.59-4.58L17 10l-6 6Z"/></svg>
+            Encoded Scores
+          </a>
+          <a href="{% url 'tabulator_review' %}">
+            <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2Zm1 15h-2v-2h2v2Zm0-4h-2V7h2v6Z"/></svg>
+            Review & Verify
+          </a>
+          <a href="{% url 'tabulator_results' %}">
+            <svg viewBox="0 0 24 24"><path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Zm-7 14-5-5 1.41-1.41L12 14.17l7.59-7.59L21 8l-9 9Z"/></svg>
+            Results
+          </a>
+        </div>
+      </div>
+      <a class="tab-nav-link" href="{% url 'tabulator_reports' %}">
+        <svg viewBox="0 0 24 24"><path d="M3 3v18h18V3H3Zm16 16H5V5h14v14ZM7 17h2v-7H7v7Zm4 0h2V7h-2v10Zm4 0h2v-4h-2v4Z"/></svg>
+        <span>Reports</span>
+      </a>
+      <a class="tab-nav-link" href="{% url 'tabulator_activity_logs' %}">
+        <svg viewBox="0 0 24 24"><path d="M13 3a9 9 0 1 1-8.74 11.19l1.94-.49A7 7 0 1 0 13 5v4L7.5 3.5 13-2v5Zm-1 6h2v5l4 2-.9 1.79L12 15V9Z"/></svg>
+        <span>Activity Logs</span>
+      </a>
+    </nav>
+    {% if current_event %}
+    <div class="tab-current-event">
+      <span class="tab-current-event-label">CURRENT EVENT</span>
+      <span class="tab-current-event-name">{{ current_event.name }}</span>
+      <span class="tab-current-event-date">{{ current_event.schedule_label }}</span>
+      <a class="tab-current-event-link" href="{% url 'tabulator_assigned' %}">View Details ›</a>
+    </div>
+    {% endif %}
+    <div class="tab-user-card">
+      <div class="tab-user-avatar-sm">{{ request.user.username|default:"TA"|slice:":2"|upper }}</div>
+      <div class="tab-user-info">
+        <strong>{{ display_name }}</strong>
+        <small>{{ request.user.email|default:"tabulator@eventtab.com" }}</small>
+      </div>
+    </div>
+    <a class="tab-logout" href="{% url 'logout' %}">
+      <svg viewBox="0 0 24 24"><path d="M10 17v-3H3v-4h7V7l5 5-5 5Zm2-14h8v18h-8v-2h6V5h-6V3Z"/></svg>
+      <span>Logout</span>
+    </a>
+  </aside>
 
-    <div class="tab-main">
-      <header class="tab-topbar">
-        <span class="tab-topbar-spacer" aria-hidden="true"></span>
-        <div class="tab-topbar-actions">
-          <button class="tab-icon-btn" type="button" aria-label="Notifications">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm8-6-2-2v-5a6 6 0 1 0-12 0v5l-2 2v1h16v-1Z"></path></svg>
-          </button>
-          <div class="tab-avatar" aria-label="{{ request.user.username }}">
-            {{ request.user.username|default:"TB"|slice:":2"|upper }}
+  <!-- ── Main ─────────────────────────────────────────────── -->
+  <div class="tab-main">
+    <header class="tab-topbar">
+      <div class="tab-topbar-left">
+        <h2>Good morning, {{ display_name }}! 👋</h2>
+        <p>Here's an overview of your assigned events and tabulation progress.</p>
+      </div>
+      <div class="tab-topbar-right">
+        <a class="tab-bell" href="{% url 'tabulator_reports' %}" aria-label="Notifications">
+          <svg viewBox="0 0 24 24"><path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm8-6-2-2v-5a6 6 0 1 0-12 0v5l-2 2v1h16v-1Z"/></svg>
+          <span class="tab-bell-dot"></span>
+        </a>
+        <div class="tab-avatar-pill">{{ request.user.username|default:"TA"|slice:":2"|upper }}</div>
+      </div>
+    </header>
+
+    <div class="tab-content">
+      <!-- Metric cards -->
+      <section class="tab-metrics">
+        <article class="tab-metric">
+          <div class="tab-metric-icon tab-metric-icon--blue">
+            <svg viewBox="0 0 24 24"><path d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2Zm0 16H5V10h14v10Zm0-12H5V6h14v2Z"/></svg>
+          </div>
+          <div class="tab-metric-body">
+            <span class="tab-metric-label">TOTAL ASSIGNED</span>
+            <strong class="tab-metric-value">{{ total_assigned }}</strong>
+            <small class="tab-metric-sub">events</small>
+            <a class="tab-metric-link" href="{% url 'tabulator_assigned' %}">View all ›</a>
+          </div>
+        </article>
+        <article class="tab-metric">
+          <div class="tab-metric-icon tab-metric-icon--orange">
+            <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2Zm1 15h-2v-2h2v2Zm0-4h-2V7h2v6Z"/></svg>
+          </div>
+          <div class="tab-metric-body">
+            <span class="tab-metric-label">PENDING ENCODE</span>
+            <strong class="tab-metric-value">{{ pending_encode }}</strong>
+            <small class="tab-metric-sub">events</small>
+            <a class="tab-metric-link" href="{% url 'tabulator_assigned' %}?status=pending">View all ›</a>
+          </div>
+        </article>
+        <article class="tab-metric">
+          <div class="tab-metric-icon tab-metric-icon--green">
+            <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2Zm-2 15-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9Z"/></svg>
+          </div>
+          <div class="tab-metric-body">
+            <span class="tab-metric-label">VERIFIED</span>
+            <strong class="tab-metric-value">{{ verified }}</strong>
+            <small class="tab-metric-sub">events</small>
+            <a class="tab-metric-link" href="{% url 'tabulator_assigned' %}?status=completed">View all ›</a>
+          </div>
+        </article>
+        <article class="tab-metric">
+          <div class="tab-metric-icon tab-metric-icon--purple">
+            <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2Zm-1 14-4-4 1.41-1.41L11 13.17l4.59-4.58L17 10l-6 6Z"/></svg>
+          </div>
+          <div class="tab-metric-body">
+            <span class="tab-metric-label">COMPLETED</span>
+            <strong class="tab-metric-value">{{ completed_count }}</strong>
+            <small class="tab-metric-sub">event</small>
+            <a class="tab-metric-link" href="{% url 'tabulator_assigned' %}?status=completed">View all ›</a>
+          </div>
+        </article>
+      </section>
+
+      <!-- Body grid: events table + right panel -->
+      <div class="tab-body-grid">
+        <div>
+          <!-- My Assigned Events table -->
+          <div class="tab-table-card">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid #f1f5f9;">
+              <h3 style="font-size:15px;font-weight:700;color:#0f172a;margin:0;">My Assigned Events</h3>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <select class="tab-filter-select" style="font-size:12px;padding:6px 10px;" onchange="window.location='{% url 'tabulator_assigned' %}?status='+this.value">
+                  <option value="all">All Statuses</option>
+                  <option value="pending">Pending Encode</option>
+                  <option value="in_progress">In Progress</option>
+                  <option value="completed">Completed</option>
+                </select>
+                <select class="tab-filter-select" style="font-size:12px;padding:6px 10px;">
+                  <option>All Categories</option>
+                </select>
+                <div class="tab-search-wrap" style="min-width:160px;">
+                  <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5Zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14Z"/></svg>
+                  <input type="text" class="tab-search-input" placeholder="Search events…">
+                </div>
+              </div>
+            </div>
+            <div class="tab-table-wrap">
+              <table class="tab-table">
+                <thead>
+                  <tr>
+                    <th>EVENT / CATEGORY</th>
+                    <th>JUDGING PANEL</th>
+                    <th>STATUS</th>
+                    <th>PROGRESS</th>
+                    <th>ACTION</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in event_rows %}
+                  <tr>
+                    <td>
+                      <div style="display:flex;align-items:center;gap:10px;">
+                        <div style="width:36px;height:36px;border-radius:8px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;">
+                          {% if row.category_lower == 'sports' %}🏀{% elif row.category_lower == 'esports' %}🎮{% elif row.category_lower == 'academic' %}📚{% else %}🎭{% endif %}
+                        </div>
+                        <div>
+                          <strong style="display:block;font-size:13.5px;color:#0f172a;">{{ row.title }}</strong>
+                          <span class="tab-cat-pill tab-cat-pill--{{ row.category_lower }}">{{ row.category }}</span>
+                          <small style="display:block;color:#94a3b8;font-size:11px;margin-top:2px;">{{ row.date_str }}</small>
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <div class="tab-judges">
+                        {% for ini in row.panel_initials %}
+                        <span class="tab-judge-avatar">{{ ini }}</span>
+                        {% endfor %}
+                        {% if row.extra_judges > 0 %}<span class="tab-judge-extra">+{{ row.extra_judges }}</span>{% endif %}
+                      </div>
+                      <small class="tab-judge-count">{{ row.judge_count }} Judge{{ row.judge_count|pluralize }}</small>
+                    </td>
+                    <td>
+                      <span class="tab-status tab-status--{{ row.tab_status }}">
+                        <span class="tab-status-dot"></span>{{ row.tab_status_label }}
+                      </span>
+                    </td>
+                    <td>
+                      <div class="tab-progress">
+                        <div class="tab-progress-bar">
+                          <div class="tab-progress-fill {% if row.progress_pct == 0 %}tab-progress-fill--0{% elif row.progress_pct < 50 %}tab-progress-fill--low{% elif row.progress_pct < 100 %}tab-progress-fill--mid{% else %}tab-progress-fill--full{% endif %}" style="width:{{ row.progress_pct }}%"></div>
+                        </div>
+                        <span class="tab-progress-text">{{ row.progress_pct }}% · {{ row.encoded_sheets }}/{{ row.total_sheets }} Score Sheets</span>
+                      </div>
+                    </td>
+                    <td>
+                      <a class="tab-action-btn tab-action-btn--{{ row.action_kind }}" href="{% url 'tabulator_assigned' %}">{{ row.action_label }}</a>
+                    </td>
+                  </tr>
+                  {% empty %}
+                  <tr><td colspan="5" class="tab-table-empty">No events assigned yet.</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Bottom row: Recent Activity + Progress Overview -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;">
+            <!-- Recent Activity -->
+            <div class="tab-panel-card">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+                <h4 class="tab-panel-title" style="margin:0;">Recent Activity</h4>
+                <a href="{% url 'tabulator_reports' %}" style="font-size:12px;color:#2563eb;text-decoration:none;font-weight:600;">View all</a>
+              </div>
+              <ul style="list-style:none;display:flex;flex-direction:column;gap:10px;">
+                {% for act in activity_rows %}
+                <li style="display:flex;align-items:flex-start;gap:10px;">
+                  <span style="width:28px;height:28px;border-radius:7px;background:#eff6ff;color:#1e40af;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;">📋</span>
+                  <div style="flex:1;min-width:0;">
+                    <p style="font-size:12.5px;color:#1f2937;margin:0;line-height:1.4;">{{ act.message|truncatechars:60 }}</p>
+                    <small style="color:#94a3b8;font-size:11px;">{{ act.date }}</small>
+                  </div>
+                  <span style="font-size:11px;color:#94a3b8;white-space:nowrap;">{{ act.ago }}</span>
+                </li>
+                {% empty %}
+                <li style="color:#94a3b8;font-style:italic;font-size:13px;text-align:center;padding:16px 0;">No recent activity.</li>
+                {% endfor %}
+              </ul>
+            </div>
+
+            <!-- Progress Overview doughnut -->
+            <div class="tab-panel-card">
+              <h4 class="tab-panel-title">Progress Overview</h4>
+              <div style="display:flex;align-items:center;gap:20px;">
+                <div style="position:relative;width:120px;height:120px;flex-shrink:0;">
+                  <canvas id="progressDoughnut" width="120" height="120"></canvas>
+                  <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+                    <strong style="font-size:18px;font-weight:800;color:#0f172a;line-height:1;">{{ total_assigned }}</strong>
+                    <small style="font-size:10px;color:#64748b;">Events</small>
+                  </div>
+                </div>
+                <ul style="list-style:none;display:flex;flex-direction:column;gap:8px;flex:1;">
+                  <li style="display:flex;align-items:center;gap:8px;font-size:12.5px;">
+                    <span style="width:10px;height:10px;border-radius:50%;background:#10b981;flex-shrink:0;"></span>
+                    <span style="flex:1;">Verified</span>
+                    <strong>{{ verified }}</strong>
+                  </li>
+                  <li style="display:flex;align-items:center;gap:8px;font-size:12.5px;">
+                    <span style="width:10px;height:10px;border-radius:50%;background:#f59e0b;flex-shrink:0;"></span>
+                    <span style="flex:1;">Pending Encode</span>
+                    <strong>{{ pending_encode }}</strong>
+                  </li>
+                  <li style="display:flex;align-items:center;gap:8px;font-size:12.5px;">
+                    <span style="width:10px;height:10px;border-radius:50%;background:#2563eb;flex-shrink:0;"></span>
+                    <span style="flex:1;">In Progress</span>
+                    <strong>{{ in_progress }}</strong>
+                  </li>
+                </ul>
+              </div>
+            </div>
           </div>
         </div>
-      </header>
 
-      <main class="tab-content">
-        <header class="tab-page-head">
-          <h2 class="tab-page-title">Tabulator Overview</h2>
-          <p class="tab-page-sub">
-            Welcome back, {{ display_name }}. You have {{ pending_critical }} critical verifications pending.
-          </p>
-        </header>
-
-        <section class="tab-stats" aria-label="Overview statistics">
-          <article class="tab-stat tab-stat--hero">
-            <span class="tab-stat-label">Total assigned events</span>
-            <strong class="tab-stat-value">{{ total_assigned }}</strong>
-          </article>
-          <article class="tab-stat tab-stat--card">
-            <div class="tab-stat-icon tab-stat-icon--ok" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"></path></svg>
-            </div>
-            <span class="tab-stat-label tab-stat-label--muted">Completed</span>
-            <strong class="tab-stat-value tab-stat-value--dark">{{ completed_count }}</strong>
-            <span class="tab-stat-foot tab-stat-foot--ok">↗ {{ completion_rate }}% progress rate</span>
-          </article>
-          <article class="tab-stat tab-stat--card">
-            <div class="tab-stat-icon tab-stat-icon--warn" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21Zm12-3h-2v-2h2v2Zm0-4h-2v-4h2v4Z"></path></svg>
-            </div>
-            <span class="tab-stat-label tab-stat-label--muted">Pending verify</span>
-            <strong class="tab-stat-value tab-stat-value--dark">{{ pending_verify_fmt }}</strong>
-            <span class="tab-stat-foot tab-stat-foot--warn">Urgent attention needed</span>
-          </article>
-        </section>
-
-        <section class="tab-next" aria-labelledby="tab-next-heading">
-          <div class="tab-next-head">
-            <h3 id="tab-next-heading">Next Up: Tabulation</h3>
-            <button type="button" class="tab-filter-btn" aria-label="Filter list">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v2H4V6Zm3 5h10v2H7v-2Zm4 5h2v2h-2v-2Z"></path></svg>
-            </button>
+        <!-- Right panel -->
+        <div class="tab-right-panel">
+          <div class="tab-panel-card">
+            <h4 class="tab-panel-title">🔔 Reminders</h4>
+            <ul class="tab-reminders">
+              {% if pending_encode > 0 %}
+              <li class="tab-reminder"><span class="tab-reminder-dot tab-reminder-dot--orange"></span><span>{{ pending_encode }} event{{ pending_encode|pluralize }} pending score encoding</span></li>
+              {% endif %}
+              {% if in_progress > 0 %}
+              <li class="tab-reminder"><span class="tab-reminder-dot tab-reminder-dot--blue"></span><span>{{ in_progress }} event{{ in_progress|pluralize }} for verification</span></li>
+              {% endif %}
+              <li class="tab-reminder"><span class="tab-reminder-dot tab-reminder-dot--gray"></span><span>Score encoding deadline: check with admin</span></li>
+            </ul>
+            <a href="{% url 'tabulator_assigned' %}" style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:#2563eb;text-decoration:none;font-weight:600;margin-top:10px;">View Calendar ›</a>
           </div>
-          <ul class="tab-next-list">
-            {% for item in next_up_items %}
-            <li>
-              <a class="tab-next-row" href="#">
-                <span class="tab-next-code">{{ item.code }}</span>
-                <div class="tab-next-body">
-                  <div class="tab-next-tags">
-                    <span class="tab-pill tab-pill--{{ item.tag_variant }}">{{ item.tag }}</span>
-                    {% if item.status_line %}
-                    <span class="tab-next-status">{{ item.status_line }}</span>
-                    {% endif %}
-                  </div>
-                  <span class="tab-next-title">{{ item.title }}</span>
-                </div>
-                <span class="tab-next-chevron" aria-hidden="true">›</span>
-              </a>
-            </li>
-            {% endfor %}
-          </ul>
-        </section>
-      </main>
+
+          <div class="tab-panel-card">
+            <h4 class="tab-panel-title">⚡ Quick Actions</h4>
+            <ul class="tab-quick-actions">
+              <li>
+                <a class="tab-qa-btn" href="{% url 'tabulator_ocr_upload' %}">
+                  <span class="tab-qa-icon" style="background:#dbeafe;color:#1e40af;"><svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z"/></svg></span>
+                  <div><strong>Upload Score Sheet</strong><small>OCR scan & upload</small></div>
+                  <svg viewBox="0 0 24 24" width="12" height="12"><path fill="#94a3b8" d="M8.59 16.59 10 18l6-6-6-6-1.41 1.41L13.17 12l-4.58 4.59Z"/></svg>
+                </a>
+              </li>
+              <li>
+                <a class="tab-qa-btn" href="{% url 'tabulator_reports' %}">
+                  <span class="tab-qa-icon" style="background:#d1fae5;color:#065f46;"><svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M5 20h14v-2H5v2Zm7-18-5 5h3v6h4v-6h3l-5-5Z"/></svg></span>
+                  <div><strong>Download Templates</strong><small>Score sheet templates</small></div>
+                  <svg viewBox="0 0 24 24" width="12" height="12"><path fill="#94a3b8" d="M8.59 16.59 10 18l6-6-6-6-1.41 1.41L13.17 12l-4.58 4.59Z"/></svg>
+                </a>
+              </li>
+              <li>
+                <a class="tab-qa-btn" href="{% url 'tabulator_assigned' %}">
+                  <span class="tab-qa-icon" style="background:#ede9fe;color:#5b21b6;"><svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zM7 7h10v2H7V7zm0 4h10v2H7v-2zm0 4h7v2H7v-2z"/></svg></span>
+                  <div><strong>View Tabulation Guide</strong><small>How-to instructions</small></div>
+                  <svg viewBox="0 0 24 24" width="12" height="12"><path fill="#94a3b8" d="M8.59 16.59 10 18l6-6-6-6-1.41 1.41L13.17 12l-4.58 4.59Z"/></svg>
+                </a>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <footer style="text-align:center;padding:20px 0 0;font-size:11.5px;color:#94a3b8;">
+        © 2025 EventTab. All rights reserved. &nbsp;·&nbsp; Version 1.0.0
+      </footer>
     </div>
   </div>
+</div>
+
+<script>
+/* Tabulation dropdown */
+const tBtn = document.getElementById('tabulationToggle');
+const tSub = document.getElementById('tabulationSub');
+if (tBtn && tSub) {
+  tBtn.addEventListener('click', () => {
+    tBtn.classList.toggle('open');
+    tSub.classList.toggle('open');
+  });
+}
+
+/* Progress doughnut */
+(function () {
+  const cv = document.getElementById('progressDoughnut');
+  if (!cv) return;
+  const ctx = cv.getContext('2d');
+  const data = {{ status_counts_json|safe }};
+  const segments = [
+    { value: data.verified || 0, color: '#10b981' },
+    { value: data.pending || 0, color: '#f59e0b' },
+    { value: data.in_progress || 0, color: '#2563eb' },
+    { value: data.not_started || 0, color: '#e2e8f0' },
+  ];
+  const total = segments.reduce((s, x) => s + x.value, 0);
+  const cx = 60, cy = 60, r = 50, inner = 34;
+  let start = -Math.PI / 2;
+  if (total === 0) {
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fillStyle = '#e2e8f0'; ctx.fill();
+  } else {
+    segments.forEach(seg => {
+      if (!seg.value) return;
+      const angle = (seg.value / total) * Math.PI * 2;
+      ctx.beginPath(); ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, r, start, start + angle);
+      ctx.closePath(); ctx.fillStyle = seg.color; ctx.fill();
+      start += angle;
+    });
+  }
+  ctx.beginPath(); ctx.arc(cx, cy, inner, 0, Math.PI * 2);
+  ctx.fillStyle = '#fff'; ctx.fill();
+})();
+</script>
 </body>
 </html>

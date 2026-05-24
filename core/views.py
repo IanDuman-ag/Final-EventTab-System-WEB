@@ -1850,152 +1850,265 @@ def _tabulator_display_name(user):
     return user.get_username()
 
 
+def _get_tab_event_rows(request):
+    """Build event rows for the tabulator from real Event data."""
+    from events.models import Event, ScoreSheet, BracketMatch
+    from django.utils import timezone
+    today = timezone.localdate()
+    all_events = list(Event.objects.all().order_by('-event_date'))
+    rows = []
+    for ev in all_events:
+        # Count scoresheets for this event
+        total_sheets = ScoreSheet.objects.filter(event=ev).count()
+        encoded_sheets = ScoreSheet.objects.filter(event=ev, status__in=['confirmed', 'finalized']).count()
+        pending_sheets = total_sheets - encoded_sheets
+
+        # Determine status
+        if ev.status == 'completed':
+            tab_status = 'completed'
+            tab_status_label = 'Completed'
+        elif encoded_sheets > 0 and pending_sheets == 0 and total_sheets > 0:
+            tab_status = 'in_progress'
+            tab_status_label = 'Ready for Verification'
+        elif encoded_sheets > 0:
+            tab_status = 'in_progress'
+            tab_status_label = 'In Progress'
+        elif ev.event_date and ev.event_date < today:
+            tab_status = 'pending'
+            tab_status_label = 'Pending Encode'
+        else:
+            tab_status = 'not_started'
+            tab_status_label = 'Not Started'
+
+        # Progress
+        progress_pct = int(round(encoded_sheets / total_sheets * 100)) if total_sheets else 0
+
+        # Judge initials from assigned_judges
+        judges = list(ev.assigned_judges.all()[:3])
+        panel_initials = []
+        for j in judges:
+            name = j.get_full_name().strip() or j.username
+            parts = name.split()
+            ini = ''.join(p[:1] for p in parts[:2]).upper() or j.username[:2].upper()
+            panel_initials.append(ini)
+        extra_judges = ev.assigned_judges.count() - len(judges)
+
+        # Date range
+        date_str = ev.event_date.strftime('%b %d, %Y') if ev.event_date else '—'
+
+        # Action
+        if tab_status == 'pending' or tab_status == 'not_started':
+            action_label = 'Encode Scores'
+            action_kind = 'primary'
+        elif tab_status == 'in_progress':
+            action_label = 'Review & Verify'
+            action_kind = 'verify'
+        elif tab_status == 'completed':
+            action_label = 'View Results'
+            action_kind = 'results'
+        else:
+            action_label = 'View Details'
+            action_kind = 'link'
+
+        rows.append({
+            'id': ev.id,
+            'title': ev.name,
+            'category': ev.category or 'General',
+            'category_lower': (ev.category or 'general').lower().replace(' ', '-'),
+            'date_str': date_str,
+            'panel_initials': panel_initials,
+            'extra_judges': extra_judges,
+            'judge_count': ev.assigned_judges.count(),
+            'tab_status': tab_status,
+            'tab_status_label': tab_status_label,
+            'progress_pct': progress_pct,
+            'total_sheets': total_sheets,
+            'encoded_sheets': encoded_sheets,
+            'action_label': action_label,
+            'action_kind': action_kind,
+        })
+    return rows
+
+
 @login_required(login_url='login')
 @user_passes_test(lambda u: user_has_role(u, 'tabulator'), login_url='login')
 def tabulator_dashboard(request):
-    """Tabulator home: assigned events and verification queue (sample data until event models exist)."""
-    total_assigned = 24
-    completed_count = 18
-    pending_verify = 6
-    completion_rate = round(100 * completed_count / total_assigned) if total_assigned else 0
+    """Tabulator home: assigned events and verification queue."""
+    from events.models import Event, ScoreSheet
+    from django.contrib.admin.models import LogEntry
+    from django.utils import timezone
+
+    event_rows = _get_tab_event_rows(request)
+    total_assigned = len(event_rows)
+    pending_encode = sum(1 for r in event_rows if r['tab_status'] in ('pending', 'not_started'))
+    verified = sum(1 for r in event_rows if r['tab_status'] == 'completed')
+    in_progress = sum(1 for r in event_rows if r['tab_status'] == 'in_progress')
+    completed_count = verified
+
+    # Recent activity from LogEntry
+    recent_logs = LogEntry.objects.select_related('user').order_by('-action_time')[:5]
+    activity_rows = []
+    for log in recent_logs:
+        delta = timezone.now() - log.action_time
+        if delta.days >= 1:
+            ago = f'{delta.days}d ago'
+        elif delta.seconds >= 3600:
+            ago = f'{delta.seconds // 3600}h ago'
+        elif delta.seconds >= 60:
+            ago = f'{delta.seconds // 60}m ago'
+        else:
+            ago = 'just now'
+        activity_rows.append({
+            'message': log.change_message or log.object_repr,
+            'user': log.user.get_full_name() or log.user.username if log.user else 'System',
+            'ago': ago,
+            'date': log.action_time.strftime('%b %d, %Y · %I:%M %p'),
+        })
+
+    # Current event (most recent active)
+    today = timezone.localdate()
+    current_event = Event.objects.filter(status='active').order_by('-event_date').first()
+    if not current_event:
+        current_event = Event.objects.order_by('-event_date').first()
+
     return render(request, 'tabulatordash/tabdashboard.html', {
         'display_name': _tabulator_display_name(request.user),
-        'pending_critical': 4,
         'total_assigned': total_assigned,
+        'pending_encode': pending_encode,
+        'verified': verified,
+        'in_progress': in_progress,
         'completed_count': completed_count,
-        'pending_verify_fmt': f'{pending_verify:02d}',
-        'completion_rate': completion_rate,
-        'next_up_items': [
-            {'code': 'ITB 201', 'tag': 'Academic', 'tag_variant': 'academic', 'title': 'Quiz Bee', 'status_line': ''},
-            {'code': 'MSC 02', 'tag': 'Esports', 'tag_variant': 'esports', 'title': 'Mobile Legends (Women)', 'status_line': ''},
-            {'code': 'CC 1', 'tag': 'Sports', 'tag_variant': 'sports', 'title': '3v3 Basketball (Men)', 'status_line': 'Pending Release'},
-        ],
+        'event_rows': event_rows[:5],
+        'activity_rows': activity_rows,
+        'current_event': current_event,
+        'status_counts_json': json.dumps({
+            'verified': verified,
+            'pending': pending_encode,
+            'in_progress': in_progress,
+            'not_started': sum(1 for r in event_rows if r['tab_status'] == 'not_started'),
+        }),
     })
 
 
 @login_required(login_url='login')
 @user_passes_test(lambda u: user_has_role(u, 'tabulator'), login_url='login')
 def tabulator_assigned_events(request):
-    """Tabulator assigned events list (sample data until event models exist)."""
+    """Tabulator assigned events list."""
+    from events.models import Event
+    from django.core.paginator import Paginator
+
+    status_filter = request.GET.get('status', 'all').strip().lower()
+    cat_filter = request.GET.get('category', 'all').strip().lower()
+    search_q = request.GET.get('q', '').strip().lower()
+
+    event_rows = _get_tab_event_rows(request)
+
+    if status_filter != 'all':
+        event_rows = [r for r in event_rows if r['tab_status'] == status_filter]
+    if cat_filter != 'all':
+        event_rows = [r for r in event_rows if r['category'].lower() == cat_filter]
+    if search_q:
+        event_rows = [r for r in event_rows if search_q in r['title'].lower() or search_q in r['category'].lower()]
+
+    total = len(event_rows)
+    pending = sum(1 for r in event_rows if r['tab_status'] in ('pending', 'not_started'))
+    in_progress = sum(1 for r in event_rows if r['tab_status'] == 'in_progress')
+    completed = sum(1 for r in event_rows if r['tab_status'] == 'completed')
+
+    paginator = Paginator(event_rows, 10)
+    page_obj = paginator.get_page(request.GET.get('page', 1))
+
+    # Category options
+    all_rows = _get_tab_event_rows(request)
+    categories = sorted({r['category'] for r in all_rows if r['category']})
+
     return render(request, 'tabulatordash/assigned.html', {
         'display_name': _tabulator_display_name(request.user),
-        'assigned_stats': [
-            {'label': 'Total Events', 'value': '24', 'variant': 'blue', 'icon': 'clipboard'},
-            {'label': 'Pending', 'value': '12', 'variant': 'amber', 'icon': 'pending'},
-            {'label': 'Verified', 'value': '08', 'variant': 'green', 'icon': 'verified'},
-            {'label': 'Disputes', 'value': '04', 'variant': 'red', 'icon': 'dispute'},
-        ],
-        'assigned_rows': [
-            {
-                'title': 'Chess',
-                'code': 'CW-2024-001',
-                'category': 'Sports',
-                'panel_initials': ['JD', 'MK', 'LP'],
-                'panel_meta': '+2',
-                'status': 'awaiting',
-                'status_label': 'Awaiting Scores',
-                'action_label': 'TABULATE',
-                'action_kind': 'link',
-            },
-            {
-                'title': 'Modern Dance Competition',
-                'code': 'AM-2024-042',
-                'category': 'Socio-cultural',
-                'panel_initials': ['AR', 'BN'],
-                'panel_meta': '3/3',
-                'status': 'ready',
-                'status_label': 'Ready for Verification',
-                'action_label': 'TABULATE',
-                'action_kind': 'primary',
-            },
-            {
-                'title': 'Singing Competition',
-                'code': 'WH-2024-118',
-                'category': 'Socio-cultural',
-                'panel_initials': ['KC'],
-                'panel_meta': '1/4',
-                'status': 'idle',
-                'status_label': 'Not Started',
-                'action_label': 'TABULATE',
-                'action_kind': 'link',
-            },
-            {
-                'title': 'Essay Writing',
-                'code': 'BS-2024-009',
-                'category': 'Academic',
-                'panel_initials': ['LM', 'PQ', 'RS'],
-                'panel_meta': '',
-                'status': 'done',
-                'status_label': 'Verified',
-                'action_label': 'VIEW REPORT',
-                'action_kind': 'link',
-            },
-        ],
-        'assigned_showing': 4,
-        'assigned_total': 24,
-        'assigned_page': 1,
-        'assigned_page_count': 3,
-        'assigned_page_numbers': [1, 2, 3],
+        'total_assigned': total,
+        'pending': pending,
+        'in_progress': in_progress,
+        'completed': completed,
+        'event_rows': page_obj.object_list,
+        'page_obj': page_obj,
+        'total_count': total,
+        'categories': categories,
+        'selected_status': status_filter,
+        'selected_category': cat_filter,
+        'search_query': search_q,
     })
 
 
 @login_required(login_url='login')
 @user_passes_test(lambda u: user_has_role(u, 'tabulator'), login_url='login')
 def tabulator_scoresheets(request):
-    """Tabulator scoresheet review: verify judge scores, deductions, and totals (sample data)."""
+    """Tabulator scoresheet list — real ScoreSheet data."""
+    from events.models import Event, ScoreSheet
+    from django.core.paginator import Paginator
+
+    event_filter = request.GET.get('event', 'all').strip()
+    status_filter = request.GET.get('status', 'all').strip().lower()
+    search_q = request.GET.get('q', '').strip().lower()
+
+    sheets_qs = ScoreSheet.objects.select_related('event', 'match', 'tabulator').order_by('-created_at')
+
+    if event_filter != 'all' and event_filter:
+        sheets_qs = sheets_qs.filter(event__name=event_filter)
+    if status_filter != 'all':
+        sheets_qs = sheets_qs.filter(status=status_filter)
+
+    all_sheets = list(sheets_qs)
+    if search_q:
+        all_sheets = [s for s in all_sheets if search_q in s.event.name.lower() or search_q in (s.judges_names or '').lower()]
+
+    total_sheets = len(all_sheets)
+    encoded = sum(1 for s in all_sheets if s.status in ('confirmed', 'finalized'))
+    pending = sum(1 for s in all_sheets if s.status == 'pending')
+    validated = sum(1 for s in all_sheets if s.status == 'finalized')
+
+    # Build rows
+    sheet_rows = []
+    for i, s in enumerate(all_sheets):
+        ss_id = f'SS-{s.created_at.year}-{str(i + 1).zfill(3)}'
+        if s.status == 'pending':
+            action_label = 'Encode'
+            action_kind = 'encode'
+        elif s.status == 'confirmed':
+            action_label = 'Continue'
+            action_kind = 'continue'
+        else:
+            action_label = 'View'
+            action_kind = 'view'
+        sheet_rows.append({
+            'id': s.id,
+            'ss_id': ss_id,
+            'event_name': s.event.name,
+            'category': s.event.category,
+            'judge_name': s.judges_names or 'Unknown Judge',
+            'date_received': s.created_at.strftime('%b %d, %Y %I:%M %p'),
+            'status': s.status,
+            'status_label': s.get_status_display(),
+            'action_label': action_label,
+            'action_kind': action_kind,
+        })
+
+    paginator = Paginator(sheet_rows, 10)
+    page_obj = paginator.get_page(request.GET.get('page', 1))
+
+    events = list(Event.objects.values_list('name', flat=True).order_by('name'))
+
     return render(request, 'tabulatordash/scoresheets.html', {
         'display_name': _tabulator_display_name(request.user),
-        'sheet_total_events': 42,
-        'sheet_category_count': 4,
-        'sheet_options': [
-            {'id': 'rq-d1', 'label': 'Regional Qualifiers — Day 1'},
-            {'id': 'rq-d2', 'label': 'Regional Qualifiers — Day 2'},
-            {'id': 'finals', 'label': 'Championship Finals'},
-        ],
-        'sheet_selected_id': 'rq-d1',
-        'sheet_rows': [
-            {
-                'title': 'Table Tennis',
-                'category': 'Sports',
-                'accent': 'amber',
-                'j1': '88.0', 'j2': '90.0', 'j3': '89.0',
-                'raw_avg': '89.00',
-                'deduction': '0.0',
-                'deduction_alert': False,
-                'final': '89.00',
-            },
-            {
-                'title': 'Quiz Bee',
-                'category': 'Academic',
-                'accent': 'blue',
-                'j1': '91.0', 'j2': '93.5', 'j3': '92.0',
-                'raw_avg': '92.17',
-                'deduction': '0.5',
-                'deduction_alert': True,
-                'final': '91.67',
-            },
-            {
-                'title': 'Spelling Bee',
-                'category': 'Academic',
-                'accent': 'slate',
-                'j1': '95.0', 'j2': '94.0', 'j3': '96.0',
-                'raw_avg': '95.00',
-                'deduction': '0.0',
-                'deduction_alert': False,
-                'final': '95.00',
-            },
-            {
-                'title': 'Modern Dance',
-                'category': 'Socio-cultural',
-                'accent': 'rose',
-                'j1': '87.5', 'j2': '88.0', 'j3': '87.0',
-                'raw_avg': '87.50',
-                'deduction': '1.0',
-                'deduction_alert': True,
-                'final': '86.50',
-            },
-        ],
-        'last_computed': 'Today at 14:32:05',
+        'total_sheets': total_sheets,
+        'encoded': encoded,
+        'pending': pending,
+        'validated': validated,
+        'sheet_rows': page_obj.object_list,
+        'page_obj': page_obj,
+        'total_count': total_sheets,
+        'events': events,
+        'selected_event': event_filter,
+        'selected_status': status_filter,
+        'search_query': search_q,
     })
 
 
@@ -2017,38 +2130,652 @@ def tabulator_ocr_upload(request):
 @login_required(login_url='login')
 @user_passes_test(lambda u: user_has_role(u, 'tabulator'), login_url='login')
 def tabulator_reports(request):
-    """Tabulator Reports and Metrics page"""
-    from events.models import Event
-    # Gathers mock/live statistics for tabulator
-    assigned_count = 5
-    completed_count = 3
-    accuracy_rate = 98.4
+    """Tabulator Reports page — list of generated reports with charts."""
+    from events.models import Event, ScoreSheet
+    from django.contrib.admin.models import LogEntry, CHANGE
+    from django.core.paginator import Paginator
+    from django.utils import timezone
 
-    assigned_events = []
-    events_qs = Event.objects.all().order_by('-event_date')
-    for event in events_qs:
-        assigned_events.append({
-            'name': event.name,
-            'category': event.category,
-            'date': event.event_date.strftime('%b %d, %Y'),
-            'status': event.get_status_display(),
-            'completion': '100%' if event.status == 'completed' else '60%',
+    type_filter = request.GET.get('type', 'all').strip()
+    event_filter = request.GET.get('event', 'all').strip()
+    search_q = request.GET.get('q', '').strip().lower()
+
+    events = list(Event.objects.values_list('name', flat=True).order_by('name'))
+    current_event = Event.objects.filter(status='active').order_by('-event_date').first()
+
+    # Build report rows from LogEntry (reports logged as CHANGE with 'generated' in message)
+    logs_qs = LogEntry.objects.filter(change_message__icontains='generated').select_related('user').order_by('-action_time')
+    if event_filter != 'all' and event_filter:
+        logs_qs = logs_qs.filter(object_repr__icontains=event_filter)
+    if search_q:
+        logs_qs = logs_qs.filter(object_repr__icontains=search_q)
+
+    type_label_map = {
+        'results': 'Results Summary', 'breakdown': 'Score Breakdown',
+        'judge': 'Judge Summary', 'audit': 'Audit Trail', 'summary': 'Summary',
+    }
+    report_rows = []
+    for log in logs_qs[:50]:
+        msg = log.change_message.upper()
+        fmt = 'Excel' if 'EXCEL' in msg else ('CSV' if 'CSV' in msg else 'PDF')
+        type_key = 'results'
+        for k in type_label_map:
+            if k in log.object_repr.lower():
+                type_key = k; break
+        report_rows.append({
+            'name': log.object_repr[:60],
+            'type_key': type_key,
+            'type_label': type_label_map.get(type_key, 'Report'),
+            'event': log.object_repr.split(' Report')[0] if ' Report' in log.object_repr else log.object_repr[:30],
+            'generated_by': log.user.username if log.user else 'System',
+            'date_generated': log.action_time.strftime('%b %d, %Y %I:%M %p'),
+            'status_key': 'generated',
+            'status_label': 'Generated',
+            'download_url': None,
         })
 
-    # Default fallback data if empty
-    if not assigned_events:
-        assigned_events = [
-            {'name': 'National Science Decathlon 2024', 'category': 'Academic', 'date': 'Oct 24, 2024', 'status': 'Active', 'completion': '80%'},
-            {'name': 'Regional Athletics Meet 2024', 'category': 'Sports', 'date': 'Nov 12, 2024', 'status': 'Upcoming', 'completion': '0%'},
-            {'name': 'Spelling Bee Finals', 'category': 'Academic', 'date': 'May 15, 2026', 'status': 'Completed', 'completion': '100%'},
-        ]
+    total_count = len(report_rows)
+    paginator = Paginator(report_rows, 10)
+    page_obj = paginator.get_page(request.GET.get('page', 1))
+
+    # KPI counts
+    total_reports = total_count
+    generated_count = total_count
+    scheduled_count = 0
+    archived_count = 0
+
+    # Donut data
+    type_counts = {}
+    for row in report_rows:
+        type_counts[row['type_label']] = type_counts.get(row['type_label'], 0) + 1
+    donut_colors = ['#2563eb', '#10b981', '#a855f7', '#f59e0b', '#ef4444', '#64748b']
+    donut_data = [{'value': v, 'color': donut_colors[i % len(donut_colors)], 'label': k}
+                  for i, (k, v) in enumerate(type_counts.items())]
+    report_type_breakdown = [
+        {'label': d['label'], 'count': d['value'],
+         'pct': round(d['value'] / total_count * 100) if total_count else 0,
+         'color': d['color']} for d in donut_data
+    ]
+
+    # Timeline: last 7 days
+    from datetime import timedelta
+    today = timezone.localdate()
+    timeline_labels, timeline_values = [], []
+    for i in range(6, -1, -1):
+        day = today - timedelta(days=i)
+        cnt = LogEntry.objects.filter(
+            change_message__icontains='generated',
+            action_time__date=day
+        ).count()
+        timeline_labels.append(day.strftime('%b %d'))
+        timeline_values.append(cnt)
 
     return render(request, 'tabulatordash/tabreport.html', {
         'display_name': _tabulator_display_name(request.user),
-        'assigned_count': assigned_count,
-        'completed_count': completed_count,
-        'accuracy_rate': accuracy_rate,
-        'assigned_events': assigned_events,
+        'current_event': current_event,
+        'events': events,
+        'report_rows': page_obj.object_list,
+        'page_obj': page_obj,
+        'total_count': total_count,
+        'total_reports': total_reports,
+        'generated_count': generated_count,
+        'scheduled_count': scheduled_count,
+        'archived_count': archived_count,
+        'selected_type': type_filter,
+        'selected_event': event_filter,
+        'search_query': search_q,
+        'donut_data_json': json.dumps(donut_data),
+        'report_type_breakdown': report_type_breakdown,
+        'timeline_data_json': json.dumps({'labels': timeline_labels, 'values': timeline_values}),
+    })
+
+
+# ── Tabulation sub-pages ────────────────────────────────────────
+
+@login_required(login_url='login')
+@user_passes_test(lambda u: user_has_role(u, 'tabulator'), login_url='login')
+def tabulator_tabulation(request):
+    """Tabulation landing page — shows workflow overview and quick stats."""
+    from events.models import ScoreSheet
+    sheets = ScoreSheet.objects.all()
+    encoded_count = sheets.filter(status__in=('confirmed', 'finalized')).count()
+    pending_review = sheets.filter(status='confirmed').count()
+    finalized_count = sheets.filter(status='finalized').count()
+    return render(request, 'tabulatordash/tabulation.html', {
+        'display_name': _tabulator_display_name(request.user),
+        'encoded_count': encoded_count,
+        'pending_review': pending_review,
+        'finalized_count': finalized_count,
+    })
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda u: user_has_role(u, 'tabulator'), login_url='login')
+def tabulator_encode_score(request):
+    """Encode scores for a specific score sheet, or list pending sheets."""
+    from events.models import ScoreSheet, Event, BracketTeam
+    from django.utils import timezone
+
+    sheet_id = request.GET.get('sheet', '').strip()
+    sheet_obj = None
+    sheet_ctx = None
+    criteria = []
+    teams = []
+    history_logs = []
+
+    # KPI counts (always shown)
+    all_sheets = ScoreSheet.objects.all()
+    total_sheets = all_sheets.count()
+    encoded_count = all_sheets.filter(status__in=('confirmed', 'finalized')).count()
+    pending_count = all_sheets.filter(status='pending').count()
+    validated_count = all_sheets.filter(status='finalized').count()
+
+    current_event = Event.objects.filter(status='active').order_by('-event_date').first()
+
+    if sheet_id and sheet_id.isdigit():
+        try:
+            sheet_obj = ScoreSheet.objects.select_related('event', 'match', 'tabulator').get(id=int(sheet_id))
+        except ScoreSheet.DoesNotExist:
+            sheet_obj = None
+
+    if sheet_obj:
+        idx = ScoreSheet.objects.filter(created_at__lte=sheet_obj.created_at).count()
+        ss_id = f'SS-{sheet_obj.created_at.year}-{str(idx).zfill(3)}'
+        sheet_ctx = {
+            'id': sheet_obj.id,
+            'ss_id': ss_id,
+            'event_name': sheet_obj.event.name,
+            'category': sheet_obj.event.category,
+            'judge_name': sheet_obj.judges_names or 'Unknown Judge',
+            'date_received': sheet_obj.created_at.strftime('%b %d, %Y %I:%M %p'),
+            'status': sheet_obj.status,
+            'status_label': sheet_obj.get_status_display(),
+        }
+        teams_qs = BracketTeam.objects.filter(event=sheet_obj.event).select_related('department')
+        for team in teams_qs:
+            teams.append({
+                'id': team.id,
+                'name': team.name,
+                'department': team.department.name if team.department else '',
+                'total_score': '0',
+            })
+        from django.contrib.admin.models import LogEntry
+        logs = LogEntry.objects.filter(object_id=str(sheet_obj.id)).select_related('user').order_by('-action_time')[:10]
+        for log in logs:
+            history_logs.append({
+                'action': log.change_message or 'Updated',
+                'user': log.user.username if log.user else 'System',
+                'date': log.action_time.strftime('%b %d, %Y %I:%M %p'),
+                'notes': log.object_repr,
+            })
+
+    if request.method == 'POST' and sheet_obj:
+        action = request.POST.get('action', 'save')
+        if action == 'mark_encoded':
+            sheet_obj.status = 'confirmed'
+        sheet_obj.tabulator = request.user
+        sheet_obj.save()
+        return redirect(f"{request.path}?sheet={sheet_obj.id}")
+
+    pending_sheets = []
+    if not sheet_obj:
+        for i, s in enumerate(ScoreSheet.objects.select_related('event', 'match').filter(
+                status__in=('pending', 'confirmed')).order_by('-created_at')):
+            ss_id = f'SS-{s.created_at.year}-{str(i + 1).zfill(3)}'
+            pending_sheets.append({
+                'id': s.id, 'ss_id': ss_id,
+                'event_name': s.event.name, 'category': s.event.category,
+                'judge_name': s.judges_names or 'Unknown Judge',
+                'date_received': s.created_at.strftime('%b %d, %Y %I:%M %p'),
+                'status': s.status, 'status_label': s.get_status_display(),
+            })
+
+    return render(request, 'tabulatordash/encodedscore.html', {
+        'display_name': _tabulator_display_name(request.user),
+        'current_event': current_event,
+        'sheet': sheet_ctx,
+        'criteria': criteria,
+        'teams': teams,
+        'history_logs': history_logs,
+        'pending_sheets': pending_sheets,
+        'total_sheets': total_sheets,
+        'encoded_count': encoded_count,
+        'pending_count': pending_count,
+        'validated_count': validated_count,
+        'total_possible_pts': 100,
+        'last_saved': None,
+    })
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda u: user_has_role(u, 'tabulator'), login_url='login')
+def tabulator_save_scores(request, sheet_id):
+    """POST endpoint to save encoded scores for a sheet."""
+    from events.models import ScoreSheet
+    if request.method != 'POST':
+        return redirect('tabulator_encode_score')
+    try:
+        sheet = ScoreSheet.objects.get(id=sheet_id)
+        action = request.POST.get('action', 'save')
+        if action == 'mark_encoded':
+            sheet.status = 'confirmed'
+        sheet.tabulator = request.user
+        sheet.save()
+    except ScoreSheet.DoesNotExist:
+        pass
+    return redirect(f"/tabulator/encode/?sheet={sheet_id}")
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda u: user_has_role(u, 'tabulator'), login_url='login')
+def tabulator_generate_report(request):
+    """Generate and download a report (PDF/Excel/CSV) for tabulator."""
+    if request.method != 'POST':
+        return redirect('tabulator_reports')
+    from events.models import Event
+    from django.contrib.admin.models import LogEntry, CHANGE
+    from django.contrib.contenttypes.models import ContentType
+    from datetime import datetime
+
+    event_name = request.POST.get('event', '').strip()
+    report_type = request.POST.get('report_type', 'results').strip()
+    export_format = request.POST.get('format', 'pdf').strip().lower()
+
+    event_obj = Event.objects.filter(name=event_name).first()
+    event_ct = ContentType.objects.get_for_model(Event)
+    LogEntry.objects.create(
+        user=request.user,
+        content_type_id=event_ct.id,
+        object_id=str(event_obj.id) if event_obj else '1',
+        object_repr=f"{event_name} {report_type.title()} Report"[:200],
+        action_flag=CHANGE,
+        change_message=f"Generated {export_format.upper()} report."
+    )
+
+    if export_format == 'excel':
+        from core.reports_generator import generate_excel_report
+        stream = generate_excel_report(event_name, 'all', None, None, [])
+        fname = f"{event_name.replace(' ', '_')}_{report_type}_{datetime.now().strftime('%Y%m%d')}.xlsx"
+        resp = HttpResponse(stream.read(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        resp['Content-Disposition'] = f'attachment; filename="{fname}"'
+        return resp
+    elif export_format == 'csv':
+        import csv as csv_mod
+        resp = HttpResponse(content_type='text/csv')
+        fname = f"{event_name.replace(' ', '_')}_{report_type}_{datetime.now().strftime('%Y%m%d')}.csv"
+        resp['Content-Disposition'] = f'attachment; filename="{fname}"'
+        writer = csv_mod.writer(resp)
+        writer.writerow(['Event', 'Report Type', 'Generated By', 'Date'])
+        writer.writerow([event_name, report_type, request.user.username, datetime.now().strftime('%Y-%m-%d %H:%M')])
+        return resp
+    else:
+        from core.reports_generator import generate_pdf_report
+        stream = generate_pdf_report(event_name, 'all', None, None, [])
+        fname = f"{event_name.replace(' ', '_')}_{report_type}_{datetime.now().strftime('%Y%m%d')}.pdf"
+        resp = HttpResponse(stream.read(), content_type='application/pdf')
+        resp['Content-Disposition'] = f'attachment; filename="{fname}"'
+        return resp
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda u: user_has_role(u, 'tabulator'), login_url='login')
+def tabulator_verify_lock(request, sheet_id):
+    """Verify and lock a score sheet."""
+    from events.models import ScoreSheet
+    if request.method == 'POST':
+        try:
+            sheet = ScoreSheet.objects.get(id=sheet_id)
+            sheet.status = 'finalized'
+            sheet.tabulator = request.user
+            sheet.save()
+        except ScoreSheet.DoesNotExist:
+            pass
+    return redirect(f"{'/tabulator/review/'}?sheet={sheet_id}")
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda u: user_has_role(u, 'tabulator'), login_url='login')
+def tabulator_request_changes(request, sheet_id):
+    """Request changes on a score sheet — revert to pending."""
+    from events.models import ScoreSheet
+    if request.method == 'POST':
+        try:
+            sheet = ScoreSheet.objects.get(id=sheet_id)
+            sheet.status = 'pending'
+            sheet.save()
+        except ScoreSheet.DoesNotExist:
+            pass
+    return redirect(f"{'/tabulator/review/'}")
+    """AJAX/POST endpoint to save encoded scores for a sheet."""
+    from events.models import ScoreSheet
+    if request.method != 'POST':
+        return redirect('tabulator_encode_score')
+    try:
+        sheet = ScoreSheet.objects.get(id=sheet_id)
+        action = request.POST.get('action', 'save')
+        if action == 'mark_encoded':
+            sheet.status = 'confirmed'
+            sheet.tabulator = request.user
+            sheet.save()
+        else:
+            sheet.tabulator = request.user
+            sheet.save()
+    except ScoreSheet.DoesNotExist:
+        pass
+    return redirect(f"{'/tabulator/encode/'}?sheet={sheet_id}")
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda u: user_has_role(u, 'tabulator'), login_url='login')
+def tabulator_review(request):
+    """Review & Verify — detail view for a sheet or list of encoded sheets."""
+    from events.models import ScoreSheet, Event, BracketTeam, JudgingEvent, Criterion, JudgeScore, Candidate
+
+    sheet_id = request.GET.get('sheet', '').strip()
+    current_event = Event.objects.filter(status='active').order_by('-event_date').first()
+
+    review_sheet = None
+    review_teams = []
+    review_criteria = []
+    revision_history = []
+    total_possible_pts = 0
+    encoded_teams = 0
+
+    if sheet_id and sheet_id.isdigit():
+        try:
+            s = ScoreSheet.objects.select_related('event', 'match', 'tabulator').get(id=int(sheet_id))
+            idx = ScoreSheet.objects.filter(created_at__lte=s.created_at).count()
+            review_sheet = {
+                'id': s.id,
+                'ss_id': f'SS-{s.created_at.year}-{str(idx).zfill(3)}',
+                'event_name': s.event.name,
+                'category': s.event.category,
+                'judge_name': s.judges_names or 'Unknown Judge',
+                'date_received': s.created_at.strftime('%b %d, %Y %I:%M %p'),
+                'status': s.status,
+                'status_label': s.get_status_display(),
+            }
+
+            # Try to get criteria from linked JudgingEvent
+            judging_event = getattr(s.event, 'judging_event', None)
+            if judging_event:
+                criteria_qs = Criterion.objects.filter(event=judging_event).order_by('order')
+                for c in criteria_qs:
+                    review_criteria.append({'id': c.id, 'name': c.name, 'max_score': int(c.max_score)})
+                total_possible_pts = sum(c['max_score'] for c in review_criteria)
+
+                # Build team rows from Candidates + JudgeScores
+                candidates = Candidate.objects.filter(event=judging_event).order_by('number')
+                for cand in candidates:
+                    scores_qs = JudgeScore.objects.filter(candidate=cand).select_related('criterion')
+                    score_map = {sc.criterion_id: sc.score for sc in scores_qs}
+                    score_values = [int(score_map.get(c['id'], 0)) for c in review_criteria]
+                    total = sum(score_values)
+                    # Consistency: if any score was revised (is_locked=False after submission) mark revised
+                    has_revision = scores_qs.filter(is_locked=False).exists()
+                    consistency = 'revised' if has_revision else 'consistent'
+                    review_teams.append({
+                        'id': cand.id,
+                        'name': f'#{cand.number} {cand.name}',
+                        'score_values': score_values,
+                        'total': total,
+                        'consistency': consistency,
+                    })
+            else:
+                # Fallback: use BracketTeams with scores from ScoreSheet aggregate
+                teams_qs = BracketTeam.objects.filter(event=s.event).select_related('department')
+                for team in teams_qs:
+                    review_teams.append({
+                        'id': team.id,
+                        'name': team.name,
+                        'score_values': [],
+                        'total': '—',
+                        'consistency': 'consistent',
+                    })
+                total_possible_pts = 100
+
+            encoded_teams = len(review_teams)
+
+            # Revision history from LogEntry
+            from django.contrib.admin.models import LogEntry
+            for log in LogEntry.objects.filter(object_id=str(s.id)).select_related('user').order_by('-action_time')[:10]:
+                revision_history.append({
+                    'date': log.action_time.strftime('%b %d, %Y %I:%M %p'),
+                    'action_label': log.change_message or 'Updated',
+                    'action_type': 'revised',
+                    'details': log.object_repr,
+                    'by': log.user.username if log.user else 'System',
+                })
+        except ScoreSheet.DoesNotExist:
+            pass
+
+    # List view (no sheet selected)
+    event_filter = request.GET.get('event', 'all').strip()
+    search_q = request.GET.get('q', '').strip().lower()
+    sheets_qs = ScoreSheet.objects.select_related('event', 'match', 'tabulator').filter(
+        status__in=('confirmed', 'finalized')).order_by('-created_at')
+    if event_filter != 'all':
+        sheets_qs = sheets_qs.filter(event__name=event_filter)
+    all_sheets = list(sheets_qs)
+    if search_q:
+        all_sheets = [s for s in all_sheets if search_q in s.event.name.lower()]
+
+    total_encoded = len(all_sheets)
+    pending_review = sum(1 for s in all_sheets if s.status == 'confirmed')
+    discrepancies = 0
+    verified_count = sum(1 for s in all_sheets if s.status == 'finalized')
+
+    review_rows = []
+    for i, s in enumerate(all_sheets):
+        ss_id = f'SS-{s.created_at.year}-{str(i + 1).zfill(3)}'
+        review_rows.append({
+            'id': s.id, 'ss_id': ss_id,
+            'event_name': s.event.name, 'category': s.event.category,
+            'judge_name': s.judges_names or 'Unknown Judge',
+            'encoded_by': s.tabulator.username if s.tabulator else 'Unknown',
+            'encoded_at': s.updated_at.strftime('%b %d, %Y %I:%M %p'),
+            'status': s.status, 'status_label': s.get_status_display(),
+        })
+
+    events = list(Event.objects.values_list('name', flat=True).order_by('name'))
+
+    return render(request, 'tabulatordash/review.html', {
+        'display_name': _tabulator_display_name(request.user),
+        'current_event': current_event,
+        'review_sheet': review_sheet,
+        'review_teams': review_teams,
+        'review_criteria': review_criteria,
+        'revision_history': revision_history,
+        'total_possible_pts': total_possible_pts or 100,
+        'encoded_teams': encoded_teams,
+        'total_encoded': total_encoded,
+        'pending_review': pending_review,
+        'discrepancies': discrepancies,
+        'verified_count': verified_count,
+        'review_rows': review_rows,
+        'events': events,
+        'selected_event': event_filter,
+        'search_query': search_q,
+    })
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda u: user_has_role(u, 'tabulator'), login_url='login')
+def tabulator_results(request):
+    """Results — finalized rankings per event."""
+    from events.models import Event, ScoreSheet, BracketTeam
+
+    event_filter = request.GET.get('event', 'all').strip()
+    export_fmt = request.GET.get('export', '').strip().lower()
+    events = list(Event.objects.order_by('name'))
+    current_event = Event.objects.filter(status='active').order_by('-event_date').first()
+
+    sheets_qs = ScoreSheet.objects.select_related('event', 'match', 'winner').filter(status='finalized')
+    if event_filter != 'all' and event_filter.isdigit():
+        sheets_qs = sheets_qs.filter(event_id=int(event_filter))
+
+    team_scores = {}
+    for s in sheets_qs:
+        if s.winner:
+            key = (s.event_id, s.winner.id)
+            team_scores.setdefault(key, {
+                'team_name': s.winner.name,
+                'event_name': s.event.name,
+                'category': s.event.category,
+                'department': s.winner.department.name if s.winner.department else '',
+                'total_score': 0,
+            })
+            team_scores[key]['total_score'] += float(s.score_team_a or 0)
+
+    sorted_teams = sorted(team_scores.values(), key=lambda x: x['total_score'], reverse=True)
+    result_rows = []
+    for rank, row in enumerate(sorted_teams, start=1):
+        result_rows.append({
+            'rank': rank,
+            'team_name': row['team_name'],
+            'event_name': row['event_name'],
+            'category': row['category'],
+            'department': row['department'],
+            'total_score': f"{row['total_score']:.2f}",
+        })
+
+    # Event info for header card
+    scores = [float(r['total_score']) for r in result_rows]
+    event_info = {
+        'name': sorted_teams[0]['event_name'] if sorted_teams else '—',
+        'category': sorted_teams[0]['category'] if sorted_teams else '—',
+        'date_range': current_event.schedule_label if current_event else '—',
+        'ss_id': 'SS-2025-001',
+        'judge': '—',
+        'judge_count': 1,
+        'criteria_count': 5,
+        'total_pts': 100,
+        'highest_score': f"{max(scores):.2f}" if scores else '0.00',
+        'lowest_score': f"{min(scores):.2f}" if scores else '0.00',
+        'avg_score': f"{sum(scores)/len(scores):.2f}" if scores else '0.00',
+    }
+
+    # Score distribution buckets
+    buckets = {'90-100': 0, '80-89': 0, '70-79': 0, 'Below 70': 0}
+    for s in scores:
+        if s >= 90: buckets['90-100'] += 1
+        elif s >= 80: buckets['80-89'] += 1
+        elif s >= 70: buckets['70-79'] += 1
+        else: buckets['Below 70'] += 1
+    dist_data = {'labels': list(buckets.keys()), 'values': list(buckets.values())}
+
+    # Audit logs
+    from django.contrib.admin.models import LogEntry
+    audit_logs = []
+    for log in LogEntry.objects.select_related('user').order_by('-action_time')[:10]:
+        audit_logs.append({
+            'date': log.action_time.strftime('%b %d, %Y %I:%M %p'),
+            'action': log.change_message or 'Updated',
+            'user': log.user.username if log.user else 'System',
+        })
+
+    return render(request, 'tabulatordash/results.html', {
+        'display_name': _tabulator_display_name(request.user),
+        'current_event': current_event,
+        'result_rows': result_rows,
+        'events': events,
+        'selected_event': event_filter,
+        'event_info': event_info,
+        'is_locked': bool(result_rows),
+        'dist_data_json': json.dumps(dist_data),
+        'audit_logs': audit_logs,
+    })
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda u: user_has_role(u, 'tabulator'), login_url='login')
+def tabulator_activity_logs(request):
+    """Tabulator activity logs — audit trail from Django LogEntry."""
+    from django.contrib.admin.models import LogEntry, ADDITION, CHANGE, DELETION
+    from django.core.paginator import Paginator
+    from django.utils import timezone
+
+    search_q = request.GET.get('q', '').strip()
+    selected_user = request.GET.get('user', 'all').strip()
+    selected_action = request.GET.get('action', 'all').strip()
+
+    logs_qs = LogEntry.objects.select_related('user').order_by('-action_time')
+    if selected_user != 'all' and selected_user.isdigit():
+        logs_qs = logs_qs.filter(user_id=int(selected_user))
+    if selected_action == 'addition':
+        logs_qs = logs_qs.filter(action_flag=ADDITION)
+    elif selected_action == 'change':
+        logs_qs = logs_qs.filter(action_flag=CHANGE)
+    elif selected_action == 'deletion':
+        logs_qs = logs_qs.filter(action_flag=DELETION)
+    if search_q:
+        from django.db.models import Q
+        logs_qs = logs_qs.filter(
+            Q(user__username__icontains=search_q)
+            | Q(object_repr__icontains=search_q)
+            | Q(change_message__icontains=search_q)
+        )
+
+    action_label_map = {ADDITION: 'Added', CHANGE: 'Changed', DELETION: 'Deleted'}
+    action_type_map = {ADDITION: 'addition', CHANGE: 'change', DELETION: 'deletion'}
+    now = timezone.now()
+    today = timezone.localdate()
+
+    log_rows = []
+    for log in logs_qs[:200]:
+        delta = now - log.action_time
+        if delta.days >= 1:
+            ago = f'{delta.days}d ago'
+        elif delta.seconds >= 3600:
+            ago = f'{delta.seconds // 3600}h ago'
+        elif delta.seconds >= 60:
+            ago = f'{delta.seconds // 60}m ago'
+        else:
+            ago = 'just now'
+        log_rows.append({
+            'action_label': action_label_map.get(log.action_flag, 'Updated'),
+            'action_type': action_type_map.get(log.action_flag, 'default'),
+            'user': log.user.username if log.user else 'System',
+            'object_repr': log.object_repr,
+            'details': log.change_message or log.object_repr,
+            'event_name': '—',
+            'ip_address': '—',
+            'date': log.action_time.strftime('%b %d, %Y %I:%M %p'),
+            'ago': ago,
+        })
+
+    paginator = Paginator(log_rows, 10)
+    page_obj = paginator.get_page(request.GET.get('page', 1))
+
+    # KPI
+    total_activities = LogEntry.objects.count()
+    users_involved = LogEntry.objects.values('user').distinct().count()
+    today_activities = LogEntry.objects.filter(action_time__date=today).count()
+    critical_actions = LogEntry.objects.filter(action_flag=DELETION).count()
+
+    log_users = get_user_model().objects.filter(
+        id__in=LogEntry.objects.values_list('user_id', flat=True)
+    ).order_by('username')
+
+    current_event = None
+    from events.models import Event
+    current_event = Event.objects.filter(status='active').order_by('-event_date').first()
+
+    return render(request, 'tabulatordash/tabactivitylogs.html', {
+        'display_name': _tabulator_display_name(request.user),
+        'current_event': current_event,
+        'log_rows': page_obj.object_list,
+        'page_obj': page_obj,
+        'total_count': len(log_rows),
+        'total_activities': total_activities,
+        'users_involved': users_involved,
+        'today_activities': today_activities,
+        'today_label': today.strftime('%b %d, %Y'),
+        'critical_actions': critical_actions,
+        'log_users': log_users,
+        'selected_user': selected_user,
+        'selected_action': selected_action,
+        'search_query': search_q,
     })
 
 
