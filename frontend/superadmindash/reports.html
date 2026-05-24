@@ -5,40 +5,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Reports - EventTab</title>
+  <link rel="stylesheet" href="{% static 'superadmindash/superadmin_dashboard.css' %}?v=20260524a">
   <link rel="stylesheet" href="{% static 'reports.css' %}">
+  <link rel="stylesheet" href="{% static 'admin_v2.css' %}?v=20260524b">
 </head>
-<body class="reports-page">
+<body class="reports-page admin-v2-page">
   <div class="reports-shell">
-    <aside class="sidebar" aria-label="Super admin navigation">
-      <div class="brand">
-        <h1>EventTab</h1>
-        <span>Super Admin Portal</span>
-      </div>
-
-      <nav class="side-nav">
-        <a href="{% url 'superadmin_dashboard' %}">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm9 0h7v7h-7v-7Z"></path></svg>
-          <span>Dashboard</span>
-        </a>
-        <a href="{% url 'superadmin_admins' %}">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 11c1.66 0 3-1.57 3-3.5S17.66 4 16 4s-3 1.57-3 3.5 1.34 3.5 3 3.5ZM8 11c1.66 0 3-1.57 3-3.5S9.66 4 8 4 5 5.57 5 7.5 6.34 11 8 11Zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 14.17 10.33 13 8 13Zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5Z"></path></svg>
-          <span>Admins</span>
-        </a>
-        <a class="active" href="{% url 'superadmin_reports' %}">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm2 4v10h10V7H7Zm2 2h2v6H9V9Zm4 3h2v3h-2v-3Z"></path></svg>
-          <span>Reports</span>
-        </a>
-        <a href="{% url 'superadmin_activity_logs' %}">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 3a9 9 0 1 1-8.74 11.19l1.94-.49A7 7 0 1 0 13 5v4L7.5 3.5 13-2v5Zm-1 6h2v5l4 2-.9 1.79L12 15V9Z"></path></svg>
-          <span>Activity Logs</span>
-        </a>
-      </nav>
-
-      <a class="logout-link" href="{% url 'logout' %}">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17v-3H3v-4h7V7l5 5-5 5Zm2-14h8v18h-8v-2h6V5h-6V3Z"></path></svg>
-        <span>Logout</span>
-      </a>
-    </aside>
+    {% include 'superadmindash/_sidebar.html' with active='reports' %}
 
     <div class="content-area">
       <header class="topbar">
@@ -110,11 +83,13 @@
               <label>
                 <span>Select Event</span>
                 <select name="event" required>
-                  {% for event in events %}
-                    <option>{{ event }}</option>
-                  {% empty %}
-                    <option>No events available</option>
-                  {% endfor %}
+                  {% if events %}
+                    {% for event in events %}
+                      <option value="{{ event }}">{{ event }}</option>
+                    {% endfor %}
+                  {% else %}
+                    <option value="" disabled selected>No events available — create events first</option>
+                  {% endif %}
                 </select>
               </label>
 
@@ -133,6 +108,8 @@
                   <option value="all">All Departments</option>
                   {% for department_name in department_names %}
                     <option value="{{ department_name }}">{{ department_name }}</option>
+                  {% empty %}
+                    <option value="" disabled>No departments found</option>
                   {% endfor %}
                 </select>
               </label>

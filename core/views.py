@@ -2386,13 +2386,11 @@ def superadmin_reports(request):
         activity_log_count_label = str(activity_log_count)
 
     department_names = list(
-        Group.objects.exclude(name__in=['Admin', 'Tabulator', 'Judge', 'Judges', 'Viewers']).order_by('name').values_list('name', flat=True)
+        Department.objects.filter(status='active').order_by('name').values_list('name', flat=True)
     )
     
-    # Dynamic Event Loading
+    # Dynamic Event Loading — only real events from the database
     events = list(Event.objects.all().order_by('-event_date').values_list('name', flat=True))
-    if not events:
-        events = ['National Science Decathlon 2024']
 
     total_events_count = Event.objects.count() or 1
     critical_logs_count = LogEntry.objects.filter(action_flag=DELETION).count()

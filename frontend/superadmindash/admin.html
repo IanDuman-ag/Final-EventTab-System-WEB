@@ -5,298 +5,603 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Admin Accounts - EventTab</title>
-  <link rel="stylesheet" href="{% static 'admin.css' %}?v=20260510a">
+  <link rel="stylesheet" href="{% static 'superadmindash/superadmin_dashboard.css' %}?v=20260524a">
+  <link rel="stylesheet" href="{% static 'admin.css' %}?v=20260524a">
+  <link rel="stylesheet" href="{% static 'admin_v2.css' %}?v=20260524b">
 </head>
-<body class="admin-page">
-  <div class="admin-shell">
-    <aside class="sidebar" aria-label="Super admin navigation">
-      <div class="brand">
-        <h1>EventTab</h1>
-        <span>Super Admin Portal</span>
-      </div>
+<body class="superadmin-dashboard-page admin-v2-page">
+  <div class="dashboard-shell">
 
-      <nav class="side-nav">
-        <a href="{% url 'superadmin_dashboard' %}">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm9 0h7v7h-7v-7Z"></path></svg>
-          <span>Dashboard</span>
-        </a>
-        <a class="active" href="{% url 'superadmin_admins' %}">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 11c1.66 0 3-1.57 3-3.5S17.66 4 16 4s-3 1.57-3 3.5 1.34 3.5 3 3.5ZM8 11c1.66 0 3-1.57 3-3.5S9.66 4 8 4 5 5.57 5 7.5 6.34 11 8 11Zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 14.17 10.33 13 8 13Zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5Z"></path></svg>
-          <span>Admins</span>
-        </a>
-        <a href="{% url 'superadmin_reports' %}">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14a2 2 0 0 1 2 2v14l-4-3H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm2 4v2h10V7H7Zm0 4v2h7v-2H7Z"></path></svg>
-          <span>Reports</span>
-        </a>
-        <a href="{% url 'superadmin_activity_logs' %}">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 3a9 9 0 1 1-8.74 11.19l1.94-.49A7 7 0 1 0 13 5v4L7.5 3.5 13-2v5Zm-1 6h2v5l4 2-.9 1.79L12 15V9Z"></path></svg>
-          <span>Activity Logs</span>
-        </a>
-      </nav>
+    <!-- ── Sidebar ─────────────────────────────────────────────── -->
+    {% include 'superadmindash/_sidebar.html' with active='admins' %}
 
-      <a class="logout-link" href="{% url 'logout' %}">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17v-3H3v-4h7V7l5 5-5 5Zm2-14h8v18h-8v-2h6V5h-6V3Z"></path></svg>
-        <span>Logout</span>
-      </a>
-    </aside>
-
-    <div class="content-area">
-      <header class="topbar">
-        <div></div>
-        <div class="topbar-actions">
-          <a class="icon-button" href="{% url 'superadmin_activity_logs' %}" aria-label="Notifications">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm8-6-2-2v-5a6 6 0 1 0-12 0v5l-2 2v1h16v-1Z"></path></svg>
+    <!-- ── Main Content ─────────────────────────────────────────── -->
+    <div class="content-area v2sa-content">
+      <header class="v2sa-topbar">
+        <div>
+          <h2 class="v2sa-page-title">Admin Accounts</h2>
+          <p class="v2sa-page-sub">Manage admin users, roles, permissions and account security.</p>
+        </div>
+        <div class="v2sa-topbar-right">
+          <a class="v2sa-bell" href="{% url 'superadmin_activity_logs' %}" aria-label="Activity logs">
+            <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm8-6-2-2v-5a6 6 0 1 0-12 0v5l-2 2v1h16v-1Z"/></svg>
+            <span class="v2sa-bell-dot"></span>
           </a>
-          <div class="profile-avatar" aria-label="{{ request.user.username }}">
-            {{ request.user.username|default:"SA"|slice:":2"|upper }}
-          </div>
+          <div class="v2sa-avatar-pill">{{ request.user.username|default:"SA"|slice:":2"|upper }}</div>
+          <button type="button" class="v2sa-add-btn" id="open-create-admin-modal">
+            <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2Z"/></svg>
+            + Add Admin
+          </button>
         </div>
       </header>
 
-      <main class="admin-main">
-        <section class="page-heading">
-          <div>
-            <h2>Admin Accounts</h2>
-            <p>
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 10 10A10.01 10.01 0 0 0 12 2Zm1 15h-2v-6h2v6Zm0-8h-2V7h2v2Z"></path></svg>
-              Showing {{ admin_count|default:"0" }} of {{ total_admin_count|default:"0" }} administrators across {{ department_count|default:"0" }} departments
-            </p>
-          </div>
-          <button class="create-admin-btn" type="button" id="open-create-admin-modal">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2Z"></path></svg>
-            <span>Create New Admin Account</span>
-          </button>
-        </section>
-
-        <section class="metrics-grid" aria-label="Admin summary cards">
-          <article class="metric-card">
-            <span>Filtered Results</span>
-            <strong>{{ admin_count|default:"0" }}</strong>
+      <main class="v2sa-main">
+        <!-- Metric cards -->
+        <section class="v2sa-metrics">
+          <article class="v2sa-metric">
+            <div class="v2sa-metric-icon" style="background:#dbeafe;color:#1e40af">
+              <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M16 11c1.66 0 3-1.57 3-3.5S17.66 4 16 4s-3 1.57-3 3.5 1.34 3.5 3 3.5ZM8 11c1.66 0 3-1.57 3-3.5S9.66 4 8 4 5 5.57 5 7.5 6.34 11 8 11Zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 14.17 10.33 13 8 13Zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5Z"/></svg>
+            </div>
+            <div>
+              <span class="v2sa-metric-label">Total Admins</span>
+              <strong class="v2sa-metric-value">{{ total_admin_count|default:"0" }}</strong>
+              <small class="v2sa-metric-foot">100% of all users</small>
+            </div>
           </article>
-          <article class="metric-card">
-            <span>Total Administrators</span>
-            <strong>{{ total_admin_count|default:"0" }}</strong>
+          <article class="v2sa-metric">
+            <div class="v2sa-metric-icon" style="background:#d1fae5;color:#065f46">
+              <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+            </div>
+            <div>
+              <span class="v2sa-metric-label">Active Admins</span>
+              <strong class="v2sa-metric-value" id="activeAdminCount">—</strong>
+              <small class="v2sa-metric-foot v2sa-metric-foot--good" id="activePct">—</small>
+            </div>
           </article>
-          <article class="metric-card">
-            <span>Departments</span>
-            <strong>{{ department_count|default:"0" }}</strong>
+          <article class="v2sa-metric">
+            <div class="v2sa-metric-icon" style="background:#fee2e2;color:#991b1b">
+              <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4Zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4Z"/></svg>
+            </div>
+            <div>
+              <span class="v2sa-metric-label">Inactive Admins</span>
+              <strong class="v2sa-metric-value" id="inactiveAdminCount">—</strong>
+              <small class="v2sa-metric-foot v2sa-metric-foot--bad" id="inactivePct">—</small>
+            </div>
+          </article>
+          <article class="v2sa-metric">
+            <div class="v2sa-metric-icon" style="background:#ede9fe;color:#5b21b6">
+              <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/></svg>
+            </div>
+            <div>
+              <span class="v2sa-metric-label">Roles</span>
+              <strong class="v2sa-metric-value">4</strong>
+              <small class="v2sa-metric-foot">Super Admin, Admin…</small>
+            </div>
+          </article>
+          <article class="v2sa-metric">
+            <div class="v2sa-metric-icon" style="background:#ffedd5;color:#9a3412">
+              <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M4 21V9h5V3h6v8h5v10H4Zm2-2h3v-3H6v3Zm0-5h3v-3H6v3Zm5 5h2v-3h-2v3Zm0-5h2v-3h-2v3Zm0-5h2V5h-2v4Zm4 10h3v-3h-3v3Zm0-5h3v-1h-3v1Z"/></svg>
+            </div>
+            <div>
+              <span class="v2sa-metric-label">Departments</span>
+              <strong class="v2sa-metric-value">{{ department_count|default:"0" }}</strong>
+              <small class="v2sa-metric-foot">Across organization</small>
+            </div>
           </article>
         </section>
 
-        <section class="filters-card" aria-label="Admin filters">
-          <form class="filters" method="get">
-            <span>Filters:</span>
-            <input type="text" name="q" value="{{ search_query }}" placeholder="Search username, email, department" aria-label="Search admins">
-            <select name="department" aria-label="Filter by department">
-              <option value="">All Departments</option>
-              {% for department_name in department_names %}
-                <option value="{{ department_name }}" {% if selected_department == department_name %}selected{% endif %}>{{ department_name }}</option>
-              {% endfor %}
-            </select>
-            <select name="role" aria-label="Filter by role">
-              <option value="">Any Role</option>
-              <option value="Admin" {% if selected_role == 'Admin' %}selected{% endif %}>Admin</option>
-              <option value="Super Admin" {% if selected_role == 'Super Admin' %}selected{% endif %}>Super Admin</option>
-            </select>
-            <select name="status" aria-label="Filter by status">
-              <option value="">Any Status</option>
-              <option value="Active" {% if selected_status == 'Active' %}selected{% endif %}>Active</option>
-              <option value="Deactivated" {% if selected_status == 'Deactivated' %}selected{% endif %}>Deactivated</option>
-            </select>
-            <input type="hidden" name="sort" value="{{ sort }}">
-            <input type="hidden" name="dir" value="{{ dir }}">
-            <button class="filter-btn" type="submit">Apply</button>
-            <a class="reset-btn" href="{% url 'superadmin_admins' %}">Reset</a>
-          </form>
-        </section>
+        <!-- Two-column: table + sidebar -->
+        <div class="v2sa-body-grid">
+          <!-- ── Table column ─────────────────────────────────────── -->
+          <div class="v2sa-table-col">
+            <!-- Filters -->
+            <form class="v2sa-filters" method="get" id="filterForm">
+              <div class="v2sa-search-wrap">
+                <svg viewBox="0 0 24 24" width="16" height="16"><path fill="#94a3b8" d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5Zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14Z"/></svg>
+                <input type="text" name="q" value="{{ search_query }}" placeholder="Search by name, email…" class="v2sa-search-input">
+              </div>
+              <select name="department" class="v2sa-filter-select">
+                <option value="">All Departments</option>
+                {% for dept in department_names %}
+                <option value="{{ dept }}" {% if selected_department == dept %}selected{% endif %}>{{ dept }}</option>
+                {% endfor %}
+              </select>
+              <select name="role" class="v2sa-filter-select">
+                <option value="">All Roles</option>
+                <option value="Admin" {% if selected_role == 'Admin' %}selected{% endif %}>Admin</option>
+                <option value="Super Admin" {% if selected_role == 'Super Admin' %}selected{% endif %}>Super Admin</option>
+              </select>
+              <select name="status" class="v2sa-filter-select">
+                <option value="">All Statuses</option>
+                <option value="Active" {% if selected_status == 'Active' %}selected{% endif %}>Active</option>
+                <option value="Deactivated" {% if selected_status == 'Deactivated' %}selected{% endif %}>Deactivated</option>
+              </select>
+              <input type="hidden" name="sort" value="{{ sort }}">
+              <input type="hidden" name="dir" value="{{ dir }}">
+              <button type="submit" class="v2sa-apply-btn">Apply</button>
+              <a href="{% url 'superadmin_admins' %}" class="v2sa-reset-btn">
+                <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M17.65 6.35A7.95 7.95 0 0 0 12 4a8 8 0 1 0 7.74 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+                Reset
+              </a>
+            </form>
 
-        <section class="bulk-actions-card" aria-label="Bulk actions">
-          <section class="bulk-actions" aria-label="Bulk actions">
-          <button id="bulk-deactivate-btn" class="bulk-btn" type="button" disabled>Deactivate Selected</button>
-          <span id="selected-count">0 selected</span>
-          </section>
-        </section>
+            <!-- Bulk actions bar -->
+            <div class="v2sa-bulk-bar">
+              <div class="v2sa-bulk-left">
+                <select class="v2sa-bulk-select" id="bulkActionSelect">
+                  <option value="">Bulk Actions</option>
+                  <option value="deactivate">Deactivate Selected</option>
+                  <option value="activate">Activate Selected</option>
+                </select>
+                <button type="button" class="v2sa-apply-btn" id="applyBulkBtn">Apply</button>
+                <span class="v2sa-selected-count" id="selectedCount">0 selected</span>
+              </div>
+            </div>
 
-        <section class="admin-table-card">
-          <div class="table-scroll">
-            <table class="admin-table">
-              <thead>
-                <tr>
-                  <th>
-                    <input id="select-all-admins" type="checkbox" aria-label="Select all admins">
-                  </th>
-                  <th>
-                    <a class="sort-link" href="?q={{ search_query|urlencode }}&department={{ selected_department|urlencode }}&role={{ selected_role|urlencode }}&status={{ selected_status|urlencode }}&sort=username&dir={% if sort == 'username' and dir == 'asc' %}desc{% else %}asc{% endif %}">
-                      Name {% if sort == 'username' %}{% if dir == 'asc' %}↑{% else %}↓{% endif %}{% endif %}
-                    </a>
-                  </th>
-
-                  <th>
-                    <a class="sort-link" href="?q={{ search_query|urlencode }}&department={{ selected_department|urlencode }}&role={{ selected_role|urlencode }}&status={{ selected_status|urlencode }}&sort=role&dir={% if sort == 'role' and dir == 'asc' %}desc{% else %}asc{% endif %}">
-                      Role {% if sort == 'role' %}{% if dir == 'asc' %}↑{% else %}↓{% endif %}{% endif %}
-                    </a>
-                  </th>
-                  <th>
-                    <a class="sort-link" href="?q={{ search_query|urlencode }}&department={{ selected_department|urlencode }}&role={{ selected_role|urlencode }}&status={{ selected_status|urlencode }}&sort=status&dir={% if sort == 'status' and dir == 'asc' %}desc{% else %}asc{% endif %}">
-                      Status {% if sort == 'status' %}{% if dir == 'asc' %}↑{% else %}↓{% endif %}{% endif %}
-                    </a>
-                  </th>
-                  <th>
-                    <a class="sort-link" href="?q={{ search_query|urlencode }}&department={{ selected_department|urlencode }}&role={{ selected_role|urlencode }}&status={{ selected_status|urlencode }}&sort=last_login&dir={% if sort == 'last_login' and dir == 'asc' %}desc{% else %}asc{% endif %}">
-                      Last Login {% if sort == 'last_login' %}{% if dir == 'asc' %}↑{% else %}↓{% endif %}{% endif %}
-                    </a>
-                  </th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for row in admin_rows %}
-                  <tr
-                    data-admin-id="{{ row.user.id }}"
-                    data-admin-name="{{ row.user.username }}"
-                    data-admin-email="{{ row.user.email|default:'' }}"
-                    data-admin-department="{{ row.department }}"
-                    data-admin-role="{{ row.role }}"
-                    data-status="{{ row.status|lower }}"
-                  >
-                    <td data-label="Select">
-                      <input class="admin-checkbox" type="checkbox" value="{{ row.user.id }}" {% if row.status != 'Active' %}disabled{% endif %} aria-label="Select {{ row.user.username }}">
+            <!-- Table -->
+            <div class="v2sa-table-wrap">
+              <table class="v2sa-table">
+                <thead>
+                  <tr>
+                    <th><input type="checkbox" id="selectAll" aria-label="Select all"></th>
+                    <th class="v2sa-th-icon"></th>
+                    <th>
+                      <a class="v2sa-sort-link" href="?q={{ search_query|urlencode }}&department={{ selected_department|urlencode }}&role={{ selected_role|urlencode }}&status={{ selected_status|urlencode }}&sort=username&dir={% if sort == 'username' and dir == 'asc' %}desc{% else %}asc{% endif %}">
+                        ADMIN {% if sort == 'username' %}<span class="v2sa-sort-arrow">{% if dir == 'asc' %}↑{% else %}↓{% endif %}</span>{% endif %}
+                      </a>
+                    </th>
+                    <th>
+                      <a class="v2sa-sort-link" href="?q={{ search_query|urlencode }}&department={{ selected_department|urlencode }}&role={{ selected_role|urlencode }}&status={{ selected_status|urlencode }}&sort=role&dir={% if sort == 'role' and dir == 'asc' %}desc{% else %}asc{% endif %}">
+                        ROLE {% if sort == 'role' %}<span class="v2sa-sort-arrow">{% if dir == 'asc' %}↑{% else %}↓{% endif %}</span>{% endif %}
+                      </a>
+                    </th>
+                    <th>
+                      <a class="v2sa-sort-link" href="?q={{ search_query|urlencode }}&department={{ selected_department|urlencode }}&role={{ selected_role|urlencode }}&status={{ selected_status|urlencode }}&sort=status&dir={% if sort == 'status' and dir == 'asc' %}desc{% else %}asc{% endif %}">
+                        STATUS {% if sort == 'status' %}<span class="v2sa-sort-arrow">{% if dir == 'asc' %}↑{% else %}↓{% endif %}</span>{% endif %}
+                      </a>
+                    </th>
+                    <th>
+                      <a class="v2sa-sort-link" href="?q={{ search_query|urlencode }}&department={{ selected_department|urlencode }}&role={{ selected_role|urlencode }}&status={{ selected_status|urlencode }}&sort=last_login&dir={% if sort == 'last_login' and dir == 'asc' %}desc{% else %}asc{% endif %}">
+                        LAST LOGIN {% if sort == 'last_login' %}<span class="v2sa-sort-arrow">{% if dir == 'asc' %}↑{% else %}↓{% endif %}</span>{% endif %}
+                      </a>
+                    </th>
+                    <th>ACTIONS</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in admin_rows %}
+                  <tr data-admin-id="{{ row.user.id }}" data-admin-name="{{ row.user.username }}" data-admin-email="{{ row.user.email|default:'' }}" data-admin-department="{{ row.department }}" data-admin-role="{{ row.role }}" data-status="{{ row.status|lower }}">
+                    <td><input type="checkbox" class="v2sa-row-check" value="{{ row.user.id }}" aria-label="Select {{ row.user.username }}"></td>
+                    <td>
+                      <div class="v2sa-row-avatar">{{ row.user.username|slice:":2"|upper }}</div>
                     </td>
-                    <td data-label="Name">
-                      <div class="admin-identity">
-                        <div class="admin-avatar">{{ row.user.username|slice:":2"|upper }}</div>
-                        <div>
-                          <strong>{{ row.user.username }}</strong>
-                          <span>{{ row.user.email|default:"No email" }}</span>
-                        </div>
+                    <td>
+                      <div class="v2sa-admin-cell">
+                        <strong>{{ row.user.username }}</strong>
+                        <small>{{ row.user.email|default:"No email" }}</small>
                       </div>
                     </td>
-
-                    <td data-label="Role">
-                      <span class="role-badge {% if row.role == 'Super Admin' %}super-role{% endif %}">{{ row.role }}</span>
+                    <td>
+                      <span class="v2sa-role-badge {% if row.role == 'Super Admin' %}v2sa-role--super{% else %}v2sa-role--admin{% endif %}">{{ row.role }}</span>
                     </td>
-                    <td data-label="Status">
-                      <span class="status-badge {% if row.status == 'Active' %}active-status{% else %}inactive-status{% endif %}">
-                        <span></span>
-                        {{ row.status }}
+                    <td>
+                      <span class="v2sa-status-dot {% if row.status == 'Active' %}v2sa-status--active{% else %}v2sa-status--inactive{% endif %}">
+                        <span></span>{{ row.status }}
                       </span>
                     </td>
-                    <td data-label="Last Login" class="last-login">{{ row.last_login }}</td>
-                    <td data-label="Actions">
-                      <div class="table-actions">
-                        <button class="table-action edit-btn" type="button" data-admin-id="{{ row.user.id }}" aria-label="Edit {{ row.user.username }}" title="Edit">
-                          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 17.25 11.06-11.06 3.75 3.75L6.75 21H3v-3.75ZM19.71 8.04 15.96 4.3l1.33-1.33a1 1 0 0 1 1.42 0l2.33 2.33a1 1 0 0 1 0 1.42l-1.33 1.33Z"></path></svg>
+                    <td class="v2sa-last-login">{{ row.last_login }}</td>
+                    <td>
+                      <div class="v2sa-row-actions">
+                        <button type="button" class="v2sa-action-btn view-btn" data-admin-id="{{ row.user.id }}" title="View" aria-label="View {{ row.user.username }}">
+                          <svg viewBox="0 0 24 24" width="15" height="15"><path fill="currentColor" d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5ZM12 17a5 5 0 1 1 0-10 5 5 0 0 1 0 10Zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"/></svg>
                         </button>
-                        <button class="table-action view-btn" type="button" data-admin-id="{{ row.user.id }}" aria-label="View {{ row.user.username }}" title="View">
-                          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5Zm0 12.5a5 5 0 1 1 0-10 5 5 0 0 1 0 10Zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"></path></svg>
+                        <button type="button" class="v2sa-action-btn edit-btn" data-admin-id="{{ row.user.id }}" title="Edit" aria-label="Edit {{ row.user.username }}">
+                          <svg viewBox="0 0 24 24" width="15" height="15"><path fill="currentColor" d="m3 17.25 11.06-11.06 3.75 3.75L6.75 21H3v-3.75ZM19.71 8.04 15.96 4.3l1.33-1.33a1 1 0 0 1 1.42 0l2.33 2.33a1 1 0 0 1 0 1.42l-1.33 1.33Z"/></svg>
                         </button>
-                        {% if row.status == 'Active' %}
-                          <button class="table-action deactivate-btn" type="button" data-admin-id="{{ row.user.id }}" aria-label="Deactivate {{ row.user.username }}" title="Deactivate">
-                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 21q-.82 0-1.41-.59Q5 19.82 5 19V7H4V5h5V4h6v1h5v2h-1v12q0 .82-.59 1.41Q17.82 21 17 21H7Zm2-4h2V9H9v8Zm4 0h2V9h-2v8Z"></path></svg>
-                          </button>
-                        {% else %}
-                          <button class="table-action activate-btn" type="button" data-admin-id="{{ row.user.id }}" aria-label="Activate {{ row.user.username }}" title="Activate">
-                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7-11-7Zm-4 7a8 8 0 1 0 8-8v2a6 6 0 1 1-6 6H4Z"></path></svg>
-                          </button>
-                        {% endif %}
-                        <button class="table-action delete-btn" type="button" data-admin-id="{{ row.user.id }}" aria-label="Delete {{ row.user.username }}" title="Delete">
-                          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm1 7h2v8h-2v-8Zm4 0h2v8h-2v-8ZM6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7Z"></path></svg>
-                        </button>
+                        <button type="button" class="v2sa-action-btn v2sa-action-more" data-admin-id="{{ row.user.id }}" title="More" aria-label="More options">•••</button>
                       </div>
                     </td>
                   </tr>
-                {% empty %}
-                  <tr>
-                    <td class="empty-state" colspan="6">No admin accounts found for your current filters.</td>
-                  </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-        </section>
+                  {% empty %}
+                  <tr><td colspan="7" class="v2sa-empty">No admin accounts found for your current filters.</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
 
-        <section class="pagination-bar" aria-label="Pagination">
-          <span>Showing {{ start_index }} to {{ end_index }} of {{ admin_count|default:"0" }} results</span>
-          <div class="pagination-controls">
-            {% if page_obj.has_previous %}
-              <a href="?q={{ search_query|urlencode }}&department={{ selected_department|urlencode }}&role={{ selected_role|urlencode }}&status={{ selected_status|urlencode }}&sort={{ sort }}&dir={{ dir }}&page={{ page_obj.previous_page_number }}" aria-label="Previous page">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12l4.58-4.59Z"></path></svg>
-              </a>
-            {% endif %}
-            {% for num in page_obj.paginator.page_range %}
-              {% if num >= page_obj.number|add:-2 and num <= page_obj.number|add:2 %}
-                <a class="{% if page_obj.number == num %}active{% endif %}" href="?q={{ search_query|urlencode }}&department={{ selected_department|urlencode }}&role={{ selected_role|urlencode }}&status={{ selected_status|urlencode }}&sort={{ sort }}&dir={{ dir }}&page={{ num }}">{{ num }}</a>
-              {% endif %}
-            {% endfor %}
-            {% if page_obj.has_next %}
-              <a href="?q={{ search_query|urlencode }}&department={{ selected_department|urlencode }}&role={{ selected_role|urlencode }}&status={{ selected_status|urlencode }}&sort={{ sort }}&dir={{ dir }}&page={{ page_obj.next_page_number }}" aria-label="Next page">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.59 16.59 10 18l6-6-6-6-1.41 1.41L13.17 12l-4.58 4.59Z"></path></svg>
-              </a>
-            {% endif %}
-          </div>
-        </section>
+            <!-- Pagination -->
+            <div class="v2sa-pagination">
+              <span>Showing {{ start_index }} to {{ end_index }} of {{ admin_count|default:"0" }} results</span>
+              <div class="v2sa-page-controls">
+                <a class="v2sa-page-btn" href="?q={{ search_query|urlencode }}&department={{ selected_department|urlencode }}&role={{ selected_role|urlencode }}&status={{ selected_status|urlencode }}&sort={{ sort }}&dir={{ dir }}&page=1" aria-label="First">«</a>
+                {% if page_obj.has_previous %}
+                <a class="v2sa-page-btn" href="?q={{ search_query|urlencode }}&department={{ selected_department|urlencode }}&role={{ selected_role|urlencode }}&status={{ selected_status|urlencode }}&sort={{ sort }}&dir={{ dir }}&page={{ page_obj.previous_page_number }}" aria-label="Previous">‹</a>
+                {% endif %}
+                {% for num in page_obj.paginator.page_range %}
+                  {% if num >= page_obj.number|add:-2 and num <= page_obj.number|add:2 %}
+                  <a class="v2sa-page-btn {% if page_obj.number == num %}v2sa-page-btn--active{% endif %}" href="?q={{ search_query|urlencode }}&department={{ selected_department|urlencode }}&role={{ selected_role|urlencode }}&status={{ selected_status|urlencode }}&sort={{ sort }}&dir={{ dir }}&page={{ num }}">{{ num }}</a>
+                  {% endif %}
+                {% endfor %}
+                {% if page_obj.has_next %}
+                <a class="v2sa-page-btn" href="?q={{ search_query|urlencode }}&department={{ selected_department|urlencode }}&role={{ selected_role|urlencode }}&status={{ selected_status|urlencode }}&sort={{ sort }}&dir={{ dir }}&page={{ page_obj.next_page_number }}" aria-label="Next">›</a>
+                {% endif %}
+                <a class="v2sa-page-btn" href="?q={{ search_query|urlencode }}&department={{ selected_department|urlencode }}&role={{ selected_role|urlencode }}&status={{ selected_status|urlencode }}&sort={{ sort }}&dir={{ dir }}&page={{ page_obj.paginator.num_pages }}" aria-label="Last">»</a>
+                <span class="v2sa-per-page">10 / page</span>
+              </div>
+            </div>
+          </div><!-- /table-col -->
+
+          <!-- ── Right sidebar ─────────────────────────────────────── -->
+          <aside class="v2sa-right-sidebar">
+            <div class="v2sa-sidebar-card">
+              <h4 class="v2sa-sidebar-title">Quick Actions</h4>
+              <ul class="v2sa-quick-actions">
+                <li>
+                  <button type="button" class="v2sa-qa-btn" id="open-create-admin-modal-2">
+                    <span class="v2sa-qa-icon" style="background:#dbeafe;color:#1e40af">
+                      <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2Z"/></svg>
+                    </span>
+                    <div>
+                      <strong>Add New Admin</strong>
+                      <small>Create a new admin account</small>
+                    </div>
+                    <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M8.59 16.59 10 18l6-6-6-6-1.41 1.41L13.17 12l-4.58 4.59Z"/></svg>
+                  </button>
+                </li>
+                <li>
+                  <a class="v2sa-qa-btn" href="{% url 'superadmin_reports' %}">
+                    <span class="v2sa-qa-icon" style="background:#ffedd5;color:#9a3412">
+                      <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M5 20h14v-2H5v2Zm7-18-5 5h3v6h4v-6h3l-5-5Z"/></svg>
+                    </span>
+                    <div>
+                      <strong>Export Admins</strong>
+                      <small>Export admin list (CSV)</small>
+                    </div>
+                    <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M8.59 16.59 10 18l6-6-6-6-1.41 1.41L13.17 12l-4.58 4.59Z"/></svg>
+                  </a>
+                </li>
+              </ul>
+            </div>
+
+            <div class="v2sa-sidebar-card">
+              <h4 class="v2sa-sidebar-title">Security Overview</h4>
+              <ul class="v2sa-security-list">
+                <li class="v2sa-sec-item v2sa-sec--green">
+                  <span class="v2sa-sec-icon">✓</span>
+                  <div>
+                    <strong id="secActiveCount">— admins</strong>
+                    <small>Last 30 days login</small>
+                  </div>
+                </li>
+                <li class="v2sa-sec-item v2sa-sec--orange">
+                  <span class="v2sa-sec-icon">!</span>
+                  <div>
+                    <strong>0 pending</strong>
+                    <small>Password reset requests</small>
+                  </div>
+                </li>
+                <li class="v2sa-sec-item v2sa-sec--green">
+                  <span class="v2sa-sec-icon">✓</span>
+                  <div>
+                    <strong>All good</strong>
+                    <small>No suspicious activity</small>
+                  </div>
+                </li>
+              </ul>
+            </div>
+          </aside>
+        </div><!-- /body-grid -->
       </main>
     </div>
   </div>
 
+  <!-- ── Create / Edit Admin Modal ─────────────────────────────── -->
   <div id="admin-modal" class="admin-modal hidden" aria-hidden="true">
     <div class="admin-modal-backdrop" data-close-modal="true"></div>
-    <div class="admin-modal-panel" role="dialog" aria-modal="true" aria-labelledby="admin-modal-title">
-      <div class="admin-modal-header">
+    <div class="admin-modal-panel v2sa-modal-panel" role="dialog" aria-modal="true" aria-labelledby="admin-modal-title">
+      <div class="admin-modal-header v2sa-modal-header">
         <h3 id="admin-modal-title">Create Admin Account</h3>
         <button type="button" class="admin-modal-close" data-close-modal="true" aria-label="Close">&times;</button>
       </div>
       <p id="admin-modal-subtitle" class="admin-modal-subtitle">Create a new admin account with your selected access level.</p>
-      <form id="admin-modal-form" class="admin-modal-form">
+      <form id="admin-modal-form" class="admin-modal-form v2sa-modal-form">
         {% csrf_token %}
         <input type="hidden" id="modal-admin-id" value="">
-        <div class="modal-grid">
-          <label>
-            Name
-            <input type="text" id="modal-username" required>
+        <div class="v2sa-modal-grid">
+          <label class="v2sa-modal-field">
+            <span>Name</span>
+            <input type="text" id="modal-username" required placeholder="e.g. john.doe">
           </label>
-          <label>
-            Email
-            <input type="email" id="modal-email" required>
+          <label class="v2sa-modal-field">
+            <span>Email</span>
+            <input type="email" id="modal-email" required placeholder="admin@example.com">
           </label>
-          <label>
-            Password <small>(required for create, optional for edit)</small>
-            <input type="password" id="modal-password">
+          <label class="v2sa-modal-field">
+            <span>Password <small>(required for create)</small></span>
+            <input type="password" id="modal-password" placeholder="••••••••">
           </label>
-        </div>
-        <div class="modal-role-grid">
-          <label>
-            Role
+          <label class="v2sa-modal-field">
+            <span>Role</span>
             <select id="modal-role">
               <option value="Admin">Admin</option>
               <option value="Super Admin">Super Admin</option>
             </select>
           </label>
-          <label>
-            Type
-            <select id="modal-type">
-              <option value="System">System</option>
-            </select>
-          </label>
-
         </div>
-        <label class="photo-upload">
-          <span>Users Photo</span>
-          <input type="file" id="modal-photo" accept="image/png,image/jpeg,image/jpg">
-          <small>Supported file type: JPG, JPEG, or PNG</small>
-        </label>
-        <label class="status-toggle">
+        <label class="v2sa-modal-check">
           <input type="checkbox" id="modal-is-active" checked>
           <span>Active account</span>
         </label>
-        <div class="admin-modal-actions">
+        <div class="admin-modal-actions v2sa-modal-actions">
           <button type="button" class="secondary-btn" data-close-modal="true">Cancel</button>
-          <button type="submit" class="primary-btn" id="admin-modal-submit">Save Account</button>
+          <button type="submit" class="primary-btn v2sa-primary-btn" id="admin-modal-submit">Save Account</button>
         </div>
       </form>
     </div>
   </div>
 
-  <script src="{% static 'js/admin_actions.js' %}?v=20260517a"></script>
+  <!-- ── Edit Admin Modal ──────────────────────────────────────── -->
+  <div id="edit-admin-modal" class="admin-modal hidden" aria-hidden="true">
+    <div class="admin-modal-backdrop" id="edit-modal-backdrop"></div>
+    <div class="admin-modal-panel v2sa-modal-panel" role="dialog" aria-modal="true" aria-labelledby="edit-admin-modal-title">
+      <div class="admin-modal-header v2sa-modal-header">
+        <h3 id="edit-admin-modal-title">Edit Admin Account</h3>
+        <button type="button" class="admin-modal-close" id="close-edit-modal" aria-label="Close">&times;</button>
+      </div>
+      <p class="admin-modal-subtitle">Update the admin account details below.</p>
+      <form id="edit-admin-form" class="admin-modal-form v2sa-modal-form">
+        {% csrf_token %}
+        <input type="hidden" id="edit-admin-id" value="">
+        <div class="v2sa-modal-grid">
+          <label class="v2sa-modal-field">
+            <span>Name</span>
+            <input type="text" id="edit-username" required placeholder="e.g. john.doe">
+          </label>
+          <label class="v2sa-modal-field">
+            <span>Email</span>
+            <input type="email" id="edit-email" required placeholder="admin@example.com">
+          </label>
+          <label class="v2sa-modal-field">
+            <span>New Password <small>(leave blank to keep)</small></span>
+            <input type="password" id="edit-password" placeholder="Leave blank to keep current">
+          </label>
+          <label class="v2sa-modal-field">
+            <span>Role</span>
+            <select id="edit-role">
+              <option value="Admin">Admin</option>
+              <option value="Super Admin">Super Admin</option>
+            </select>
+          </label>
+        </div>
+        <label class="v2sa-modal-check">
+          <input type="checkbox" id="edit-is-active">
+          <span>Active account</span>
+        </label>
+        <div class="admin-modal-actions v2sa-modal-actions">
+          <button type="button" class="secondary-btn" id="cancel-edit-modal">Cancel</button>
+          <button type="submit" class="primary-btn v2sa-primary-btn" id="edit-modal-submit">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+  /* ── Compute active/inactive counts from table rows ── */
+  (function () {
+    const rows = document.querySelectorAll('tbody tr[data-status]');
+    let active = 0, inactive = 0;
+    rows.forEach(r => {
+      if (r.dataset.status === 'active') active++;
+      else inactive++;
+    });
+    const total = active + inactive || 1;
+    const activeEl = document.getElementById('activeAdminCount');
+    const inactiveEl = document.getElementById('inactiveAdminCount');
+    const activePctEl = document.getElementById('activePct');
+    const inactivePctEl = document.getElementById('inactivePct');
+    const secEl = document.getElementById('secActiveCount');
+    if (activeEl) activeEl.textContent = active;
+    if (inactiveEl) inactiveEl.textContent = inactive;
+    if (activePctEl) activePctEl.textContent = Math.round(active / total * 100) + '% active';
+    if (inactivePctEl) inactivePctEl.textContent = Math.round(inactive / total * 100) + '% inactive';
+    if (secEl) secEl.textContent = active + ' admins';
+  })();
+
+  /* ── CSRF helper ── */
+  function getCsrf() {
+    const m = document.cookie.match('(^|;)\\s*csrftoken\\s*=\\s*([^;]+)');
+    return m ? decodeURIComponent(m.pop()) : '';
+  }
+
+  /* ── Toast notification ── */
+  function showToast(msg, isError = false) {
+    const t = document.createElement('div');
+    t.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);padding:12px 24px;border-radius:8px;font-size:14px;font-weight:600;z-index:99999;box-shadow:0 4px 12px rgba(0,0,0,.15);transition:opacity .3s;';
+    t.style.background = isError ? '#ef4444' : '#10b981';
+    t.style.color = '#fff';
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, 3000);
+  }
+
+  /* ── Select all checkbox ── */
+  const selectAll = document.getElementById('selectAll');
+  if (selectAll) {
+    selectAll.addEventListener('change', () => {
+      document.querySelectorAll('.v2sa-row-check').forEach(cb => { cb.checked = selectAll.checked; });
+      updateSelectedCount();
+    });
+  }
+  document.querySelectorAll('.v2sa-row-check').forEach(cb => {
+    cb.addEventListener('change', updateSelectedCount);
+  });
+  function updateSelectedCount() {
+    const n = document.querySelectorAll('.v2sa-row-check:checked').length;
+    const el = document.getElementById('selectedCount');
+    if (el) el.textContent = n + ' selected';
+  }
+
+  /* ── Bulk actions ── */
+  document.getElementById('applyBulkBtn')?.addEventListener('click', async () => {
+    const action = document.getElementById('bulkActionSelect')?.value;
+    const ids = [...document.querySelectorAll('.v2sa-row-check:checked')].map(cb => cb.value);
+    if (!action || !ids.length) { showToast('Select an action and at least one admin.', true); return; }
+    if (!confirm(`${action === 'deactivate' ? 'Deactivate' : 'Activate'} ${ids.length} admin(s)?`)) return;
+    let ok = 0, fail = 0;
+    for (const id of ids) {
+      const url = action === 'deactivate' ? `/super-admin/admins/${id}/deactivate/` : `/super-admin/admins/${id}/activate/`;
+      try {
+        const r = await fetch(url, { method: 'POST', headers: { 'X-CSRFToken': getCsrf() } });
+        const d = await r.json();
+        if (d.success) ok++; else fail++;
+      } catch { fail++; }
+    }
+    showToast(`${ok} admin(s) updated${fail ? ', ' + fail + ' failed' : ''}.`, fail > 0);
+    setTimeout(() => location.reload(), 1200);
+  });
+
+  /* ── Second "Add Admin" button ── */
+  document.getElementById('open-create-admin-modal-2')?.addEventListener('click', () => {
+    document.getElementById('open-create-admin-modal')?.click();
+  });
+
+  /* ── View button — show admin details ── */
+  document.querySelectorAll('.view-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const row = btn.closest('tr');
+      if (!row) return;
+      const name = row.dataset.adminName;
+      const email = row.dataset.adminEmail;
+      const role = row.dataset.adminRole;
+      const status = row.dataset.status;
+      alert(`Admin Details\n\nName: ${name}\nEmail: ${email || 'N/A'}\nRole: ${role}\nStatus: ${status}`);
+    });
+  });
+
+  /* ── Edit button — open Edit modal pre-filled ── */
+  const editModal = document.getElementById('edit-admin-modal');
+  const editForm = document.getElementById('edit-admin-form');
+
+  function openEditModal(row) {
+    document.getElementById('edit-admin-id').value = row.dataset.adminId;
+    document.getElementById('edit-username').value = row.dataset.adminName || '';
+    document.getElementById('edit-email').value = row.dataset.adminEmail || '';
+    document.getElementById('edit-password').value = '';
+    document.getElementById('edit-role').value = row.dataset.adminRole || 'Admin';
+    document.getElementById('edit-is-active').checked = row.dataset.status === 'active';
+    editModal.classList.remove('hidden');
+    editModal.setAttribute('aria-hidden', 'false');
+    setTimeout(() => document.getElementById('edit-username').focus(), 50);
+  }
+  function closeEditModal() {
+    editModal.classList.add('hidden');
+    editModal.setAttribute('aria-hidden', 'true');
+  }
+
+  document.getElementById('close-edit-modal')?.addEventListener('click', closeEditModal);
+  document.getElementById('cancel-edit-modal')?.addEventListener('click', closeEditModal);
+  document.getElementById('edit-modal-backdrop')?.addEventListener('click', closeEditModal);
+
+  document.querySelectorAll('.edit-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const row = btn.closest('tr');
+      if (!row) return;
+      openEditModal(row);
+    });
+  });
+
+  if (editForm) {
+    editForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const adminId = document.getElementById('edit-admin-id').value;
+      if (!adminId) return;
+      const payload = {
+        username: document.getElementById('edit-username').value.trim(),
+        email: document.getElementById('edit-email').value.trim(),
+        password: document.getElementById('edit-password').value,
+        role: document.getElementById('edit-role').value,
+        department: '',
+        is_active: document.getElementById('edit-is-active').checked,
+      };
+      if (!payload.username || !payload.email) {
+        showToast('Name and email are required.', true);
+        return;
+      }
+      const submitBtn = document.getElementById('edit-modal-submit');
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Saving…';
+      try {
+        const r = await fetch(`/super-admin/admins/${adminId}/update/`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+          body: JSON.stringify(payload),
+        });
+        const d = await r.json();
+        if (d.success) {
+          showToast(d.message || 'Admin updated.');
+          closeEditModal();
+          setTimeout(() => location.reload(), 1200);
+        } else {
+          showToast(d.message || 'Failed to update.', true);
+        }
+      } catch {
+        showToast('Network error.', true);
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Save Changes';
+      }
+    });
+  }
+
+  /* ── More options (deactivate/delete) ── */
+  document.querySelectorAll('.v2sa-action-more').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.adminId;
+      const row = btn.closest('tr');
+      const status = row?.dataset.status;
+      document.querySelectorAll('.v2sa-context-menu').forEach(m => m.remove());
+      const menu = document.createElement('div');
+      menu.className = 'v2sa-context-menu';
+      menu.innerHTML = `
+        <button data-act="${status === 'active' ? 'deactivate' : 'activate'}" data-id="${id}">${status === 'active' ? 'Deactivate' : 'Activate'}</button>
+        <button data-act="delete" data-id="${id}" class="v2sa-ctx-danger">Delete</button>
+      `;
+      document.body.appendChild(menu);
+      const rect = btn.getBoundingClientRect();
+      menu.style.position = 'fixed';
+      menu.style.top = (rect.bottom + 4) + 'px';
+      menu.style.left = Math.max(8, rect.left - 80) + 'px';
+      menu.style.zIndex = '9999';
+      const close = () => menu.remove();
+      setTimeout(() => document.addEventListener('click', close, { once: true }), 10);
+      menu.querySelectorAll('button').forEach(b => {
+        b.addEventListener('click', async () => {
+          close();
+          const act = b.dataset.act;
+          const adminId = b.dataset.id;
+          if (act === 'delete') {
+            if (!confirm('Delete this admin? This cannot be undone.')) return;
+            try {
+              const r = await fetch(`/super-admin/admins/${adminId}/delete/`, { method: 'POST', headers: { 'X-CSRFToken': getCsrf() } });
+              const d = await r.json();
+              if (d.success) { showToast(d.message || 'Admin deleted.'); setTimeout(() => location.reload(), 1200); }
+              else showToast(d.message || 'Failed to delete.', true);
+            } catch { showToast('Network error.', true); }
+          } else {
+            const url = act === 'deactivate' ? `/super-admin/admins/${adminId}/deactivate/` : `/super-admin/admins/${adminId}/activate/`;
+            try {
+              const r = await fetch(url, { method: 'POST', headers: { 'X-CSRFToken': getCsrf() } });
+              const d = await r.json();
+              if (d.success) { showToast(d.message || 'Done.'); setTimeout(() => location.reload(), 1200); }
+              else showToast(d.message || 'Failed.', true);
+            } catch { showToast('Network error.', true); }
+          }
+        });
+      });
+    });
+  });
+  </script>
+  <script src="{% static 'js/admin_actions.js' %}?v=20260524a"></script>
 </body>
 </html>

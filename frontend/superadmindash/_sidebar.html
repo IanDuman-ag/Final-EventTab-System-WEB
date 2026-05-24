@@ -1,0 +1,54 @@
+{% load static %}
+{% comment %}
+  Shared Super Admin sidebar. Include with:
+    {% include 'superadmindash/_sidebar.html' with active='dashboard' %}
+  active values: dashboard, admins, reports, activity_logs
+{% endcomment %}
+<aside class="sidebar v2sa-sidebar" aria-label="Super admin navigation">
+  <div class="brand">
+    <h1>EventTab</h1>
+    <span>ADMIN PORTAL</span>
+  </div>
+
+  <nav class="side-nav v2sa-nav">
+    <a class="{% if active == 'dashboard' %}active{% endif %}" href="{% url 'superadmin_dashboard' %}" {% if active == 'dashboard' %}aria-current="page"{% endif %}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm9 0h7v7h-7v-7Z"/></svg>
+      <span>Dashboard</span>
+    </a>
+
+    <div class="v2sa-nav-section">MANAGE</div>
+
+    <a class="{% if active == 'admins' %}active{% endif %}" href="{% url 'superadmin_admins' %}" {% if active == 'admins' %}aria-current="page"{% endif %}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4Zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4Z"/></svg>
+      <span>Admins</span>
+    </a>
+
+    <div class="v2sa-nav-section">REPORTS</div>
+
+    <a class="{% if active == 'reports' %}active{% endif %}" href="{% url 'superadmin_reports' %}" {% if active == 'reports' %}aria-current="page"{% endif %}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 3v18h18V3H3Zm16 16H5V5h14v14ZM7 17h2v-7H7v7Zm4 0h2V7h-2v10Zm4 0h2v-4h-2v4Z"/></svg>
+      <span>Reports</span>
+    </a>
+
+    <div class="v2sa-nav-section">SYSTEM</div>
+
+    <a class="{% if active == 'activity_logs' %}active{% endif %}" href="{% url 'superadmin_activity_logs' %}" {% if active == 'activity_logs' %}aria-current="page"{% endif %}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M13 3a9 9 0 1 1-8.74 11.19l1.94-.49A7 7 0 1 0 13 5v4L7.5 3.5 13-2v5Zm-1 6h2v5l4 2-.9 1.79L12 15V9Z"/></svg>
+      <span>Activity Logs</span>
+    </a>
+  </nav>
+
+  <div class="v2sa-user-card">
+    <div class="v2sa-user-avatar">{{ request.user.username|default:"SA"|slice:":2"|upper }}</div>
+    <div class="v2sa-user-info">
+      <strong>{{ request.user.get_full_name|default:request.user.username }}</strong>
+      <small>{{ request.user.email|default:"superadmin@email.com" }}</small>
+    </div>
+    <button class="v2sa-user-chevron" type="button" aria-label="User menu">▾</button>
+  </div>
+
+  <a class="v2sa-logout" href="{% url 'logout' %}">
+    <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M10 17v-3H3v-4h7V7l5 5-5 5Zm2-14h8v18h-8v-2h6V5h-6V3Z"/></svg>
+    <span>Logout</span>
+  </a>
+</aside>
