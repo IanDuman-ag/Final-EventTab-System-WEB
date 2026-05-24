@@ -177,7 +177,6 @@
                 <th>ACTION</th>
                 <th>DETAILS</th>
                 <th>EVENT</th>
-                <th>IP ADDRESS</th>
                 <th>ACTION</th>
               </tr>
             </thead>
@@ -193,7 +192,6 @@
                 </td>
                 <td>{{ log.details }}</td>
                 <td class="tab-cell-muted">{{ log.event_name }}</td>
-                <td class="tab-cell-muted">{{ log.ip_address }}</td>
                 <td>
                   <button type="button" class="tab-action-btn tab-action-btn--view al-view-btn"
                           data-details="{{ log.details }}" data-user="{{ log.user }}" data-date="{{ log.date }}">
@@ -202,7 +200,7 @@
                 </td>
               </tr>
               {% empty %}
-              <tr><td colspan="7" class="tab-table-empty">No activity logs found.</td></tr>
+              <tr><td colspan="6" class="tab-table-empty">No activity logs found.</td></tr>
               {% endfor %}
             </tbody>
           </table>
@@ -211,7 +209,7 @@
         <!-- Pagination -->
         <div class="tab-pagination">
           <span class="tab-pagination-info">
-            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ total_activities }} activities
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} activities
           </span>
           <div class="tab-pagination-btns">
             {% if page_obj.has_previous %}

@@ -2130,11 +2130,13 @@ def tabulator_ocr_upload(request):
 @login_required(login_url='login')
 @user_passes_test(lambda u: user_has_role(u, 'tabulator'), login_url='login')
 def tabulator_reports(request):
-    """Tabulator Reports page — list of generated reports with charts."""
+    """Tabulator Reports page — all data from database, no sample data."""
     from events.models import Event, ScoreSheet
     from django.contrib.admin.models import LogEntry, CHANGE
+    from django.contrib.contenttypes.models import ContentType
     from django.core.paginator import Paginator
     from django.utils import timezone
+    from datetime import timedelta
 
     type_filter = request.GET.get('type', 'all').strip()
     event_filter = request.GET.get('event', 'all').strip()
@@ -2143,30 +2145,88 @@ def tabulator_reports(request):
     events = list(Event.objects.values_list('name', flat=True).order_by('name'))
     current_event = Event.objects.filter(status='active').order_by('-event_date').first()
 
-    # Build report rows from LogEntry (reports logged as CHANGE with 'generated' in message)
-    logs_qs = LogEntry.objects.filter(change_message__icontains='generated').select_related('user').order_by('-action_time')
+    # ── Pull ONLY tabulator-generated report log entries ───────
+    # These are identified by the [TAB_REPORT] marker in change_message
+    logs_qs = (
+        LogEntry.objects
+        .filter(change_message__startswith='[TAB_REPORT]')
+        .select_related('user', 'content_type')
+        .order_by('-action_time')
+    )
+
+    # Apply event filter — match against object_repr which contains event name
     if event_filter != 'all' and event_filter:
         logs_qs = logs_qs.filter(object_repr__icontains=event_filter)
+
+    # Apply type filter
+    type_keyword_map = {
+        'results':   'Results',
+        'breakdown': 'Breakdown',
+        'judge':     'Judge',
+        'audit':     'Audit',
+        'summary':   'Summary',
+    }
+    if type_filter != 'all' and type_filter in type_keyword_map:
+        logs_qs = logs_qs.filter(object_repr__icontains=type_keyword_map[type_filter])
+
+    # Apply search
     if search_q:
         logs_qs = logs_qs.filter(object_repr__icontains=search_q)
 
+    # ── Build report rows from real LogEntry data ───────────────
     type_label_map = {
-        'results': 'Results Summary', 'breakdown': 'Score Breakdown',
-        'judge': 'Judge Summary', 'audit': 'Audit Trail', 'summary': 'Summary',
+        'results':   'Results Summary',
+        'breakdown': 'Score Breakdown',
+        'judge':     'Judge Summary',
+        'audit':     'Audit Trail',
+        'summary':   'Summary',
     }
+    type_color_map = {
+        'results':   '#2563eb',
+        'breakdown': '#10b981',
+        'judge':     '#a855f7',
+        'audit':     '#ef4444',
+        'summary':   '#f59e0b',
+    }
+
+    all_logs = list(logs_qs)
     report_rows = []
-    for log in logs_qs[:50]:
-        msg = log.change_message.upper()
-        fmt = 'Excel' if 'EXCEL' in msg else ('CSV' if 'CSV' in msg else 'PDF')
-        type_key = 'results'
-        for k in type_label_map:
-            if k in log.object_repr.lower():
-                type_key = k; break
+    for log in all_logs:
+        repr_lower = log.object_repr.lower()
+        msg_upper = (log.change_message or '').upper()
+
+        # Detect format from message
+        if 'EXCEL' in msg_upper:
+            fmt = 'Excel'
+        elif 'CSV' in msg_upper:
+            fmt = 'CSV'
+        else:
+            fmt = 'PDF'
+
+        # Detect report type from object_repr
+        type_key = 'summary'
+        for k, keyword in type_keyword_map.items():
+            if keyword.lower() in repr_lower:
+                type_key = k
+                break
+
+        # Extract event name: object_repr format is "{Event Name} {Type} Report"
+        # Strip " Report" suffix and type keyword to get event name
+        event_name = log.object_repr
+        for suffix in [' Results Summary Report', ' Score Breakdown Report',
+                       ' Judge Summary Report', ' Audit Trail Report',
+                       ' Summary Report', ' Report']:
+            if event_name.endswith(suffix):
+                event_name = event_name[:-len(suffix)]
+                break
+        # Truncate long names
+        event_name = event_name[:40]
+
         report_rows.append({
             'name': log.object_repr[:60],
             'type_key': type_key,
             'type_label': type_label_map.get(type_key, 'Report'),
-            'event': log.object_repr.split(' Report')[0] if ' Report' in log.object_repr else log.object_repr[:30],
+            'event': event_name,
             'generated_by': log.user.username if log.user else 'System',
             'date_generated': log.action_time.strftime('%b %d, %Y %I:%M %p'),
             'status_key': 'generated',
@@ -2178,33 +2238,45 @@ def tabulator_reports(request):
     paginator = Paginator(report_rows, 10)
     page_obj = paginator.get_page(request.GET.get('page', 1))
 
-    # KPI counts
-    total_reports = total_count
-    generated_count = total_count
-    scheduled_count = 0
-    archived_count = 0
+    # ── KPI counts from real data ───────────────────────────────
+    total_reports = LogEntry.objects.filter(change_message__startswith='[TAB_REPORT]').count()
+    generated_count = total_reports
+    scheduled_count = 0   # No scheduling model yet
+    archived_count = 0    # No archive model yet
 
-    # Donut data
+    # ── Donut chart: breakdown by report type ───────────────────
     type_counts = {}
     for row in report_rows:
-        type_counts[row['type_label']] = type_counts.get(row['type_label'], 0) + 1
-    donut_colors = ['#2563eb', '#10b981', '#a855f7', '#f59e0b', '#ef4444', '#64748b']
-    donut_data = [{'value': v, 'color': donut_colors[i % len(donut_colors)], 'label': k}
-                  for i, (k, v) in enumerate(type_counts.items())]
+        lbl = row['type_label']
+        type_counts[lbl] = type_counts.get(lbl, 0) + 1
+
+    donut_data = []
+    for i, (lbl, cnt) in enumerate(type_counts.items()):
+        # Find matching type_key for color
+        color = '#64748b'
+        for k, tl in type_label_map.items():
+            if tl == lbl:
+                color = type_color_map.get(k, '#64748b')
+                break
+        donut_data.append({'value': cnt, 'color': color, 'label': lbl})
+
     report_type_breakdown = [
-        {'label': d['label'], 'count': d['value'],
-         'pct': round(d['value'] / total_count * 100) if total_count else 0,
-         'color': d['color']} for d in donut_data
+        {
+            'label': d['label'],
+            'count': d['value'],
+            'pct': round(d['value'] / total_count * 100) if total_count else 0,
+            'color': d['color'],
+        }
+        for d in donut_data
     ]
 
-    # Timeline: last 7 days
-    from datetime import timedelta
+    # ── Timeline: reports generated per day (last 7 days) ───────
     today = timezone.localdate()
     timeline_labels, timeline_values = [], []
     for i in range(6, -1, -1):
         day = today - timedelta(days=i)
         cnt = LogEntry.objects.filter(
-            change_message__icontains='generated',
+            change_message__startswith='[TAB_REPORT]',
             action_time__date=day
         ).count()
         timeline_labels.append(day.strftime('%b %d'))
@@ -2381,15 +2453,27 @@ def tabulator_generate_report(request):
     report_type = request.POST.get('report_type', 'results').strip()
     export_format = request.POST.get('format', 'pdf').strip().lower()
 
+    type_label_map = {
+        'results': 'Results Summary',
+        'breakdown': 'Score Breakdown',
+        'judge': 'Judge Summary',
+        'audit': 'Audit Trail',
+        'summary': 'Summary',
+    }
+    type_label = type_label_map.get(report_type, report_type.title())
+
     event_obj = Event.objects.filter(name=event_name).first()
     event_ct = ContentType.objects.get_for_model(Event)
+
+    # Use a consistent object_repr format: "{Event Name} {Type Label} Report"
+    # Use change_message to store format + source so we can filter accurately
     LogEntry.objects.create(
         user=request.user,
         content_type_id=event_ct.id,
         object_id=str(event_obj.id) if event_obj else '1',
-        object_repr=f"{event_name} {report_type.title()} Report"[:200],
+        object_repr=f"{event_name} {type_label} Report"[:200],
         action_flag=CHANGE,
-        change_message=f"Generated {export_format.upper()} report."
+        change_message=f"[TAB_REPORT] Generated {export_format.upper()} report. type={report_type}"
     )
 
     if export_format == 'excel':
@@ -2420,32 +2504,55 @@ def tabulator_generate_report(request):
 @login_required(login_url='login')
 @user_passes_test(lambda u: user_has_role(u, 'tabulator'), login_url='login')
 def tabulator_verify_lock(request, sheet_id):
-    """Verify and lock a score sheet."""
+    """Verify and lock a score sheet — sets status to finalized and logs the action."""
     from events.models import ScoreSheet
+    from django.contrib.admin.models import LogEntry, CHANGE
+    from django.contrib.contenttypes.models import ContentType
     if request.method == 'POST':
         try:
-            sheet = ScoreSheet.objects.get(id=sheet_id)
+            sheet = ScoreSheet.objects.select_related('event').get(id=sheet_id)
             sheet.status = 'finalized'
             sheet.tabulator = request.user
             sheet.save()
+            # Log the verify & lock action
+            ct = ContentType.objects.get_for_model(ScoreSheet)
+            LogEntry.objects.create(
+                user=request.user,
+                content_type_id=ct.id,
+                object_id=str(sheet.id),
+                object_repr=f"{sheet.event.name} Score Sheet #{sheet.id}",
+                action_flag=CHANGE,
+                change_message="Verified and locked score sheet."
+            )
         except ScoreSheet.DoesNotExist:
             pass
-    return redirect(f"{'/tabulator/review/'}?sheet={sheet_id}")
+    return redirect(f'/tabulator/review/?sheet={sheet_id}')
 
 
 @login_required(login_url='login')
 @user_passes_test(lambda u: user_has_role(u, 'tabulator'), login_url='login')
 def tabulator_request_changes(request, sheet_id):
-    """Request changes on a score sheet — revert to pending."""
+    """Request changes — reverts sheet to pending and logs the action."""
     from events.models import ScoreSheet
+    from django.contrib.admin.models import LogEntry, CHANGE
+    from django.contrib.contenttypes.models import ContentType
     if request.method == 'POST':
         try:
-            sheet = ScoreSheet.objects.get(id=sheet_id)
+            sheet = ScoreSheet.objects.select_related('event').get(id=sheet_id)
             sheet.status = 'pending'
             sheet.save()
+            ct = ContentType.objects.get_for_model(ScoreSheet)
+            LogEntry.objects.create(
+                user=request.user,
+                content_type_id=ct.id,
+                object_id=str(sheet.id),
+                object_repr=f"{sheet.event.name} Score Sheet #{sheet.id}",
+                action_flag=CHANGE,
+                change_message="Requested changes — score sheet reverted to pending."
+            )
         except ScoreSheet.DoesNotExist:
             pass
-    return redirect(f"{'/tabulator/review/'}")
+    return redirect('/tabulator/review/')
     """AJAX/POST endpoint to save encoded scores for a sheet."""
     from events.models import ScoreSheet
     if request.method != 'POST':
@@ -2499,21 +2606,32 @@ def tabulator_review(request):
             # Try to get criteria from linked JudgingEvent
             judging_event = getattr(s.event, 'judging_event', None)
             if judging_event:
-                criteria_qs = Criterion.objects.filter(event=judging_event).order_by('order')
+                criteria_qs = list(Criterion.objects.filter(event=judging_event).order_by('order'))
                 for c in criteria_qs:
                     review_criteria.append({'id': c.id, 'name': c.name, 'max_score': int(c.max_score)})
                 total_possible_pts = sum(c['max_score'] for c in review_criteria)
 
                 # Build team rows from Candidates + JudgeScores
-                candidates = Candidate.objects.filter(event=judging_event).order_by('number')
+                candidates = list(Candidate.objects.filter(event=judging_event).order_by('number'))
                 for cand in candidates:
-                    scores_qs = JudgeScore.objects.filter(candidate=cand).select_related('criterion')
-                    score_map = {sc.criterion_id: sc.score for sc in scores_qs}
-                    score_values = [int(score_map.get(c['id'], 0)) for c in review_criteria]
-                    total = sum(score_values)
-                    # Consistency: if any score was revised (is_locked=False after submission) mark revised
-                    has_revision = scores_qs.filter(is_locked=False).exists()
-                    consistency = 'revised' if has_revision else 'consistent'
+                    scores_qs = list(JudgeScore.objects.filter(candidate=cand).select_related('criterion'))
+                    # Average scores across all judges per criterion
+                    crit_scores = {}
+                    for sc in scores_qs:
+                        cid = sc.criterion_id
+                        if cid not in crit_scores:
+                            crit_scores[cid] = []
+                        crit_scores[cid].append(float(sc.score))
+                    # Build per-criterion average values
+                    score_values = []
+                    for c in criteria_qs:
+                        vals = crit_scores.get(c.id, [])
+                        avg = round(sum(vals) / len(vals), 1) if vals else 0
+                        score_values.append(avg)
+                    total = round(sum(score_values), 1)
+                    # Consistency: locked = verified, unlocked = revised
+                    has_unlocked = any(sc.is_locked is False for sc in scores_qs)
+                    consistency = 'revised' if has_unlocked else 'consistent'
                     review_teams.append({
                         'id': cand.id,
                         'name': f'#{cand.number} {cand.name}',
@@ -2522,7 +2640,7 @@ def tabulator_review(request):
                         'consistency': consistency,
                     })
             else:
-                # Fallback: use BracketTeams with scores from ScoreSheet aggregate
+                # Fallback: use BracketTeams — show aggregate scores from ScoreSheet
                 teams_qs = BracketTeam.objects.filter(event=s.event).select_related('department')
                 for team in teams_qs:
                     review_teams.append({
@@ -2536,13 +2654,29 @@ def tabulator_review(request):
 
             encoded_teams = len(review_teams)
 
-            # Revision history from LogEntry
+            # Revision history from LogEntry — filter by ScoreSheet content type + object_id
             from django.contrib.admin.models import LogEntry
-            for log in LogEntry.objects.filter(object_id=str(s.id)).select_related('user').order_by('-action_time')[:10]:
+            from django.contrib.contenttypes.models import ContentType
+            try:
+                ss_ct = ContentType.objects.get_for_model(ScoreSheet)
+                history_qs = LogEntry.objects.filter(
+                    content_type=ss_ct,
+                    object_id=str(s.id)
+                ).select_related('user').order_by('-action_time')[:10]
+            except Exception:
+                history_qs = []
+            for log in history_qs:
+                msg = log.change_message or 'Updated'
+                if 'locked' in msg.lower() or 'verified' in msg.lower():
+                    action_type = 'locked'
+                elif 'request' in msg.lower() or 'pending' in msg.lower():
+                    action_type = 'revised'
+                else:
+                    action_type = 'change'
                 revision_history.append({
                     'date': log.action_time.strftime('%b %d, %Y %I:%M %p'),
-                    'action_label': log.change_message or 'Updated',
-                    'action_type': 'revised',
+                    'action_label': msg[:80],
+                    'action_type': action_type,
                     'details': log.object_repr,
                     'by': log.user.username if log.user else 'System',
                 })
@@ -2721,6 +2855,10 @@ def tabulator_activity_logs(request):
     now = timezone.now()
     today = timezone.localdate()
 
+    # Pre-load event names for quick lookup
+    from events.models import Event
+    event_names = list(Event.objects.values_list('name', flat=True))
+
     log_rows = []
     for log in logs_qs[:200]:
         delta = now - log.action_time
@@ -2732,14 +2870,29 @@ def tabulator_activity_logs(request):
             ago = f'{delta.seconds // 60}m ago'
         else:
             ago = 'just now'
+
+        # Clean up details — strip [TAB_REPORT] prefix if present
+        raw_msg = log.change_message or log.object_repr
+        details = raw_msg.replace('[TAB_REPORT] ', '').strip()
+        # Capitalise first letter
+        if details:
+            details = details[0].upper() + details[1:]
+
+        # Try to extract event name from object_repr
+        event_name = '—'
+        repr_str = log.object_repr or ''
+        for ev in event_names:
+            if ev and ev.lower() in repr_str.lower():
+                event_name = ev
+                break
+
         log_rows.append({
             'action_label': action_label_map.get(log.action_flag, 'Updated'),
             'action_type': action_type_map.get(log.action_flag, 'default'),
             'user': log.user.username if log.user else 'System',
-            'object_repr': log.object_repr,
-            'details': log.change_message or log.object_repr,
-            'event_name': '—',
-            'ip_address': '—',
+            'object_repr': repr_str,
+            'details': details[:120],
+            'event_name': event_name,
             'date': log.action_time.strftime('%b %d, %Y %I:%M %p'),
             'ago': ago,
         })
@@ -2757,8 +2910,6 @@ def tabulator_activity_logs(request):
         id__in=LogEntry.objects.values_list('user_id', flat=True)
     ).order_by('username')
 
-    current_event = None
-    from events.models import Event
     current_event = Event.objects.filter(status='active').order_by('-event_date').first()
 
     return render(request, 'tabulatordash/tabactivitylogs.html', {
