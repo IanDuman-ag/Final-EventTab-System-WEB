@@ -426,21 +426,99 @@ def admin_edit_department(request, dept_id):
         return JsonResponse({'success': False, 'message': str(e)}, status=500)
 
 
-@login_required
+@login_required(login_url='login')
 @user_passes_test(lambda user: user.is_staff, login_url='login')
 def admin_delete_department(request, dept_id):
-    """Delete a Department."""
+    """Delete a Department (or fall back to deleting a Group if no Department exists)."""
     if request.method != 'POST':
         return JsonResponse({'success': False, 'message': 'Invalid request method.'}, status=400)
 
-    dept = get_object_or_404(Department, id=dept_id)
-    name = dept.name
+    # Try Department first
     try:
+        dept = Department.objects.get(id=dept_id)
+        name = dept.name
         Event.objects.filter(department__iexact=name).update(department='')
         dept.delete()
-        return JsonResponse({'success': True, 'message': f'Department {name} deleted.'})
+        return JsonResponse({'success': True, 'message': f'Department "{name}" deleted successfully.'})
+    except Department.DoesNotExist:
+        pass
+
+    # Fallback: legacy Group-based row
+    try:
+        group = Group.objects.get(id=dept_id)
+        name = group.name
+        if name in {'Admin', 'Tabulator', 'Judge', 'Judges', 'Viewers'}:
+            return JsonResponse(
+                {'success': False, 'message': f'Cannot delete reserved role "{name}".'},
+                status=400,
+            )
+        Event.objects.filter(department__iexact=name).update(department='')
+        group.delete()
+        return JsonResponse({'success': True, 'message': f'Department "{name}" deleted successfully.'})
+    except Group.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'Department not found.'}, status=404)
     except Exception as e:
         return JsonResponse({'success': False, 'message': str(e)}, status=500)
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def admin_bulk_delete_departments(request):
+    """Delete multiple departments at once. Body: {ids: [1,2,3]}"""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': 'Invalid request method.'}, status=400)
+
+    try:
+        payload = json.loads(request.body.decode('utf-8') or '{}')
+    except (ValueError, UnicodeDecodeError):
+        return JsonResponse({'success': False, 'message': 'Invalid JSON.'}, status=400)
+
+    ids = payload.get('ids') or []
+    if not isinstance(ids, list) or not ids:
+        return JsonResponse({'success': False, 'message': 'No department IDs provided.'}, status=400)
+
+    deleted_count = 0
+    skipped_count = 0
+    reserved = {'Admin', 'Tabulator', 'Judge', 'Judges', 'Viewers'}
+
+    for raw_id in ids:
+        try:
+            dept_id = int(raw_id)
+        except (TypeError, ValueError):
+            skipped_count += 1
+            continue
+
+        # Try Department first
+        try:
+            dept = Department.objects.get(id=dept_id)
+            Event.objects.filter(department__iexact=dept.name).update(department='')
+            dept.delete()
+            deleted_count += 1
+            continue
+        except Department.DoesNotExist:
+            pass
+
+        # Fallback: Group
+        try:
+            group = Group.objects.get(id=dept_id)
+            if group.name in reserved:
+                skipped_count += 1
+                continue
+            Event.objects.filter(department__iexact=group.name).update(department='')
+            group.delete()
+            deleted_count += 1
+        except Group.DoesNotExist:
+            skipped_count += 1
+
+    msg_parts = [f'{deleted_count} department(s) deleted']
+    if skipped_count:
+        msg_parts.append(f'{skipped_count} skipped')
+    return JsonResponse({
+        'success': True,
+        'message': '. '.join(msg_parts) + '.',
+        'deleted': deleted_count,
+        'skipped': skipped_count,
+    })
 
 
 @never_cache

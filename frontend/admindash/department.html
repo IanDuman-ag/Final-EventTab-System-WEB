@@ -63,6 +63,9 @@
               {% endif %}
             </form>
             <div class="departments-actions">
+              <button class="btn-bulk-delete" id="bulkDeleteBtn" type="button" hidden>
+                🗑 Delete Selected (<span id="bulkSelectedCount">0</span>)
+              </button>
               <button class="btn-add-dept" id="openModalBtn" type="button">+ Add Department</button>
             </div>
           </div>
@@ -71,6 +74,7 @@
             <table class="departments-table">
               <thead>
                 <tr>
+                  <th class="col-checkbox"><input type="checkbox" id="selectAllCheckbox" aria-label="Select all departments"></th>
                   <th>Department</th>
                   <th>Dept Code</th>
                   <th>Dean</th>
@@ -82,6 +86,7 @@
               <tbody>
                 {% for row in department_rows %}
                   <tr>
+                    <td class="col-checkbox"><input type="checkbox" class="row-checkbox" value="{{ row.id }}" data-name="{{ row.name|escapejs }}" aria-label="Select {{ row.name }}"></td>
                     <td>
                       <div class="department-cell">
                         {% if row.logo %}
@@ -110,7 +115,7 @@
                   </tr>
                 {% empty %}
                   <tr>
-                    <td colspan="5" class="empty-state-cell">
+                    <td colspan="7" class="empty-state-cell">
                       <div class="empty-state">
                         <p class="empty-state-title">{% if search_query %}No matches{% else %}No departments yet{% endif %}</p>
                         <p class="empty-state-text">
@@ -274,6 +279,24 @@
       <div class="modal-footer">
         <button class="btn-cancel" id="cancelDeleteModalBtn" type="button">Cancel</button>
         <button class="btn-delete-confirm" id="confirmDeleteBtn" type="button">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bulk Delete Confirmation Modal -->
+  <div class="modal-overlay" id="bulkDeleteModal">
+    <div class="modal-container delete-container">
+      <div class="modal-header">
+        <h3>Delete Selected Departments</h3>
+        <button class="close-modal" id="closeBulkDeleteBtn" type="button">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p>Are you sure you want to delete <strong id="bulkDeleteCount">0</strong> department(s)? This action cannot be undone.</p>
+        <ul id="bulkDeleteList" class="bulk-delete-list"></ul>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-cancel" id="cancelBulkDeleteBtn" type="button">Cancel</button>
+        <button class="btn-delete-confirm" id="confirmBulkDeleteBtn" type="button">Delete All</button>
       </div>
     </div>
   </div>
@@ -464,18 +487,29 @@
         confirmDeleteBtn.addEventListener('click', async () => {
           if (!deptIdToDelete) return;
           try {
-            const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+            // Get CSRF token from any form on the page
+            const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value
+              || document.cookie.split('; ').find(r => r.startsWith('csrftoken='))?.split('=')[1]
+              || '';
             const response = await fetch(`/admin/departments/${deptIdToDelete}/delete/`, {
               method: 'POST',
               headers: {
                 'X-CSRFToken': csrfToken,
-                'Content-Type': 'application/json'
-              }
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+              },
+              body: JSON.stringify({}),
             });
+
+            if (!response.ok) {
+              const text = await response.text();
+              throw new Error(`Server returned ${response.status}: ${text.substring(0, 100)}`);
+            }
 
             const result = await response.json();
             if (result.success) {
               showToast(result.message, 'success');
+              toggleModal(deleteModal, false);
               setTimeout(() => location.reload(), 1500);
             } else {
               showToast('Error: ' + result.message, 'error');
@@ -483,7 +517,6 @@
           } catch (error) {
             showToast('Failed to delete department: ' + error.message, 'error');
           }
-          toggleModal(deleteModal, false);
         });
       }
 
@@ -545,6 +578,91 @@
           }
         });
       });
+
+      // --- Bulk Delete Logic ---
+      const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+      const rowCheckboxes = document.querySelectorAll('.row-checkbox');
+      const bulkDeleteBtn = document.getElementById('bulkDeleteBtn');
+      const bulkSelectedCount = document.getElementById('bulkSelectedCount');
+      const bulkDeleteModal = document.getElementById('bulkDeleteModal');
+      const closeBulkDeleteBtn = document.getElementById('closeBulkDeleteBtn');
+      const cancelBulkDeleteBtn = document.getElementById('cancelBulkDeleteBtn');
+      const confirmBulkDeleteBtn = document.getElementById('confirmBulkDeleteBtn');
+      const bulkDeleteCount = document.getElementById('bulkDeleteCount');
+      const bulkDeleteList = document.getElementById('bulkDeleteList');
+
+      const updateBulkBar = () => {
+        const selected = document.querySelectorAll('.row-checkbox:checked');
+        const count = selected.length;
+        bulkSelectedCount.textContent = count;
+        bulkDeleteBtn.hidden = count === 0;
+        // Sync select-all checkbox state
+        if (rowCheckboxes.length > 0) {
+          selectAllCheckbox.checked = count === rowCheckboxes.length;
+          selectAllCheckbox.indeterminate = count > 0 && count < rowCheckboxes.length;
+        }
+      };
+
+      if (selectAllCheckbox) {
+        selectAllCheckbox.addEventListener('change', () => {
+          rowCheckboxes.forEach(cb => { cb.checked = selectAllCheckbox.checked; });
+          updateBulkBar();
+        });
+      }
+
+      rowCheckboxes.forEach(cb => {
+        cb.addEventListener('change', updateBulkBar);
+      });
+
+      if (bulkDeleteBtn) {
+        bulkDeleteBtn.addEventListener('click', () => {
+          const selected = Array.from(document.querySelectorAll('.row-checkbox:checked'));
+          if (selected.length === 0) return;
+          bulkDeleteCount.textContent = selected.length;
+          bulkDeleteList.innerHTML = selected
+            .map(cb => `<li>${cb.dataset.name}</li>`)
+            .join('');
+          toggleModal(bulkDeleteModal, true);
+        });
+      }
+
+      if (closeBulkDeleteBtn) closeBulkDeleteBtn.addEventListener('click', () => toggleModal(bulkDeleteModal, false));
+      if (cancelBulkDeleteBtn) cancelBulkDeleteBtn.addEventListener('click', () => toggleModal(bulkDeleteModal, false));
+
+      if (confirmBulkDeleteBtn) {
+        confirmBulkDeleteBtn.addEventListener('click', async () => {
+          const ids = Array.from(document.querySelectorAll('.row-checkbox:checked'))
+            .map(cb => cb.value);
+          if (ids.length === 0) return;
+          try {
+            const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value
+              || document.cookie.split('; ').find(r => r.startsWith('csrftoken='))?.split('=')[1]
+              || '';
+            const response = await fetch('/admin/departments/bulk-delete/', {
+              method: 'POST',
+              headers: {
+                'X-CSRFToken': csrfToken,
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+              },
+              body: JSON.stringify({ ids }),
+            });
+            if (!response.ok) {
+              throw new Error(`Server returned ${response.status}`);
+            }
+            const result = await response.json();
+            if (result.success) {
+              showToast(result.message, 'success');
+              toggleModal(bulkDeleteModal, false);
+              setTimeout(() => location.reload(), 1500);
+            } else {
+              showToast('Error: ' + result.message, 'error');
+            }
+          } catch (error) {
+            showToast('Failed to delete departments: ' + error.message, 'error');
+          }
+        });
+      }
     });
   </script>
 </body>
