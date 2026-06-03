@@ -48,24 +48,6 @@
           <input type="password" id="password" name="password" placeholder="Enter your password" required>
         </div>
 
-        <div class="login-field">
-          <label for="role">Role</label>
-          <span class="login-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" focusable="false">
-              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
-              <circle cx="9" cy="7" r="4"></circle>
-              <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
-              <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-            </svg>
-          </span>
-          <select id="role" name="role" required>
-            <option value="" selected disabled>Select your role</option>
-            {% for value, label in roles.items %}
-              <option value="{{ value }}" {% if selected_role == value %}selected{% endif %}>{{ label }}</option>
-            {% endfor %}
-          </select>
-        </div>
-
         <label class="login-remember">
           <input type="checkbox" name="remember">
           <span>Remember me</span>

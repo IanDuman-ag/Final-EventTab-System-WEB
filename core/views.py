@@ -360,7 +360,20 @@ def admin_create_department(request):
                 'remarks': remarks
             }
         )
-        
+
+        # Log the action
+        from django.contrib.admin.models import LogEntry, ADDITION, CHANGE
+        from django.contrib.contenttypes.models import ContentType
+        ct = ContentType.objects.get_for_model(Department)
+        LogEntry.objects.create(
+            user=request.user,
+            content_type_id=ct.id,
+            object_id=str(dept.id),
+            object_repr=f'Department: {name}',
+            action_flag=ADDITION if created else CHANGE,
+            change_message=f'{"Created" if created else "Updated"} department "{name}" (code: {code}).'
+        )
+
         return JsonResponse({'success': True, 'message': f'Department {name} created.', 'id': dept.id})
     except Exception as e:
         return JsonResponse({'success': False, 'message': str(e)}, status=500)
@@ -421,6 +434,23 @@ def admin_edit_department(request, dept_id):
         if old_name != name:
             replacement_name = '' if name.lower() in RESERVED_DEPARTMENT_NAMES else name
             Event.objects.filter(department__iexact=old_name).update(department=replacement_name)
+
+        # Log the edit
+        from django.contrib.admin.models import LogEntry, CHANGE as LOG_CHANGE
+        from django.contrib.contenttypes.models import ContentType
+        ct = ContentType.objects.get_for_model(Department)
+        changes = []
+        if old_name != name:
+            changes.append(f'name changed from "{old_name}" to "{name}"')
+        LogEntry.objects.create(
+            user=request.user,
+            content_type_id=ct.id,
+            object_id=str(dept.id),
+            object_repr=f'Department: {name}',
+            action_flag=LOG_CHANGE,
+            change_message=f'Updated department "{name}". ' + ('; '.join(changes) if changes else 'Details updated.')
+        )
+
         return JsonResponse({'success': True, 'message': f'Department {name} updated.'})
     except Exception as e:
         return JsonResponse({'success': False, 'message': str(e)}, status=500)
@@ -521,44 +551,68 @@ def admin_bulk_delete_departments(request):
     })
 
 
+def _detect_user_role(user):
+    """Return the highest-priority role key for this user, or None."""
+    if user.is_superuser:
+        return 'super-admin'
+    if user.is_staff or user.groups.filter(name__iexact='Admin').exists():
+        return 'admin'
+    if user.groups.filter(name__iexact='Tabulator').exists():
+        return 'tabulator'
+    if (
+        user.groups.filter(name__iexact='Judge').exists()
+        or user.groups.filter(name__iexact='Judges').exists()
+    ):
+        return 'judge'
+    return None
+
+
+_ROLE_REDIRECTS = {
+    'super-admin': 'superadmin_dashboard',
+    'admin': 'admin_dashboard',
+    'tabulator': 'tabulator_dashboard',
+}
+
+_ROLE_LABELS = {
+    'super-admin': 'Super Admin',
+    'admin': 'Admin',
+    'tabulator': 'Tabulator',
+    'judge': 'Judge',
+}
+
+
 @never_cache
 @ensure_csrf_cookie
 def login_view(request):
-    context = {'roles': ROLE_CHOICES}
+    context = {}
 
     if request.method == 'POST':
         email = request.POST.get('email', '').strip()
         password = request.POST.get('password', '')
-        role = request.POST.get('role', '')
 
-        context.update({
-            'email': email,
-            'selected_role': role,
-        })
-
-        if role not in ROLE_CHOICES:
-            context['error'] = 'Select a valid role.'
-            return render(request, 'login.html', context)
+        context['email'] = email
 
         user = authenticate_email(request, email, password)
         if user is None:
             context['error'] = 'Invalid email or password.'
             return render(request, 'login.html', context)
 
-        if not user_has_role(user, role):
-            context['error'] = 'Your account does not match the selected role.'
+        role = _detect_user_role(user)
+        if role is None:
+            context['error'] = 'Your account has no assigned role. Contact an administrator.'
             return render(request, 'login.html', context)
 
         login(request, user)
         request.session['login_role'] = role
-        if role == 'super-admin':
-            return redirect('superadmin_dashboard')
-        if role == 'admin':
-            return redirect('admin_dashboard')
-        if role == 'tabulator':
-            return redirect('tabulator_dashboard')
 
-        context['success'] = f'Logged in as {ROLE_CHOICES[role]}.'
+        redirect_name = _ROLE_REDIRECTS.get(role)
+        if redirect_name:
+            return redirect(redirect_name)
+
+        context['success'] = (
+            f'Logged in as {_ROLE_LABELS[role]}. '
+            'Open the EventTab judge mobile app and sign in with this email and password.'
+        )
 
     return render(request, 'login.html', context)
 
@@ -3517,39 +3571,111 @@ def superadmin_activity_logs(request):
     today_logs_count = logs_qs.filter(action_time__date=timezone.localdate()).count()
     latest_entry = logs_qs.first()
 
-    title_map = {
-        ADDITION: 'New Account Created',
-        CHANGE: 'Privilege / Data Update',
-        DELETION: 'Security / Record Removed',
-    }
-    class_map = {
-        ADDITION: 'info',
-        CHANGE: 'warning',
-        DELETION: 'danger',
-    }
-    pill_map = {
-        ADDITION: 'info',
-        CHANGE: 'warning',
-        DELETION: 'critical',
-    }
-    badge_map = {
-        ADDITION: 'User Action',
-        CHANGE: 'Policy Update',
-        DELETION: 'Security',
-    }
+    # ── Smart title + message derivation ───────────────────────
+    def _derive_log_entry(entry):
+        """Return (title, clean_message, row_class, badge, status_pill) from a LogEntry."""
+        msg_raw = (entry.change_message or '').strip()
+        obj = entry.object_repr or ''
+        username = entry.user.username if entry.user else 'System'
 
-    timeline_rows = []
+        # Strip internal markers
+        msg_clean = msg_raw.replace('[TAB_REPORT] ', '').strip()
+        if msg_clean and msg_clean[0].islower():
+            msg_clean = msg_clean[0].upper() + msg_clean[1:]
+
+        flag = entry.action_flag
+
+        # ── Determine title from content ──────────────────────
+        msg_lower = msg_clean.lower()
+        obj_lower = obj.lower()
+
+        if flag == ADDITION:
+            if 'user' in obj_lower or 'account' in obj_lower:
+                title = 'New Account Created'
+            elif 'department' in obj_lower:
+                title = 'Department Created'
+            elif 'event' in obj_lower:
+                title = 'Event Created'
+            else:
+                title = f'New Record Added'
+            row_class, badge, pill = 'info', 'User Action', 'info'
+
+        elif flag == DELETION:
+            if 'user' in obj_lower or 'account' in obj_lower:
+                title = 'Account Deleted'
+            elif 'department' in obj_lower:
+                title = 'Department Deleted'
+            elif 'score' in obj_lower or 'sheet' in obj_lower:
+                title = 'Score Sheet Deleted'
+            elif 'event' in obj_lower:
+                title = 'Event Deleted'
+            else:
+                title = 'Record Deleted'
+            row_class, badge, pill = 'danger', 'Security', 'critical'
+
+        else:  # CHANGE
+            if 'verified and locked' in msg_lower:
+                title = 'Score Sheet Verified & Locked'
+                row_class, badge, pill = 'info', 'Tabulation', 'info'
+            elif 'requested changes' in msg_lower or 'reverted to pending' in msg_lower:
+                title = 'Score Sheet Sent Back for Changes'
+                row_class, badge, pill = 'warning', 'Tabulation', 'warning'
+            elif 'generated' in msg_lower and 'report' in msg_lower:
+                title = 'Report Generated'
+                row_class, badge, pill = 'info', 'Report', 'info'
+            elif 'deactivated' in msg_lower:
+                title = 'Account Deactivated'
+                row_class, badge, pill = 'warning', 'Security', 'warning'
+            elif 'activated' in msg_lower:
+                title = 'Account Activated'
+                row_class, badge, pill = 'info', 'Security', 'info'
+            elif 'password' in msg_lower:
+                title = 'Password Changed'
+                row_class, badge, pill = 'warning', 'Security', 'warning'
+            elif 'login' in msg_lower:
+                title = 'User Login'
+                row_class, badge, pill = 'info', 'Auth', 'info'
+            elif 'logout' in msg_lower:
+                title = 'User Logout'
+                row_class, badge, pill = 'info', 'Auth', 'info'
+            elif 'score' in msg_lower or 'encoded' in msg_lower:
+                title = 'Score Encoded'
+                row_class, badge, pill = 'info', 'Tabulation', 'info'
+            elif 'department' in obj_lower:
+                title = 'Department Updated'
+                row_class, badge, pill = 'warning', 'Policy Update', 'warning'
+            elif 'event' in obj_lower:
+                title = 'Event Updated'
+                row_class, badge, pill = 'warning', 'Policy Update', 'warning'
+            elif 'user' in obj_lower or 'account' in obj_lower:
+                title = 'Account Updated'
+                row_class, badge, pill = 'warning', 'Policy Update', 'warning'
+            else:
+                title = 'Record Updated'
+                row_class, badge, pill = 'warning', 'Policy Update', 'warning'
+
+        # Build display message: "actor did X on object"
+        if msg_clean:
+            display_msg = msg_clean
+        else:
+            display_msg = f'{obj} was modified.'
+
+        return title, display_msg, row_class, badge, pill
+
+    # ── Build timeline ──────────────────────────────────────────
     grouped = {}
     today = timezone.localdate()
     yesterday = today - timedelta(days=1)
 
-    paginator = Paginator(list(logs_qs[:250]), 20)
+    paginator = Paginator(list(logs_qs[:500]), 20)
     page_obj = paginator.get_page(page_number)
     start_index = page_obj.start_index() if paginator.count else 0
     end_index = page_obj.end_index() if paginator.count else 0
 
     for entry in page_obj.object_list:
-        entry_date = timezone.localtime(entry.action_time).date()
+        local_action_time = timezone.localtime(entry.action_time)
+        entry_date = local_action_time.date()
+
         if entry_date == today:
             day_label = 'Today'
         elif entry_date == yesterday:
@@ -3557,29 +3683,32 @@ def superadmin_activity_logs(request):
         else:
             day_label = entry_date.strftime('%b %d, %Y')
 
-        local_action_time = timezone.localtime(entry.action_time)
         delta = now_local - local_action_time
-        if delta.days:
-            relative_time = f'{delta.days}d ago'
+        if delta.total_seconds() < 60:
+            relative_time = 'Just now'
+        elif delta.total_seconds() < 3600:
+            relative_time = f'{int(delta.total_seconds() // 60)}m ago'
+        elif delta.days == 0:
+            relative_time = f'{int(delta.total_seconds() // 3600)}h ago'
         else:
-            mins = delta.seconds // 60
-            relative_time = f'{mins}m ago' if mins else 'Just now'
+            relative_time = f'{delta.days}d ago'
+
+        title, display_msg, row_class, badge, pill = _derive_log_entry(entry)
 
         grouped.setdefault(day_label, []).append({
-            'time': local_action_time.strftime('%I:%M').lstrip('0') or '0:00',
-            'period': timezone.localtime(entry.action_time).strftime('%p'),
+            'time': local_action_time.strftime('%I:%M').lstrip('0') or '12:00',
+            'period': local_action_time.strftime('%p'),
             'exact_time': local_action_time.strftime('%b %d, %Y %I:%M %p'),
             'relative_time': relative_time,
-            'title': title_map.get(entry.action_flag, 'System Update'),
-            'message': entry.change_message or f'{entry.object_repr} was updated.',
+            'title': title,
+            'message': display_msg,
             'actor': entry.user.username if entry.user else 'System',
-            'row_class': class_map.get(entry.action_flag, 'neutral'),
-            'badge': badge_map.get(entry.action_flag, 'User Action'),
-            'status': pill_map.get(entry.action_flag, 'active'),
+            'row_class': row_class,
+            'badge': badge,
+            'status': pill,
         })
 
-    for label, entries in grouped.items():
-        timeline_rows.append({'label': label, 'entries': entries})
+    timeline_rows = [{'label': label, 'entries': entries} for label, entries in grouped.items()]
 
     return render(request, 'activitylogs.html', {
         'logs_by_day': timeline_rows,

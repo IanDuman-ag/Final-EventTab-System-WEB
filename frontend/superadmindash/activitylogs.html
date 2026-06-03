@@ -123,10 +123,9 @@
                   <div class="time-col">
                     {% if time_display == 'exact' %}
                       <span>{{ log.exact_time }}</span>
-                      <small>Exact</small>
                     {% else %}
                       <span>{{ log.time }}</span>
-                      <small>{{ log.period }}</small>
+                      <small>{{ log.period }} · {{ log.relative_time }}</small>
                     {% endif %}
                   </div>
                   <div class="icon-col" aria-hidden="true">
@@ -134,7 +133,7 @@
                   </div>
                   <div class="log-content">
                     <h3>{{ log.title }}</h3>
-                    <p><strong>{{ log.actor }}</strong> - {{ log.message|truncatechars:112 }}</p>
+                    <p><strong>{{ log.actor }}</strong> — {{ log.message|truncatechars:120 }}</p>
                   </div>
                   <div class="action-col">
                     <span class="ghost-btn">{{ log.badge }}</span>
