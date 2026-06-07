@@ -14,7 +14,12 @@ from .judging_serializers import (
     JudgingEventListSerializer,
     SubmitScoresSerializer,
 )
-from .models import Candidate, Criterion, Event, EventCategory, JudgeScore, JudgingEvent
+from .models import Candidate, Criterion, Event, EventCategory, JudgeActivityLog, JudgeScore, JudgingEvent
+
+
+def _client_ip(request):
+    xff = request.META.get('HTTP_X_FORWARDED_FOR')
+    return xff.split(',')[0].strip() if xff else request.META.get('REMOTE_ADDR')
 
 
 class IsJudgeUser(permissions.BasePermission):
@@ -113,6 +118,19 @@ class JudgingEventViewSet(viewsets.ReadOnlyModelViewSet):
                 'weighted_score': round(weighted, 2),
             })
 
+        JudgeActivityLog.log(
+            judge=request.user,
+            action=JudgeActivityLog.ACTION_SUBMIT_SCORE,
+            details=(
+                f'Scored candidate #{candidate.number} {candidate.name} '
+                f'in "{event.title}" — total: {round(total_score, 1)} '
+                f'({len(created_scores)} criteria) [VID: {verification_id}]'
+            ),
+            event=event,
+            candidate=candidate,
+            ip_address=_client_ip(request),
+        )
+
         return Response({
             'verification_id': verification_id,
             'submitted_at': submitted_at.isoformat(),
@@ -120,6 +138,18 @@ class JudgingEventViewSet(viewsets.ReadOnlyModelViewSet):
             'breakdown': breakdown,
             'is_locked': True,
         })
+
+    def retrieve(self, request, *args, **kwargs):
+        response = super().retrieve(request, *args, **kwargs)
+        event = self.get_object()
+        JudgeActivityLog.log(
+            judge=request.user,
+            action=JudgeActivityLog.ACTION_VIEW_EVENT,
+            details=f'Viewed event "{event.title}"',
+            event=event,
+            ip_address=_client_ip(request),
+        )
+        return response
 
     @action(detail=True, methods=['get'])
     def my_scores(self, request, pk=None):
@@ -134,4 +164,13 @@ class JudgingEventViewSet(viewsets.ReadOnlyModelViewSet):
             candidate__event=event,
         )
         serializer = JudgeScoreSerializer(scores, many=True)
+
+        JudgeActivityLog.log(
+            judge=request.user,
+            action=JudgeActivityLog.ACTION_VIEW_SCORES,
+            details=f'Viewed their scores for candidate #{candidate_id} in "{event.title}"',
+            event=event,
+            ip_address=_client_ip(request),
+        )
+
         return Response(serializer.data)

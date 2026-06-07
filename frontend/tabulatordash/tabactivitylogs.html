@@ -4,9 +4,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Activity Logs — EventTab Tabulator</title>
+  <title>Judge Activity Logs — EventTab Tabulator</title>
   <link rel="stylesheet" href="{% static 'tabulatordash/tab_v2.css' %}?v=20260524b">
-  <link rel="stylesheet" href="{% static 'tabulatordash/tabactivitylogs.css' %}?v=20260524b">
+  <link rel="stylesheet" href="{% static 'tabulatordash/tabactivitylogs.css' %}?v=20260604a">
 </head>
 <body class="tab-v2">
 <div class="tab-shell">
@@ -82,8 +82,8 @@
   <div class="tab-main">
     <header class="tab-topbar">
       <div class="tab-topbar-left">
-        <h2>Activity Logs</h2>
-        <p>Track all actions and activities performed in the system.</p>
+        <h2>Judge Activity Logs</h2>
+        <p>Monitor all judge actions — logins, score submissions, and event access.</p>
       </div>
       <div class="tab-topbar-right">
         <a class="tab-bell" href="#" aria-label="Notifications">
@@ -104,7 +104,7 @@
           <div class="tab-metric-body">
             <span class="tab-metric-label">TOTAL ACTIVITIES</span>
             <strong class="tab-metric-value">{{ total_activities }}</strong>
-            <small class="tab-metric-sub">All time</small>
+            <small class="tab-metric-sub">All judge actions</small>
           </div>
         </article>
         <article class="tab-metric">
@@ -112,9 +112,9 @@
             <svg viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3Zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3Zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5Zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5Z"/></svg>
           </div>
           <div class="tab-metric-body">
-            <span class="tab-metric-label">USERS INVOLVED</span>
-            <strong class="tab-metric-value">{{ users_involved }}</strong>
-            <small class="tab-metric-sub">All time</small>
+            <span class="tab-metric-label">ACTIVE JUDGES</span>
+            <strong class="tab-metric-value">{{ judges_active }}</strong>
+            <small class="tab-metric-sub">With recorded activity</small>
           </div>
         </article>
         <article class="tab-metric">
@@ -132,9 +132,9 @@
             <svg viewBox="0 0 24 24"><path d="M12 1 3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4Zm-1 14-4-4 1.41-1.41L11 12.17l4.59-4.58L17 10l-6 6Z"/></svg>
           </div>
           <div class="tab-metric-body">
-            <span class="tab-metric-label">CRITICAL ACTIONS</span>
-            <strong class="tab-metric-value">{{ critical_actions }}</strong>
-            <small class="tab-metric-sub">Require attention</small>
+            <span class="tab-metric-label">SCORE SUBMISSIONS</span>
+            <strong class="tab-metric-value">{{ score_submissions }}</strong>
+            <small class="tab-metric-sub">Scores submitted &amp; edited</small>
           </div>
         </article>
       </section>
@@ -144,21 +144,21 @@
         <div class="tab-table-toolbar">
           <div class="al-filter-bar">
             <form method="get" action="{% url 'tabulator_activity_logs' %}" class="tab-filter-form" id="logFilterForm">
-              <select class="tab-filter-select" name="user" title="Filter by user" onchange="this.form.submit()">
-                <option value="all" {% if selected_user == 'all' %}selected{% endif %}>All Users</option>
+              <select class="tab-filter-select" name="user" title="Filter by judge" onchange="this.form.submit()">
+                <option value="all" {% if selected_user == 'all' %}selected{% endif %}>All Judges</option>
                 {% for u in log_users %}
                 <option value="{{ u.id }}" {% if selected_user == u.id|stringformat:"s" %}selected{% endif %}>{{ u.username }}</option>
                 {% endfor %}
               </select>
               <select class="tab-filter-select" name="action" title="Filter by action" onchange="this.form.submit()">
                 <option value="all" {% if selected_action == 'all' %}selected{% endif %}>All Actions</option>
-                <option value="addition" {% if selected_action == 'addition' %}selected{% endif %}>Added</option>
-                <option value="change" {% if selected_action == 'change' %}selected{% endif %}>Changed</option>
-                <option value="deletion" {% if selected_action == 'deletion' %}selected{% endif %}>Deleted</option>
+                {% for code, label in action_choices %}
+                <option value="{{ code }}" {% if selected_action == code %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
               </select>
               <div class="tab-search-wrap">
                 <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5Zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14Z"/></svg>
-                <input type="text" class="tab-search-input" name="q" value="{{ search_query }}" placeholder="Search activities…">
+                <input type="text" class="tab-search-input" name="q" value="{{ search_query }}" placeholder="Search judge, event, details…">
               </div>
               <button type="submit" class="tab-btn tab-btn--outline" style="padding:7px 14px;">
                 <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M4 6h16v2H4V6Zm3 5h10v2H7v-2Zm4 5h2v2h-2v-2Z"/></svg>
@@ -173,18 +173,24 @@
             <thead>
               <tr>
                 <th>DATE &amp; TIME</th>
-                <th>USER</th>
+                <th>JUDGE</th>
                 <th>ACTION</th>
                 <th>DETAILS</th>
                 <th>EVENT</th>
-                <th>ACTION</th>
+                <th>IP ADDRESS</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
               {% for log in log_rows %}
               <tr>
                 <td class="tab-cell-muted">{{ log.date }}</td>
-                <td><strong>{{ log.user }}</strong></td>
+                <td>
+                  <div class="al-judge-cell">
+                    <strong>{{ log.user }}</strong>
+                    <small>{{ log.email }}</small>
+                  </div>
+                </td>
                 <td>
                   <span class="al-action-badge al-action-badge--{{ log.action_type }}">
                     <span class="al-action-dot"></span>{{ log.action_label }}
@@ -192,15 +198,22 @@
                 </td>
                 <td>{{ log.details }}</td>
                 <td class="tab-cell-muted">{{ log.event_name }}</td>
+                <td class="tab-cell-muted" style="font-family:monospace;font-size:12px;">{{ log.ip_address }}</td>
                 <td>
                   <button type="button" class="tab-action-btn tab-action-btn--view al-view-btn"
-                          data-details="{{ log.details }}" data-user="{{ log.user }}" data-date="{{ log.date }}">
+                          data-details="{{ log.details }}"
+                          data-user="{{ log.user }}"
+                          data-email="{{ log.email }}"
+                          data-date="{{ log.date }}"
+                          data-event="{{ log.event_name }}"
+                          data-candidate="{{ log.candidate_name }}"
+                          data-ip="{{ log.ip_address }}">
                     View
                   </button>
                 </td>
               </tr>
               {% empty %}
-              <tr><td colspan="6" class="tab-table-empty">No activity logs found.</td></tr>
+              <tr><td colspan="7" class="tab-table-empty">No judge activity logs recorded yet. Logs will appear here as judges interact with the mobile app.</td></tr>
               {% endfor %}
             </tbody>
           </table>
@@ -233,8 +246,8 @@
       <div class="al-info-banner">
         <svg viewBox="0 0 24 24" width="16" height="16"><path fill="#1e40af" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2Zm1 15h-2v-2h2v2Zm0-4h-2V7h2v6Z"/></svg>
         <div>
-          <strong>About Activity Logs</strong>
-          <p>Activity logs track important actions in the system for security and monitoring purposes. Logs are kept for 180 days.</p>
+          <strong>Judge Activity Monitoring</strong>
+          <p>This log tracks judge-only actions: logins, score submissions, score edits, and event access from the mobile app. Admin and super-admin actions are not shown here.</p>
         </div>
       </div>
 
@@ -247,12 +260,17 @@
 <div class="rp-modal-overlay" id="viewLogModal" style="display:none;">
   <div class="rp-modal">
     <div class="rp-modal-header">
-      <h3>Activity Detail</h3>
+      <h3>Judge Activity Detail</h3>
       <button type="button" class="rp-modal-close" id="closeLogModal">✕</button>
     </div>
     <div class="rp-modal-form">
-      <p><strong>User:</strong> <span id="modalUser"></span></p>
+      <p><strong>Judge:</strong> <span id="modalUser"></span></p>
+      <p><strong>Email:</strong> <span id="modalEmail"></span></p>
       <p><strong>Date:</strong> <span id="modalDate"></span></p>
+      <p><strong>Event:</strong> <span id="modalEvent"></span></p>
+      <p><strong>Candidate:</strong> <span id="modalCandidate"></span></p>
+      <p><strong>IP Address:</strong> <span id="modalIP"></span></p>
+      <hr style="border:0;border-top:1px solid #2d3748;margin:12px 0;">
       <p><strong>Details:</strong> <span id="modalDetails"></span></p>
     </div>
   </div>
@@ -265,12 +283,15 @@ if (tBtn && tSub) {
   tBtn.addEventListener('click', () => { tBtn.classList.toggle('open'); tSub.classList.toggle('open'); });
 }
 
-/* View log modal */
 const logModal = document.getElementById('viewLogModal');
 document.querySelectorAll('.al-view-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     document.getElementById('modalUser').textContent = btn.dataset.user;
+    document.getElementById('modalEmail').textContent = btn.dataset.email;
     document.getElementById('modalDate').textContent = btn.dataset.date;
+    document.getElementById('modalEvent').textContent = btn.dataset.event;
+    document.getElementById('modalCandidate').textContent = btn.dataset.candidate;
+    document.getElementById('modalIP').textContent = btn.dataset.ip;
     document.getElementById('modalDetails').textContent = btn.dataset.details;
     logModal.style.display = 'flex';
   });

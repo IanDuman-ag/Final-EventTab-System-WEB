@@ -8,6 +8,7 @@ from .models import (
     Department,
     Event,
     EventCategory,
+    JudgeActivityLog,
     JudgeScore,
     JudgingEvent,
     ScoreSheet,
@@ -42,3 +43,11 @@ admin.site.register(BracketTeam)
 admin.site.register(BracketMatch)
 admin.site.register(ScoreSheet)
 admin.site.register(JudgeScore)
+
+
+@admin.register(JudgeActivityLog)
+class JudgeActivityLogAdmin(admin.ModelAdmin):
+    list_display = ('judge', 'action', 'event', 'timestamp', 'ip_address')
+    list_filter = ('action', 'timestamp')
+    search_fields = ('judge__username', 'details', 'event__title')
+    readonly_fields = ('judge', 'action', 'details', 'event', 'candidate', 'ip_address', 'timestamp')

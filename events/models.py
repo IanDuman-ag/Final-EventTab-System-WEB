@@ -321,3 +321,49 @@ class ScoringCriterion(TabRecordBase):
 class Chairperson(TabRecordBase):
     """A chairperson assigned to oversee an event/portion."""
     pass
+
+
+class JudgeActivityLog(models.Model):
+    ACTION_LOGIN = 'login'
+    ACTION_LOGOUT = 'logout'
+    ACTION_SUBMIT_SCORE = 'submit_score'
+    ACTION_EDIT_SCORE = 'edit_score'
+    ACTION_VIEW_EVENT = 'view_event'
+    ACTION_VIEW_SCORES = 'view_scores'
+    ACTION_CHOICES = [
+        (ACTION_LOGIN, 'Logged In'),
+        (ACTION_LOGOUT, 'Logged Out'),
+        (ACTION_SUBMIT_SCORE, 'Submitted Score'),
+        (ACTION_EDIT_SCORE, 'Edited Score'),
+        (ACTION_VIEW_EVENT, 'Viewed Event'),
+        (ACTION_VIEW_SCORES, 'Viewed Scores'),
+    ]
+
+    judge = models.ForeignKey(User, on_delete=models.CASCADE, related_name='activity_logs')
+    action = models.CharField(max_length=30, choices=ACTION_CHOICES)
+    details = models.TextField(blank=True)
+    event = models.ForeignKey(
+        JudgingEvent, null=True, blank=True, on_delete=models.SET_NULL, related_name='judge_logs',
+    )
+    candidate = models.ForeignKey(
+        Candidate, null=True, blank=True, on_delete=models.SET_NULL,
+    )
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ['-timestamp']
+
+    def __str__(self):
+        return f'{self.judge.username} — {self.get_action_display()} — {self.timestamp:%Y-%m-%d %H:%M}'
+
+    @classmethod
+    def log(cls, judge, action, details='', event=None, candidate=None, ip_address=None):
+        return cls.objects.create(
+            judge=judge,
+            action=action,
+            details=details,
+            event=event,
+            candidate=candidate,
+            ip_address=ip_address,
+        )

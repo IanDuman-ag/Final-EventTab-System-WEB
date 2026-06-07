@@ -180,6 +180,27 @@ body.tab-v2 {
 .tab-progress-fill--full { background: #10b981; }
 .tab-progress-text { font-size: 11.5px; color: #64748b; }
 
+.tab-progress-cell { display: flex; flex-direction: column; gap: 3px; min-width: 100px; }
+.tab-progress-cell strong { font-size: 13px; color: #0f172a; }
+.tab-progress-cell small { font-size: 11px; color: #64748b; }
+.tab-progress-cell .tab-progress-bar { margin-top: 2px; }
+.tab-progress-cell .tab-progress-fill { background: #2563eb; }
+
+.tab-judge-cell { display: flex; flex-direction: column; gap: 4px; }
+.tab-judge-cell strong { font-size: 13px; font-weight: 600; color: #0f172a; }
+.tab-judge-tag {
+  display: inline-block; font-size: 12px; font-weight: 500; color: #1e3a5f;
+  background: #e8f0fe; padding: 2px 8px; border-radius: 4px; line-height: 1.4;
+}
+
+.tab-source-badge {
+  display: inline-block; margin-top: 4px;
+  padding: 1px 7px; border-radius: 4px;
+  font-size: 10px; font-weight: 700; letter-spacing: .3px;
+}
+.tab-source-badge--mobile { background: #dbeafe; color: #1e40af; }
+.tab-source-badge--bracket { background: #f1f5f9; color: #475569; }
+
 /* ── Judge avatars ─────────────────────────────────────────── */
 .tab-judges { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 .tab-judge-avatar {

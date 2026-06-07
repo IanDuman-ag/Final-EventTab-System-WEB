@@ -184,7 +184,7 @@ def get_reporting_data(event_name, department_filter="all", start_date=None, end
     return event_details, rankings, participants, audit_trail
 
 
-def generate_excel_report(event_name, department_filter="all", start_date=None, end_date=None, included_metrics=None):
+def generate_excel_report(event_name, department_filter="all", start_date=None, end_date=None, included_metrics=None, event_info=None):
     """
     Creates an Excel spreadsheet in memory using openpyxl, applying EventTab styling.
     """
@@ -376,7 +376,7 @@ def generate_excel_report(event_name, department_filter="all", start_date=None, 
     return excel_stream
 
 
-def generate_pdf_report(event_name, department_filter="all", start_date=None, end_date=None, included_metrics=None):
+def generate_pdf_report(event_name, department_filter="all", start_date=None, end_date=None, included_metrics=None, event_info=None):
     """
     Creates a styled PDF report using reportlab, conforming to the EventTab design system.
     """

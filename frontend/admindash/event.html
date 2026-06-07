@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Manage Events - EventTab</title>
-  <link rel="stylesheet" href="{% static 'admindash/event.css' %}?v=20260524b">
+  <link rel="stylesheet" href="{% static 'admindash/event.css' %}?v=20260607e">
 </head>
 <body class="admin-dashboard-page manage-events-page admin-dashboard-v2">
   <div class="dashboard-shell">
@@ -31,119 +31,186 @@
         </ul>
         {% endif %}
 
-        <section class="title-band">
-          <h3>MANAGE EVENTS</h3>
+        <section class="events-header">
+          <div class="events-header-text">
+            <h1>Events</h1>
+            <p>Manage all events for the intramurals.</p>
+          </div>
+          <button type="button" class="ev-create-btn" id="open-create-event">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 11V5h2v6h6v2h-6v6h-2v-6H5v-2h6Z"></path></svg>
+            <span>Create Event</span>
+          </button>
         </section>
 
-        <section class="stats-grid" aria-label="Event summaries">
-          <article class="stat-card stat-card--total">
-            <div class="stat-icon stat-icon--total">📋</div>
-            <div>
+        <section class="ev-stats" aria-label="Event summaries">
+          <article class="ev-stat">
+            <span class="ev-stat-icon ev-stat-icon--blue" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M7 2v2H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2H7Zm12 7v10H5V9h14Z"></path></svg>
+            </span>
+            <div class="ev-stat-body">
               <strong>{{ total_events_count|default:"0" }}</strong>
               <small>Total Events</small>
             </div>
           </article>
-          <article class="stat-card">
-            <div class="stat-icon">⚡</div>
-            <div>
+          <article class="ev-stat">
+            <span class="ev-stat-icon ev-stat-icon--amber" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z"></path></svg>
+            </span>
+            <div class="ev-stat-body">
               <strong>{{ active_count|default:"0" }}</strong>
               <small>Ongoing</small>
             </div>
           </article>
-          <article class="stat-card">
-            <div class="stat-icon">◔</div>
-            <div>
+          <article class="ev-stat">
+            <span class="ev-stat-icon ev-stat-icon--sky" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16Zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67V7Z"></path></svg>
+            </span>
+            <div class="ev-stat-body">
               <strong>{{ upcoming_count|default:"0" }}</strong>
               <small>Upcoming</small>
             </div>
           </article>
-          <article class="stat-card">
-            <div class="stat-icon">✓</div>
-            <div>
+          <article class="ev-stat">
+            <span class="ev-stat-icon ev-stat-icon--green" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm-1.2 14.4-4.2-4.2 1.4-1.4 2.8 2.8 5.8-5.8 1.4 1.4-7.2 7.2Z"></path></svg>
+            </span>
+            <div class="ev-stat-body">
               <strong>{{ completed_count|default:"0" }}</strong>
               <small>Completed</small>
             </div>
           </article>
         </section>
 
-        <section class="table-card">
-          <div class="table-card-header">
-            <h3>Manage Events</h3>
-            <div class="header-actions">
-              <details class="advanced-filters">
-                <summary>Advanced Filters</summary>
-                <form class="filters" method="get" role="search">
-                  <input type="text" name="q" value="{{ search_query }}" placeholder="Search event, category, venue">
-                  <select name="category" aria-label="Category">
-                    <option value="all">All Categories</option>
-                    {% for category in category_names %}
-                      <option value="{{ category|lower }}" {% if selected_category == category|lower %}selected{% endif %}>{{ category }}</option>
-                    {% endfor %}
-                  </select>
-                  <select name="status" aria-label="Status">
-                    <option value="all" {% if selected_status == 'all' %}selected{% endif %}>All Status</option>
-                    <option value="upcoming" {% if selected_status == 'upcoming' %}selected{% endif %}>Upcoming</option>
-                    <option value="ongoing" {% if selected_status == 'ongoing' %}selected{% endif %}>Ongoing</option>
-                    <option value="completed" {% if selected_status == 'completed' %}selected{% endif %}>Completed</option>
-                    <option value="inactive" {% if selected_status == 'inactive' %}selected{% endif %}>Deactivated</option>
-                  </select>
-                  <input type="text" name="schedule" value="{{ schedule_filter }}" placeholder="Schedule (optional)">
-                  <button type="submit">Apply</button>
+        <section class="ev-card">
+          <div class="ev-card-toolbar">
+            <nav class="ev-tabs" aria-label="Filter events by type">
+              <button type="button" class="ev-tab is-active" data-type="all">All Events</button>
+              <button type="button" class="ev-tab" data-type="match">Match-Based Events</button>
+              <button type="button" class="ev-tab" data-type="criteria">Criteria-Based Events</button>
+            </nav>
+            <div class="ev-toolbar-actions">
+              <form class="ev-search" method="get" role="search">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5Zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14Z"></path></svg>
+                <input type="text" name="q" value="{{ search_query }}" placeholder="Search events…" aria-label="Search events">
+              </form>
+              <div class="ev-filter">
+                <button type="button" class="ev-tool-btn" id="ev-filter-toggle" aria-haspopup="true" aria-expanded="false">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18v2l-7 7v5l-4 2v-7L3 7V5Z"></path></svg>
+                  <span>Filter</span>
+                </button>
+                <form class="ev-filter-panel" method="get" role="search" hidden>
+                  <div class="ev-filter-head">
+                    <span class="ev-filter-title">Filters</span>
+                    <button type="button" class="ev-filter-close" id="ev-filter-close" aria-label="Close filters">×</button>
+                  </div>
+                  <label>Category
+                    <select name="category">
+                      <option value="all">All Categories</option>
+                      {% for category in category_names %}
+                        <option value="{{ category|lower }}" {% if selected_category == category|lower %}selected{% endif %}>{{ category }}</option>
+                      {% endfor %}
+                    </select>
+                  </label>
+                  <label>Status
+                    <select name="status">
+                      <option value="all" {% if selected_status == 'all' %}selected{% endif %}>All Status</option>
+                      <option value="upcoming" {% if selected_status == 'upcoming' %}selected{% endif %}>Upcoming</option>
+                      <option value="ongoing" {% if selected_status == 'ongoing' %}selected{% endif %}>Ongoing</option>
+                      <option value="completed" {% if selected_status == 'completed' %}selected{% endif %}>Completed</option>
+                      <option value="inactive" {% if selected_status == 'inactive' %}selected{% endif %}>Deactivated</option>
+                    </select>
+                  </label>
+                  <label>Schedule
+                    <input type="date" name="schedule" value="{{ schedule_filter }}" placeholder="YYYY-MM-DD">
+                  </label>
+                  <input type="hidden" name="q" value="{{ search_query }}">
+                  <div class="ev-filter-actions">
+                    <a href="{% url 'admin_manage_events' %}" class="ev-filter-clear">Clear</a>
+                    <button type="submit" class="ev-filter-apply">Apply Filters</button>
+                  </div>
                 </form>
-              </details>
-              <button type="button" class="add-event-btn" id="open-create-event">Create Event</button>
+              </div>
+              <button type="button" class="ev-tool-btn ev-tool-btn--danger" id="ev-bulk-delete" hidden>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm1 7h2v8h-2v-8Zm4 0h2v8h-2v-8ZM6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7Z"></path></svg>
+                <span>Delete Selected (<span id="ev-bulk-count">0</span>)</span>
+              </button>
             </div>
           </div>
 
-          <div class="table-wrap">
-            <table class="events-table">
+          <div class="ev-table-wrap">
+            <table class="ev-table">
               <thead>
                 <tr>
+                  <th class="ev-th-check"><input type="checkbox" id="ev-select-all" aria-label="Select all events"></th>
+                  <th>Event Name</th>
                   <th>Type</th>
                   <th>Category</th>
                   <th>Date</th>
-                  <th>Time</th>
                   <th>Venue</th>
-                  <th>Actions</th>
+                  <th>Status</th>
+                  <th class="ev-th-actions">Actions</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody id="ev-tbody">
                 {% for row in event_rows %}
-                  <tr>
+                  <tr data-type="{{ row.event_type_key }}" data-event-id="{{ row.id }}">
+                    <td class="ev-td-check"><input type="checkbox" class="ev-row-check" value="{{ row.id }}" aria-label="Select {{ row.name }}"></td>
                     <td>
-                      <div class="event-name">
-                        <strong>{{ row.name }}</strong>
-                        <span>{{ row.status_label }}</span>
-                        {% if row.mobile_published %}
-                          <span class="mobile-sync-badge" title="Available on judge mobile app">Mobile</span>
-                        {% endif %}
+                      <div class="ev-name-cell">
+                        <span class="ev-name-icon ev-name-icon--{{ row.event_type_key }}" aria-hidden="true">{{ row.event_icon }}</span>
+                        <div class="ev-name-text">
+                          <strong>{{ row.name }}</strong>
+                          <span>{{ row.division|default:"—" }}{% if row.mobile_published %} · <em class="ev-mobile-tag">Mobile</em>{% endif %}</span>
+                        </div>
                       </div>
                     </td>
-                    <td>{{ row.category }}</td>
-                    <td>{{ row.schedule_label }}</td>
-                    <td>{{ row.event_time|default:"—" }}</td>
-                    <td>{{ row.venue }}</td>
                     <td>
-                      <div class="action-buttons">
-                        <button type="button" class="btn-view-event" data-id="{{ row.id }}" title="View" aria-label="View {{ row.name }}">
+                      <span class="ev-type-badge ev-type-badge--{{ row.event_type_key }}">{{ row.event_type_label }}</span>
+                    </td>
+                    <td><span class="ev-muted">{{ row.category|default:"—" }}</span></td>
+                    <td>
+                      <div class="ev-date-cell">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2v2H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2H7Zm12 7v10H5V9h14Z"></path></svg>
+                        <div>
+                          <strong>{{ row.schedule_label|default:"—" }}</strong>
+                          <span>{{ row.event_time|default:"—" }}</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td><span class="ev-muted ev-venue" title="{{ row.venue|default:'—' }}">{{ row.venue|default:"—" }}</span></td>
+                    <td>
+                      <span class="ev-status ev-status--{{ row.status }}">{{ row.status_label }}</span>
+                    </td>
+                    <td>
+                      <div class="ev-actions">
+                        <button type="button" class="ev-act ev-act--view btn-view-event" data-id="{{ row.id }}" title="View" aria-label="View {{ row.name }}">
                           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5ZM12 17a5 5 0 1 1 0-10 5 5 0 0 1 0 10Zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"></path></svg>
                         </button>
-                        <button type="button" class="btn-edit-event" data-id="{{ row.id }}" title="Edit" aria-label="Edit {{ row.name }}">
+                        <button type="button" class="ev-act ev-act--edit btn-edit-event" data-id="{{ row.id }}" title="Edit" aria-label="Edit {{ row.name }}">
                           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 17.25 11.06-11.06 3.75 3.75L6.75 21H3v-3.75ZM19.71 8.04 15.96 4.3l1.33-1.33a1 1 0 0 1 1.42 0l2.33 2.33a1 1 0 0 1 0 1.42l-1.33 1.33Z"></path></svg>
                         </button>
-                        <button type="button" class="btn-delete-event danger" data-id="{{ row.id }}" title="Delete" aria-label="Delete {{ row.name }}">
+                        <button type="button" class="ev-act ev-act--delete btn-delete-event danger" data-id="{{ row.id }}" title="Delete" aria-label="Delete {{ row.name }}">
                           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm1 7h2v8h-2v-8Zm4 0h2v8h-2v-8ZM6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7Z"></path></svg>
                         </button>
                       </div>
                     </td>
                   </tr>
-                {% empty %}
-                  <tr>
-                    <td colspan="6" class="empty-state">No events yet. Click "Create Event" to add one.</td>
-                  </tr>
                 {% endfor %}
+                <tr class="ev-empty-row" hidden>
+                  <td colspan="8" class="empty-state">No events match the current filter.</td>
+                </tr>
+                {% if not event_rows %}
+                <tr>
+                  <td colspan="8" class="empty-state">No events yet. Click "Create Event" to add one.</td>
+                </tr>
+                {% endif %}
               </tbody>
             </table>
+          </div>
+
+          <div class="ev-card-footer">
+            <span class="ev-entries" id="ev-entries">Showing {{ event_rows|length }} of {{ total_events_count }} events</span>
+            <div class="ev-pagination" id="ev-pagination"></div>
           </div>
         </section>
       </main>
@@ -151,78 +218,256 @@
   </div>
 
   <!-- ── Create Event Dialog ─────────────────────────────────────── -->
-  <dialog id="create-event-dialog" class="create-event-dialog" aria-labelledby="create-event-title">
-    <form class="create-event-form" method="post" enctype="multipart/form-data" action="{% url 'admin_manage_events' %}">
+  <dialog id="create-event-dialog" class="ced" aria-labelledby="create-event-title">
+    <form class="ced-form" method="post" enctype="multipart/form-data" action="{% url 'admin_manage_events' %}">
       {% csrf_token %}
       <input type="hidden" name="form_action" value="create_event">
-      <header class="create-event-dialog-head">
-        <h2 id="create-event-title">Create event</h2>
-        <button type="button" class="create-event-close" id="close-create-event" aria-label="Close dialog">×</button>
+
+      <!-- Header -->
+      <header class="ced-header">
+        <h2 id="create-event-title">Create New Event</h2>
+        <button type="button" class="ced-close" id="close-create-event" aria-label="Close dialog">
+          <svg viewBox="0 0 24 24" width="20" height="20"><path d="M18.3 5.71a1 1 0 0 0-1.41 0L12 10.59 7.11 5.7A1 1 0 0 0 5.7 7.11L10.59 12 5.7 16.89a1 1 0 1 0 1.41 1.41L12 13.41l4.89 4.89a1 1 0 0 0 1.41-1.41L13.41 12l4.89-4.89a1 1 0 0 0 0-1.4Z" fill="currentColor"/></svg>
+        </button>
       </header>
-      <div class="create-event-grid">
-        <label class="create-event-field">
-          <span class="create-event-label">Event Name</span>
-          <input type="text" name="event_name" required maxlength="200" placeholder="e.g. Inter-college Debate 2026" autocomplete="off">
-        </label>
-        <label class="create-event-field">
-          <span class="create-event-label">Category</span>
-          <select name="category" required>
-            <option value="" disabled selected>Select category</option>
-            {% for cat in create_category_options %}
-            <option value="{{ cat }}">{{ cat }}</option>
-            {% endfor %}
-          </select>
-        </label>
-        <label class="create-event-field">
-          <span class="create-event-label">Division</span>
-          <select name="division" required>
-            <option value="" disabled selected>Select division</option>
-            {% for div in create_division_options %}
-            <option value="{{ div }}">{{ div }}</option>
-            {% endfor %}
-          </select>
-        </label>
-        <label class="create-event-field">
-          <span class="create-event-label">Status</span>
-          <select name="status" required>
-            <option value="active" selected>Activate</option>
-            <option value="inactive">Deactivate</option>
-          </select>
-        </label>
-        <label class="create-event-field">
-          <span class="create-event-label">Maximum Participants</span>
-          <input type="number" name="max_participants" min="1" max="99999" placeholder="e.g. 120" required>
-        </label>
-        <label class="create-event-field">
-          <span class="create-event-label">Number of Teams/Groups</span>
-          <input type="number" name="num_teams" min="1" max="9999" placeholder="e.g. 16" required>
-        </label>
-        <label class="create-event-field">
-          <span class="create-event-label">Faculty In-Charge</span>
-          <input type="text" name="faculty_in_charge" maxlength="150" placeholder="Full name" required>
-        </label>
-        <label class="create-event-field">
-          <span class="create-event-label">Student In-Charge</span>
-          <input type="text" name="student_in_charge" maxlength="150" placeholder="Full name" required>
-        </label>
-        <label class="create-event-field">
-          <span class="create-event-label">Date</span>
-          <input type="date" name="event_date" required>
-        </label>
-        <label class="create-event-field">
-          <span class="create-event-label">Time</span>
-          <input type="time" name="event_time" required>
-        </label>
-        <label class="create-event-field create-event-field--full">
-          <span class="create-event-label">Venue</span>
-          <input type="text" name="venue" maxlength="200" placeholder="Building, room, or court" required>
-        </label>
-        <label class="create-event-field create-event-field--full">
-          <span class="create-event-label">Mechanics/Rules</span>
-          <textarea name="mechanics" rows="4" maxlength="8000" placeholder="Eligibility, rounds, equipment, conduct…" required></textarea>
-        </label>
-        <div class="create-event-field create-event-field--full">
-          <span class="create-event-label">Assigned Judges</span>
+
+      <div class="ced-body">
+
+        <!-- ── 1. Basic Information ─────────────────────── -->
+        <section class="ced-section">
+          <h3 class="ced-section-title">1. Basic Information</h3>
+          <div class="ced-row">
+            <label class="ced-field">
+              <span class="ced-label">Event Name <span class="ced-req">*</span></span>
+              <input type="text" name="event_name" required maxlength="200" placeholder="Enter event name" autocomplete="off">
+            </label>
+            <label class="ced-field">
+              <span class="ced-label">Category <span class="ced-req">*</span></span>
+              <select name="category" required>
+                <option value="" disabled selected>Select category</option>
+                {% for cat in create_category_options %}
+                <option value="{{ cat }}">{{ cat }}</option>
+                {% endfor %}
+              </select>
+            </label>
+          </div>
+          <div class="ced-row">
+            <label class="ced-field">
+              <span class="ced-label">Division / Gender</span>
+              <select name="division">
+                <option value="" disabled selected>Select division or gender</option>
+                {% for div in create_division_options %}
+                <option value="{{ div }}">{{ div }}</option>
+                {% endfor %}
+              </select>
+            </label>
+            <label class="ced-field">
+              <span class="ced-label">Description <span class="ced-opt">(Optional)</span></span>
+              <input type="text" name="mechanics" maxlength="8000" placeholder="Enter event description">
+            </label>
+          </div>
+        </section>
+
+        <!-- ── 2. Scoring Method ────────────────────────── -->
+        <section class="ced-section">
+          <h3 class="ced-section-title">2. Scoring Method</h3>
+          <div class="ced-scoring-cards">
+            <label class="ced-scard is-selected" data-method="match">
+              <input type="radio" name="scoring_method" value="match" checked class="ced-scard-radio">
+              <div class="ced-scard-icon ced-scard-icon--match">
+                <svg viewBox="0 0 24 24" width="28" height="28"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2Zm0 14.5c-2.49 0-4.5-2.01-4.5-4.5S9.51 7.5 12 7.5s4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5Zm0-5.5c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1Z" fill="currentColor"/></svg>
+              </div>
+              <div class="ced-scard-body">
+                <strong>Match Result Based</strong>
+                <span>For sports events with match scores</span>
+                <small>Example: Basketball, Volleyball, Chess</small>
+              </div>
+              <span class="ced-scard-check"></span>
+            </label>
+            <label class="ced-scard" data-method="criteria">
+              <input type="radio" name="scoring_method" value="criteria" class="ced-scard-radio">
+              <div class="ced-scard-icon ced-scard-icon--criteria">
+                <svg viewBox="0 0 24 24" width="28" height="28"><path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Zm-9 14-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9Z" fill="currentColor"/></svg>
+              </div>
+              <div class="ced-scard-body">
+                <strong>Criteria Based</strong>
+                <span>For judged events with criteria scoring</span>
+                <small>Example: Dance, Singing, Pageant</small>
+              </div>
+              <span class="ced-scard-check"></span>
+            </label>
+          </div>
+        </section>
+
+        <!-- ── 3. Event Details ─────────────────────────── -->
+        <section class="ced-section">
+          <h3 class="ced-section-title">3. Event Details</h3>
+          <div class="ced-row">
+            <label class="ced-field">
+              <span class="ced-label">Date <span class="ced-req">*</span></span>
+              <input type="date" name="event_date" required placeholder="Select date">
+            </label>
+            <label class="ced-field">
+              <span class="ced-label">Time <span class="ced-req">*</span></span>
+              <input type="time" name="event_time" required placeholder="Select time">
+            </label>
+          </div>
+          <div class="ced-row">
+            <label class="ced-field">
+              <span class="ced-label">Venue <span class="ced-req">*</span></span>
+              <div class="ced-input-icon">
+                <input type="text" name="venue" required maxlength="200" placeholder="Enter venue" autocomplete="off">
+                <svg viewBox="0 0 24 24" width="16" height="16"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7Zm0 9.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5Z" fill="#94a3b8"/></svg>
+              </div>
+            </label>
+            <label class="ced-field">
+              <span class="ced-label">Tournament Type</span>
+              <select name="tournament_type">
+                <option value="" disabled selected>Select tournament type</option>
+                <option value="single_elimination">Single Elimination</option>
+                <option value="double_elimination">Double Elimination</option>
+                <option value="round_robin">Round Robin</option>
+                <option value="best_of_3">Best of 3</option>
+                <option value="best_of_5">Best of 5</option>
+              </select>
+            </label>
+          </div>
+          <div class="ced-row">
+            <label class="ced-field">
+              <span class="ced-label">Registration Start <span class="ced-opt">(Optional)</span></span>
+              <input type="date" name="reg_start" placeholder="Select date">
+            </label>
+            <label class="ced-field">
+              <span class="ced-label">Registration End <span class="ced-opt">(Optional)</span></span>
+              <input type="date" name="reg_end" placeholder="Select date">
+            </label>
+          </div>
+        </section>
+
+        <!-- ── 4. Configuration (switches between match / criteria) ── -->
+        <section class="ced-section" id="ced-config-section">
+
+          <!-- ▸ Match Result Based panel -->
+          <div id="ced-match-panel">
+            <h3 class="ced-section-title">4. Points Configuration</h3>
+            <p class="ced-section-desc">Set the points to be awarded for this event.</p>
+
+            <span class="ced-badge ced-badge--blue">Match Result Based</span>
+            <div class="ced-row ced-row--4">
+              <label class="ced-field">
+                <span class="ced-label">Champion Points <span class="ced-req">*</span></span>
+                <input type="number" name="champion_points" min="0" max="999" placeholder="e.g. 15">
+              </label>
+              <label class="ced-field">
+                <span class="ced-label">1st Runner-up Points <span class="ced-req">*</span></span>
+                <input type="number" name="first_runner_points" min="0" max="999" placeholder="e.g. 10">
+              </label>
+              <label class="ced-field">
+                <span class="ced-label">2nd Runner-up Points</span>
+                <input type="number" name="second_runner_points" min="0" max="999" placeholder="e.g. 5">
+              </label>
+              <label class="ced-field">
+                <span class="ced-label">Participation Points</span>
+                <input type="number" name="participation_points" min="0" max="999" placeholder="e.g. 1">
+              </label>
+            </div>
+
+            <!-- Teams sub-section -->
+            <div class="ced-sub-header">
+              <span class="ced-badge ced-badge--blue">Teams</span>
+              <button type="button" class="ced-add-btn" id="ced-add-team">
+                <svg viewBox="0 0 24 24" width="14" height="14"><path d="M11 11V5h2v6h6v2h-6v6h-2v-6H5v-2h6Z" fill="currentColor"/></svg>
+                Add Team
+              </button>
+            </div>
+            <div class="ced-dynamic-list" id="ced-teams-list"></div>
+            <textarea name="teams_data" id="ced-teams-data" hidden></textarea>
+          </div>
+
+          <!-- ▸ Criteria Based panel -->
+          <div id="ced-criteria-panel" hidden>
+            <h3 class="ced-section-title">4. Criteria Configuration</h3>
+            <p class="ced-section-desc">Set the scoring criteria for this judged event.</p>
+
+            <div class="scoring-builder" data-builder-id="create">
+              <div class="scoring-builder-head">
+                <span class="scoring-builder-title">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 7v6c0 4.5 3.4 8.5 8 9 4.6-.5 8-4.5 8-9V7l-8-4Z"/></svg>
+                  SCORING CRITERIA
+                </span>
+              </div>
+              <p class="scoring-builder-info">
+                <span class="scoring-info-icon" aria-hidden="true">ℹ</span>
+                Create the criteria and set the weight/points for each. Total weight should equal 100%.
+              </p>
+              <label class="scoring-field">
+                <span class="scoring-field-label">Scoring Type</span>
+                <select class="scoring-type">
+                  <option value="percentage" selected>Percentage (Total = 100%)</option>
+                  <option value="points">Points (any total)</option>
+                </select>
+              </label>
+              <div class="scoring-list-label">Criteria List</div>
+              <div class="scoring-list"></div>
+              <button type="button" class="scoring-add-btn">+ Add Criteria</button>
+              <div class="scoring-total">
+                <span>Total Weight</span>
+                <span class="scoring-total-value">0%</span>
+              </div>
+            </div>
+
+            <!-- Candidates sub-section -->
+            <div class="ced-sub-header">
+              <span class="ced-badge ced-badge--green">Candidates</span>
+              <button type="button" class="ced-add-btn" id="ced-add-candidate">
+                <svg viewBox="0 0 24 24" width="14" height="14"><path d="M11 11V5h2v6h6v2h-6v6h-2v-6H5v-2h6Z" fill="currentColor"/></svg>
+                Add Candidate
+              </button>
+            </div>
+            <div class="ced-dynamic-list" id="ced-candidates-list"></div>
+            <textarea name="candidates_data" id="ced-candidates-data" hidden></textarea>
+            <textarea name="scoring_criteria" class="scoring-data" hidden></textarea>
+          </div>
+
+        </section>
+
+        <!-- ── 5. Additional Settings ───────────────────── -->
+        <section class="ced-section">
+          <h3 class="ced-section-title">5. Additional Settings</h3>
+          <div class="ced-toggles">
+            <div class="ced-toggle-row">
+              <div class="ced-toggle-info">
+                <strong>Require Verification</strong>
+                <span>Results must be verified before publishing</span>
+              </div>
+              <label class="ced-switch">
+                <input type="checkbox" name="require_verification" checked>
+                <span class="ced-switch-track"></span>
+              </label>
+            </div>
+            <div class="ced-toggle-row">
+              <div class="ced-toggle-info">
+                <strong>Set as Active</strong>
+                <span>Make this event visible to users</span>
+              </div>
+              <label class="ced-switch">
+                <input type="checkbox" name="set_active" checked>
+                <span class="ced-switch-track"></span>
+              </label>
+            </div>
+          </div>
+        </section>
+
+        <!-- Hidden fields that the backend still needs -->
+        <input type="hidden" name="status" id="ced-status-hidden" value="active">
+        <input type="hidden" name="max_participants" id="ced-maxp-hidden" value="">
+        <input type="hidden" name="num_teams" id="ced-numt-hidden" value="">
+        <input type="hidden" name="faculty_in_charge" value="">
+        <input type="hidden" name="student_in_charge" value="">
+
+        <!-- Assigned Judges (collapsed) -->
+        <section class="ced-section ced-section--judges" id="ced-judges-section">
+          <h3 class="ced-section-title" id="ced-judges-title">6. Assigned Judges <span class="ced-opt">(Optional)</span></h3>
           <div class="judge-select-wrap">
             {% if judge_options %}
               {% for judge in judge_options %}
@@ -237,45 +482,14 @@
               <p class="judge-empty">No judge accounts found. Create judge accounts in Manage Account first.</p>
             {% endif %}
           </div>
-        </div>
-        <div class="create-event-field create-event-field--full">
-          <div class="scoring-builder" data-builder-id="create">
-            <div class="scoring-builder-head">
-              <span class="scoring-builder-title">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 7v6c0 4.5 3.4 8.5 8 9 4.6-.5 8-4.5 8-9V7l-8-4Z"/></svg>
-                SCORING CRITERIA
-              </span>
-            </div>
-            <p class="scoring-builder-info">
-              <span class="scoring-info-icon" aria-hidden="true">ℹ</span>
-              Create the criteria and set the weight/points for each. Total weight should equal 100%.
-            </p>
-            <label class="scoring-field">
-              <span class="scoring-field-label">Scoring Type</span>
-              <select class="scoring-type">
-                <option value="percentage" selected>Percentage (Total = 100%)</option>
-                <option value="points">Points (any total)</option>
-              </select>
-            </label>
-            <div class="scoring-list-label">Criteria List</div>
-            <div class="scoring-list"></div>
-            <button type="button" class="scoring-add-btn">+ Add Criteria</button>
-            <div class="scoring-total">
-              <span>Total Weight</span>
-              <span class="scoring-total-value">0%</span>
-            </div>
-          </div>
-          <textarea name="scoring_criteria" class="scoring-data" hidden></textarea>
-        </div>
-        <label class="create-event-field create-event-field--full">
-          <span class="create-event-label">Event Image</span>
-          <input type="file" name="event_image" accept="image/*">
-        </label>
+        </section>
+
       </div>
-      <footer class="create-event-actions">
-        <button type="button" class="create-event-cancel" id="cancel-create-event">Cancel</button>
-        <p class="create-event-hint">Events are automatically published to the judge mobile app after creation.</p>
-        <button type="submit" class="create-event-submit">Create event</button>
+
+      <!-- Footer -->
+      <footer class="ced-footer">
+        <button type="button" class="ced-btn-cancel" id="cancel-create-event">Cancel</button>
+        <button type="submit" class="ced-btn-submit">Create Event</button>
       </footer>
     </form>
   </dialog>
@@ -504,6 +718,21 @@
     </div>
   </dialog>
 
+  <!-- ── Bulk Delete Confirmation Dialog ────────────────────────── -->
+  <dialog id="bulk-delete-dialog" class="delete-confirm-dialog" aria-labelledby="bulk-delete-title">
+    <div class="delete-confirm-inner">
+      <div class="delete-confirm-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm1 7h2v8h-2v-8Zm4 0h2v8h-2v-8ZM6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7Z"></path></svg>
+      </div>
+      <h2 id="bulk-delete-title">Delete Selected Events?</h2>
+      <p>You are about to delete <strong id="bulk-delete-count">0</strong> event(s). This action cannot be undone.</p>
+      <div class="delete-confirm-actions">
+        <button type="button" class="create-event-cancel" id="cancel-bulk-delete">Cancel</button>
+        <button type="button" class="delete-confirm-btn" id="confirm-bulk-delete">Delete All</button>
+      </div>
+    </div>
+  </dialog>
+
   {{ event_rows|json_script:"event-rows-data" }}
 
   <script>
@@ -690,6 +919,15 @@
     if (createDlg && openCreate) {
       openCreate.addEventListener('click', function () {
         if (createBuilder && createBuilder._reset) createBuilder._reset();
+        // Reset to match-based as default
+        scoringCards.forEach(function (c) { c.classList.remove('is-selected'); });
+        var matchCard = document.querySelector('.ced-scard[data-method="match"]');
+        if (matchCard) { matchCard.classList.add('is-selected'); matchCard.querySelector('.ced-scard-radio').checked = true; }
+        switchScoringPanel('match');
+        if (teamsList) teamsList.innerHTML = '';
+        if (candidatesList) candidatesList.innerHTML = '';
+        if (teamsData) teamsData.value = '[]';
+        if (candidatesData) candidatesData.value = '[]';
         openDialog(createDlg);
       });
       var closeCreateBtn = document.getElementById('close-create-event');
@@ -697,6 +935,158 @@
       if (closeCreateBtn) closeCreateBtn.addEventListener('click', function () { closeDialog(createDlg); });
       if (cancelCreateBtn) cancelCreateBtn.addEventListener('click', function () { closeDialog(createDlg); });
       createDlg.addEventListener('click', function (e) { if (e.target === createDlg) closeDialog(createDlg); });
+    }
+
+    /* ── Scoring method card selection + panel toggling ──────────── */
+    var scoringCards = document.querySelectorAll('.ced-scard');
+    var matchPanel    = document.getElementById('ced-match-panel');
+    var criteriaPanel = document.getElementById('ced-criteria-panel');
+
+    var judgesTitleEl = document.getElementById('ced-judges-title');
+
+    function switchScoringPanel(method) {
+      if (matchPanel)    matchPanel.hidden    = (method !== 'match');
+      if (criteriaPanel) criteriaPanel.hidden = (method !== 'criteria');
+      if (judgesTitleEl) {
+        judgesTitleEl.innerHTML = method === 'match'
+          ? '6. Assigned Scorers <span class="ced-opt">(Optional)</span>'
+          : '6. Assigned Judges <span class="ced-opt">(Optional)</span>';
+      }
+    }
+
+    scoringCards.forEach(function (card) {
+      card.addEventListener('click', function () {
+        scoringCards.forEach(function (c) { c.classList.remove('is-selected'); });
+        card.classList.add('is-selected');
+        switchScoringPanel(card.dataset.method);
+      });
+    });
+
+    /* ── Teams builder (match-based) ─────────────────────────────── */
+    var teamsList  = document.getElementById('ced-teams-list');
+    var teamsData  = document.getElementById('ced-teams-data');
+    var addTeamBtn = document.getElementById('ced-add-team');
+
+    var departmentOptions = {{ department_options_json|safe }};
+
+    function deptOptionsHtml(selected) {
+      var html = '<option value="">Select department</option>';
+      departmentOptions.forEach(function (d) {
+        html += '<option value="' + escHtml(d) + '"' + (d === selected ? ' selected' : '') + '>' + escHtml(d) + '</option>';
+      });
+      return html;
+    }
+
+    function renderTeamRow(team, idx) {
+      return '<div class="ced-dyn-row" data-idx="' + idx + '">' +
+        '<span class="ced-dyn-num">' + (idx + 1) + '</span>' +
+        '<input type="text" class="ced-dyn-input ced-team-name" placeholder="Team name" value="' + escHtml(team.name || '') + '">' +
+        '<select class="ced-dyn-select ced-team-dept">' + deptOptionsHtml(team.department || '') + '</select>' +
+        '<input type="text" class="ced-dyn-input ced-team-members" placeholder="Members (comma-separated)" value="' + escHtml(team.members || '') + '">' +
+        '<button type="button" class="ced-dyn-remove" aria-label="Remove team">×</button>' +
+      '</div>';
+    }
+
+    function syncTeamsData() {
+      if (!teamsList || !teamsData) return;
+      var rows = teamsList.querySelectorAll('.ced-dyn-row');
+      var teams = [];
+      rows.forEach(function (row, i) {
+        var name = row.querySelector('.ced-team-name').value.trim();
+        var dept = row.querySelector('.ced-team-dept').value;
+        var members = row.querySelector('.ced-team-members').value.trim();
+        row.querySelector('.ced-dyn-num').textContent = (i + 1);
+        if (name) teams.push({ name: name, department: dept, members: members });
+      });
+      teamsData.value = JSON.stringify(teams);
+    }
+
+    function wireTeamRowEvents() {
+      if (!teamsList) return;
+      teamsList.querySelectorAll('.ced-dyn-row').forEach(function (row) {
+        row.querySelectorAll('input, select').forEach(function (el) {
+          el.addEventListener('input', syncTeamsData);
+          el.addEventListener('change', syncTeamsData);
+        });
+        var rm = row.querySelector('.ced-dyn-remove');
+        if (rm) rm.addEventListener('click', function () { row.remove(); syncTeamsData(); });
+      });
+    }
+
+    if (addTeamBtn) {
+      addTeamBtn.addEventListener('click', function () {
+        var idx = teamsList.querySelectorAll('.ced-dyn-row').length;
+        var temp = document.createElement('div');
+        temp.innerHTML = renderTeamRow({}, idx);
+        var newRow = temp.firstChild;
+        teamsList.appendChild(newRow);
+        wireTeamRowEvents();
+        syncTeamsData();
+        newRow.querySelector('.ced-team-name').focus();
+      });
+    }
+
+    /* ── Candidates builder (criteria-based) ─────────────────────── */
+    var candidatesList  = document.getElementById('ced-candidates-list');
+    var candidatesData  = document.getElementById('ced-candidates-data');
+    var addCandidateBtn = document.getElementById('ced-add-candidate');
+
+    function renderCandidateRow(cand, idx) {
+      return '<div class="ced-dyn-row" data-idx="' + idx + '">' +
+        '<span class="ced-dyn-num">' + (idx + 1) + '</span>' +
+        '<input type="text" class="ced-dyn-input ced-cand-name" placeholder="Candidate name" value="' + escHtml(cand.name || '') + '">' +
+        '<select class="ced-dyn-select ced-cand-dept">' + deptOptionsHtml(cand.department || '') + '</select>' +
+        '<input type="text" class="ced-dyn-input ced-cand-desc" placeholder="Description (optional)" value="' + escHtml(cand.description || '') + '">' +
+        '<button type="button" class="ced-dyn-remove" aria-label="Remove candidate">×</button>' +
+      '</div>';
+    }
+
+    function syncCandidatesData() {
+      if (!candidatesList || !candidatesData) return;
+      var rows = candidatesList.querySelectorAll('.ced-dyn-row');
+      var candidates = [];
+      rows.forEach(function (row, i) {
+        var name = row.querySelector('.ced-cand-name').value.trim();
+        var dept = row.querySelector('.ced-cand-dept').value;
+        var desc = row.querySelector('.ced-cand-desc').value.trim();
+        row.querySelector('.ced-dyn-num').textContent = (i + 1);
+        if (name) candidates.push({ number: i + 1, name: name, department: dept, description: desc });
+      });
+      candidatesData.value = JSON.stringify(candidates);
+    }
+
+    function wireCandidateRowEvents() {
+      if (!candidatesList) return;
+      candidatesList.querySelectorAll('.ced-dyn-row').forEach(function (row) {
+        row.querySelectorAll('input, select').forEach(function (el) {
+          el.addEventListener('input', syncCandidatesData);
+          el.addEventListener('change', syncCandidatesData);
+        });
+        var rm = row.querySelector('.ced-dyn-remove');
+        if (rm) rm.addEventListener('click', function () { row.remove(); syncCandidatesData(); });
+      });
+    }
+
+    if (addCandidateBtn) {
+      addCandidateBtn.addEventListener('click', function () {
+        var idx = candidatesList.querySelectorAll('.ced-dyn-row').length;
+        var temp = document.createElement('div');
+        temp.innerHTML = renderCandidateRow({}, idx);
+        var newRow = temp.firstChild;
+        candidatesList.appendChild(newRow);
+        wireCandidateRowEvents();
+        syncCandidatesData();
+        newRow.querySelector('.ced-cand-name').focus();
+      });
+    }
+
+    /* ── Sync "Set as Active" toggle to hidden status field ───────── */
+    var activeToggle = createDlg ? createDlg.querySelector('[name="set_active"]') : null;
+    var statusHidden = document.getElementById('ced-status-hidden');
+    if (activeToggle && statusHidden) {
+      activeToggle.addEventListener('change', function () {
+        statusHidden.value = activeToggle.checked ? 'active' : 'inactive';
+      });
     }
 
     /* ── View dialog ─────────────────────────────────────────────── */
@@ -839,6 +1229,221 @@
         openDialog(deleteDlg);
       });
     });
+  }());
+  </script>
+
+  <!-- ── Tabs, pagination, filter toggle & bulk delete ─────────────── -->
+  <script>
+  (function () {
+    function openDialog(dlg) {
+      if (!dlg) return;
+      if (typeof dlg.showModal === 'function') dlg.showModal();
+      else dlg.setAttribute('open', '');
+    }
+    function closeDialog(dlg) {
+      if (!dlg) return;
+      if (typeof dlg.close === 'function') dlg.close();
+      else dlg.removeAttribute('open');
+    }
+
+    var PAGE_SIZE = 10;
+    var tbody = document.getElementById('ev-tbody');
+    if (!tbody) return;
+
+    var allRows = Array.prototype.slice.call(tbody.querySelectorAll('tr[data-type]'));
+    var emptyRow = tbody.querySelector('.ev-empty-row');
+    var tabs = Array.prototype.slice.call(document.querySelectorAll('.ev-tab'));
+    var pagEl = document.getElementById('ev-pagination');
+    var entriesEl = document.getElementById('ev-entries');
+    var totalRows = allRows.length;
+
+    var activeType = 'all';
+    var currentPage = 1;
+
+    function getFiltered() {
+      if (activeType === 'all') return allRows;
+      return allRows.filter(function (r) { return r.dataset.type === activeType; });
+    }
+
+    function render() {
+      var filtered = getFiltered();
+      var pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+      if (currentPage > pageCount) currentPage = pageCount;
+      var start = (currentPage - 1) * PAGE_SIZE;
+      var end = start + PAGE_SIZE;
+
+      allRows.forEach(function (r) { r.style.display = 'none'; });
+      filtered.slice(start, end).forEach(function (r) { r.style.display = ''; });
+
+      if (emptyRow) emptyRow.hidden = filtered.length !== 0;
+
+      if (entriesEl) {
+        if (filtered.length === 0) {
+          entriesEl.textContent = 'Showing 0 of ' + totalRows + ' events';
+        } else {
+          entriesEl.textContent = 'Showing ' + (start + 1) + ' to ' +
+            Math.min(end, filtered.length) + ' of ' + filtered.length + ' events';
+        }
+      }
+      renderPagination(pageCount);
+    }
+
+    function makeBtn(label, page, opts) {
+      opts = opts || {};
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'ev-page-btn' + (opts.active ? ' is-active' : '');
+      b.innerHTML = label;
+      if (opts.disabled) { b.disabled = true; }
+      else { b.addEventListener('click', function () { currentPage = page; render(); }); }
+      return b;
+    }
+
+    function renderPagination(pageCount) {
+      if (!pagEl) return;
+      pagEl.innerHTML = '';
+      if (pageCount <= 1) return;
+      pagEl.appendChild(makeBtn('&lsaquo;', currentPage - 1, { disabled: currentPage === 1 }));
+      for (var i = 1; i <= pageCount; i++) {
+        pagEl.appendChild(makeBtn(String(i), i, { active: i === currentPage }));
+      }
+      pagEl.appendChild(makeBtn('&rsaquo;', currentPage + 1, { disabled: currentPage === pageCount }));
+    }
+
+    tabs.forEach(function (tab) {
+      tab.addEventListener('click', function () {
+        tabs.forEach(function (t) { t.classList.remove('is-active'); });
+        tab.classList.add('is-active');
+        activeType = tab.dataset.type || 'all';
+        currentPage = 1;
+        render();
+      });
+    });
+
+    /* Filter dropdown toggle */
+    var filterToggle = document.getElementById('ev-filter-toggle');
+    var filterPanel = document.querySelector('.ev-filter-panel');
+    var filterClose = document.getElementById('ev-filter-close');
+    function hideFilterPanel() {
+      if (!filterPanel) return;
+      filterPanel.hidden = true;
+      if (filterToggle) filterToggle.setAttribute('aria-expanded', 'false');
+    }
+    if (filterToggle && filterPanel) {
+      filterToggle.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var willShow = filterPanel.hidden;
+        filterPanel.hidden = !willShow;
+        filterToggle.setAttribute('aria-expanded', String(willShow));
+      });
+      if (filterClose) {
+        filterClose.addEventListener('click', function (e) {
+          e.stopPropagation();
+          hideFilterPanel();
+        });
+      }
+      document.addEventListener('click', function (e) {
+        if (!filterPanel.hidden && !filterPanel.contains(e.target) && e.target !== filterToggle) {
+          hideFilterPanel();
+        }
+      });
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') hideFilterPanel();
+      });
+    }
+
+    /* ── Bulk selection & delete ──────────────────────────────────── */
+    var selectAllCb = document.getElementById('ev-select-all');
+    var bulkDeleteBtn = document.getElementById('ev-bulk-delete');
+    var bulkCountEl = document.getElementById('ev-bulk-count');
+
+    function getVisibleChecks() {
+      return allRows.filter(function (r) { return r.style.display !== 'none'; })
+        .map(function (r) { return r.querySelector('.ev-row-check'); })
+        .filter(Boolean);
+    }
+
+    function updateBulkUI() {
+      var checks = getVisibleChecks();
+      var checked = checks.filter(function (c) { return c.checked; });
+      var count = checked.length;
+      if (bulkDeleteBtn) bulkDeleteBtn.hidden = count === 0;
+      if (bulkCountEl) bulkCountEl.textContent = count;
+      if (selectAllCb) selectAllCb.checked = checks.length > 0 && count === checks.length;
+    }
+
+    if (selectAllCb) {
+      selectAllCb.addEventListener('change', function () {
+        var checked = selectAllCb.checked;
+        getVisibleChecks().forEach(function (c) { c.checked = checked; });
+        updateBulkUI();
+      });
+    }
+
+    tbody.addEventListener('change', function (e) {
+      if (e.target.classList.contains('ev-row-check')) updateBulkUI();
+    });
+
+    var bulkDlg = document.getElementById('bulk-delete-dialog');
+    var cancelBulkBtn = document.getElementById('cancel-bulk-delete');
+    var confirmBulkBtn = document.getElementById('confirm-bulk-delete');
+
+    if (bulkDeleteBtn && bulkDlg) {
+      bulkDeleteBtn.addEventListener('click', function () {
+        var count = getVisibleChecks().filter(function (c) { return c.checked; }).length;
+        document.getElementById('bulk-delete-count').textContent = count;
+        openDialog(bulkDlg);
+      });
+    }
+    if (cancelBulkBtn) cancelBulkBtn.addEventListener('click', function () { closeDialog(bulkDlg); });
+    if (bulkDlg) bulkDlg.addEventListener('click', function (e) { if (e.target === bulkDlg) closeDialog(bulkDlg); });
+
+    if (confirmBulkBtn) {
+      confirmBulkBtn.addEventListener('click', function () {
+        var ids = getVisibleChecks()
+          .filter(function (c) { return c.checked; })
+          .map(function (c) { return parseInt(c.value, 10); });
+        if (!ids.length) return;
+
+        confirmBulkBtn.disabled = true;
+        confirmBulkBtn.textContent = 'Deleting…';
+
+        var csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+        fetch('{% url "admin_bulk_delete_events" %}', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+          body: JSON.stringify({ ids: ids }),
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          closeDialog(bulkDlg);
+          if (data.success) window.location.reload();
+          else alert(data.message || 'Bulk delete failed.');
+        })
+        .catch(function () {
+          closeDialog(bulkDlg);
+          alert('Network error. Please try again.');
+        })
+        .finally(function () {
+          confirmBulkBtn.disabled = false;
+          confirmBulkBtn.textContent = 'Delete All';
+        });
+      });
+    }
+
+    /* Reset select-all when page or filter changes */
+    var origRender = render;
+    render = function () {
+      origRender();
+      if (selectAllCb) selectAllCb.checked = false;
+      allRows.forEach(function (r) {
+        var cb = r.querySelector('.ev-row-check');
+        if (cb) cb.checked = false;
+      });
+      updateBulkUI();
+    };
+
+    render();
   }());
   </script>
 </body>

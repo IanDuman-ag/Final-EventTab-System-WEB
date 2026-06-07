@@ -37,11 +37,6 @@
       <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M2 4h4v4H2V4Zm0 6h4v4H2v-4Zm0 6h4v4H2v-4ZM8 5h2v2h2v4h-2v2H8v-2H6V9h2V5Zm6 2h2v2h2v2h-2v2h-2v-2h-2V9h2V7Zm4 2h4v2h-4V9ZM8 17h2v-2h2v-2h2v2h2v2h2v2h4v2h-4v-2h-2v-2h-2v2h-2v-2H8v-2Z"/></svg>
       <span>Brackets</span>
     </a>
-    <a class="{% if active == 'scoresheets' %}active{% endif %}" href="{% url 'admin_scoresheets' %}" {% if active == 'scoresheets' %}aria-current="page"{% endif %}>
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zm0 16H5V5h14v14zM7 7h10v2H7V7zm0 4h10v2H7v-2zm0 4h7v2H7v-2z"/></svg>
-      <span>Scoresheet</span>
-    </a>
-
     <div class="v2-nav-section">REPORTS</div>
 
     <a class="{% if active == 'analytics' %}active{% endif %}" href="{% url 'admin_analytics' %}" {% if active == 'analytics' %}aria-current="page"{% endif %}>

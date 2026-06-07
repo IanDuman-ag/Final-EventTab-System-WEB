@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Score Sheets — EventTab Tabulator</title>
-  <link rel="stylesheet" href="{% static 'tabulatordash/tab_v2.css' %}?v=20260524a">
+  <link rel="stylesheet" href="{% static 'tabulatordash/tab_v2.css' %}?v=20260604c">
 </head>
 <body class="tab-v2">
 <div class="tab-shell">
@@ -157,10 +157,11 @@
           <table class="tab-table">
             <thead>
               <tr>
-                <th>SCORE SHEET ID</th>
+                <th>ID</th>
                 <th>EVENT / CATEGORY</th>
                 <th>JUDGE</th>
-                <th>DATE RECEIVED</th>
+                <th>PROGRESS</th>
+                <th>DATE SUBMITTED</th>
                 <th>STATUS</th>
                 <th>ACTION</th>
               </tr>
@@ -170,6 +171,11 @@
               <tr>
                 <td>
                   <span class="tab-ss-id">{{ row.ss_id }}</span>
+                  {% if row.source == 'judge' %}
+                    <span class="tab-source-badge tab-source-badge--mobile">Mobile</span>
+                  {% else %}
+                    <span class="tab-source-badge tab-source-badge--bracket">Bracket</span>
+                  {% endif %}
                 </td>
                 <td>
                   <div>
@@ -177,7 +183,35 @@
                     <span class="tab-cat-pill tab-cat-pill--{{ row.category|lower }}">{{ row.category }}</span>
                   </div>
                 </td>
-                <td class="tab-cell-muted">{{ row.judge_name }}</td>
+                <td>
+                  <div class="tab-judge-cell">
+                    {% if row.judge_names_list %}
+                      {% for jname in row.judge_names_list %}
+                        <span class="tab-judge-tag">{{ jname }}</span>
+                      {% endfor %}
+                    {% else %}
+                      <strong>{{ row.judge_name }}</strong>
+                    {% endif %}
+                    {% if row.verification_id and row.verification_id != '—' %}
+                      <small style="font-family:monospace;color:#64748b;font-size:11px;">VID: {{ row.verification_id }}</small>
+                    {% endif %}
+                  </div>
+                </td>
+                <td>
+                  {% if row.candidates_scored != None %}
+                    <div class="tab-progress-cell">
+                      <strong>{{ row.candidates_scored }}/{{ row.total_candidates }}</strong>
+                      <small>candidates scored</small>
+                      {% if row.total_candidates > 0 %}
+                      <div class="tab-progress-bar">
+                        <div class="tab-progress-fill" style="width:{% widthratio row.candidates_scored row.total_candidates 100 %}%"></div>
+                      </div>
+                      {% endif %}
+                    </div>
+                  {% else %}
+                    <span class="tab-cell-muted">—</span>
+                  {% endif %}
+                </td>
                 <td class="tab-cell-muted">{{ row.date_received }}</td>
                 <td>
                   <span class="tab-status tab-status--{{ row.status }}">
@@ -185,12 +219,16 @@
                   </span>
                 </td>
                 <td>
-                  <a class="tab-action-btn tab-action-btn--{{ row.action_kind }}"
-                     href="{% url 'tabulator_encode_score' %}?sheet={{ row.id }}">{{ row.action_label }}</a>
+                  {% if row.source == 'bracket' %}
+                    <a class="tab-action-btn tab-action-btn--{{ row.action_kind }}"
+                       href="{% url 'tabulator_encode_score' %}?sheet={{ row.id }}">{{ row.action_label }}</a>
+                  {% else %}
+                    <span class="tab-action-btn tab-action-btn--view" style="cursor:default;">View</span>
+                  {% endif %}
                 </td>
               </tr>
               {% empty %}
-              <tr><td colspan="6" class="tab-table-empty">No score sheets found.</td></tr>
+              <tr><td colspan="7" class="tab-table-empty">No score sheets found. Judge scores will appear here once judges submit scores from the mobile app.</td></tr>
               {% endfor %}
             </tbody>
           </table>

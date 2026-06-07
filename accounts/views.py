@@ -16,6 +16,11 @@ User = get_user_model()
 _RESET_TOKEN_TTL = 60 * 2
 
 
+def _client_ip(request):
+    xff = request.META.get('HTTP_X_FORWARDED_FOR')
+    return xff.split(',')[0].strip() if xff else request.META.get('REMOTE_ADDR')
+
+
 def _user_payload(user):
     return {
         'id': user.id,
@@ -50,12 +55,33 @@ def login(request):
 
     user = serializer.validated_data['user']
     token, _ = Token.objects.get_or_create(user=user)
+
+    from core.views import get_assignment_role
+    if get_assignment_role(user) == 'Judge':
+        from events.models import JudgeActivityLog
+        JudgeActivityLog.log(
+            judge=user,
+            action=JudgeActivityLog.ACTION_LOGIN,
+            details=f'Judge logged in via mobile app',
+            ip_address=_client_ip(request),
+        )
+
     return Response({'token': token.key, 'user': _user_payload(user)})
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def logout(request):
+    from core.views import get_assignment_role
+    if get_assignment_role(request.user) == 'Judge':
+        from events.models import JudgeActivityLog
+        JudgeActivityLog.log(
+            judge=request.user,
+            action=JudgeActivityLog.ACTION_LOGOUT,
+            details='Judge logged out of mobile app',
+            ip_address=_client_ip(request),
+        )
+
     Token.objects.filter(user=request.user).delete()
     return Response({'detail': 'Logged out.'}, status=status.HTTP_200_OK)
 
