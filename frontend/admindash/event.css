@@ -2190,3 +2190,64 @@
   .ced-dyn-row { flex-wrap: wrap; }
   .ced-dyn-input, .ced-dyn-select { flex: 1 1 100%; }
 }
+
+/* Read-only view dialog values */
+.ced-field--readonly .ced-value {
+  margin: 0;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #334155;
+  min-height: 42px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+.ced-scard--readonly {
+  pointer-events: none;
+  cursor: default;
+}
+.ced-scoring-cards--readonly .ced-scard:not(.is-selected) {
+  opacity: 0.55;
+}
+.ced-view-image {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin-top: 0.5rem;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+.ced-value--inline,
+.ced-value--compact {
+  margin: 0;
+  min-height: auto;
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-weight: 600;
+  color: #334155;
+}
+.ced-view-table-wrap {
+  margin-top: 8px;
+  overflow-x: auto;
+}
+.ced-view-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.ced-view-table th,
+.ced-view-table td {
+  padding: 8px 10px;
+  border: 1px solid #e2e8f0;
+  text-align: left;
+}
+.ced-view-table th {
+  background: #f8fafc;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+}

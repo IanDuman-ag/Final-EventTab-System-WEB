@@ -27,6 +27,9 @@ class Event(models.Model):
     status             = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_UPCOMING)
     max_participants   = models.PositiveIntegerField(null=True, blank=True)
     num_teams          = models.PositiveIntegerField(null=True, blank=True)
+    scoring_method     = models.CharField(max_length=20, blank=True, default='')
+    tournament_type    = models.CharField(max_length=50, blank=True, default='')
+    bracket_locked     = models.BooleanField(default=False)
     faculty_in_charge  = models.CharField(max_length=150, blank=True, default='')
     student_in_charge  = models.CharField(max_length=150, blank=True, default='')
     mechanics          = models.TextField(blank=True, default='')
@@ -102,6 +105,8 @@ class BracketTeam(models.Model):
     members = models.TextField(blank=True, default='')
     seed = models.PositiveIntegerField(default=0)
     loss_count = models.PositiveIntegerField(default=0)
+    points = models.IntegerField(default=0)
+    is_champion = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

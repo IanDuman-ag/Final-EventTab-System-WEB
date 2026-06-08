@@ -12,7 +12,10 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Table, TableStyle, 
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.pdfgen import canvas
 
-from events.models import Event, BracketTeam, BracketMatch, ScoreSheet
+from events.models import (
+    Event, BracketTeam, BracketMatch, ScoreSheet,
+    JudgingEvent, Candidate, Criterion, JudgeScore,
+)
 
 class NumberedCanvas(canvas.Canvas):
     """
@@ -64,31 +67,175 @@ class NumberedCanvas(canvas.Canvas):
         self.restoreState()
 
 
-def get_reporting_data(event_name, department_filter="all", start_date=None, end_date=None):
+TOURNAMENT_TYPE_LABELS = {
+    'single_elimination': 'Single Elimination',
+    'double_elimination': 'Double Elimination',
+    'round_robin': 'Round Robin',
+    'best_of_3': 'Best of 3',
+    'best_of_5': 'Best of 5',
+}
+
+
+def _derive_event_type(event_obj):
+    """Return ('match'|'criteria', 'Match Result Based'|'Criteria Based')."""
+    method = (getattr(event_obj, 'scoring_method', '') or '').strip().lower()
+    if method in ('match', 'criteria'):
+        return method, 'Match Result Based' if method == 'match' else 'Criteria Based'
+    # Fall back to category heuristic (mirrors Manage Events page)
+    cat = (getattr(event_obj, 'category', '') or '').strip().lower()
+    if cat in ('sports', 'esports', 'e-sports'):
+        return 'match', 'Match Result Based'
+    return 'criteria', 'Criteria Based'
+
+
+def _build_bracket_overview(event_obj, round_filter=None, status_filter=None):
+    """Group BracketMatch records by round into a tournament-tree structure."""
+    matches_qs = (
+        BracketMatch.objects.filter(event=event_obj)
+        .select_related('team_a', 'team_b', 'winner')
+        .order_by('match_number')
+    )
+    if round_filter:
+        matches_qs = matches_qs.filter(round_name__icontains=round_filter)
+    if status_filter:
+        matches_qs = matches_qs.filter(status__iexact=status_filter)
+
+    rounds = {}
+    final_winner = 'TBD'
+    for m in matches_qs:
+        rounds.setdefault(m.round_name or 'Round', []).append({
+            'match_no': m.match_number,
+            'team_a': m.team_a.name if m.team_a else 'TBD',
+            'team_b': m.team_b.name if m.team_b else 'TBD',
+            'score_a': m.score_a or '—',
+            'score_b': m.score_b or '—',
+            'winner': m.winner.name if m.winner else 'TBD',
+            'status': m.get_status_display(),
+        })
+        if m.winner and (m.round_name or '').lower().find('final') != -1:
+            final_winner = m.winner.name
+
+    bracket_rounds = [{'round': rname, 'matches': mlist} for rname, mlist in rounds.items()]
+    return bracket_rounds, final_winner
+
+
+def _build_criteria_results(event_obj):
+    """Per-candidate criterion scores, weighted total, and rank (criteria-based events)."""
+    je = getattr(event_obj, 'judging_event', None)
+    if not je:
+        return [], []
+
+    criteria = list(Criterion.objects.filter(event=je).order_by('order'))
+    candidates = list(Candidate.objects.filter(event=je).order_by('number'))
+    if not criteria or not candidates:
+        return [], []
+
+    crit_names = [c.name for c in criteria]
+    results = []
+    for cand in candidates:
+        per_criterion = {}
+        weighted_total = 0.0
+        for crit in criteria:
+            scores = list(
+                JudgeScore.objects.filter(candidate=cand, criterion=crit)
+                .values_list('score', flat=True)
+            )
+            avg = (sum(float(s) for s in scores) / len(scores)) if scores else 0.0
+            per_criterion[crit.name] = round(avg, 2)
+            weighted_total += avg * (float(crit.weight_percent or 0) / 100.0)
+        results.append({
+            'candidate': cand.name,
+            'number': cand.number,
+            'per_criterion': per_criterion,
+            'total': round(weighted_total, 2),
+        })
+
+    results.sort(key=lambda r: r['total'], reverse=True)
+    for idx, r in enumerate(results, 1):
+        r['rank'] = idx
+    return results, crit_names
+
+
+def _build_leaderboard(event_obj, event_type, criteria_results):
+    """Standings/points summary. Match → wins; Criteria → weighted totals."""
+    leaderboard = []
+    if event_type == 'criteria':
+        for r in criteria_results:
+            leaderboard.append({
+                'rank': r['rank'],
+                'name': r['candidate'],
+                'group': f"#{r['number']}",
+                'points': r['total'],
+                'detail': 'Weighted score',
+            })
+        return leaderboard
+
+    # Match-based: rank teams by wins (then fewest losses)
+    teams = list(BracketTeam.objects.filter(event=event_obj).select_related('department'))
+    standings = []
+    for t in teams:
+        wins = BracketMatch.objects.filter(event=event_obj, winner=t).count()
+        standings.append({
+            'name': t.name,
+            'group': t.department.name if t.department else (t.members[:30] if t.members else '—'),
+            'wins': wins,
+            'losses': t.loss_count,
+        })
+    standings.sort(key=lambda s: (s['wins'], -s['losses']), reverse=True)
+    for idx, s in enumerate(standings, 1):
+        leaderboard.append({
+            'rank': idx,
+            'name': s['name'],
+            'group': s['group'],
+            'points': s['wins'],
+            'detail': f"{s['wins']}W - {s['losses']}L",
+        })
+    return leaderboard
+
+
+def get_reporting_data(event_name, department_filter="all", start_date=None, end_date=None,
+                       round_filter=None, status_filter=None, category_filter=None,
+                       division_filter=None):
     """
-    Gathers dynamic reporting data from the database.
-    If no events/scores exist, fall back to high-fidelity mock data.
+    Gathers dynamic reporting data from the database and returns a single dict.
+    If no events/scores exist, falls back to high-fidelity mock data.
+
+    Returned keys: event_details, rankings, participants, audit_trail,
+    bracket_rounds, final_winner, criteria_results, criteria_names, leaderboard.
     """
-    # Attempt to locate the actual Event model
     event_obj = Event.objects.filter(name=event_name).first()
-    
-    # 1. Base Event Details
+
     if event_obj:
+        event_type_key, event_type_label = _derive_event_type(event_obj)
+        tournament_label = TOURNAMENT_TYPE_LABELS.get(
+            (event_obj.tournament_type or '').strip().lower(),
+            event_obj.tournament_type or 'N/A',
+        )
+        assigned_judges = ', '.join(
+            (f"{j.first_name} {j.last_name}".strip() or j.username)
+            for j in event_obj.assigned_judges.all()
+        ) or 'None assigned'
+
         event_details = {
             'name': event_obj.name,
             'category': event_obj.category,
             'division': event_obj.division or 'Unassigned',
             'department': event_obj.department or 'Unassigned',
-            'date': event_obj.event_date.strftime('%B %d, %Y'),
+            'date': event_obj.event_date.strftime('%B %d, %Y') if event_obj.event_date else 'TBD',
             'time': event_obj.event_time.strftime('%I:%M %p') if event_obj.event_time else 'TBD',
             'venue': event_obj.venue,
             'status': event_obj.get_status_display(),
             'max_participants': event_obj.max_participants or 'Unlimited',
             'total_teams': event_obj.num_teams or event_obj.bracket_teams.count(),
+            'event_type': event_type_label,
+            'tournament_type': tournament_label,
+            'assigned_judges': assigned_judges,
         }
-        
-        # 2. Rankings & Scores (from ScoreSheet)
+
+        # Match results (from ScoreSheet)
         score_sheets = ScoreSheet.objects.filter(event=event_obj).select_related('match', 'winner', 'tabulator')
+        if status_filter:
+            score_sheets = score_sheets.filter(status__iexact=status_filter)
         rankings = []
         for index, ss in enumerate(score_sheets, 1):
             rankings.append({
@@ -103,12 +250,11 @@ def get_reporting_data(event_name, department_filter="all", start_date=None, end
                 'tabulator': ss.tabulator.username if ss.tabulator else 'System',
                 'remarks': ss.remarks or 'N/A'
             })
-            
-        # 3. Bracket Teams (Participants)
+
+        # Participants / Teams
         teams_qs = BracketTeam.objects.filter(event=event_obj).select_related('department')
-        if department_filter != 'all':
+        if department_filter and department_filter != 'all':
             teams_qs = teams_qs.filter(department__name=department_filter)
-            
         participants = []
         for t in teams_qs:
             participants.append({
@@ -118,14 +264,18 @@ def get_reporting_data(event_name, department_filter="all", start_date=None, end
                 'loss_count': t.loss_count,
                 'members': t.members or 'No members declared'
             })
-            
-        # 4. Audit Trail Logs (LogEntry)
+
+        # Bracket overview, criteria results, leaderboard
+        bracket_rounds, final_winner = _build_bracket_overview(event_obj, round_filter, status_filter)
+        criteria_results, criteria_names = _build_criteria_results(event_obj)
+        leaderboard = _build_leaderboard(event_obj, event_type_key, criteria_results)
+
+        # Audit Trail (LogEntry)
         logs_qs = LogEntry.objects.filter(object_id=str(event_obj.id)).select_related('user').order_by('-action_time')
         if start_date:
             logs_qs = logs_qs.filter(action_time__date__gte=start_date)
         if end_date:
             logs_qs = logs_qs.filter(action_time__date__lte=end_date)
-            
         audit_trail = []
         for log in logs_qs:
             action_type = "Created" if log.is_addition() else "Modified" if log.is_change() else "Deleted"
@@ -136,7 +286,7 @@ def get_reporting_data(event_name, department_filter="all", start_date=None, end
                 'repr': log.object_repr,
                 'message': log.change_message or 'No details provided'
             })
-            
+
     else:
         # High-fidelity mock data fallback (when Event doesn't exist yet)
         event_details = {
@@ -150,26 +300,45 @@ def get_reporting_data(event_name, department_filter="all", start_date=None, end
             'status': 'Active',
             'max_participants': 200,
             'total_teams': 8,
+            'event_type': 'Match Result Based',
+            'tournament_type': 'Single Elimination',
+            'assigned_judges': 'Judge Angela, Judge Brandon, Judge Carter',
         }
-        
+
         rankings = [
             {'rank': 1, 'team_a': 'Quantum Physicists', 'team_b': 'Bio-Warriors', 'score_a': 94.50, 'score_b': 88.00, 'winner': 'Quantum Physicists', 'match_no': 1, 'status': 'Finalized', 'tabulator': 'adminn', 'remarks': 'Outstanding performance in theory rounds.'},
             {'rank': 2, 'team_a': 'Alchemists', 'team_b': 'Neuro-Hackers', 'score_a': 91.00, 'score_b': 92.50, 'winner': 'Neuro-Hackers', 'match_no': 2, 'status': 'Finalized', 'tabulator': 'adminn', 'remarks': 'Extremely close matching in final minutes.'},
             {'rank': 3, 'team_a': 'Astrophysicists', 'team_b': 'Geodesics', 'score_a': 85.00, 'score_b': 81.50, 'winner': 'Astrophysicists', 'match_no': 3, 'status': 'Finalized', 'tabulator': 'tabulator', 'remarks': 'Advancing to quarter-finals.'},
             {'rank': 4, 'team_a': 'Ecology Champions', 'team_b': 'Cybernetics', 'score_a': 76.50, 'score_b': 89.00, 'winner': 'Cybernetics', 'match_no': 4, 'status': 'Finalized', 'tabulator': 'tabulator', 'remarks': 'Scored high on presentation.'},
         ]
-        
+
         participants = [
             {'seed': 1, 'name': 'Quantum Physicists', 'department': 'Physics Department', 'loss_count': 0, 'members': 'Alice Smith, Bob Jones, Charles Lee'},
             {'seed': 2, 'name': 'Neuro-Hackers', 'department': 'Biology Department', 'loss_count': 0, 'members': 'David Miller, Emma Davis, Frank Wilson'},
             {'seed': 3, 'name': 'Alchemists', 'department': 'Chemistry Department', 'loss_count': 1, 'members': 'Grace Taylor, Henry Harris, Irene Clark'},
             {'seed': 4, 'name': 'Cybernetics', 'department': 'Computer Science Department', 'loss_count': 0, 'members': 'Jack Lewis, Karen Walker, Leo Young'},
-            {'seed': 5, 'name': 'Astrophysicists', 'department': 'Physics Department', 'loss_count': 0, 'members': 'Mia Hall, Nathan Allen, Olivia King'},
-            {'seed': 6, 'name': 'Bio-Warriors', 'department': 'Biology Department', 'loss_count': 1, 'members': 'Peter Wright, Sarah Scott, Thomas Green'},
-            {'seed': 7, 'name': 'Ecology Champions', 'department': 'Environmental Sciences', 'loss_count': 1, 'members': 'Ursula Adams, Victor Baker, Wendy Carter'},
-            {'seed': 8, 'name': 'Geodesics', 'department': 'Earth Sciences', 'loss_count': 1, 'members': 'Xavier Evans, Yvonne Fisher, Zach Nelson'},
         ]
-        
+
+        bracket_rounds = [
+            {'round': 'Semifinals', 'matches': [
+                {'match_no': 1, 'team_a': 'Quantum Physicists', 'team_b': 'Bio-Warriors', 'score_a': '94', 'score_b': '88', 'winner': 'Quantum Physicists', 'status': 'Completed'},
+                {'match_no': 2, 'team_a': 'Neuro-Hackers', 'team_b': 'Astrophysicists', 'score_a': '92', 'score_b': '85', 'winner': 'Neuro-Hackers', 'status': 'Completed'},
+            ]},
+            {'round': 'Finals', 'matches': [
+                {'match_no': 3, 'team_a': 'Quantum Physicists', 'team_b': 'Neuro-Hackers', 'score_a': '96', 'score_b': '90', 'winner': 'Quantum Physicists', 'status': 'Completed'},
+            ]},
+        ]
+        final_winner = 'Quantum Physicists'
+
+        criteria_results = []
+        criteria_names = []
+
+        leaderboard = [
+            {'rank': 1, 'name': 'Quantum Physicists', 'group': 'Physics Department', 'points': 2, 'detail': '2W - 0L'},
+            {'rank': 2, 'name': 'Neuro-Hackers', 'group': 'Biology Department', 'points': 1, 'detail': '1W - 1L'},
+            {'rank': 3, 'name': 'Bio-Warriors', 'group': 'Biology Department', 'points': 0, 'detail': '0W - 1L'},
+        ]
+
         audit_trail = [
             {'timestamp': '2026-05-17 10:15 AM', 'user': 'superadmin', 'action_type': 'Created', 'repr': 'National Science Decathlon 2024', 'message': 'Registered decathlon tournament event.'},
             {'timestamp': '2026-05-17 10:30 AM', 'user': 'superadmin', 'action_type': 'Modified', 'repr': 'National Science Decathlon 2024', 'message': 'Generated single-elimination bracket matchups.'},
@@ -177,11 +346,20 @@ def get_reporting_data(event_name, department_filter="all", start_date=None, end
             {'timestamp': '2026-05-17 12:00 PM', 'user': 'superadmin', 'action_type': 'Modified', 'repr': 'Scoresheet Match 1', 'message': 'Approved scoresheet and advanced Quantum Physicists.'},
         ]
 
-    # Filter mock data dynamically by department if requested
-    if not event_obj and department_filter != 'all':
-        participants = [p for p in participants if p['department'].lower() == department_filter.lower()]
+        if department_filter and department_filter != 'all':
+            participants = [p for p in participants if p['department'].lower() == department_filter.lower()]
 
-    return event_details, rankings, participants, audit_trail
+    return {
+        'event_details': event_details,
+        'rankings': rankings,
+        'participants': participants,
+        'audit_trail': audit_trail,
+        'bracket_rounds': bracket_rounds,
+        'final_winner': final_winner,
+        'criteria_results': criteria_results,
+        'criteria_names': criteria_names,
+        'leaderboard': leaderboard,
+    }
 
 
 def generate_excel_report(event_name, department_filter="all", start_date=None, end_date=None, included_metrics=None, event_info=None):
@@ -190,11 +368,25 @@ def generate_excel_report(event_name, department_filter="all", start_date=None, 
     """
     if included_metrics is None:
         included_metrics = ['rankings', 'participants', 'scores']
-        
-    event_details, rankings, participants, audit_trail = get_reporting_data(
-        event_name, department_filter, start_date, end_date
+
+    event_info = event_info or {}
+    data = get_reporting_data(
+        event_name, department_filter, start_date, end_date,
+        round_filter=event_info.get('round_filter'),
+        status_filter=event_info.get('status_filter'),
+        category_filter=event_info.get('category_filter'),
+        division_filter=event_info.get('division_filter'),
     )
-    
+    event_details = data['event_details']
+    rankings = data['rankings']
+    participants = data['participants']
+    audit_trail = data['audit_trail']
+    bracket_rounds = data['bracket_rounds']
+    final_winner = data['final_winner']
+    criteria_results = data['criteria_results']
+    criteria_names = data['criteria_names']
+    leaderboard = data['leaderboard']
+
     wb = Workbook()
     
     # ------------------ STYLING CONFIGS ------------------
@@ -241,15 +433,21 @@ def generate_excel_report(event_name, department_filter="all", start_date=None, 
     
     summary_rows = [
         ("Event Name", event_details['name']),
+        ("Event Type", event_details.get('event_type', 'N/A')),
         ("Category", event_details['category']),
         ("Division", event_details['division']),
         ("Department", event_details['department']),
+        ("Tournament Type", event_details.get('tournament_type', 'N/A')),
         ("Date", event_details['date']),
         ("Time", event_details['time']),
         ("Venue", event_details['venue']),
         ("Status", event_details['status']),
+        ("Assigned Judges / Scorers", event_details.get('assigned_judges', 'None assigned')),
         ("Max Participants", event_details['max_participants']),
         ("Total Teams Registered", event_details['total_teams']),
+        ("Generated By", event_info.get('generated_by', 'Admin')),
+        ("Generated On", datetime.now().strftime('%B %d, %Y - %I:%M %p')),
+        ("Remarks", event_info.get('remarks', 'N/A')),
     ]
     
     for idx, (label, val) in enumerate(summary_rows, 4):
@@ -327,7 +525,77 @@ def generate_excel_report(event_name, department_filter="all", start_date=None, 
                 if r_idx % 2 == 0:
                     cell.fill = stripe_fill
 
-    # 4. AUDIT TRAIL SHEET
+    # ── Helper to write a simple titled table sheet ──
+    def _write_table_sheet(title, sheet_title, headers, rows, center_cols=()):
+        ws = wb.create_sheet(title=sheet_title)
+        ws.views.sheetView[0].showGridLines = True
+        last_col = get_column_letter(max(len(headers), 1))
+        ws["A1"] = title
+        ws["A1"].font = title_font
+        ws.merge_cells(f"A1:{last_col}1")
+        ws.row_dimensions[1].height = 30
+        for col_idx, h in enumerate(headers, 1):
+            cell = ws.cell(row=3, column=col_idx, value=h)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = align_center if col_idx in center_cols else align_left
+            cell.border = cell_border
+        ws.row_dimensions[3].height = 24
+        for r_idx, row_vals in enumerate(rows, 4):
+            ws.row_dimensions[r_idx].height = 20
+            for c_idx, val in enumerate(row_vals, 1):
+                cell = ws.cell(row=r_idx, column=c_idx, value=val)
+                cell.font = regular_font
+                cell.border = cell_border
+                cell.alignment = align_center if c_idx in center_cols else align_left
+                if r_idx % 2 == 0:
+                    cell.fill = stripe_fill
+        return ws
+
+    # 4. BRACKET OVERVIEW SHEET
+    if bracket_rounds:
+        bracket_rows = []
+        for rnd in bracket_rounds:
+            for m in rnd['matches']:
+                bracket_rows.append([
+                    rnd['round'], m['match_no'],
+                    f"{m['team_a']} vs {m['team_b']}",
+                    f"{m['score_a']} - {m['score_b']}",
+                    m['winner'], m['status'],
+                ])
+        bracket_rows.append([])
+        bracket_rows.append(['CHAMPION / FINAL WINNER', '', '', '', final_winner, ''])
+        _write_table_sheet(
+            "BRACKET OVERVIEW", "Bracket Overview",
+            ["Round", "Match #", "Matchup", "Score", "Winner", "Status"],
+            bracket_rows, center_cols=(2, 4, 6),
+        )
+
+    # 5. CRITERIA RESULTS SHEET
+    if criteria_results:
+        crit_headers = ["Rank", "Candidate", "No."] + criteria_names + ["Total Score"]
+        crit_rows = []
+        for r in criteria_results:
+            row = [r['rank'], r['candidate'], r['number']]
+            row += [r['per_criterion'].get(cn, 0) for cn in criteria_names]
+            row.append(r['total'])
+            crit_rows.append(row)
+        center = tuple([1, 3] + list(range(4, 4 + len(criteria_names) + 1)))
+        _write_table_sheet(
+            "CRITERIA-BASED RESULTS", "Criteria Results",
+            crit_headers, crit_rows, center_cols=center,
+        )
+
+    # 6. LEADERBOARD SHEET
+    if leaderboard:
+        lb_rows = [[l['rank'], l['name'], l['group'], l['points'], l['detail']] for l in leaderboard]
+        _write_table_sheet(
+            "LEADERBOARD / POINTS SUMMARY", "Leaderboard",
+            ["Rank", "Team / Participant", "Group", "Points", "Record / Detail"],
+            lb_rows, center_cols=(1, 4),
+        )
+
+    # 7. AUDIT TRAIL SHEET
     ws_audit = wb.create_sheet(title="Audit Logs")
     ws_audit.views.sheetView[0].showGridLines = True
     
@@ -382,10 +650,24 @@ def generate_pdf_report(event_name, department_filter="all", start_date=None, en
     """
     if included_metrics is None:
         included_metrics = ['rankings', 'participants', 'scores']
-        
-    event_details, rankings, participants, audit_trail = get_reporting_data(
-        event_name, department_filter, start_date, end_date
+
+    event_info = event_info or {}
+    data = get_reporting_data(
+        event_name, department_filter, start_date, end_date,
+        round_filter=event_info.get('round_filter'),
+        status_filter=event_info.get('status_filter'),
+        category_filter=event_info.get('category_filter'),
+        division_filter=event_info.get('division_filter'),
     )
+    event_details = data['event_details']
+    rankings = data['rankings']
+    participants = data['participants']
+    audit_trail = data['audit_trail']
+    bracket_rounds = data['bracket_rounds']
+    final_winner = data['final_winner']
+    criteria_results = data['criteria_results']
+    criteria_names = data['criteria_names']
+    leaderboard = data['leaderboard']
 
     pdf_stream = io.BytesIO()
     
@@ -478,12 +760,16 @@ def generate_pdf_report(event_name, department_filter="all", start_date=None, en
             Paragraph("<b>Date:</b>", body_bold), Paragraph(event_details['date'], body_regular)
         ],
         [
-            Paragraph("<b>Category:</b>", body_bold), Paragraph(event_details['category'], body_regular),
+            Paragraph("<b>Event Type:</b>", body_bold), Paragraph(event_details.get('event_type', 'N/A'), body_regular),
             Paragraph("<b>Time:</b>", body_bold), Paragraph(event_details['time'], body_regular)
         ],
         [
-            Paragraph("<b>Division:</b>", body_bold), Paragraph(event_details['division'], body_regular),
+            Paragraph("<b>Category:</b>", body_bold), Paragraph(event_details['category'], body_regular),
             Paragraph("<b>Venue:</b>", body_bold), Paragraph(event_details['venue'], body_regular)
+        ],
+        [
+            Paragraph("<b>Division:</b>", body_bold), Paragraph(event_details['division'], body_regular),
+            Paragraph("<b>Tournament Type:</b>", body_bold), Paragraph(event_details.get('tournament_type', 'N/A'), body_regular)
         ],
         [
             Paragraph("<b>Department:</b>", body_bold), Paragraph(event_details['department'], body_regular),
@@ -492,6 +778,10 @@ def generate_pdf_report(event_name, department_filter="all", start_date=None, en
         [
             Paragraph("<b>Max Capacity:</b>", body_bold), Paragraph(str(event_details['max_participants']), body_regular),
             Paragraph("<b>Total Teams:</b>", body_bold), Paragraph(str(event_details['total_teams']), body_regular)
+        ],
+        [
+            Paragraph("<b>Assigned Judges:</b>", body_bold), Paragraph(event_details.get('assigned_judges', 'None assigned'), body_regular),
+            Paragraph("<b>Generated By:</b>", body_bold), Paragraph(str(event_info.get('generated_by', 'Admin')), body_regular)
         ]
     ]
     
@@ -601,6 +891,88 @@ def generate_pdf_report(event_name, department_filter="all", start_date=None, en
                 
         part_table.setStyle(TableStyle(part_styles))
         story.append(part_table)
+        story.append(Spacer(1, 16))
+
+    # ── Helper: build a navy-header striped table ──
+    def _styled_table(headers, data_rows, col_widths, center_idx=()):
+        head_cells = [Paragraph(f"<b>{h}</b>", body_bold) for h in headers]
+        for c in head_cells:
+            c.style.textColor = colors.white
+        table_data = [head_cells]
+        for row in data_rows:
+            cells = []
+            for c_idx, val in enumerate(row):
+                style = body_center if c_idx in center_idx else body_regular
+                cells.append(Paragraph(str(val), style))
+            table_data.append(cells)
+        tbl = Table(table_data, colWidths=col_widths)
+        tstyles = [
+            ('BACKGROUND', (0, 0), (-1, 0), navy),
+            ('GRID', (0, 0), (-1, -1), 0.5, border_color),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('LEFTPADDING', (0, 0), (-1, -1), 8),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+        ]
+        for idx in range(1, len(table_data)):
+            if idx % 2 == 0:
+                tstyles.append(('BACKGROUND', (0, idx), (-1, idx), stripe_color))
+        tbl.setStyle(TableStyle(tstyles))
+        return tbl
+
+    # Bracket Overview Section
+    if bracket_rounds:
+        story.append(Paragraph("Bracket Overview", h2_style))
+        for rnd in bracket_rounds:
+            story.append(Paragraph(f"<b>{rnd['round']}</b>", body_bold))
+            story.append(Spacer(1, 4))
+            rows = [
+                [m['match_no'], f"{m['team_a']} vs {m['team_b']}",
+                 f"{m['score_a']} - {m['score_b']}", m['winner'], m['status']]
+                for m in rnd['matches']
+            ]
+            story.append(_styled_table(
+                ["Match #", "Matchup", "Score", "Winner", "Status"],
+                rows, col_widths=[50, 190, 70, 130, 80], center_idx=(0, 2, 4),
+            ))
+            story.append(Spacer(1, 10))
+        story.append(Paragraph(
+            f"<b>Champion / Final Winner:</b> {final_winner}", body_bold))
+        story.append(Spacer(1, 16))
+
+    # Criteria-Based Results Section
+    if criteria_results:
+        story.append(Paragraph("Criteria-Based Results", h2_style))
+        headers = ["Rank", "Candidate"] + criteria_names + ["Total"]
+        n_crit = len(criteria_names)
+        crit_w = (540 - 40 - 130 - 60) / n_crit if n_crit else 0
+        col_widths = [40, 130] + [crit_w] * n_crit + [60]
+        rows = []
+        for r in criteria_results:
+            row = [r['rank'], r['candidate']]
+            row += [r['per_criterion'].get(cn, 0) for cn in criteria_names]
+            row.append(r['total'])
+            rows.append(row)
+        center = tuple([0] + list(range(2, 2 + n_crit + 1)))
+        story.append(_styled_table(headers, rows, col_widths, center_idx=center))
+        story.append(Spacer(1, 16))
+
+    # Leaderboard / Points Summary Section
+    if leaderboard:
+        story.append(Paragraph("Leaderboard / Points Summary", h2_style))
+        rows = [[l['rank'], l['name'], l['group'], l['points'], l['detail']] for l in leaderboard]
+        story.append(_styled_table(
+            ["Rank", "Team / Participant", "Group", "Points", "Record / Detail"],
+            rows, col_widths=[45, 160, 140, 60, 135], center_idx=(0, 3),
+        ))
+        story.append(Spacer(1, 16))
+
+    # Remarks / Metadata Section
+    remarks_text = event_info.get('remarks')
+    if remarks_text:
+        story.append(Paragraph("Remarks", h2_style))
+        story.append(Paragraph(remarks_text, body_regular))
         story.append(Spacer(1, 16))
 
     # Audit Trail Section

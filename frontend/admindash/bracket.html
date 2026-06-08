@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Brackets - EventTab</title>
-  <link rel="stylesheet" href="{% static 'admindash/bracket.css' %}?v=20260524a">
+  <link rel="stylesheet" href="{% static 'admindash/bracket.css' %}?v=20260608e">
 </head>
 <body class="admin-dashboard-page bracket-page admin-dashboard-v2">
   <div class="dashboard-shell">
@@ -63,46 +63,59 @@
                 <tr>
                   <th>Event</th>
                   <th>Category</th>
-                  <th>Division</th>
+                  <th>Format</th>
                   <th>Teams</th>
-                  <th>Status</th>
+                  <th>Bracket Status</th>
+                  <th>Progress</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {% for row in event_rows %}
-                  <tr>
+                  <tr data-event-id="{{ row.id }}">
                     <td>
                       <div class="bracket-event-name">
                         <strong>{{ row.name }}</strong>
-                        <span>{{ row.schedule_label }}</span>
+                        <span>{{ row.schedule_label }}{% if row.division %} · {{ row.division }}{% endif %}</span>
                       </div>
                     </td>
                     <td>{{ row.category }}</td>
-                    <td>{{ row.division|default:"—" }}</td>
-                    <td>{{ row.num_teams|default:"—" }}</td>
+                    <td><span class="bracket-format-pill">{{ row.tournament_type_label|default:"—" }}</span></td>
+                    <td>{{ row.bracket_team_count|default:row.num_teams|default:"—" }}</td>
                     <td>
-                      <span class="bracket-status {{ row.status }}">
-                        {{ row.status_label }}
+                      <span class="bracket-status bracket-bracket-status bracket-bracket-status--{{ row.bracket_status }}">
+                        {{ row.bracket_status_label }}
                       </span>
+                      {% if row.bracket_locked %}
+                      <span class="bracket-lock-badge bracket-lock-badge--sm" title="Locked after generation">
+                        <svg viewBox="0 0 24 24" aria-hidden="true" width="11" height="11"><path fill="currentColor" d="M12 1a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2h-1V6a5 5 0 0 0-5-5Zm-3 8V6a3 3 0 0 1 6 0v3H9Z"/></svg>
+                      </span>
+                      {% endif %}
                     </td>
                     <td>
-                      <div style="display: flex; gap: 8px;">
-                        <button type="button" class="btn-view-bracket" data-id="{{ row.id }}" title="View Bracket">
-                          <svg viewBox="0 0 24 24" aria-hidden="true" width="14" height="14"><path fill="currentColor" d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5ZM12 17a5 5 0 1 1 0-10 5 5 0 0 1 0 10Zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"></path></svg>
-                        </button>
-                        <button type="button" class="btn-edit-bracket" data-id="{{ row.id }}" title="Edit Teams">
-                          <svg viewBox="0 0 24 24" aria-hidden="true" width="14" height="14"><path fill="currentColor" d="m3 17.25 11.06-11.06 3.75 3.75L6.75 21H3v-3.75ZM19.71 8.04 15.96 4.3l1.33-1.33a1 1 0 0 1 1.42 0l2.33 2.33a1 1 0 0 1 0 1.42l-1.33 1.33Z"></path></svg>
-                        </button>
-                        <button type="button" class="btn-delete-bracket danger" data-id="{{ row.id }}" title="Delete Bracket" style="background: #fee2e2; border-color: #fca5a5; color: #dc2626;">
-                          <svg viewBox="0 0 24 24" aria-hidden="true" width="14" height="14"><path fill="currentColor" d="M9 3h6l1 2h4v2H4V5h4l1-2Zm1 7h2v8h-2v-8Zm4 0h2v8h-2v-8ZM6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7Z"></path></svg>
+                      {% if row.has_bracket %}
+                      <div class="bracket-progress-cell">
+                        <div class="bracket-progress-bar" role="progressbar" aria-valuenow="{{ row.match_progress_pct }}" aria-valuemin="0" aria-valuemax="100">
+                          <span style="width:{{ row.match_progress_pct }}%"></span>
+                        </div>
+                        <small>{{ row.match_completed }}/{{ row.match_total }} matches</small>
+                      </div>
+                      {% else %}
+                      <span class="bracket-muted">—</span>
+                      {% endif %}
+                    </td>
+                    <td>
+                      <div class="bracket-row-actions">
+                        <button type="button" class="btn-bracket-details btn-view-bracket" data-id="{{ row.id }}" title="Open bracket details">
+                          <svg viewBox="0 0 24 24" aria-hidden="true" width="14" height="14"><path fill="currentColor" d="M4 6h16v2H4V6Zm0 5h16v2H4v-2Zm0 5h10v2H4v-2Z"/></svg>
+                          Bracket
                         </button>
                       </div>
                     </td>
                   </tr>
                 {% empty %}
                   <tr>
-                    <td colspan="6" class="bracket-empty-state">No events with brackets yet. Create events first from Manage Events.</td>
+                    <td colspan="7" class="bracket-empty-state">No events with brackets yet. Create events first from Manage Events, then generate a bracket.</td>
                   </tr>
                 {% endfor %}
               </tbody>
@@ -140,7 +153,13 @@
                 <select id="bracket_event" name="event" required>
                   <option value="">Select Event</option>
                   {% for row in event_rows %}
-                  <option value="{{ row.id }}" data-category="{{ row.category }}" data-division="{{ row.division|default:'' }}" data-num-teams="{{ row.num_teams|default:'0' }}">{{ row.name }} ({{ row.category }})</option>
+                  <option value="{{ row.id }}"
+                          data-category="{{ row.category }}"
+                          data-division="{{ row.division|default:'' }}"
+                          data-num-teams="{{ row.num_teams|default:'0' }}"
+                          data-tournament-type="{{ row.tournament_type|default:'' }}"
+                          data-has-bracket="{{ row.has_bracket|yesno:'1,0' }}"
+                          data-locked="{{ row.bracket_locked|yesno:'1,0' }}">{{ row.name }} ({{ row.category }})</option>
                   {% endfor %}
                 </select>
               </div>
@@ -158,70 +177,35 @@
             </div>
 
             <div class="form-row">
-              <div class="form-group full-width">
-                <label class="manage-list-head">
-                  ROUNDS / STAGES <span class="info-icon-inline" title="Define the rounds for your tournament">ⓘ</span>
-                </label>
-                <ul class="inline-list" id="roundsList"></ul>
-                <button type="button" class="add-list-btn" data-add-key="rounds">+ Add Round / Stage</button>
-              </div>
-            </div>
-
-            <div class="form-row">
               <div class="form-group">
-                <label for="tournament_format">TOURNAMENT FORMAT <span class="required">*</span></label>
-                <select id="tournament_format" name="tournament_format" required>
-                  <option value="Single Elimination" selected>Single Elimination</option>
-                  <option value="Double Elimination">Double Elimination</option>
-                  <option value="Round Robin">Round Robin</option>
-                </select>
-                <button type="button" class="add-list-btn" id="addFormatOptionBtn">+ Add Format Option</button>
+                <label for="event_tournament_type">Tournament Type</label>
+                <input type="text" id="event_tournament_type" placeholder="Auto-filled from Event" readonly>
               </div>
-              <div class="form-group form-group--check">
-                <label class="check-label">
-                  <input type="checkbox" id="enable_consolation" name="enable_consolation">
-                  <span>Enable Consolation Bracket (Optional) <span class="info-icon-inline" title="Adds a losers bracket">ⓘ</span></span>
-                </label>
-              </div>
-            </div>
-
-            <div class="form-row">
               <div class="form-group">
-                <label class="manage-list-head">
-                  SEEDING METHOD <span class="info-icon-inline" title="The first one is used as the active method">ⓘ</span>
-                </label>
-                <ul class="inline-list" id="seedingsList"></ul>
-                <button type="button" class="add-list-btn" data-add-key="seedings">+ Add Seeding Method</button>
-              </div>
-              <div class="form-group form-group--check">
-                <label class="check-label">
-                  <input type="checkbox" id="avoid_same_department" name="avoid_same_department" checked>
-                  <span>AVOID SAME DEPARTMENT<br>FIRST ROUND <span class="info-icon-inline" title="Avoid pairing teams from the same department in round 1">ⓘ</span></span>
-                </label>
+                <label for="event_participants">Participants / Teams</label>
+                <input type="text" id="event_participants" placeholder="Auto-filled from Event" readonly>
               </div>
             </div>
 
-            <!-- Hidden inputs (populated from the lists at submit time) -->
+            <!-- Derived from event on selection -->
+            <input type="hidden" id="tournament_format" name="tournament_format" value="Single Elimination">
+            <input type="hidden" id="match_format" name="match_format" value="1">
             <input type="hidden" name="round" id="hidden_round">
             <input type="hidden" name="seeding_method" id="hidden_seeding">
 
             <div class="form-row">
               <div class="form-group">
-                <label for="match_interval">MATCH INTERVAL (MINS) <span class="info-icon-inline" title="Time between matches">ⓘ</span></label>
-                <input type="number" id="match_interval" name="match_interval" value="60" min="15" step="15">
-              </div>
-              <div class="form-group">
-                <label for="default_bye">DEFAULT BYE ASSIGNMENT <span class="info-icon-inline" title="Who gets a bye when teams are odd">ⓘ</span></label>
-                <select id="default_bye" name="default_bye">
-                  <option value="highest_seed">Highest Seed</option>
-                  <option value="random">Random</option>
+                <label for="draw_type">DRAW METHOD <span class="required">*</span> <span class="info-icon-inline" title="Random Draw shuffles teams; Seeded Draw pairs by seed (1 vs N)">ⓘ</span></label>
+                <select id="draw_type" name="draw_type">
+                  <option value="seeded" selected>Seeded Draw</option>
+                  <option value="random">Random Draw</option>
                 </select>
               </div>
             </div>
 
             <div class="bracket-info-banner">
               <span class="info-icon" aria-hidden="true">ℹ</span>
-              <span>Teams will be <strong>randomly paired</strong> based on the selected seeding methods and format. You can preview the bracket before saving.</span>
+              <span>Select an event to auto-fill tournament type, teams, and bracket structure. Choose <strong>Random</strong> or <strong>Seeded</strong> draw, then click <strong>Generate Bracket</strong>. The bracket is <strong>locked after generation</strong>.</span>
             </div>
 
             <!-- Teams table inside left column -->
@@ -296,7 +280,7 @@
 
             <div class="preview-banner">
               <span class="info-icon" aria-hidden="true">ℹ</span>
-              <span>This is a preview only. The winner of each match will be updated later during the tournament.</span>
+              <span id="previewRuleText">This is a preview only. The winner of each match will be updated later during the tournament.</span>
             </div>
 
             <div class="bracket-preview-canvas" id="bracketPreviewCanvas">
@@ -319,8 +303,7 @@
                   <div><dt>Total Teams</dt><dd id="sumTeams">0</dd></div>
                   <div><dt>Tournament Format</dt><dd id="sumFormat">Single Elimination</dd></div>
                   <div><dt>Total Rounds</dt><dd id="sumRounds">0</dd></div>
-                  <div><dt>Seeding Method</dt><dd id="sumSeed">Department Balanced</dd></div>
-                  <div><dt>Match Interval</dt><dd id="sumInterval">60 minutes</dd></div>
+                  <div><dt>Draw Method</dt><dd id="sumSeed">Seeded Draw</dd></div>
                 </dl>
               </div>
 
@@ -353,19 +336,123 @@
     </div>
   </div>
 
-  <!-- View Bracket Modal (uses same preview look as Create) -->
+  <!-- View Bracket Details — full tournament flow -->
   <div class="bracket-modal-overlay" id="viewBracketModal" aria-hidden="true">
-    <div class="bracket-modal-container bracket-modal-view" role="dialog" aria-modal="true" aria-labelledby="view-bracket-title">
+    <div class="bracket-modal-container bracket-modal-view bracket-modal-view--wide" role="dialog" aria-modal="true" aria-labelledby="view-bracket-title">
       <div class="bracket-modal-header bracket-modal-header--blue">
-        <div>
-          <h3 id="view-bracket-title">View Bracket</h3>
-          <p class="bracket-modal-subtitle" id="viewBracketMeta">Format: — &nbsp;|&nbsp; Teams: 0 &nbsp;|&nbsp; Rounds: 0</p>
+        <div class="bracket-details-head">
+          <div>
+            <h3 id="view-bracket-title">Bracket Details</h3>
+            <p class="bracket-modal-subtitle" id="viewBracketMeta">Select an event to view bracket details.</p>
+          </div>
+          <div class="bracket-details-badges" id="viewBracketBadges"></div>
         </div>
         <button class="bracket-close-modal" id="closeViewBracketBtn" type="button" aria-label="Close">&times;</button>
       </div>
-      <div class="bracket-modal-body">
-        <div class="bracket-preview-canvas" id="bracketVisualizer">
-          <p class="preview-empty">No bracket generated for this event yet.</p>
+
+      <div class="bracket-modal-body bracket-view-body">
+        <!-- Toolbar -->
+        <div class="bracket-view-toolbar">
+          <div class="bracket-view-legend" aria-label="Match status legend">
+            <span class="legend-item"><span class="legend-dot legend-dot--completed"></span>Completed</span>
+            <span class="legend-item"><span class="legend-dot legend-dot--ongoing"></span>In Progress</span>
+            <span class="legend-item"><span class="legend-dot legend-dot--pending"></span>Pending</span>
+          </div>
+          <div class="bracket-view-actions">
+            <button type="button" class="btn-toolbar" id="exportBracketBtn" title="Print or save as PDF">
+              <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M5 20h14v-2H5v2Zm7-18-5 5h3v6h4V9h3l-5-5Z"/></svg>
+              Export PDF
+            </button>
+            <button type="button" class="btn-toolbar" id="regenerateFromViewBtn" title="Regenerate bracket (only if not locked)">
+              <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M17.65 6.35A7.95 7.95 0 0 0 12 4a8 8 0 1 0 7.74 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+              Regenerate
+            </button>
+          </div>
+        </div>
+
+        <div class="bracket-details-layout">
+          <!-- Left sidebar: summary panels -->
+          <aside class="bracket-details-sidebar" id="bracketDetailsSidebar">
+            <div class="bd-panel">
+              <h4 class="bd-panel-title">Event Summary</h4>
+              <dl class="bd-summary-list" id="bdEventSummary">
+                <div><dt>Event</dt><dd id="bdEventName">—</dd></div>
+                <div><dt>Category</dt><dd id="bdCategory">—</dd></div>
+                <div><dt>Division</dt><dd id="bdDivision">—</dd></div>
+                <div><dt>Tournament Type</dt><dd id="bdFormat">—</dd></div>
+                <div><dt>Assigned Scorers</dt><dd id="bdJudges">—</dd></div>
+              </dl>
+            </div>
+
+            <div class="bd-panel">
+              <h4 class="bd-panel-title">Tournament Summary</h4>
+              <dl class="bd-summary-list" id="bdTournamentSummary">
+                <div><dt>Total Teams</dt><dd id="bdTotalTeams">0</dd></div>
+                <div><dt>Total Rounds</dt><dd id="bdTotalRounds">0</dd></div>
+                <div><dt>Bracket Status</dt><dd id="bdBracketStatus">—</dd></div>
+                <div><dt>Lock State</dt><dd id="bdLockState">—</dd></div>
+              </dl>
+            </div>
+
+            <div class="bd-panel bd-panel--format" id="bdFormatRulesPanel">
+              <h4 class="bd-panel-title">Format Rules</h4>
+              <p class="bd-format-name" id="bdFormatName">—</p>
+              <dl class="bd-format-spec-list">
+                <div>
+                  <dt>Matches Structure</dt>
+                  <dd id="bdFormatStructure">—</dd>
+                </div>
+                <div>
+                  <dt>Advancement Rule</dt>
+                  <dd id="bdFormatAdvancement">—</dd>
+                </div>
+              </dl>
+            </div>
+
+            <div class="bd-panel">
+              <h4 class="bd-panel-title">Match Progress</h4>
+              <div class="bd-progress-wrap">
+                <div class="bracket-progress-bar bracket-progress-bar--lg" id="bdProgressBar">
+                  <span style="width:0%"></span>
+                </div>
+                <p class="bd-progress-label" id="bdProgressLabel">0 / 0 matches completed</p>
+              </div>
+            </div>
+
+            <div class="bd-panel">
+              <h4 class="bd-panel-title">Recent Results</h4>
+              <ul class="bd-recent-list" id="bdRecentResults">
+                <li class="bd-recent-empty">No completed matches yet.</li>
+              </ul>
+            </div>
+
+            <div class="bd-panel bd-panel--info">
+              <h4 class="bd-panel-title">Workflow</h4>
+              <ol class="bd-workflow-steps">
+                <li>Judges submit scores via mobile app</li>
+                <li>Tabulator reviews &amp; approves results</li>
+                <li>Winners advance automatically</li>
+                <li>Leaderboard updates on approval</li>
+              </ol>
+            </div>
+          </aside>
+
+          <!-- Main: bracket tree -->
+          <div class="bracket-details-main">
+            <p class="bracket-view-hint">Scroll horizontally to follow the tournament flow →</p>
+            <div class="bracket-flow-scroll" id="bracketFlowScroll">
+              <div class="bracket-flow-canvas" id="bracketVisualizer">
+                <p class="preview-empty">No bracket generated for this event yet.</p>
+              </div>
+            </div>
+            <div class="bracket-champion-bar" id="bracketChampionBar" hidden>
+              <span class="bracket-champion-icon" aria-hidden="true">🏆</span>
+              <div>
+                <small>Champion</small>
+                <strong id="bracketChampionName">—</strong>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -424,6 +511,128 @@
   </div>
 
   <script>
+    /**
+     * Structured tournament format definitions for documentation and
+     * bracket management system integration.
+     * Exposed globally as window.EventTabsTournamentFormats.
+     */
+    const TOURNAMENT_FORMAT_SPEC = {
+      single_elimination: {
+        id: 'single_elimination',
+        name: 'Single Elimination',
+        matches_structure: '1 match per round',
+        advancement_rule: 'Loser is eliminated immediately',
+        bracket_type: 'elimination',
+        losses_to_eliminate: 1,
+        winner_advances_to: 'next_round_match',
+        loser_advances_to: null,
+        ranking_method: 'final_placement',
+      },
+      double_elimination: {
+        id: 'double_elimination',
+        name: 'Double Elimination',
+        matches_structure: 'Upper and Lower Brackets',
+        advancement_rule: 'Loser is eliminated after 2 losses',
+        bracket_type: 'double_elimination',
+        losses_to_eliminate: 2,
+        winner_advances_to: 'next_winner_match',
+        loser_advances_to: 'next_loser_match',
+        ranking_method: 'final_placement',
+      },
+      round_robin: {
+        id: 'round_robin',
+        name: 'Round Robin',
+        matches_structure: 'Each team plays all other teams',
+        advancement_rule: 'Winner determined by most wins or points',
+        bracket_type: 'round_robin',
+        losses_to_eliminate: null,
+        winner_advances_to: null,
+        loser_advances_to: null,
+        ranking_method: 'wins_or_points',
+      },
+      best_of_3: {
+        id: 'best_of_3',
+        name: 'Best of 3',
+        matches_structure: '2–3 games per matchup',
+        advancement_rule: 'First team to reach 2 wins advances',
+        bracket_type: 'series',
+        series_length: 3,
+        wins_to_advance: 2,
+        min_games: 2,
+        max_games: 3,
+      },
+      best_of_5: {
+        id: 'best_of_5',
+        name: 'Best of 5',
+        matches_structure: '3–5 games per matchup',
+        advancement_rule: 'First team to reach 3 wins advances',
+        bracket_type: 'series',
+        series_length: 5,
+        wins_to_advance: 3,
+        min_games: 3,
+        max_games: 5,
+      },
+    };
+
+    window.EventTabsTournamentFormats = TOURNAMENT_FORMAT_SPEC;
+
+    function resolvePrimaryFormatKey(tournamentFormat) {
+      const norm = (tournamentFormat || '').trim().toLowerCase();
+      if (norm === 'best of 3') return 'best_of_3';
+      if (norm === 'best of 5') return 'best_of_5';
+      if (norm.includes('double')) return 'double_elimination';
+      if (norm.includes('round')) return 'round_robin';
+      return 'single_elimination';
+    }
+
+    function getActiveFormatSpec(tournamentFormat, matchFormat) {
+      const primaryKey = resolvePrimaryFormatKey(tournamentFormat);
+      const base = TOURNAMENT_FORMAT_SPEC[primaryKey];
+      const spec = Object.assign({}, base);
+
+      if (primaryKey === 'best_of_3' || primaryKey === 'best_of_5') {
+        return spec;
+      }
+
+      const mf = parseInt(matchFormat, 10) || 1;
+      if ((primaryKey === 'single_elimination' || primaryKey === 'double_elimination') && mf > 1) {
+        const seriesKey = mf === 5 ? 'best_of_5' : 'best_of_3';
+        const series = TOURNAMENT_FORMAT_SPEC[seriesKey];
+        spec.series_format = seriesKey;
+        spec.series = Object.assign({}, series);
+        spec.matches_structure = base.matches_structure + ' · ' + series.matches_structure;
+        spec.advancement_rule = series.advancement_rule + ' (per matchup); bracket: ' + base.advancement_rule.toLowerCase();
+        spec.wins_to_advance = series.wins_to_advance;
+        spec.series_length = series.series_length;
+      }
+
+      return spec;
+    }
+
+    function renderFormatSpecPanel(tournamentFormat, matchFormat) {
+      const spec = getActiveFormatSpec(tournamentFormat, matchFormat);
+      const nameEl = document.getElementById('formatSpecName');
+      const structEl = document.getElementById('formatSpecStructure');
+      const advEl = document.getElementById('formatSpecAdvancement');
+      const jsonEl = document.getElementById('formatSpecJson');
+      if (nameEl) nameEl.textContent = spec.name;
+      if (structEl) structEl.textContent = spec.matches_structure;
+      if (advEl) advEl.textContent = spec.advancement_rule;
+      if (jsonEl) jsonEl.textContent = JSON.stringify(spec, null, 2);
+      return spec;
+    }
+
+    function renderViewFormatRules(tournamentFormat, matchFormat) {
+      const spec = getActiveFormatSpec(tournamentFormat, matchFormat);
+      const nameEl = document.getElementById('bdFormatName');
+      const structEl = document.getElementById('bdFormatStructure');
+      const advEl = document.getElementById('bdFormatAdvancement');
+      if (nameEl) nameEl.textContent = spec.name;
+      if (structEl) structEl.textContent = spec.matches_structure;
+      if (advEl) advEl.textContent = spec.advancement_rule;
+      return spec;
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
       const modal = document.getElementById('createBracketModal');
       const openBtn = document.getElementById('openCreateBracketBtn');
@@ -435,8 +644,11 @@
       const eventSelect = document.getElementById('bracket_event');
       const categoryInput = document.getElementById('event_category');
       const divisionInput = document.getElementById('event_division');
-      const formatSelect = document.getElementById('tournament_format');
-      const intervalInput = document.getElementById('match_interval');
+      const formatHidden = document.getElementById('tournament_format');
+      const matchFormatHidden = document.getElementById('match_format');
+      const drawTypeSelect = document.getElementById('draw_type');
+      const tournamentTypeInput = document.getElementById('event_tournament_type');
+      const participantsInput = document.getElementById('event_participants');
       const regenerateBtn = document.getElementById('regenerateBtn');
       const saveDraftBtn = document.getElementById('saveDraftBtn');
       const form = document.getElementById('createBracketForm');
@@ -444,179 +656,97 @@
       const teamsTableBody = document.getElementById('teamsTableBody');
       const previewCanvas = document.getElementById('bracketPreviewCanvas');
 
-      /* ─────────────────────────────────────────────────────────
-         Inline lists for Rounds/Stages and Seeding Methods
-         (replaces the old dropdown + manage button approach)
-         Persists in localStorage.
-         ───────────────────────────────────────────────────────── */
-      const STORAGE_PREFIX = 'eventtabs:bracket:';
+      /* Rounds are auto-computed from team count + tournament type */
+      let roundsData = [];
 
-      const DEFAULT_LISTS = {
-        rounds: ['Round 1 (Quarterfinals)', 'Semifinals', 'Finals'],
-        seedings: ['Department Balanced', 'Random'],
-      };
-
-      function loadList(key) {
-        try {
-          const raw = localStorage.getItem(STORAGE_PREFIX + key);
-          if (raw) {
-            const parsed = JSON.parse(raw);
-            if (Array.isArray(parsed) && parsed.length) return parsed;
-          }
-        } catch (e) {}
-        return DEFAULT_LISTS[key] ? DEFAULT_LISTS[key].slice() : [];
-      }
-      function saveList(key, list) {
-        localStorage.setItem(STORAGE_PREFIX + key, JSON.stringify(list));
+      function getTournamentFormat() {
+        return formatHidden ? formatHidden.value : 'Single Elimination';
       }
 
-      const inlineLists = {
-        rounds:   { ul: document.getElementById('roundsList'),   data: loadList('rounds') },
-        seedings: { ul: document.getElementById('seedingsList'), data: loadList('seedings') },
-      };
+      function getMatchFormat() {
+        return matchFormatHidden ? matchFormatHidden.value : '1';
+      }
 
-      function renderInlineList(key) {
-        const cfg = inlineLists[key];
-        if (!cfg) return;
-        if (!cfg.data.length) {
-          cfg.ul.innerHTML = '<li class="inline-list-empty">No items yet. Click below to add.</li>';
-        } else {
-          cfg.ul.innerHTML = cfg.data.map((label, i) => (
-            '<li class="inline-list-item" data-idx="' + i + '">' +
-              '<span class="inline-grip" aria-hidden="true">::</span>' +
-              '<input type="text" class="inline-list-input" value="' + escapeHtml(label) + '">' +
-              '<button type="button" class="row-action edit" data-act="edit" aria-label="Edit">' +
-                '<svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="m3 17.25 11.06-11.06 3.75 3.75L6.75 21H3v-3.75ZM19.71 8.04 15.96 4.3l1.33-1.33a1 1 0 0 1 1.42 0l2.33 2.33a1 1 0 0 1 0 1.42l-1.33 1.33Z"/></svg>' +
-              '</button>' +
-              '<button type="button" class="row-action danger" data-act="delete" aria-label="Delete">' +
-                '<svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M9 3h6l1 2h4v2H4V5h4l1-2Zm1 7h2v8h-2v-8Zm4 0h2v8h-2v-8ZM6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7Z"/></svg>' +
-              '</button>' +
-            '</li>'
-          )).join('');
-          /* Make the inputs read-only by default; "edit" puts them in edit mode */
-          cfg.ul.querySelectorAll('.inline-list-input').forEach(input => {
-            input.readOnly = true;
-            input.addEventListener('blur', commitInputEdit);
-            input.addEventListener('keydown', e => {
-              if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
-            });
-          });
-          cfg.ul.querySelectorAll('button[data-act="edit"]').forEach(btn => {
-            btn.addEventListener('click', () => {
-              const li = btn.closest('.inline-list-item');
-              const input = li.querySelector('.inline-list-input');
-              input.readOnly = false;
-              input.focus();
-              input.select();
-            });
-          });
-          cfg.ul.querySelectorAll('button[data-act="delete"]').forEach(btn => {
-            btn.addEventListener('click', () => {
-              const li = btn.closest('.inline-list-item');
-              const idx = parseInt(li.dataset.idx);
-              cfg.data.splice(idx, 1);
-              saveList(key, cfg.data);
-              renderInlineList(key);
-              syncHiddenInputs();
-              renderPreview();
-            });
-          });
+      function applyEventTournamentFormat(tTypeRaw, tTypeLabel) {
+        let format = 'Single Elimination';
+        let mf = '1';
+        const raw = (tTypeRaw || '').trim().toLowerCase();
+        if (raw === 'double_elimination' || raw.includes('double')) format = 'Double Elimination';
+        else if (raw === 'round_robin' || raw.includes('round')) format = 'Round Robin';
+        else if (raw === 'best_of_3' || (raw.includes('best') && raw.includes('3'))) { format = 'Best of 3'; mf = '3'; }
+        else if (raw === 'best_of_5' || (raw.includes('best') && raw.includes('5'))) { format = 'Best of 5'; mf = '5'; }
+        else if (raw === 'single_elimination') format = 'Single Elimination';
+        else if (tTypeLabel) {
+          const normalized = tTypeLabel.toLowerCase();
+          if (normalized.includes('double')) format = 'Double Elimination';
+          else if (normalized.includes('round')) format = 'Round Robin';
+          else if (normalized.includes('best') && normalized.includes('3')) { format = 'Best of 3'; mf = '3'; }
+          else if (normalized.includes('best') && normalized.includes('5')) { format = 'Best of 5'; mf = '5'; }
         }
+        if (formatHidden) formatHidden.value = format;
+        if (matchFormatHidden) matchFormatHidden.value = mf;
+      }
+
+      function getFormatKey() {
+        return resolvePrimaryFormatKey(getTournamentFormat());
+      }
+
+      function syncHiddenInputs() {
+        const roundHidden = document.getElementById('hidden_round');
+        const seedingHidden = document.getElementById('hidden_seeding');
+        const drawMethod = drawTypeSelect && drawTypeSelect.value === 'random' ? 'Random Draw' : 'Seeded Draw';
+        if (roundHidden) roundHidden.value = roundsData[0] || '';
+        if (seedingHidden) seedingHidden.value = drawMethod;
+      }
+
+      function getElimRoundLabels(numRounds) {
+        const labels = [];
+        for (let i = 0; i < numRounds; i++) {
+          const roundFromEnd = numRounds - i;
+          const teamCount = Math.pow(2, roundFromEnd);
+          if (roundFromEnd === 1) labels.push('Final');
+          else if (teamCount === 4) labels.push('Semifinals');
+          else if (teamCount === 8) labels.push('Quarterfinals');
+          else if (teamCount >= 16) labels.push('Round of ' + teamCount);
+          else labels.push('Round ' + (i + 1));
+        }
+        return labels;
+      }
+
+      function computeRoundsForTeamCount(count) {
+        const formatKey = getFormatKey();
+        if (count < 2) {
+          roundsData = [];
+          syncHiddenInputs();
+          return;
+        }
+        if (formatKey === 'round_robin') {
+          const scheduleRounds = (count % 2 === 0) ? count - 1 : count;
+          roundsData = ['Round Robin (' + scheduleRounds + ' rounds)'];
+          syncHiddenInputs();
+          return;
+        }
+        const slots = nextPow2(count);
+        const numRounds = Math.max(1, Math.round(Math.log2(slots)));
+        roundsData = getElimRoundLabels(numRounds);
         syncHiddenInputs();
       }
 
-      function commitInputEdit(e) {
-        const input = e.target;
-        const li = input.closest('.inline-list-item');
-        const ul = li.parentElement;
-        const key = ul.id === 'roundsList' ? 'rounds' : 'seedings';
-        const idx = parseInt(li.dataset.idx);
-        const newVal = input.value.trim();
-        if (newVal) {
-          inlineLists[key].data[idx] = newVal;
-          saveList(key, inlineLists[key].data);
-        }
-        input.readOnly = true;
-        renderInlineList(key);
-        renderPreview();
-      }
-
-      document.querySelectorAll('.add-list-btn[data-add-key]').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const key = btn.dataset.addKey;
-          const placeholder = key === 'rounds' ? 'New Round' : 'New Seeding Method';
-          inlineLists[key].data.push(placeholder);
-          saveList(key, inlineLists[key].data);
-          renderInlineList(key);
-          /* Auto-edit the newly added one */
-          setTimeout(() => {
-            const items = inlineLists[key].ul.querySelectorAll('.inline-list-item');
-            const last = items[items.length - 1];
-            if (last) {
-              const input = last.querySelector('.inline-list-input');
-              input.readOnly = false;
-              input.focus();
-              input.select();
-            }
-          }, 30);
-          renderPreview();
-        });
-      });
-
-      function syncHiddenInputs() {
-        const roundHidden   = document.getElementById('hidden_round');
-        const seedingHidden = document.getElementById('hidden_seeding');
-        if (roundHidden)   roundHidden.value   = (inlineLists.rounds.data[0]   || '');
-        if (seedingHidden) seedingHidden.value = (inlineLists.seedings.data[0] || '');
-      }
-
-      /* "+ Add Format Option" — appends a new option to the format select */
-      const addFormatBtn = document.getElementById('addFormatOptionBtn');
-      if (addFormatBtn) {
-        addFormatBtn.addEventListener('click', () => {
-          const value = prompt('Enter a new tournament format name:');
-          if (!value || !value.trim()) return;
-          const sel = document.getElementById('tournament_format');
-          const v = value.trim();
-          if (Array.from(sel.options).some(o => o.value.toLowerCase() === v.toLowerCase())) {
-            showToast('That format already exists.', true);
-            return;
-          }
-          const opt = document.createElement('option');
-          opt.value = v;
-          opt.textContent = v;
-          sel.appendChild(opt);
-          sel.value = v;
-          /* Persist in localStorage */
-          const stored = (function () {
-            try { return JSON.parse(localStorage.getItem(STORAGE_PREFIX + 'formats') || '[]'); }
-            catch (e) { return []; }
-          })();
-          stored.push(v);
-          localStorage.setItem(STORAGE_PREFIX + 'formats', JSON.stringify(stored));
-          renderPreview();
-        });
-      }
-
-      /* Restore saved custom format options on load */
-      (function () {
-        try {
-          const stored = JSON.parse(localStorage.getItem(STORAGE_PREFIX + 'formats') || '[]');
-          const sel = document.getElementById('tournament_format');
-          if (sel) {
-            stored.forEach(v => {
-              if (!Array.from(sel.options).some(o => o.value.toLowerCase() === v.toLowerCase())) {
-                const opt = document.createElement('option');
-                opt.value = v; opt.textContent = v;
-                sel.appendChild(opt);
-              }
+      if (drawTypeSelect) {
+        drawTypeSelect.addEventListener('change', () => {
+          syncHiddenInputs();
+          document.getElementById('previewMethodTag').textContent =
+            drawTypeSelect.value === 'random' ? 'Randomized' : 'Seeded';
+          bracketState.forEach((round, rIdx) => {
+            if (rIdx === 0) round.forEach(match => {
+              if (match.a && !match.a.manual) match.a = null;
+              if (match.b && !match.b.manual) match.b = null;
             });
-          }
-        } catch (e) {}
-      })();
-
-      renderInlineList('rounds');
-      renderInlineList('seedings');
+          });
+          renderPreview();
+        });
+      }
+      syncHiddenInputs();
 
       /* In-memory teams list (single source of truth) */
       let teams = []; // { id, name, dept_id, dept_label, members, seed }
@@ -637,21 +767,69 @@
         teams = [];
         teamIdCounter = 1;
         bracketState = [];
+        roundsData = [];
+        if (formatHidden) formatHidden.value = 'Single Elimination';
+        if (matchFormatHidden) matchFormatHidden.value = '1';
+        syncHiddenInputs();
         renderTeams();
         renderPreview();
       }
 
-      /* Auto-fill category and division when an event is picked */
+      /* Auto-fill category, division, tournament type, participants, and teams */
       eventSelect.addEventListener('change', function () {
         const opt = this.options[this.selectedIndex];
-        if (opt && opt.value) {
-          categoryInput.value = opt.getAttribute('data-category') || '';
-          divisionInput.value = opt.getAttribute('data-division') || '';
-        } else {
+        if (!opt || !opt.value) {
           categoryInput.value = '';
           divisionInput.value = '';
+          if (tournamentTypeInput) tournamentTypeInput.value = '';
+          if (participantsInput) participantsInput.value = '';
+          roundsData = [];
+          syncHiddenInputs();
+          renderPreview();
+          return;
         }
+        categoryInput.value = opt.getAttribute('data-category') || '';
+        divisionInput.value = opt.getAttribute('data-division') || '';
+
+        const tTypeRaw = (opt.getAttribute('data-tournament-type') || '').trim();
+        const tTypeLabel = tTypeRaw
+          ? tTypeRaw.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+          : '';
+        if (tournamentTypeInput) tournamentTypeInput.value = tTypeLabel || '—';
+
+        const teamCount = parseInt(opt.getAttribute('data-num-teams') || '0', 10);
+        if (participantsInput) participantsInput.value = teamCount + ' team(s)';
+
+        applyEventTournamentFormat(tTypeRaw, tTypeLabel);
+        computeRoundsForTeamCount(teamCount >= 2 ? teamCount : teams.length);
+
+        autoLoadEventTeams(opt.value);
+        renderPreview();
       });
+
+      async function autoLoadEventTeams(eventId) {
+        try {
+          const resp = await fetch(`/admin/brackets/${eventId}/teams/`);
+          const data = await resp.json();
+          if (data.success && Array.isArray(data.teams) && data.teams.length) {
+            teams = data.teams.map((t, i) => ({
+              id: teamIdCounter++,
+              name: t.name,
+              dept_id: t.department_id ? String(t.department_id) : '',
+              dept_label: t.department_name || '',
+              seed: t.seed || (i + 1),
+              members: t.members || '',
+              member_count: t.member_count,
+            }));
+            teams.sort((a, b) => (a.seed || 0) - (b.seed || 0));
+            if (participantsInput) participantsInput.value = teams.length + ' team(s)';
+            computeRoundsForTeamCount(teams.length);
+            renderTeams();
+            renderPreview();
+            showToast(data.teams.length + ' team(s) loaded from the event.');
+          }
+        } catch (e) { /* non-fatal — admin can still add teams manually */ }
+      }
 
       openBtn.addEventListener('click', openModal);
       closeBtn.addEventListener('click', closeModal);
@@ -718,7 +896,14 @@
         editingTeamId = team ? team.id : null;
         teamDlgTitle.textContent = team ? 'Edit Team' : 'Add Team';
         teamDlgName.value = team ? team.name : '';
-        teamDlgDept.value = team ? (team.dept_id || '') : '';
+        teamDlgDept.value = team ? String(team.dept_id || '') : '';
+        if (team && !team.dept_id && team.dept_label && teamDlgDept) {
+          Array.prototype.forEach.call(teamDlgDept.options, function (opt) {
+            if (opt.getAttribute('data-name') === team.dept_label) {
+              teamDlgDept.value = opt.value;
+            }
+          });
+        }
         teamDlgSeed.value = team ? team.seed : nextSeed();
         /* Members: split saved string into array of names */
         dialogMembers = team && team.members
@@ -757,9 +942,15 @@
 
         if (editingTeamId) {
           const t = teams.find(x => x.id === editingTeamId);
-          if (t) { t.name = name; t.dept_id = deptId; t.dept_label = deptLabel; t.seed = seed; t.members = members; }
+          if (t) {
+            t.name = name; t.dept_id = deptId; t.dept_label = deptLabel; t.seed = seed;
+            t.members = members; t.member_count = dialogMembers.length;
+          }
         } else {
-          teams.push({ id: teamIdCounter++, name, dept_id: deptId, dept_label: deptLabel, seed, members });
+          teams.push({
+            id: teamIdCounter++, name, dept_id: deptId, dept_label: deptLabel,
+            seed, members, member_count: dialogMembers.length,
+          });
         }
         teams.sort((a, b) => (a.seed || 0) - (b.seed || 0));
         renderTeams();
@@ -773,13 +964,16 @@
       function renderTeams() {
         document.getElementById('team-count').textContent = teams.length;
         document.getElementById('total-teams').textContent = teams.length;
+        computeRoundsForTeamCount(teams.length);
 
         if (!teams.length) {
           teamsTableBody.innerHTML = '<tr class="teams-table-empty"><td colspan="5">No teams yet. Click <strong>Add Team</strong> to start.</td></tr>';
           return;
         }
         teamsTableBody.innerHTML = teams.map(t => {
-          const memberCount = (t.members || '').split(',').map(s => s.trim()).filter(Boolean).length;
+          const memberCount = (t.member_count != null)
+            ? t.member_count
+            : (t.members || '').split(',').map(s => s.trim()).filter(Boolean).length;
           return `
             <tr data-team-id="${t.id}">
               <td><span class="seed-pill">${t.seed}</span></td>
@@ -859,7 +1053,7 @@
       }
 
       function rebuildBracketState() {
-        const numRounds = inlineLists.rounds.data.length;
+        const numRounds = roundsData.length;
         if (numRounds === 0) { bracketState = []; return; }
 
         /* Round 1 capacity = nextPow2(team count) / 2; halve each round */
@@ -884,11 +1078,11 @@
           }
         }
 
-        /* Auto-seed round 1 from teams + active seeding (only empty slots) */
+        /* Auto-seed round 1 from teams + active draw method (only empty slots) */
         if (newState[0] && teams.length >= 2) {
-          const seedingActive = (inlineLists.seedings.data[0] || 'Random');
-          const method = seedingActive.toLowerCase().replace(/\s+/g, '_');
-          const ordered = pairTeamsForFirstRound(teams, method);
+          const drawSel = document.getElementById('draw_type');
+          const drawMethod = drawSel && drawSel.value === 'random' ? 'random' : 'strict_seed';
+          const ordered = pairTeamsForFirstRound(teams, drawMethod);
           const filled = ordered.concat(Array(slots - ordered.length).fill(null));
           let pos = 0;
           for (let i = 0; i < newState[0].length; i++) {
@@ -906,53 +1100,7 @@
         bracketState = newState;
       }
 
-      function renderPreview() {
-        const format = formatSelect.value || 'Single Elimination';
-        const seedingActive = (inlineLists.seedings.data[0]) || 'Random';
-        const numRounds = inlineLists.rounds.data.length;
-
-        document.getElementById('previewFormat').textContent = format;
-        document.getElementById('previewTeams').textContent = teams.length;
-        document.getElementById('sumTeams').textContent = teams.length;
-        document.getElementById('sumFormat').textContent = format;
-        document.getElementById('sumSeed').textContent = seedingActive;
-        document.getElementById('sumInterval').textContent = (intervalInput.value || 60) + ' minutes';
-        document.getElementById('previewRounds').textContent = numRounds;
-        document.getElementById('sumRounds').textContent = numRounds;
-
-        if (numRounds === 0) {
-          previewCanvas.innerHTML = '<p class="preview-empty">Add at least one round in <strong>ROUNDS / STAGES</strong> to start.</p>';
-          return;
-        }
-        if (teams.length < 2) {
-          previewCanvas.innerHTML = '<p class="preview-empty">Add at least 2 teams to see the bracket preview.</p>';
-          return;
-        }
-
-        rebuildBracketState();
-
-        let html = '<div class="preview-rounds">';
-        bracketState.forEach((matches, rIdx) => {
-          const label = (inlineLists.rounds.data[rIdx] || ('Round ' + (rIdx + 1))).toUpperCase();
-          html += '<div class="preview-round">';
-          html += '<div class="preview-round-title">' + escapeHtml(label) + '</div>';
-          html += '<div class="preview-matches">';
-          matches.forEach((match, mIdx) => {
-            html += '<div class="preview-match">';
-            html += renderClickableSlot(match.a, rIdx, mIdx, 'a');
-            html += '<div class="preview-match-divider"></div>';
-            html += renderClickableSlot(match.b, rIdx, mIdx, 'b');
-            html += '</div>';
-          });
-          html += '</div></div>';
-        });
-        html += '</div>';
-        previewCanvas.innerHTML = html;
-
-        wireSlotHandlers();
-      }
-
-      function renderClickableSlot(slot, rIdx, mIdx, side) {
+      function renderPreviewSlot(slot, rIdx, mIdx, side) {
         const dataAttrs = 'data-r="' + rIdx + '" data-m="' + mIdx + '" data-s="' + side + '"';
         if (!slot) {
           return '<button type="button" class="preview-slot preview-slot--tbd preview-slot--clickable" ' + dataAttrs + '>TBD</button>';
@@ -974,6 +1122,209 @@
           '</button>';
         }
         return '<button type="button" class="preview-slot preview-slot--tbd preview-slot--clickable" ' + dataAttrs + '>TBD</button>';
+      }
+
+      function renderPreviewSeriesFooter(bestOf, winsNeeded) {
+        if (!bestOf || bestOf < 2) return '';
+        let games = '';
+        for (let g = 1; g <= bestOf; g++) {
+          games += '<span class="preview-game-slot">G' + g + '</span>';
+        }
+        return '<div class="preview-series-footer">' +
+          '<div class="preview-series-games">' + games + '</div>' +
+          '<small>First to ' + winsNeeded + ' wins advances</small>' +
+        '</div>';
+      }
+
+      function buildRoundsPreviewHtml(state, labels, options) {
+        options = options || {};
+        const bestOf = options.bestOf || 1;
+        const winsNeeded = options.winsNeeded || 1;
+        const clickable = options.clickable !== false;
+        let html = '<div class="preview-rounds">';
+        state.forEach((matches, rIdx) => {
+          const label = (labels[rIdx] || ('Round ' + (rIdx + 1))).toUpperCase();
+          html += '<div class="preview-round">';
+          html += '<div class="preview-round-title">' + escapeHtml(label) + '</div>';
+          html += '<div class="preview-matches">';
+          matches.forEach((match, mIdx) => {
+            html += '<div class="preview-match' + (bestOf > 1 ? ' preview-match--series' : '') + '">';
+            if (clickable) {
+              html += renderPreviewSlot(match.a, rIdx, mIdx, 'a');
+              html += '<div class="preview-match-divider"></div>';
+              html += renderPreviewSlot(match.b, rIdx, mIdx, 'b');
+            } else {
+              html += renderPreviewSlot(match.a, rIdx, mIdx, 'a').replace(/preview-slot--clickable/g, '');
+              html += '<div class="preview-match-divider"></div>';
+              html += renderPreviewSlot(match.b, rIdx, mIdx, 'b').replace(/preview-slot--clickable/g, '');
+            }
+            html += renderPreviewSeriesFooter(bestOf, winsNeeded);
+            html += '</div>';
+          });
+          html += '</div></div>';
+        });
+        html += '</div>';
+        return html;
+      }
+
+      function buildLowerBracketPreview(upperState) {
+        const numUpper = upperState.length;
+        if (!numUpper) return { state: [], labels: [] };
+
+        const lowerState = [];
+        const lowerLabels = [];
+        const firstRoundMatches = upperState[0].length;
+        let matches = Math.max(1, Math.floor(firstRoundMatches / 2));
+        lowerState.push(Array.from({ length: matches }, () => ({ a: null, b: null })));
+        lowerLabels.push('Losers Round 1');
+
+        for (let r = 1; r < numUpper - 1; r++) {
+          const prev = lowerState[lowerState.length - 1].length;
+          const count = Math.max(1, Math.ceil(prev / 2));
+          lowerState.push(Array.from({ length: count }, () => ({ a: null, b: null })));
+          lowerLabels.push('Losers Round ' + (r + 1));
+        }
+
+        lowerState.push([{ a: null, b: null }]);
+        lowerLabels.push('Losers Final');
+        return { state: lowerState, labels: lowerLabels };
+      }
+
+      function buildRoundRobinPairings(teamList) {
+        const drawSel = document.getElementById('draw_type');
+        const drawMethod = drawSel && drawSel.value === 'random' ? 'random' : 'strict_seed';
+        const ordered = pairTeamsForFirstRound(teamList, drawMethod);
+        const pairs = [];
+        for (let i = 0; i < ordered.length; i++) {
+          for (let j = i + 1; j < ordered.length; j++) {
+            pairs.push({
+              a: { type: 'team', team: ordered[i] },
+              b: { type: 'team', team: ordered[j] },
+            });
+          }
+        }
+        return pairs;
+      }
+
+      function updatePreviewMeta(spec, meta) {
+        meta = meta || {};
+        document.getElementById('previewFormat').textContent = spec.name;
+        document.getElementById('previewTeams').textContent = teams.length;
+        document.getElementById('sumTeams').textContent = teams.length;
+        document.getElementById('sumFormat').textContent = spec.name;
+        document.getElementById('sumSeed').textContent = meta.drawMethodLabel || 'Seeded Draw';
+        document.getElementById('previewRounds').textContent = meta.roundsLabel != null ? meta.roundsLabel : (roundsData.length || 0);
+        document.getElementById('sumRounds').textContent = meta.roundsLabel != null ? meta.roundsLabel : (roundsData.length || 0);
+        const ruleEl = document.getElementById('previewRuleText');
+        if (ruleEl) {
+          ruleEl.textContent = spec.matches_structure + ' · ' + spec.advancement_rule;
+        }
+      }
+
+      function renderPreview() {
+        const format = getTournamentFormat();
+        const mf = getMatchFormat();
+        const formatKey = getFormatKey();
+        const spec = getActiveFormatSpec(format, mf);
+        const drawMethodLabel = drawTypeSelect && drawTypeSelect.value === 'random' ? 'Random Draw' : 'Seeded Draw';
+
+        if (teams.length < 2) {
+          updatePreviewMeta(spec, { drawMethodLabel, roundsLabel: 0 });
+          previewCanvas.innerHTML = '<p class="preview-empty">Add at least 2 teams to see the bracket preview.</p>';
+          return;
+        }
+
+        computeRoundsForTeamCount(teams.length);
+
+        if (formatKey === 'round_robin') {
+          const pairings = buildRoundRobinPairings(teams);
+          const matchCount = pairings.length;
+          updatePreviewMeta(spec, {
+            drawMethodLabel,
+            roundsLabel: matchCount + ' matchups',
+          });
+          let html = '<div class="preview-round-robin">';
+          html += '<div class="preview-rr-header">Each team plays every other team once</div>';
+          html += '<div class="preview-rr-grid">';
+          pairings.forEach((match, idx) => {
+            html += '<div class="preview-match preview-match--rr">';
+            html += '<div class="preview-rr-label">Match ' + (idx + 1) + '</div>';
+            html += renderPreviewSlot(match.a, 0, idx, 'a').replace(/preview-slot--clickable/g, '');
+            html += '<div class="preview-match-divider"></div>';
+            html += renderPreviewSlot(match.b, 0, idx, 'b').replace(/preview-slot--clickable/g, '');
+            html += '</div>';
+          });
+          html += '</div></div>';
+          previewCanvas.innerHTML = html;
+          return;
+        }
+
+        if (formatKey === 'double_elimination') {
+          rebuildBracketState();
+          const lower = buildLowerBracketPreview(bracketState);
+          const totalRounds = bracketState.length + lower.state.length + 1;
+          updatePreviewMeta(spec, {
+            drawMethodLabel,
+            roundsLabel: totalRounds + ' (Upper + Lower + Grand Final)',
+          });
+          let html = '<div class="preview-bracket-layout preview-bracket-layout--double">';
+          html += '<div class="preview-bracket-section">';
+          html += '<div class="preview-section-label preview-section-label--upper">Upper Bracket · 1 loss</div>';
+          html += buildRoundsPreviewHtml(
+            bracketState,
+            roundsData.map(l => 'Winners ' + l),
+            { clickable: true, bestOf: 1 }
+          );
+          html += '</div>';
+          html += '<div class="preview-bracket-section preview-bracket-section--lower">';
+          html += '<div class="preview-section-label preview-section-label--lower">Lower Bracket · 2nd loss eliminates</div>';
+          html += buildRoundsPreviewHtml(lower.state, lower.labels, { clickable: false, bestOf: 1 });
+          html += '</div>';
+          html += '<div class="preview-grand-final">';
+          html += '<div class="preview-section-label">Grand Final</div>';
+          html += '<div class="preview-match"><div class="preview-slot preview-slot--tbd">Upper Bracket Winner</div>';
+          html += '<div class="preview-match-divider"></div>';
+          html += '<div class="preview-slot preview-slot--tbd">Lower Bracket Winner</div></div>';
+          html += '<small>Loser is eliminated after 2 losses overall</small>';
+          html += '</div></div>';
+          previewCanvas.innerHTML = html;
+          wireSlotHandlers();
+          return;
+        }
+
+        rebuildBracketState();
+
+        if (formatKey === 'best_of_3' || formatKey === 'best_of_5') {
+          const bestOf = formatKey === 'best_of_3' ? 3 : 5;
+          const winsNeeded = formatKey === 'best_of_3' ? 2 : 3;
+          updatePreviewMeta(spec, {
+            drawMethodLabel,
+            roundsLabel: roundsData.length + ' rounds · Bo' + bestOf,
+          });
+          previewCanvas.innerHTML = buildRoundsPreviewHtml(bracketState, roundsData, {
+            clickable: true,
+            bestOf: bestOf,
+            winsNeeded: winsNeeded,
+          });
+          wireSlotHandlers();
+          return;
+        }
+
+        /* Single elimination (default) */
+        updatePreviewMeta(spec, {
+          drawMethodLabel,
+          roundsLabel: roundsData.length,
+        });
+        previewCanvas.innerHTML = buildRoundsPreviewHtml(bracketState, roundsData, {
+          clickable: true,
+          bestOf: 1,
+          winsNeeded: 1,
+        });
+        wireSlotHandlers();
+      }
+
+      function renderClickableSlot(slot, rIdx, mIdx, side) {
+        return renderPreviewSlot(slot, rIdx, mIdx, side);
       }
 
       function wireSlotHandlers() {
@@ -1022,7 +1373,7 @@
           : '<p class="slot-picker-empty">No teams added yet.</p>';
 
         slotPickerEl.innerHTML =
-          '<div class="slot-picker-head">Assign to ' + (inlineLists.rounds.data[r] || 'Round ' + (r + 1)) + ' &nbsp;·&nbsp; Match ' + (m + 1) + ' (' + side.toUpperCase() + ')</div>' +
+          '<div class="slot-picker-head">Assign to ' + (roundsData[r] || 'Round ' + (r + 1)) + ' &nbsp;·&nbsp; Match ' + (m + 1) + ' (' + side.toUpperCase() + ')</div>' +
           '<div class="slot-picker-list">' + teamRows + '</div>' +
           '<div class="slot-picker-divider"></div>' +
           '<input type="text" class="slot-picker-custom" placeholder="Or type a custom team name…">' +
@@ -1086,14 +1437,11 @@
         renderPreview();
       }
 
-      /* Live update preview when settings change */
-      [formatSelect, intervalInput].forEach(el => {
-        el.addEventListener('change', renderPreview);
-        el.addEventListener('input', renderPreview);
-      });
+      /* Draw method controls how round 1 is filled — refresh preview on change */
       regenerateBtn.addEventListener('click', () => {
-        const seedingActive = (inlineLists.seedings && inlineLists.seedings.data[0]) || '';
-        document.getElementById('previewMethodTag').textContent = /random/i.test(seedingActive) ? 'Randomized' : 'Seeded';
+        const drawSel = document.getElementById('draw_type');
+        document.getElementById('previewMethodTag').textContent =
+          (drawSel && drawSel.value === 'random') ? 'Randomized' : 'Seeded';
         /* Clear all auto-assigned slots so they get reseeded */
         bracketState.forEach((round, rIdx) => {
           if (rIdx === 0) {
@@ -1176,7 +1524,15 @@
       function buildPayload(status) {
         const formData = new FormData(form);
         const eventId = formData.get('event');
-        const formatType = formData.get('tournament_format');
+        const tournamentType = formData.get('tournament_format');
+        const matchFormat = parseInt(formData.get('match_format') || '1', 10);
+        const primaryKey = resolvePrimaryFormatKey(tournamentType);
+        let formatType = tournamentType;
+        if (primaryKey === 'best_of_3') formatType = 'Best of 3';
+        else if (primaryKey === 'best_of_5') formatType = 'Best of 5';
+        else if (matchFormat === 3) formatType = tournamentType + ' (Best of 3)';
+        else if (matchFormat === 5) formatType = tournamentType + ' (Best of 5)';
+        const formatSpec = getActiveFormatSpec(tournamentType, matchFormat);
         const selectedEventOption = eventSelect.options[eventSelect.selectedIndex];
         const teamsPayload = teams.map((t, i) => ({
           team_name: t.name,
@@ -1185,15 +1541,16 @@
           seed_number: t.seed || (i + 1),
           members: t.members
         }));
-        /* Use inline-list first items as the active values */
-        const activeRound   = (inlineLists.rounds.data[0]   || 'Elimination');
-        const activeSeeding = (inlineLists.seedings.data[0] || 'Random');
-        const seedingMethodKey = activeSeeding.toLowerCase().replace(/\s+/g, '_');
+        const activeRound   = roundsData[0] || 'Elimination';
+        const drawSel = document.getElementById('draw_type');
+        const drawMethod = (drawSel && drawSel.value === 'random') ? 'random' : 'seeded';
+        const activeSeeding = drawMethod === 'random' ? 'Random Draw' : 'Seeded Draw';
+        const seedingMethodKey = drawMethod;
 
         /* Serialize the bracket layout the admin built (round names + slot assignments) */
         const bracket_layout = bracketState.map((roundMatches, rIdx) => ({
           round_index: rIdx,
-          round_name: inlineLists.rounds.data[rIdx] || ('Round ' + (rIdx + 1)),
+          round_name: roundsData[rIdx] || ('Round ' + (rIdx + 1)),
           matches: roundMatches.map((match, mIdx) => ({
             match_number: mIdx + 1,
             team_a: serializeSlot(match.a),
@@ -1212,24 +1569,39 @@
           },
           teams: teamsPayload,
           bracket_layout: bracket_layout,
-          rounds_list: inlineLists.rounds.data.slice(),
+          rounds_list: roundsData.slice(),
           seeding: {
             method: seedingMethodKey,
             method_label: activeSeeding,
             round_label: activeRound,
-            all_methods: inlineLists.seedings.data.slice(),
-            all_rounds:  inlineLists.rounds.data.slice(),
-            avoid_same_department_first_round: formData.get('avoid_same_department') === 'on',
-            enable_consolation_bracket: formData.get('enable_consolation') === 'on'
+            all_methods: [activeSeeding],
+            all_rounds:  roundsData.slice(),
+            avoid_same_department_first_round: false,
+            enable_consolation_bracket: false
           },
           match_settings: {
-            match_interval_minutes: parseInt(formData.get('match_interval')),
-            default_bye_assignment: formData.get('default_bye'),
-            status_options: ['Pending', 'Ongoing', 'Completed', 'Forfeit']
+            match_interval_minutes: 60,
+            default_bye_assignment: 'highest_seed',
+            status_options: ['Pending', 'Ongoing', 'Completed', 'Forfeit'],
+            best_of: formatSpec.series_length || (matchFormat > 1 ? matchFormat : 1),
+            wins_to_advance: formatSpec.wins_to_advance || 1,
           },
+          format_spec: formatSpec,
           bracket_rules: {
-            double_elimination: { winner_advances_to: 'next_winner_match', loser_advances_to: 'next_loser_match', eliminate_after_losses: 2 },
-            single_elimination: { winner_advances_to: 'next_match', loser_eliminated: true }
+            format_id: formatSpec.id,
+            format_name: formatSpec.name,
+            matches_structure: formatSpec.matches_structure,
+            advancement_rule: formatSpec.advancement_rule,
+            bracket_type: formatSpec.bracket_type,
+            losses_to_eliminate: formatSpec.losses_to_eliminate ?? null,
+            winner_advances_to: formatSpec.winner_advances_to ?? null,
+            loser_advances_to: formatSpec.loser_advances_to ?? null,
+            ranking_method: formatSpec.ranking_method ?? null,
+            series_length: formatSpec.series_length ?? null,
+            wins_to_advance: formatSpec.wins_to_advance ?? null,
+            min_games: formatSpec.min_games ?? null,
+            max_games: formatSpec.max_games ?? null,
+            series_format: formatSpec.series_format ?? null,
           },
           match_fields: ['game_number', 'round_name', 'team_a', 'team_b', 'team_a_source', 'team_b_source', 'date', 'time', 'venue', 'score_team_a', 'score_team_b', 'winner', 'loser', 'status', 'remarks'],
           features: { auto_generate_bracket: true, auto_advance_winner_loser: true, handle_byes: true, bracket_lock_after_first_match: true, notifications: true, export_options: ['PDF', 'Excel'] }
@@ -1283,30 +1655,298 @@
       renderPreview();
 
       /* ─────────────────────────────────────────────────────────
-         View Bracket Modal — uses the same preview look,
-         no winners shown (TBD-style cards only)
+         Bracket Flow Tree — tournament-style layout with connectors
+         Used by View Bracket modal (and optionally preview)
          ───────────────────────────────────────────────────────── */
+      const BRACKET_SLOT_H = 52; /* px per tree slot — controls vertical rhythm */
+
+      function groupMatchesByRound(matches) {
+        const roundOrder = [];
+        const rounds = {};
+        matches.forEach(m => {
+          const key = m.round_name || 'Round';
+          if (!rounds[key]) { rounds[key] = []; roundOrder.push(key); }
+          rounds[key].push(m);
+        });
+        roundOrder.forEach(r => rounds[r].sort((a, b) => (a.match_number || 0) - (b.match_number || 0)));
+        return roundOrder.map(name => ({ name, matches: rounds[name] }));
+      }
+
+      function computeTreeLayout(roundColumns) {
+        const numRounds = roundColumns.length;
+        if (!numRounds) return { rounds: [], treeHeight: 0, champion: null };
+
+        const firstCount = roundColumns[0].matches.length || 1;
+        const treeSlots = firstCount * Math.pow(2, numRounds - 1);
+        const treeHeight = treeSlots * BRACKET_SLOT_H;
+
+        let champion = null;
+        const rounds = roundColumns.map((col, rIdx) => {
+          const span = Math.pow(2, rIdx);
+          const matches = col.matches.map((m, mIdx) => {
+            const slotCenter = mIdx * span * 2 + span;
+            const topPx = slotCenter * BRACKET_SLOT_H - 44;
+            if (rIdx === numRounds - 1 && m.winner) champion = m.winner;
+            return { ...m, topPx, mIdx, rIdx };
+          });
+          return { name: col.name, matches, rIdx };
+        });
+
+        return { rounds, treeHeight, champion };
+      }
+
+      function renderBestOfGames(m) {
+        if (!m.best_of || m.best_of < 3) return '';
+        const winsNeeded = Math.ceil(m.best_of / 2);
+        let winsA = 0, winsB = 0;
+        const scoreStr = (m.score_a || '') + '-' + (m.score_b || '');
+        const seriesMatch = scoreStr.match(/^(\d+)\s*[-–]\s*(\d+)$/);
+        if (seriesMatch) {
+          winsA = parseInt(seriesMatch[1], 10) || 0;
+          winsB = parseInt(seriesMatch[2], 10) || 0;
+        }
+        let html = '<div class="bf-series-games">';
+        for (let g = 1; g <= m.best_of; g++) {
+          let cls = 'bf-game-slot';
+          let label = 'G' + g;
+          if (winsA + winsB >= g) {
+            if (winsA + winsB === g - 1 && (winsA >= winsNeeded || winsB >= winsNeeded)) {
+              cls += ' bf-game-slot--skip';
+              label = '—';
+            } else if (winsA + winsB >= g) {
+              const aWon = winsA >= g || (winsA + winsB >= g && winsA > winsB);
+              cls += winsA >= Math.ceil(g / 2) ? ' bf-game-slot--win-a' : ' bf-game-slot--played';
+            }
+          }
+          html += '<span class="' + cls + '" title="Game ' + g + '">' + label + '</span>';
+        }
+        html += '<span class="bf-series-label">Bo' + m.best_of + '</span></div>';
+        return html;
+      }
+
+      function renderFlowMatchCard(m, mode) {
+        const statusKey = (m.status || 'pending').toLowerCase();
+        const statusLabel = m.status_label || statusKey.charAt(0).toUpperCase() + statusKey.slice(1);
+        const teamA = (m.team_a || '').trim();
+        const teamB = (m.team_b || '').trim();
+        const winner = (m.winner || '').trim();
+        const scoreA = (m.score_a == null ? '' : String(m.score_a)).trim();
+        const scoreB = (m.score_b == null ? '' : String(m.score_b)).trim();
+
+        function slotHtml(name, score, isWinner) {
+          const n = name || 'TBD';
+          const upper = n.toUpperCase();
+          if (upper === 'TBD') return '<div class="bf-slot bf-slot--tbd"><span>TBD</span></div>';
+          if (upper === 'BYE') return '<div class="bf-slot bf-slot--bye"><span>BYE</span></div>';
+          const winCls = isWinner && winner ? ' bf-slot--winner' : '';
+          const scoreHtml = score ? '<span class="bf-score">' + escapeHtml(score) + '</span>' : '';
+          return '<div class="bf-slot' + winCls + '"><span class="bf-team">' + escapeHtml(n) + '</span>' + scoreHtml + '</div>';
+        }
+
+        const isWinA = winner && teamA && winner === teamA;
+        const isWinB = winner && teamB && winner === teamB;
+
+        let html = '<div class="bf-match bf-match--' + statusKey + '" data-match="' + (m.match_number || '') + '">';
+        html += '<div class="bf-match-label">Match ' + (m.match_number || '?') + '</div>';
+        html += slotHtml(teamA, scoreA, isWinA);
+        html += '<div class="bf-divider"></div>';
+        html += slotHtml(teamB, scoreB, isWinB);
+        html += renderBestOfGames(m);
+        html += '<div class="bf-match-foot">';
+        html += '<span class="match-status-badge match-status-' + statusKey + '">' + escapeHtml(statusLabel) + '</span>';
+        if (winner) html += '<span class="bf-winner-pill">→ ' + escapeHtml(winner) + '</span>';
+        html += '</div>';
+        html += '</div>';
+        return html;
+      }
+
+      function renderBracketFlowTree(container, matches, options) {
+        options = options || {};
+        if (!matches || !matches.length) {
+          container.innerHTML = '<p class="preview-empty">No bracket generated for this event yet.</p>';
+          return { champion: null, rounds: 0, teams: 0 };
+        }
+
+        const roundColumns = groupMatchesByRound(matches);
+        const layout = computeTreeLayout(roundColumns);
+        const numRounds = layout.rounds.length;
+
+        /* Estimate team count from first round */
+        const teamsCount = (roundColumns[0]?.matches.length || 0) * 2;
+
+        let html = '<div class="bracket-flow" style="--tree-height:' + layout.treeHeight + 'px; --slot-h:' + BRACKET_SLOT_H + 'px;">';
+
+        layout.rounds.forEach((round, rIdx) => {
+          const isLast = rIdx === numRounds - 1;
+          html += '<div class="bracket-flow-col" data-round="' + rIdx + '">';
+          html += '<div class="bracket-flow-col-title">' + escapeHtml(round.name.toUpperCase()) + '</div>';
+          html += '<div class="bracket-flow-col-track" style="height:' + layout.treeHeight + 'px">';
+
+          round.matches.forEach(m => {
+            html += '<div class="bracket-flow-node" style="top:' + m.topPx + 'px" data-r="' + rIdx + '" data-m="' + m.mIdx + '">';
+            html += renderFlowMatchCard(m, options.mode || 'view');
+            if (!isLast) {
+              html += '<div class="bf-connector bf-connector--out" aria-hidden="true"></div>';
+            }
+            if (rIdx > 0) {
+              html += '<div class="bf-connector bf-connector--in" aria-hidden="true"></div>';
+            }
+            html += '</div>';
+          });
+
+          html += '</div></div>';
+        });
+
+        /* Champion column */
+        if (layout.champion) {
+          html += '<div class="bracket-flow-col bracket-flow-col--champion">';
+          html += '<div class="bracket-flow-col-title">CHAMPION</div>';
+          html += '<div class="bracket-flow-col-track" style="height:' + layout.treeHeight + 'px">';
+          html += '<div class="bf-champion-node" style="top:' + (layout.treeHeight / 2 - 40) + 'px">';
+          html += '<span class="bf-champion-crown" aria-hidden="true">🏆</span>';
+          html += '<strong>' + escapeHtml(layout.champion) + '</strong>';
+          html += '<small>Tournament Winner</small>';
+          html += '</div></div></div>';
+        }
+
+        html += '</div>';
+        container.innerHTML = html;
+        applyConnectorArms(container);
+        return { champion: layout.champion, rounds: numRounds, teams: teamsCount };
+      }
+
+      function applyConnectorArms(container) {
+        container.querySelectorAll('.bracket-flow-node').forEach(node => {
+          const rIdx = parseInt(node.dataset.r, 10);
+          const mIdx = parseInt(node.dataset.m, 10);
+          if (isNaN(rIdx) || isNaN(mIdx)) return;
+          const armH = Math.pow(2, rIdx) * BRACKET_SLOT_H;
+          node.style.setProperty('--arm-h', armH + 'px');
+          node.classList.toggle('bf-node--arm-down', mIdx % 2 === 0);
+          node.classList.toggle('bf-node--arm-up', mIdx % 2 === 1);
+        });
+      }
+
       const viewModal = document.getElementById('viewBracketModal');
       const closeViewBtn = document.getElementById('closeViewBracketBtn');
       const visualizer = document.getElementById('bracketVisualizer');
       const viewMetaEl = document.getElementById('viewBracketMeta');
+      const viewTitleEl = document.getElementById('view-bracket-title');
+      const viewBadgesEl = document.getElementById('viewBracketBadges');
+      const championBar = document.getElementById('bracketChampionBar');
+      const championNameEl = document.getElementById('bracketChampionName');
+      const exportBracketBtn = document.getElementById('exportBracketBtn');
+      const regenerateFromViewBtn = document.getElementById('regenerateFromViewBtn');
+      let currentViewEventId = null;
+      let currentViewLocked = false;
+
+      function populateBracketDetails(data) {
+        const ev = data.event || {};
+        const prog = data.progress || {};
+        if (viewTitleEl) viewTitleEl.textContent = ev.name || 'Bracket Details';
+        if (viewMetaEl) {
+          viewMetaEl.textContent = [
+            ev.category,
+            ev.division !== '—' ? ev.division : null,
+            ev.tournament_type_label || data.format,
+          ].filter(Boolean).join(' · ');
+        }
+        if (viewBadgesEl) {
+          let badges = '<span class="bracket-bracket-status bracket-bracket-status--' + (prog.bracket_status || 'not_generated') + '">' +
+            escapeHtml(prog.bracket_status_label || 'Not Generated') + '</span>';
+          if (data.locked) {
+            badges += '<span class="bracket-lock-badge"><svg viewBox="0 0 24 24" width="12" height="12"><path fill="currentColor" d="M12 1a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2h-1V6a5 5 0 0 0-5-5Zm-3 8V6a3 3 0 0 1 6 0v3H9Z"/></svg> Locked</span>';
+          }
+          viewBadgesEl.innerHTML = badges;
+        }
+        document.getElementById('bdEventName').textContent = ev.name || '—';
+        document.getElementById('bdCategory').textContent = ev.category || '—';
+        document.getElementById('bdDivision').textContent = ev.division || '—';
+        document.getElementById('bdFormat').textContent = ev.tournament_type_label || data.format || '—';
+        renderViewFormatRules(
+          ev.tournament_type_label || data.format || 'Single Elimination',
+          data.match_format || data.best_of || 1
+        );
+        document.getElementById('bdJudges').textContent = ev.assigned_judges || 'None assigned';
+        document.getElementById('bdTotalTeams').textContent = (data.teams || []).length;
+        document.getElementById('bdTotalRounds').textContent = (data.rounds || []).length;
+        document.getElementById('bdBracketStatus').textContent = prog.bracket_status_label || '—';
+        document.getElementById('bdLockState').textContent = data.locked ? 'Locked (no manual edits)' : 'Unlocked';
+        const pct = prog.match_progress_pct || 0;
+        const bar = document.querySelector('#bdProgressBar span');
+        if (bar) bar.style.width = pct + '%';
+        document.getElementById('bdProgressLabel').textContent =
+          (prog.match_completed || 0) + ' / ' + (prog.match_total || 0) + ' matches completed (' + pct + '%)';
+        const recentEl = document.getElementById('bdRecentResults');
+        const recent = data.recent_results || [];
+        if (!recent.length) {
+          recentEl.innerHTML = '<li class="bd-recent-empty">No completed matches yet.</li>';
+        } else {
+          recentEl.innerHTML = recent.map(r =>
+            '<li class="bd-recent-item">' +
+              '<strong>M' + r.match_number + ' · ' + escapeHtml(r.round_name) + '</strong>' +
+              '<span>' + escapeHtml(r.team_a) + ' <em>' + escapeHtml(r.score_a) + '-' + escapeHtml(r.score_b) + '</em> ' + escapeHtml(r.team_b) + '</span>' +
+              '<small>Winner: ' + escapeHtml(r.winner) + '</small>' +
+            '</li>'
+          ).join('');
+        }
+        if (regenerateFromViewBtn) {
+          regenerateFromViewBtn.disabled = !!data.locked;
+          regenerateFromViewBtn.title = data.locked
+            ? 'Bracket is locked after generation'
+            : 'Open bracket setup to regenerate';
+        }
+      }
 
       function closeViewModal() {
         viewModal.classList.remove('active');
         viewModal.setAttribute('aria-hidden', 'true');
         visualizer.innerHTML = '';
+        if (championBar) championBar.hidden = true;
+        currentViewEventId = null;
       }
       closeViewBtn.addEventListener('click', closeViewModal);
       viewModal.addEventListener('click', e => { if (e.target === viewModal) closeViewModal(); });
 
+      if (exportBracketBtn) {
+        exportBracketBtn.addEventListener('click', () => {
+          const area = document.querySelector('.bracket-modal-view--wide');
+          if (!area) { window.print(); return; }
+          document.body.classList.add('bracket-print-mode');
+          window.print();
+          setTimeout(() => document.body.classList.remove('bracket-print-mode'), 500);
+        });
+      }
+
+      if (regenerateFromViewBtn) {
+        regenerateFromViewBtn.addEventListener('click', () => {
+          if (!currentViewEventId || currentViewLocked) return;
+          closeViewModal();
+          eventSelect.value = currentViewEventId;
+          eventSelect.dispatchEvent(new Event('change'));
+          openModal();
+        });
+      }
+
       document.querySelectorAll('.btn-view-bracket').forEach(btn => {
         btn.addEventListener('click', async () => {
           const eventId = btn.getAttribute('data-id');
+          currentViewEventId = eventId;
           try {
             const response = await fetch(`/admin/brackets/${eventId}/view/`);
             const data = await response.json();
             if (data.success) {
-              renderViewBracket(data.matches, data.format || data.event_format || '');
+              currentViewLocked = !!data.locked;
+              populateBracketDetails(data);
+              const result = renderBracketFlowTree(visualizer, data.matches, { mode: 'view' });
+              if (championBar && championNameEl) {
+                if (result.champion) {
+                  championNameEl.textContent = result.champion;
+                  championBar.hidden = false;
+                } else {
+                  championBar.hidden = true;
+                }
+              }
               viewModal.classList.add('active');
               viewModal.setAttribute('aria-hidden', 'false');
             } else {
@@ -1319,108 +1959,6 @@
         });
       });
 
-      function pickRoundLabel(rIdx, total) {
-        if (rIdx === total - 1) return 'FINAL';
-        if (rIdx === total - 2) return 'SEMIFINALS';
-        if (rIdx === total - 3) return 'QUARTERFINALS';
-        return 'ROUND ' + (rIdx + 1);
-      }
-
-      function renderViewBracket(matches, format) {
-        visualizer.innerHTML = '';
-        if (!matches || matches.length === 0) {
-          visualizer.innerHTML = '<p class="preview-empty">No bracket generated for this event yet.</p>';
-          if (viewMetaEl) viewMetaEl.textContent = 'No matches available.';
-          return;
-        }
-
-        /* Group matches by round name (keeping their original order) */
-        const roundOrder = [];
-        const rounds = {};
-        matches.forEach(m => {
-          if (!rounds[m.round_name]) { rounds[m.round_name] = []; roundOrder.push(m.round_name); }
-          rounds[m.round_name].push(m);
-        });
-
-        const totalRounds = roundOrder.length;
-        const teamsCount = (rounds[roundOrder[0]] || []).length * 2;
-        if (viewMetaEl) {
-          viewMetaEl.textContent = 'Format: ' + (format || 'Single Elimination') + '  |  Teams: ' + teamsCount + '  |  Rounds: ' + totalRounds;
-        }
-
-        let html = '<div class="preview-rounds">';
-        roundOrder.forEach((roundName) => {
-          html += '<div class="preview-round">';
-          /* Use exact round name as the admin entered it */
-          html += '<div class="preview-round-title">' + escapeHtml(roundName.toUpperCase()) + '</div>';
-          html += '<div class="preview-matches">';
-          rounds[roundName].forEach(m => {
-            html += '<div class="preview-match">';
-            html += renderViewSlot(m.team_a);
-            html += '<div class="preview-match-divider"></div>';
-            html += renderViewSlot(m.team_b);
-            html += '</div>';
-          });
-          html += '</div></div>';
-        });
-        html += '</div>';
-        visualizer.innerHTML = html;
-      }
-
-      function renderViewSlot(name) {
-        const trimmed = (name || '').trim();
-        if (!trimmed || trimmed.toUpperCase() === 'TBD') {
-          return '<div class="preview-slot preview-slot--tbd">TBD</div>';
-        }
-        if (trimmed.toUpperCase() === 'BYE') {
-          return '<div class="preview-slot preview-slot--bye">BYE</div>';
-        }
-        return '<div class="preview-slot"><span class="preview-name">' + escapeHtml(trimmed) + '</span></div>';
-      }
-
-      /* Delete Bracket */
-      document.querySelectorAll('.btn-delete-bracket').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          if (!confirm('Are you sure you want to delete this bracket? This will remove all teams and matches.')) return;
-          const eventId = btn.getAttribute('data-id');
-          try {
-            const response = await fetch(`/admin/brackets/${eventId}/delete/`, {
-              method: 'POST',
-              headers: { 'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/json' }
-            });
-            const data = await response.json();
-            if (data.success) { showToast(data.message); setTimeout(() => window.location.reload(), 1200); }
-            else { showToast(data.message, true); }
-          } catch (err) { console.error(err); showToast('Error deleting bracket.', true); }
-        });
-      });
-
-      /* Edit Bracket — load existing teams into the new modal */
-      document.querySelectorAll('.btn-edit-bracket').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          const eventId = btn.getAttribute('data-id');
-          try {
-            const response = await fetch(`/admin/brackets/${eventId}/teams/`);
-            const data = await response.json();
-            if (data.success && data.teams.length > 0) {
-              eventSelect.value = eventId;
-              eventSelect.dispatchEvent(new Event('change'));
-              teams = data.teams.map((t, i) => ({
-                id: teamIdCounter++,
-                name: t.name,
-                dept_id: t.department_id || '',
-                dept_label: t.department_name || '',
-                seed: t.seed || (i + 1),
-                members: t.members || ''
-              }));
-              renderTeams(); renderPreview();
-              openModal();
-            } else {
-              showToast('No existing teams found to edit. Please create a bracket first.', true);
-            }
-          } catch (err) { console.error(err); showToast('Error fetching bracket teams.', true); }
-        });
-      });
     });
   </script>
 </body>

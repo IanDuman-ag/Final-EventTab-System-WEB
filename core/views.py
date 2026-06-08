@@ -4,7 +4,7 @@ from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.admin.models import ADDITION, CHANGE, DELETION, LogEntry
 from django.contrib.auth.models import Group
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Q, Count
 from django.shortcuts import redirect, render, get_object_or_404
 from django.utils import timezone
 from django.http import HttpResponse, JsonResponse
@@ -49,6 +49,66 @@ def normalize_event_availability_status(status):
     return Event.STATUS_ACTIVE
 
 
+def resolve_department(dept_val):
+    """Resolve a department from an id, name, or code string."""
+    val = (dept_val or '').strip()
+    if not val:
+        return None
+    if val.isdigit():
+        return Department.objects.filter(pk=int(val)).first()
+    dept = Department.objects.filter(name=val).first()
+    if dept:
+        return dept
+    return Department.objects.filter(code__iexact=val).first()
+
+
+def parse_team_members(members_raw):
+    """Return a comma-separated member string and count from stored value."""
+    raw = (members_raw or '').strip()
+    if not raw:
+        return '', 0
+    if raw.startswith('['):
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, list):
+                names = [str(m).strip() for m in parsed if str(m).strip()]
+                return ', '.join(names), len(names)
+        except (json.JSONDecodeError, TypeError):
+            pass
+    names = [m.strip() for m in raw.split(',') if m.strip()]
+    return ', '.join(names), len(names)
+
+
+def serialize_event_teams(event):
+    """Serialize BracketTeam rows for admin event dialogs."""
+    teams = []
+    for t in event.bracket_teams.select_related('department').order_by('seed', 'name'):
+        members_str, _ = parse_team_members(t.members)
+        teams.append({
+            'name': t.name,
+            'department': t.department.name if t.department else '',
+            'members': members_str,
+            'seed': t.seed or 0,
+        })
+    return teams
+
+
+def serialize_event_candidates(event):
+    """Serialize judging candidates for admin event dialogs."""
+    if not event.judging_event_id:
+        return []
+    from events.models import Candidate
+    return [
+        {
+            'name': c.name,
+            'number': c.number,
+            'department': '',
+            'description': c.description or '',
+        }
+        for c in Candidate.objects.filter(event=event.judging_event).order_by('number')
+    ]
+
+
 def get_event_status_meta(event, today=None):
     today = today or timezone.localdate()
     availability_status = normalize_event_availability_status(event.status)
@@ -88,6 +148,48 @@ def get_event_status_counts(events, today=None):
     for event in events:
         counts[get_event_status_meta(event, today)['status']] += 1
     return counts
+
+
+TOURNAMENT_TYPE_LABELS = {
+    'single_elimination': 'Single Elimination',
+    'double_elimination': 'Double Elimination',
+    'round_robin': 'Round Robin',
+    'best_of_3': 'Best of 3',
+    'best_of_5': 'Best of 5',
+}
+
+
+def _tournament_type_label(raw):
+    key = (raw or '').strip().lower()
+    if not key:
+        return '—'
+    return TOURNAMENT_TYPE_LABELS.get(key, raw.replace('_', ' ').title())
+
+
+def get_bracket_status_meta(has_bracket, total=0, completed=0, ongoing=0):
+    """Bracket lifecycle: Not Generated → Generated → In Progress → Completed."""
+    if not has_bracket or total == 0:
+        return {
+            'bracket_status': 'not_generated',
+            'bracket_status_label': 'Not Generated',
+            'match_completed': 0,
+            'match_total': 0,
+            'match_progress_pct': 0,
+        }
+    if completed >= total:
+        status_key, status_label = 'completed', 'Completed'
+    elif completed > 0 or ongoing > 0:
+        status_key, status_label = 'in_progress', 'In Progress'
+    else:
+        status_key, status_label = 'generated', 'Generated'
+    pct = int(round(completed / total * 100)) if total else 0
+    return {
+        'bracket_status': status_key,
+        'bracket_status_label': status_label,
+        'match_completed': completed,
+        'match_total': total,
+        'match_progress_pct': pct,
+    }
 
 
 def authenticate_email(request, email, password):
@@ -1001,9 +1103,24 @@ def admin_generate_report(request):
         dept_filter = request.POST.get('dept_filter', '').strip()
         cat_filter = request.POST.get('cat_filter', '').strip()
         status_filter = request.POST.get('status_filter', '').strip()
+        round_filter = request.POST.get('round_filter', '').strip()
+        div_filter = request.POST.get('div_filter', '').strip()
         start_date_str = request.POST.get('start_date', '').strip()
         end_date_str = request.POST.get('end_date', '').strip()
         included_metrics = request.POST.getlist('metrics')
+
+        # Metadata + filters passed through to the report generators.
+        # Note: the UI status filter is event-level (upcoming/ongoing/...), which
+        # does not map to match/scoresheet status, so it is not forwarded to the
+        # per-match queries to avoid filtering everything out.
+        report_info = {
+            'generated_by': request.user.get_full_name() or request.user.username,
+            'round_filter': round_filter or None,
+            'status_filter': None,
+            'category_filter': cat_filter or None,
+            'division_filter': div_filter or None,
+            'remarks': request.POST.get('remarks', '').strip() or None,
+        }
 
         # Log the export action
         event_ct = ContentType.objects.get_for_model(Event)
@@ -1037,7 +1154,7 @@ def admin_generate_report(request):
         try:
             if export_format in ('xlsx', 'excel'):
                 from core.reports_generator import generate_excel_report
-                stream = generate_excel_report(event_name, dept_name, start_date, end_date, included_metrics)
+                stream = generate_excel_report(event_name, dept_name, start_date, end_date, included_metrics, report_info)
                 fname = f'EventTab_{report_type}_{today.strftime("%Y%m%d")}.xlsx'
                 resp = HttpResponse(
                     stream.read(),
@@ -1062,7 +1179,7 @@ def admin_generate_report(request):
                 return resp
             else:
                 from core.reports_generator import generate_pdf_report
-                stream = generate_pdf_report(event_name, dept_name, start_date, end_date, included_metrics)
+                stream = generate_pdf_report(event_name, dept_name, start_date, end_date, included_metrics, report_info)
                 fname = f'EventTab_{report_type}_{today.strftime("%Y%m%d")}.pdf'
                 resp = HttpResponse(stream.read(), content_type='application/pdf')
                 resp['Content-Disposition'] = f'attachment; filename="{fname}"'
@@ -1363,6 +1480,8 @@ def admin_manage_events(request):
             status            = normalize_event_availability_status(request.POST.get('status', 'active')),
             max_participants  = _int_or_none(request.POST.get('max_participants', '')),
             num_teams         = _int_or_none(request.POST.get('num_teams', '')),
+            scoring_method    = request.POST.get('scoring_method', '').strip(),
+            tournament_type   = request.POST.get('tournament_type', '').strip(),
             faculty_in_charge = request.POST.get('faculty_in_charge', '').strip(),
             student_in_charge = request.POST.get('student_in_charge', '').strip(),
             mechanics         = request.POST.get('mechanics', '').strip(),
@@ -1384,20 +1503,19 @@ def admin_manage_events(request):
         if teams_json:
             try:
                 teams_list = json.loads(teams_json)
-                from events.models import BracketTeam, Department as DeptModel
+                from events.models import BracketTeam
                 for i, t in enumerate(teams_list):
                     team_name = (t.get('name') or '').strip()
                     if not team_name:
                         continue
-                    dept_obj = None
-                    dept_name = (t.get('department') or '').strip()
-                    if dept_name:
-                        dept_obj = DeptModel.objects.filter(name=dept_name).first()
+                    dept_obj = resolve_department(t.get('department'))
+                    members_raw = (t.get('members') or '').strip()
+                    members_str, _ = parse_team_members(members_raw)
                     BracketTeam.objects.create(
                         event=event,
                         name=team_name,
                         department=dept_obj,
-                        members=(t.get('members') or '').strip(),
+                        members=members_str,
                         seed=i + 1,
                     )
             except (json.JSONDecodeError, TypeError):
@@ -1495,12 +1613,15 @@ def admin_manage_events(request):
             'student_in_charge': ev.student_in_charge,
             'mechanics':        ev.mechanics,
             'scoring_criteria': ev.scoring_criteria,
-            'mobile_published': ev.judging_event is not None,
+            'scoring_method':   ev.scoring_method or type_key,
+            'tournament_type':  ev.tournament_type or '',
             'assigned_judge_ids': list(ev.assigned_judges.values_list('id', flat=True)),
             'assigned_judges_display': ', '.join(
                 u.get_full_name() or u.username
                 for u in ev.assigned_judges.all()
             ),
+            'teams_list': serialize_event_teams(ev),
+            'candidates_list': serialize_event_candidates(ev),
         })
         if len(event_rows) >= 30:
             break
@@ -1612,6 +1733,10 @@ def admin_edit_event(request, event_id):
     ev.status            = normalize_event_availability_status(request.POST.get('status', 'active'))
     ev.max_participants  = _int_or_none(request.POST.get('max_participants', ''))
     ev.num_teams         = _int_or_none(request.POST.get('num_teams', ''))
+    if request.POST.get('scoring_method', '').strip():
+        ev.scoring_method = request.POST.get('scoring_method', '').strip()
+    if request.POST.get('tournament_type', '').strip():
+        ev.tournament_type = request.POST.get('tournament_type', '').strip()
     ev.faculty_in_charge = request.POST.get('faculty_in_charge', '').strip()
     ev.student_in_charge = request.POST.get('student_in_charge', '').strip()
     ev.mechanics         = request.POST.get('mechanics', '').strip()
@@ -1626,6 +1751,49 @@ def admin_edit_event(request, event_id):
         Q(groups__name__iexact='Judge') | Q(groups__name__iexact='Judges')
     ) if judge_ids else User.objects.none()
     ev.assigned_judges.set(judges)
+
+    teams_json = request.POST.get('teams_data', '').strip()
+    if teams_json:
+        try:
+            teams_list = json.loads(teams_json)
+            from events.models import BracketTeam
+            BracketTeam.objects.filter(event=ev).delete()
+            for i, t in enumerate(teams_list):
+                team_name = (t.get('name') or '').strip()
+                if not team_name:
+                    continue
+                dept_obj = resolve_department(t.get('department'))
+                members_raw = (t.get('members') or '').strip()
+                members_str, _ = parse_team_members(members_raw)
+                BracketTeam.objects.create(
+                    event=ev,
+                    name=team_name,
+                    department=dept_obj,
+                    members=members_str,
+                    seed=i + 1,
+                )
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    candidates_json = request.POST.get('candidates_data', '').strip()
+    if candidates_json and ev.judging_event_id:
+        try:
+            cand_list = json.loads(candidates_json)
+            from events.models import Candidate as CandModel
+            CandModel.objects.filter(event=ev.judging_event).delete()
+            for c in cand_list:
+                cand_name = (c.get('name') or '').strip()
+                if not cand_name:
+                    continue
+                CandModel.objects.create(
+                    event=ev.judging_event,
+                    name=cand_name,
+                    number=c.get('number', 0),
+                    description=(c.get('description') or '').strip(),
+                )
+        except (json.JSONDecodeError, TypeError):
+            pass
+
     sync_event_to_mobile(ev)
 
     messages.success(request, f'Event "{event_name}" updated and synced to the judge mobile app.')
@@ -1817,11 +1985,38 @@ def admin_tab_delete(request, tab_key, record_id):
 @user_passes_test(lambda user: user.is_staff, login_url='login')
 def admin_brackets(request):
     """Display the tournament brackets management page."""
+    from events.models import BracketMatch, BracketTeam
     all_events = list(Event.objects.all())
     today = timezone.localdate()
+
+    events_with_bracket = set(
+        BracketMatch.objects.values_list('event_id', flat=True).distinct()
+    )
+    team_counts = {}
+    for row in BracketTeam.objects.values('event_id'):
+        team_counts[row['event_id']] = team_counts.get(row['event_id'], 0) + 1
+
+    match_stats = {
+        row['event_id']: row
+        for row in BracketMatch.objects.values('event_id').annotate(
+            total=Count('id'),
+            completed=Count('id', filter=Q(status=BracketMatch.STATUS_COMPLETED)),
+            ongoing=Count('id', filter=Q(status=BracketMatch.STATUS_ONGOING)),
+        )
+    }
+
     event_rows = []
     for ev in all_events[:50]:
         status_meta = get_event_status_meta(ev, today)
+        bracket_team_count = team_counts.get(ev.id, 0)
+        has_bracket = ev.id in events_with_bracket
+        ms = match_stats.get(ev.id, {})
+        bracket_meta = get_bracket_status_meta(
+            has_bracket,
+            total=ms.get('total', 0),
+            completed=ms.get('completed', 0),
+            ongoing=ms.get('ongoing', 0),
+        )
         event_rows.append({
             'id': ev.id,
             'name': ev.name,
@@ -1835,6 +2030,13 @@ def admin_brackets(request):
             'status': status_meta['status'],
             'status_label': status_meta['status_label'],
             'num_teams': str(ev.num_teams) if ev.num_teams else '',
+            'bracket_team_count': bracket_team_count,
+            'tournament_type': ev.tournament_type or '',
+            'tournament_type_label': _tournament_type_label(ev.tournament_type),
+            'scoring_method': ev.scoring_method or '',
+            'bracket_locked': ev.bracket_locked,
+            'has_bracket': has_bracket,
+            **bracket_meta,
         })
 
     status_counts = get_event_status_counts(all_events, today)
@@ -2013,45 +2215,17 @@ def admin_approve_scoresheet(request, scoresheet_id):
     scoresheet.status = ScoreSheet.STATUS_FINALIZED
     scoresheet.save()
 
-    # Sync with BracketMatch
-    match = scoresheet.match
-    match.score_a = f"{scoresheet.score_team_a:.1f}"
-    match.score_b = f"{scoresheet.score_team_b:.1f}"
-    match.winner = scoresheet.winner
+    # Delegate bracket sync + winner advancement + points to the shared engine.
+    from events.bracket_progression import apply_scoresheet_to_bracket
+    result = apply_scoresheet_to_bracket(scoresheet)
 
-    # Identify loser
-    if match.winner == match.team_a:
-        match.loser = match.team_b
-    else:
-        match.loser = match.team_a
+    if not result.get('updated'):
+        return JsonResponse({'success': True, 'message': 'Scoresheet approved. No linked bracket match to update.'})
 
-    match.status = BracketMatch.STATUS_COMPLETED
-    match.save()
-
-    # Advance winner to the next round if applicable
-    if match.next_match_winner:
-        next_m = match.next_match_winner
-        if next_m.team_a != match.winner and next_m.team_b != match.winner:
-            if next_m.team_a is None:
-                next_m.team_a = match.winner
-            elif next_m.team_b is None:
-                next_m.team_b = match.winner
-            next_m.save()
-
-    # Advance loser to loser bracket if double elimination (if next_match_loser exists)
-    if match.next_match_loser:
-        next_l = match.next_match_loser
-        if next_l.team_a != match.loser and next_l.team_b != match.loser:
-            if next_l.team_a is None:
-                next_l.team_a = match.loser
-            elif next_l.team_b is None:
-                next_l.team_b = match.loser
-            next_l.save()
-
-    return JsonResponse({
-        'success': True,
-        'message': f'Scoresheet for Match {match.match_number} approved successfully. Bracket updated.'
-    })
+    msg = f"Scoresheet for Match {result['match_number']} approved. Bracket updated."
+    if result.get('is_championship'):
+        msg = f"Championship result approved — winner crowned and leaderboard updated."
+    return JsonResponse({'success': True, 'message': msg})
 
 
 @login_required(login_url='login')
@@ -2964,10 +3138,27 @@ def tabulator_verify_lock(request, sheet_id):
     from django.contrib.contenttypes.models import ContentType
     if request.method == 'POST':
         try:
-            sheet = ScoreSheet.objects.select_related('event').get(id=sheet_id)
+            sheet = ScoreSheet.objects.select_related('event', 'match').get(id=sheet_id)
             sheet.status = 'finalized'
             sheet.tabulator = request.user
             sheet.save()
+
+            # Tabulator approval drives the bracket: sync match, advance winners,
+            # award points, and crown the champion on the final.
+            change_message = "Verified and locked score sheet."
+            try:
+                from events.bracket_progression import apply_scoresheet_to_bracket
+                result = apply_scoresheet_to_bracket(sheet)
+                if result.get('updated'):
+                    change_message = (
+                        "Verified & locked — championship result, leaderboard updated."
+                        if result.get('is_championship')
+                        else f"Verified & locked — bracket Match {result['match_number']} updated."
+                    )
+            except Exception:
+                # Never let bracket sync block the verify/lock action.
+                pass
+
             # Log the verify & lock action
             ct = ContentType.objects.get_for_model(ScoreSheet)
             LogEntry.objects.create(
@@ -2976,7 +3167,7 @@ def tabulator_verify_lock(request, sheet_id):
                 object_id=str(sheet.id),
                 object_repr=f"{sheet.event.name} Score Sheet #{sheet.id}",
                 action_flag=CHANGE,
-                change_message="Verified and locked score sheet."
+                change_message=change_message,
             )
         except ScoreSheet.DoesNotExist:
             pass
@@ -4041,43 +4232,64 @@ def admin_generate_bracket(request):
     try:
         import json
         from events.models import Event, Department, BracketTeam, BracketMatch
-        from events.bracket_generator import generate_single_elimination, generate_double_elimination, generate_round_robin
-        
+        from events.bracket_generator import (
+            generate_single_elimination, generate_double_elimination,
+            generate_round_robin, generate_best_of_series, order_teams_for_draw,
+        )
+        from events.bracket_progression import link_bracket_advancement
+
         data = json.loads(request.body)
         event_data = data.get('event')
         event_id = event_data.get('event_id') if isinstance(event_data, dict) else event_data
         format_type = event_data.get('tournament_format') if isinstance(event_data, dict) else data.get('tournament_format')
         teams_data = data.get('teams', [])
-        
-        if not event_id or not format_type or not teams_data:
-            return JsonResponse({'success': False, 'message': 'Event, format, and teams are required.'}, status=400)
-            
-        event = get_object_or_404(Event, id=event_id)
-        
+
+        # Draw method (Random Draw vs Seeded Draw) drives first-round placement.
+        seeding = data.get('seeding') or {}
+        draw_method = (seeding.get('method') or data.get('draw_method') or 'seeded').lower()
+        if 'random' in draw_method:
+            draw_method = 'random'
+        else:
+            draw_method = 'seeded'
+
+        event = get_object_or_404(Event, id=event_id) if event_id else None
+        if not event or not format_type:
+            return JsonResponse({'success': False, 'message': 'Event and format are required.'}, status=400)
+
+        # Auto-fill teams from the event's existing BracketTeams if none supplied.
+        existing_teams = list(BracketTeam.objects.filter(event=event).order_by('seed'))
+        if not teams_data and not existing_teams:
+            return JsonResponse({'success': False, 'message': 'No teams found. Add teams or select an event that has teams.'}, status=400)
+
         # Check if matches already exist for this event
         if BracketMatch.objects.filter(event=event).exists():
              BracketMatch.objects.filter(event=event).delete()
-             BracketTeam.objects.filter(event=event).delete()
-        
-        # Create Teams
+        # Only wipe & recreate teams when the client sent a teams list; otherwise reuse existing.
+        if teams_data:
+            BracketTeam.objects.filter(event=event).delete()
+
+        # Create / collect Teams
         bracket_teams = []
         team_id_to_obj = {}
-        for index, team_data in enumerate(teams_data):
-            dept_id = team_data.get('department')
-            department = Department.objects.get(id=dept_id) if dept_id else None
-            
-            name = team_data.get('team_name') or team_data.get('name') or f'Team {index+1}'
-            seed = team_data.get('seed_number', index + 1)
-            
-            team = BracketTeam.objects.create(
-                event=event,
-                name=name,
-                department=department,
-                members=team_data.get('members', ''),
-                seed=seed
-            )
-            bracket_teams.append(team)
-            team_id_to_obj[index] = team
+        if teams_data:
+            for index, team_data in enumerate(teams_data):
+                department = resolve_department(team_data.get('department'))
+                name = team_data.get('team_name') or team_data.get('name') or f'Team {index+1}'
+                seed = team_data.get('seed_number', index + 1)
+                members_raw = team_data.get('members', '')
+                members_str, _ = parse_team_members(members_raw)
+
+                team = BracketTeam.objects.create(
+                    event=event,
+                    name=name,
+                    department=department,
+                    members=members_str,
+                    seed=seed
+                )
+                bracket_teams.append(team)
+                team_id_to_obj[index] = team
+        else:
+            bracket_teams = existing_teams
 
         # If admin supplied a bracket_layout, use it exactly as-is.
         # Otherwise fall back to auto-generation by format.
@@ -4113,19 +4325,38 @@ def admin_generate_bracket(request):
                         status=BracketMatch.STATUS_PENDING,
                     )
                     match_no += 1
+            # Admin layouts ship without advancement links — infer them so
+            # winners auto-advance when results are approved later.
+            link_bracket_advancement(event)
         else:
-            # Generate matches based on format (legacy auto-mode)
-            if format_type == 'Single Elimination':
-                generate_single_elimination(event, bracket_teams)
-            elif format_type == 'Double Elimination':
-                generate_double_elimination(event, bracket_teams)
-            elif format_type == 'Round Robin':
-                generate_round_robin(event, bracket_teams)
+            # Generate matches based on format (auto-mode). Draw method orders
+            # the teams for first-round placement (Random Draw vs Seeded Draw).
+            ordered_teams = order_teams_for_draw(bracket_teams, draw_method)
+            fmt = (format_type or '').strip()
+            if fmt == 'Single Elimination':
+                generate_single_elimination(event, ordered_teams)
+            elif fmt == 'Double Elimination':
+                generate_double_elimination(event, ordered_teams)
+            elif fmt == 'Round Robin':
+                generate_round_robin(event, ordered_teams)
+            elif fmt == 'Best of 3':
+                generate_best_of_series(event, ordered_teams, best_of=3)
+            elif fmt == 'Best of 5':
+                generate_best_of_series(event, ordered_teams, best_of=5)
             else:
                 return JsonResponse({'success': False, 'message': 'Unsupported tournament format.'}, status=400)
 
+        # Persist the chosen tournament type and lock the bracket against edits.
+        event.tournament_type = format_type
+        event.bracket_locked = True
+        event.save(update_fields=['tournament_type', 'bracket_locked'])
+
         sync_event_to_mobile(event)
-        return JsonResponse({'success': True, 'message': 'Bracket generated and synced to the judge mobile app.'})
+        return JsonResponse({
+            'success': True,
+            'message': 'Bracket generated, locked, and synced to the judge mobile app.',
+            'locked': True,
+        })
     except Exception as e:
         return JsonResponse({'success': False, 'message': str(e)}, status=500)
 
@@ -4135,12 +4366,20 @@ def admin_view_bracket(request, event_id):
     if request.method != 'GET':
         return JsonResponse({'success': False, 'message': 'Invalid method'}, status=400)
     try:
-        from events.models import Event, BracketMatch
+        from events.models import Event, BracketMatch, BracketTeam
         event = get_object_or_404(Event, id=event_id)
-        matches = BracketMatch.objects.filter(event=event).select_related('team_a', 'team_b', 'winner')
-        
+        matches_qs = BracketMatch.objects.filter(event=event).select_related(
+            'team_a', 'team_b', 'winner', 'loser',
+        ).order_by('match_number')
+
         matches_data = []
-        for m in matches:
+        for m in matches_qs:
+            remarks = m.remarks or ''
+            best_of = None
+            if 'Best of 3' in remarks:
+                best_of = 3
+            elif 'Best of 5' in remarks:
+                best_of = 5
             matches_data.append({
                 'id': m.id,
                 'match_number': m.match_number,
@@ -4150,13 +4389,88 @@ def admin_view_bracket(request, event_id):
                 'team_a_id': m.team_a.id if m.team_a else None,
                 'team_b_id': m.team_b.id if m.team_b else None,
                 'winner': m.winner.name if m.winner else None,
-                'score_a': m.score_a,
-                'score_b': m.score_b,
+                'winner_id': m.winner.id if m.winner else None,
+                'score_a': m.score_a or '',
+                'score_b': m.score_b or '',
                 'status': m.status,
-                'next_match_winner_id': m.next_match_winner.id if m.next_match_winner else None
+                'status_label': m.get_status_display(),
+                'remarks': remarks,
+                'best_of': best_of,
+                'next_match_winner_id': m.next_match_winner_id,
             })
-            
-        return JsonResponse({'success': True, 'matches': matches_data, 'format': 'Unknown (Requires Event Format Tracking)'})
+
+        teams_data = list(
+            BracketTeam.objects.filter(event=event)
+            .select_related('department')
+            .order_by('seed')
+            .values('id', 'name', 'seed', 'loss_count', 'members', 'department__name')
+        )
+        for t in teams_data:
+            t['department_name'] = t.pop('department__name') or '—'
+
+        total = matches_qs.count()
+        completed = matches_qs.filter(status=BracketMatch.STATUS_COMPLETED).count()
+        ongoing = matches_qs.filter(status=BracketMatch.STATUS_ONGOING).count()
+        bracket_meta = get_bracket_status_meta(total > 0, total, completed, ongoing)
+
+        rounds = []
+        seen = set()
+        for m in matches_qs:
+            if m.round_name not in seen:
+                seen.add(m.round_name)
+                rounds.append(m.round_name)
+
+        recent_results = []
+        for m in matches_qs.filter(status=BracketMatch.STATUS_COMPLETED).order_by('-updated_at')[:6]:
+            recent_results.append({
+                'match_number': m.match_number,
+                'round_name': m.round_name,
+                'team_a': m.team_a.name if m.team_a else 'TBD',
+                'team_b': m.team_b.name if m.team_b else 'TBD',
+                'score_a': m.score_a or '—',
+                'score_b': m.score_b or '—',
+                'winner': m.winner.name if m.winner else '—',
+            })
+
+        judge_names = ', '.join(
+            (f"{j.first_name} {j.last_name}".strip() or j.username)
+            for j in event.assigned_judges.all()
+        ) or 'None assigned'
+
+        tt = (event.tournament_type or '').strip().lower()
+        if tt == 'best_of_3':
+            match_format = 3
+        elif tt == 'best_of_5':
+            match_format = 5
+        else:
+            match_format = next((m['best_of'] for m in matches_data if m.get('best_of')), 1)
+
+        return JsonResponse({
+            'success': True,
+            'event': {
+                'id': event.id,
+                'name': event.name,
+                'category': event.category,
+                'division': event.division or '—',
+                'venue': event.venue,
+                'schedule_label': event.schedule_label,
+                'event_time': event.event_time_str,
+                'tournament_type': event.tournament_type or '',
+                'tournament_type_label': _tournament_type_label(event.tournament_type),
+                'scoring_method': event.scoring_method or 'match',
+                'assigned_judges': judge_names,
+                'bracket_locked': event.bracket_locked,
+            },
+            'teams': teams_data,
+            'rounds': rounds,
+            'matches': matches_data,
+            'format': _tournament_type_label(event.tournament_type) or 'Single Elimination',
+            'match_format': match_format,
+            'best_of': match_format,
+            'locked': event.bracket_locked,
+            'progress': bracket_meta,
+            'recent_results': recent_results,
+        })
     except Exception as e:
         return JsonResponse({'success': False, 'message': str(e)}, status=500)
 
@@ -4182,14 +4496,18 @@ def admin_get_bracket_teams(request, event_id):
     try:
         from events.models import Event, BracketTeam
         event = get_object_or_404(Event, id=event_id)
-        teams = BracketTeam.objects.filter(event=event).order_by('seed')
+        teams = BracketTeam.objects.filter(event=event).select_related('department').order_by('seed')
         teams_data = []
         for t in teams:
+            members_str, member_count = parse_team_members(t.members)
             teams_data.append({
+                'id': t.id,
                 'name': t.name,
-                'department_id': t.department.id if t.department else '',
+                'department_id': t.department_id or '',
+                'department_name': t.department.name if t.department else '',
                 'seed': t.seed,
-                'members': t.members
+                'members': members_str,
+                'member_count': member_count,
             })
         return JsonResponse({'success': True, 'teams': teams_data})
     except Exception as e:

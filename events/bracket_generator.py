@@ -1,5 +1,31 @@
 import math
+import random
 from events.models import BracketTeam, BracketMatch
+
+
+def order_teams_for_draw(teams, draw_method="seeded"):
+    """
+    Return teams ordered for first-round placement.
+      - 'random'  → shuffled (Random Draw)
+      - 'seeded'  → standard seed pairing (1 vs N, 2 vs N-1, ...) (Seeded Draw)
+    """
+    method = (draw_method or 'seeded').strip().lower()
+    ordered = sorted(teams, key=lambda t: (t.seed or 0))
+    if method in ('random', 'random_draw', 'randomized'):
+        shuffled = ordered[:]
+        random.shuffle(shuffled)
+        return shuffled
+    # Seeded draw: fold the list so top seeds meet bottom seeds first.
+    out = []
+    i, j = 0, len(ordered) - 1
+    while i < j:
+        out.append(ordered[i])
+        out.append(ordered[j])
+        i += 1
+        j -= 1
+    if i == j:
+        out.append(ordered[i])
+    return out
 
 def generate_single_elimination(event, teams, round_name_prefix="Round"):
     """
@@ -132,4 +158,22 @@ def generate_round_robin(event, teams):
             )
             matches.append(m)
             match_number += 1
+    return matches
+
+
+def generate_best_of_series(event, teams, best_of=3):
+    """
+    Generates a single-elimination tree where every matchup is a best-of-N series.
+
+    The bracket structure (rounds, advancement links) is identical to single
+    elimination; each match is annotated as a "Best of N" series so the score
+    fields capture the series result (e.g. 2-1). Winners still advance via
+    `next_match_winner`, so the existing progression engine works unchanged.
+    """
+    matches = generate_single_elimination(event, teams)
+    label = f"Best of {best_of}"
+    for m in matches:
+        # Preserve any existing remark (e.g. bye auto-advance) and tag the series.
+        m.remarks = f"{label}{(' — ' + m.remarks) if m.remarks else ''}"
+        m.save(update_fields=['remarks'])
     return matches
