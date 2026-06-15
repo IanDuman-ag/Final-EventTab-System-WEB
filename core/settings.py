@@ -158,7 +158,7 @@ STATICFILES_DIRS = [BASE_DIR / 'frontend', BASE_DIR / 'frontend' / 'superadminda
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # Media files (User uploaded content)
-MEDIA_URL = 'media/'
+MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 # Default primary key field type

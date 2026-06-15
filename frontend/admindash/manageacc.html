@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Manage Account - EventTab</title>
-  <link rel="stylesheet" href="{% static 'admindash/manageacc.css' %}?v=20260524a">
+  <link rel="stylesheet" href="{% static 'admindash/manageacc.css' %}?v=20260615d">
 </head>
 <body class="admin-dashboard-page manage-account-page admin-dashboard-v2">
   <div class="dashboard-shell">
@@ -62,6 +62,7 @@
                 <option value="all" {% if selected_role == 'all' %}selected{% endif %}>All Roles</option>
                 <option value="tabulator" {% if selected_role == 'tabulator' %}selected{% endif %}>Tabulator</option>
                 <option value="judge" {% if selected_role == 'judge' %}selected{% endif %}>Judge</option>
+                <option value="scorer" {% if selected_role == 'scorer' %}selected{% endif %}>Scorer</option>
               </select>
               <select name="status" aria-label="Status">
                 <option value="all" {% if selected_status == 'all' %}selected{% endif %}>All Status</option>
@@ -78,15 +79,31 @@
             </div>
           </div>
 
+          <!-- Bulk-action bar (hidden until rows are selected) -->
+          <div id="bulk-action-bar" class="bulk-action-bar bulk-action-bar--hidden">
+            <span id="bulk-selected-count" class="bulk-count">0 selected</span>
+            <button
+              id="btn-bulk-delete"
+              type="button"
+              class="bulk-delete-btn"
+              data-bulk-delete-url="{% url 'bulk_delete_assignment_accounts' %}"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm1 7h2v8h-2v-8Zm4 0h2v8h-2v-8ZM6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7Z"/></svg>
+              Delete Selected
+            </button>
+            <button id="btn-bulk-cancel" type="button" class="bulk-cancel-btn">Cancel</button>
+          </div>
+
           <div class="table-wrap">
-            <table class="accounts-table">
+            <table class="accounts-table" id="accounts-table">
               <thead>
                 <tr>
+                  <th class="col-check">
+                    <input type="checkbox" id="chk-select-all" aria-label="Select all">
+                  </th>
                   <th>Full Name</th>
                   <th>Username</th>
                   <th>Email</th>
-                  <th>Contact</th>
-                  <th>Dept Code</th>
                   <th>Role</th>
                   <th>Status</th>
                   <th>Actions</th>
@@ -102,6 +119,14 @@
                     data-role="{{ row.role }}"
                     data-status="{{ row.status_key }}"
                   >
+                    <td class="col-check">
+                      <input
+                        type="checkbox"
+                        class="row-checkbox"
+                        aria-label="Select {{ row.full_name }}"
+                        value="{{ row.user.id }}"
+                      >
+                    </td>
                     <td data-label="Full Name">
                       <div class="person-cell">
                         <span class="person-avatar">{{ row.initials }}</span>
@@ -109,10 +134,8 @@
                       </div>
                     </td>
                     <td data-label="Username">{{ row.user.username }}</td>
-                    <td data-label="Email">{{ row.user.email|default:"No email" }}</td>
-                    <td data-label="Contact">{{ row.contact }}</td>
-                    <td data-label="Dept Code">{{ row.department_code|default:"—" }}</td>
-                    <td data-label="Role"><span class="role-label">{{ row.role }}</span></td>
+                    <td data-label="Email">{{ row.user.email|default:"—" }}</td>
+                    <td data-label="Role"><span class="role-label role-label--{{ row.role|lower }}">{{ row.role }}</span></td>
                     <td data-label="Status">
                       <span class="status-pill {{ row.status_key }}">{{ row.status }}</span>
                     </td>
@@ -141,7 +164,7 @@
                   </tr>
                 {% empty %}
                   <tr>
-                    <td colspan="8" class="empty-state">No tabulator or judge accounts found.</td>
+                    <td colspan="7" class="empty-state">No accounts found.</td>
                   </tr>
                 {% endfor %}
               </tbody>
@@ -174,7 +197,7 @@
       <div class="modal-header">
         <div>
           <h3 id="assignment-modal-title">Create Account</h3>
-          <p id="assignment-modal-subtitle">Create a tabulator account. Tabulators use the email and password set here to sign in on the web portal.</p>
+          <p id="assignment-modal-subtitle">Create a tabulator, judge, or scorer account.</p>
         </div>
         <button class="modal-close" type="button" data-close-modal="true" aria-label="Close">&times;</button>
       </div>
@@ -182,23 +205,15 @@
       <form id="assignment-account-form" class="account-modal-form">
         {% csrf_token %}
         <input type="hidden" id="assignment-account-id">
-        <div class="form-grid">
-          <label>
-            Username
-            <input type="text" id="assignment-username" required>
-          </label>
-          <label>
-            Email
-            <input type="email" id="assignment-email" required>
-          </label>
-          <label>
-            Password <small>(required for new accounts)</small>
-            <input type="password" id="assignment-password">
-          </label>
+
+        <!-- Role + Status — always visible -->
+        <div class="form-grid form-grid--top">
           <label>
             Role
             <select id="assignment-role" required>
               <option value="Tabulator">Tabulator</option>
+              <option value="Judge">Judge</option>
+              <option value="Scorer">Scorer</option>
             </select>
           </label>
           <label>
@@ -209,6 +224,58 @@
             </select>
           </label>
         </div>
+
+        <!-- Standard section: Tabulator -->
+        <div id="acc-standard-section" class="form-grid">
+          <label>
+            Username
+            <input type="text" id="assignment-username">
+          </label>
+          <label>
+            Email
+            <input type="email" id="assignment-email">
+          </label>
+          <label class="acc-field--full">
+            Password <small>(required for new accounts)</small>
+            <input type="password" id="assignment-password">
+          </label>
+        </div>
+
+        <!-- Code section: Judge / Scorer -->
+        <div id="acc-code-section" class="form-grid acc-code-section--hidden">
+          <label class="acc-field--full">
+            Name
+            <input type="text" id="assignment-name" placeholder="Full name of this person">
+          </label>
+          <div class="acc-code-row acc-field--full">
+            <button type="button" id="btn-generate-code" class="generate-code-btn">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 8C8 10 5.9 16.17 3.82 19.82L5.71 21l1-1.85A4.52 4.52 0 0 0 8 20c4 0 4-2 8-2s4 2 8 2v-2c-4 0-4-2-8-2-.63 0-1.17.06-1.67.14C14.43 11.22 15.06 8.07 17 8Z"/></svg>
+              Generate Access Code
+            </button>
+            <div id="acc-code-display" class="acc-code-display acc-code-display--hidden">
+              <span class="acc-code-label">Access Code</span>
+              <strong id="acc-code-value"></strong>
+              <button type="button" id="btn-copy-code" class="copy-code-btn" title="Copy code">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1Zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2Zm0 16H8V7h11v14Z"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Success card: shown after account is created (code-role only) -->
+        <div id="acc-success-card" class="acc-success-card acc-success-card--hidden">
+          <svg class="acc-success-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2Zm-2 14.5-4-4 1.41-1.41L10 13.67l6.59-6.59L18 8.5l-8 8Z"/></svg>
+          <p id="acc-success-msg" class="acc-success-msg"></p>
+          <div class="acc-success-code-wrap">
+            <span class="acc-code-label">Access Code</span>
+            <strong id="acc-success-code"></strong>
+            <button type="button" id="btn-copy-success-code" class="copy-code-btn" title="Copy code">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1Zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2Zm0 16H8V7h11v14Z"/></svg>
+            </button>
+          </div>
+          <p class="acc-success-hint">Share this code with the person so they can sign in.</p>
+        </div>
+
         <div class="modal-actions">
           <button class="secondary-btn" type="button" data-close-modal="true">Cancel</button>
           <button class="primary-btn" type="submit" id="assignment-submit">Create Account</button>
@@ -217,6 +284,6 @@
     </div>
   </div>
 
-  <script src="{% static 'js/assignment_accounts.js' %}?v=20260523a"></script>
+  <script src="{% static 'js/assignment_accounts.js' %}?v=20260615d"></script>
 </body>
 </html>

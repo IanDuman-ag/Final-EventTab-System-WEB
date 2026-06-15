@@ -1,205 +1,484 @@
+// ── Bulk-delete logic ─────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', function () {
-  const openButton = document.getElementById('open-assignment-modal');
-  const modal = document.getElementById('assignment-modal');
-  const form = document.getElementById('assignment-account-form');
-  const submitButton = document.getElementById('assignment-submit');
-  const modalTitle = document.getElementById('assignment-modal-title');
-  const modalSubtitle = document.getElementById('assignment-modal-subtitle');
+  var chkAll       = document.getElementById('chk-select-all');
+  var bulkBar      = document.getElementById('bulk-action-bar');
+  var bulkCount    = document.getElementById('bulk-selected-count');
+  var btnBulkDel   = document.getElementById('btn-bulk-delete');
+  var btnBulkCancel = document.getElementById('btn-bulk-cancel');
 
-  const accountId = document.getElementById('assignment-account-id');
-  const username = document.getElementById('assignment-username');
-  const email = document.getElementById('assignment-email');
-  const password = document.getElementById('assignment-password');
-  const role = document.getElementById('assignment-role');
-  const statusSelect = document.getElementById('assignment-status');
-
-  if (!openButton || !modal || !form) {
-    return;
+  function getChecked() {
+    return Array.from(document.querySelectorAll('.row-checkbox:checked'));
   }
 
-  openButton.addEventListener('click', function () {
-    openCreateModal();
+  function syncBulkBar() {
+    var checked = getChecked();
+    var n = checked.length;
+    if (n > 0) {
+      bulkBar.classList.remove('bulk-action-bar--hidden');
+      bulkCount.textContent = n + ' selected';
+    } else {
+      bulkBar.classList.add('bulk-action-bar--hidden');
+    }
+    // Sync header checkbox state
+    var all = document.querySelectorAll('.row-checkbox');
+    if (chkAll) {
+      chkAll.checked       = all.length > 0 && n === all.length;
+      chkAll.indeterminate = n > 0 && n < all.length;
+    }
+  }
+
+  if (chkAll) {
+    chkAll.addEventListener('change', function () {
+      document.querySelectorAll('.row-checkbox').forEach(function (cb) {
+        cb.checked = chkAll.checked;
+      });
+      syncBulkBar();
+    });
+  }
+
+  document.querySelectorAll('.row-checkbox').forEach(function (cb) {
+    cb.addEventListener('change', syncBulkBar);
   });
+
+  if (btnBulkCancel) {
+    btnBulkCancel.addEventListener('click', function () {
+      document.querySelectorAll('.row-checkbox').forEach(function (cb) { cb.checked = false; });
+      if (chkAll) { chkAll.checked = false; chkAll.indeterminate = false; }
+      bulkBar.classList.add('bulk-action-bar--hidden');
+    });
+  }
+
+  if (btnBulkDel) {
+    btnBulkDel.addEventListener('click', async function () {
+      var checked = getChecked();
+      if (checked.length === 0) { return; }
+
+      var names = checked.map(function (cb) {
+        var row = cb.closest('tr');
+        return row ? (row.dataset.fullName || row.dataset.username || 'account') : 'account';
+      });
+      var preview = names.slice(0, 3).join(', ') + (names.length > 3 ? '…' : '');
+      if (!window.confirm('Delete ' + checked.length + ' account(s)?\n' + preview + '\n\nThis cannot be undone.')) { return; }
+
+      var ids = checked.map(function (cb) { return cb.value; });
+      btnBulkDel.disabled    = true;
+      btnBulkDel.textContent = 'Deleting…';
+
+      var result = await postJson(btnBulkDel.dataset.bulkDeleteUrl, { ids: ids });
+      if (!result.success) {
+        btnBulkDel.disabled    = false;
+        btnBulkDel.innerHTML   = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm1 7h2v8h-2v-8Zm4 0h2v8h-2v-8ZM6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7Z"/></svg> Delete Selected';
+        showToast(result.message || 'Bulk delete failed.', 'error');
+        return;
+      }
+
+      showToast(result.message || 'Accounts deleted.', 'success');
+      setTimeout(function () { window.location.reload(); }, 700);
+    });
+  }
+});
+
+// ── Create/Edit modal logic ───────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', function () {
+  var openButton     = document.getElementById('open-assignment-modal');
+  var modal          = document.getElementById('assignment-modal');
+  var form           = document.getElementById('assignment-account-form');
+  var submitButton   = document.getElementById('assignment-submit');
+  var modalTitle     = document.getElementById('assignment-modal-title');
+  var modalSubtitle  = document.getElementById('assignment-modal-subtitle');
+
+  var accountId      = document.getElementById('assignment-account-id');
+  var role           = document.getElementById('assignment-role');
+  var statusSelect   = document.getElementById('assignment-status');
+
+  // Standard fields (Tabulator)
+  var standardSection = document.getElementById('acc-standard-section');
+  var usernameInput   = document.getElementById('assignment-username');
+  var emailInput      = document.getElementById('assignment-email');
+  var passwordInput   = document.getElementById('assignment-password');
+
+  // Code fields (Judge / Scorer)
+  var codeSection   = document.getElementById('acc-code-section');
+  var nameInput     = document.getElementById('assignment-name');
+  var btnGenerate   = document.getElementById('btn-generate-code');
+  var codeDisplay   = document.getElementById('acc-code-display');
+  var codeValue     = document.getElementById('acc-code-value');
+  var btnCopyCode   = document.getElementById('btn-copy-code');
+
+  // Success card (shown after code-role account is created)
+  var successCard        = document.getElementById('acc-success-card');
+  var successMsg         = document.getElementById('acc-success-msg');
+  var successCode        = document.getElementById('acc-success-code');
+  var btnCopySuccessCode = document.getElementById('btn-copy-success-code');
+
+  var _generatedCode = '';
+
+  if (!openButton || !modal || !form) { return; }
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
+  function isCodeRole(r) {
+    return r === 'Judge' || r === 'Scorer';
+  }
+
+  function generateCode() {
+    var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    var code  = '';
+    for (var i = 0; i < 8; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return code;
+  }
+
+  function roleSubtitle(r) {
+    if (r === 'Judge')  { return 'Enter the judge\'s name and generate an access code to share with them.'; }
+    if (r === 'Scorer') { return 'Enter the scorer\'s name and generate an access code to share with them.'; }
+    return 'Tabulators sign in via the web portal with their username and password.';
+  }
+
+  function applyRoleMode(r, isCreating) {
+    var code = isCodeRole(r);
+
+    standardSection.classList.toggle('acc-section--hidden', code);
+    codeSection.classList.toggle('acc-code-section--hidden', !code);
+    successCard.classList.add('acc-success-card--hidden');
+
+    usernameInput.required = !code;
+    emailInput.required    = !code;
+    nameInput.required     = code;
+
+    _generatedCode = '';
+    codeDisplay.classList.add('acc-code-display--hidden');
+    codeValue.textContent = '';
+    resetGenerateBtn();
+
+    modalSubtitle.textContent = roleSubtitle(r);
+
+    // For code-roles in CREATE mode: hide "Create Account" — generate button does it.
+    // For code-roles in EDIT mode: keep "Save" button visible.
+    // For Tabulator: always show.
+    if (code && isCreating) {
+      submitButton.classList.add('acc-btn--hidden');
+    } else {
+      submitButton.classList.remove('acc-btn--hidden');
+    }
+  }
+
+  function resetGenerateBtn() {
+    btnGenerate.disabled = false;
+    btnGenerate.innerHTML =
+      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 8C8 10 5.9 16.17 3.82 19.82L5.71 21l1-1.85A4.52 4.52 0 0 0 8 20c4 0 4-2 8-2s4 2 8 2v-2c-4 0-4-2-8-2-.63 0-1.17.06-1.67.14C14.43 11.22 15.06 8.07 17 8Z"/></svg> Generate Access Code';
+  }
+
+  // ── Role change ────────────────────────────────────────────────────────────
+
+  role.addEventListener('change', function () {
+    applyRoleMode(role.value, !accountId.value);
+  });
+
+  // ── Generate Access Code button ────────────────────────────────────────────
+
+  btnGenerate.addEventListener('click', async function () {
+    var roleVal    = role.value;
+    var isCreating = !accountId.value;
+
+    // Require name before generating
+    var fullName = nameInput.value.trim();
+    if (!fullName) {
+      showToast('Please enter a name first.', 'warning');
+      nameInput.focus();
+      return;
+    }
+
+    var code = generateCode();
+    _generatedCode = code;
+    codeValue.textContent = code;
+    codeDisplay.classList.remove('acc-code-display--hidden');
+
+    // ── CREATE mode: save account immediately ──────────────────────────────
+    if (isCreating) {
+      btnGenerate.disabled     = true;
+      btnGenerate.textContent  = 'Creating account…';
+
+      var result = await postJson(modal.dataset.endpoint, {
+        full_name:   fullName,
+        access_code: code,
+        role:        roleVal,
+        is_active:   statusSelect.value === 'active',
+      });
+
+      if (!result.success) {
+        btnGenerate.disabled    = false;
+        btnGenerate.innerHTML   =
+          '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 8C8 10 5.9 16.17 3.82 19.82L5.71 21l1-1.85A4.52 4.52 0 0 0 8 20c4 0 4-2 8-2s4 2 8 2v-2c-4 0-4-2-8-2-.63 0-1.17.06-1.67.14C14.43 11.22 15.06 8.07 17 8Z"/></svg> Try Again';
+        _generatedCode          = '';
+        codeValue.textContent   = '';
+        codeDisplay.classList.add('acc-code-display--hidden');
+        showToast(result.message || 'Failed to create account.', 'error');
+        return;
+      }
+
+      // Show success card — account is now in the database
+      showSuccessCard(fullName, roleVal, result.username, code);
+      return;
+    }
+
+    // ── EDIT mode: just show new code (committed on Save) ─────────────────
+    btnGenerate.innerHTML =
+      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 8C8 10 5.9 16.17 3.82 19.82L5.71 21l1-1.85A4.52 4.52 0 0 0 8 20c4 0 4-2 8-2s4 2 8 2v-2c-4 0-4-2-8-2-.63 0-1.17.06-1.67.14C14.43 11.22 15.06 8.07 17 8Z"/></svg> Regenerate Code';
+  });
+
+  btnCopyCode.addEventListener('click', function () {
+    copyToClipboard(codeValue.textContent);
+    showToast('Code copied!', 'success');
+  });
+
+  btnCopySuccessCode.addEventListener('click', function () {
+    copyToClipboard(successCode.textContent);
+    showToast('Code copied!', 'success');
+  });
+
+  function copyToClipboard(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).catch(function () {});
+    } else {
+      var el = document.createElement('textarea');
+      el.value = text;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+    }
+  }
+
+  // ── Edit / Delete row buttons ──────────────────────────────────────────────
+
+  openButton.addEventListener('click', function () { openCreateModal(); });
 
   document.querySelectorAll('.edit-account').forEach(function (button) {
     button.addEventListener('click', function () {
-      const row = button.closest('tr');
-      if (!row) {
-        return;
-      }
+      var row = button.closest('tr');
+      if (!row) { return; }
       openEditModal(row, button.dataset.updateUrl);
     });
   });
 
   document.querySelectorAll('.delete-account').forEach(function (button) {
     button.addEventListener('click', async function () {
-      const row = button.closest('tr');
-      const name = row ? (row.dataset.username || row.dataset.fullName || 'this account') : 'this account';
-      const confirmed = window.confirm('Delete ' + name + '? This action cannot be undone.');
-      if (!confirmed) {
-        return;
-      }
+      var row  = button.closest('tr');
+      var name = row ? (row.dataset.fullName || row.dataset.username || 'this account') : 'this account';
+      if (!window.confirm('Delete ' + name + '? This action cannot be undone.')) { return; }
 
       button.disabled = true;
-      const result = await postJson(button.dataset.deleteUrl, {});
+      var result = await postJson(button.dataset.deleteUrl, {});
       if (!result.success) {
         button.disabled = false;
         showToast(result.message || 'Unable to delete account.', 'error');
         return;
       }
-
       showToast(result.message || 'Account deleted.', 'success');
-      setTimeout(function () {
-        window.location.reload();
-      }, 700);
+      setTimeout(function () { window.location.reload(); }, 700);
     });
   });
 
-  modal.addEventListener('click', function (event) {
-    if (event.target.dataset.closeModal === 'true') {
-      closeModal();
-    }
+  // ── Close ──────────────────────────────────────────────────────────────────
+
+  modal.addEventListener('click', function (e) {
+    if (e.target.dataset.closeModal === 'true') { closeModal(); }
   });
 
-  document.addEventListener('keydown', function (event) {
-    if (event.key === 'Escape' && !modal.classList.contains('hidden')) {
-      closeModal();
-    }
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !modal.classList.contains('hidden')) { closeModal(); }
   });
 
-  form.addEventListener('submit', async function (event) {
-    event.preventDefault();
+  // ── Form submit (Tabulator create/edit, Judge/Scorer edit-save, Done) ──────
 
-    const editing = Boolean(accountId.value);
-    const isActive = statusSelect.value === 'active';
-    const payload = {
-      full_name: username.value.trim(),
-      username: username.value.trim(),
-      email: email.value.trim(),
-      password: password.value,
-      role: role.value,
-      is_active: isActive,
-    };
+  form.addEventListener('submit', async function (e) {
+    e.preventDefault();
 
-    if (!payload.username || !payload.email || (!editing && !payload.password)) {
-      showToast('Username, email, and password are required for new accounts.', 'warning');
+    // "Done" mode: just close and reload
+    if (form.dataset.doneMode === '1') {
+      form.dataset.doneMode = '';
+      closeModal();
+      setTimeout(function () { window.location.reload(); }, 300);
       return;
     }
 
-    submitButton.disabled = true;
-    submitButton.textContent = editing ? 'Saving...' : 'Creating...';
+    var editing  = Boolean(accountId.value);
+    var isActive = statusSelect.value === 'active';
+    var roleVal  = role.value;
+    var payload  = { role: roleVal, is_active: isActive };
 
-    const result = await postJson(modal.dataset.endpoint, payload);
+    if (isCodeRole(roleVal)) {
+      // Edit-save for Judge/Scorer
+      payload.full_name   = nameInput.value.trim();
+      payload.access_code = _generatedCode; // blank = keep existing password
+      if (!payload.full_name) {
+        showToast('Please enter a name.', 'warning');
+        return;
+      }
+    } else {
+      // Tabulator (create or edit)
+      payload.full_name = usernameInput.value.trim();
+      payload.username  = usernameInput.value.trim();
+      payload.email     = emailInput.value.trim();
+      payload.password  = passwordInput.value;
+      if (!payload.username || !payload.email || (!editing && !payload.password)) {
+        showToast('Username, email, and password are required.', 'warning');
+        return;
+      }
+    }
+
+    submitButton.disabled    = true;
+    submitButton.textContent = editing ? 'Saving…' : 'Creating…';
+
+    var result = await postJson(modal.dataset.endpoint, payload);
     if (!result.success) {
-      submitButton.disabled = false;
-      submitButton.textContent = editing ? 'Save Account' : 'Create Account';
+      submitButton.disabled    = false;
+      submitButton.textContent = editing ? 'Save Changes' : 'Create Account';
       showToast(result.message || 'Unable to save account.', 'error');
+      return;
+    }
+
+    // If edit generated a new access code, show it in the success card
+    if (isCodeRole(roleVal) && result.access_code) {
+      showSuccessCard(payload.full_name, roleVal, null, result.access_code);
       return;
     }
 
     showToast(result.message || 'Account saved.', 'success');
     closeModal();
-    setTimeout(function () {
-      window.location.reload();
-    }, 700);
+    setTimeout(function () { window.location.reload(); }, 700);
   });
 
+  // ── Success card ───────────────────────────────────────────────────────────
+
+  function showSuccessCard(fullName, roleLabel, username, code) {
+    standardSection.classList.add('acc-section--hidden');
+    codeSection.classList.add('acc-code-section--hidden');
+    successCard.classList.remove('acc-success-card--hidden');
+
+    var line = roleLabel + ' account for ' + fullName + ' created.';
+    if (username) { line += ' Username: ' + username; }
+    successMsg.textContent  = line;
+    successCode.textContent = code;
+
+    submitButton.classList.remove('acc-btn--hidden');
+    submitButton.disabled    = false;
+    submitButton.textContent = 'Done';
+    form.dataset.doneMode    = '1';
+  }
+
+  // ── Open helpers ───────────────────────────────────────────────────────────
+
   function openCreateModal() {
-    modal.dataset.endpoint = openButton.dataset.createUrl;
-    accountId.value = '';
-    username.value = '';
-    email.value = '';
-    password.value = '';
-    role.value = 'Tabulator';
-    statusSelect.value = 'active';
-    modalTitle.textContent = 'Create Account';
-    modalSubtitle.textContent = 'Create a tabulator or judge account. Judges use the email and password on the mobile app.';
-    submitButton.disabled = false;
+    modal.dataset.endpoint   = openButton.dataset.createUrl;
+    form.dataset.doneMode    = '';
+    accountId.value          = '';
+    usernameInput.value      = '';
+    emailInput.value         = '';
+    passwordInput.value      = '';
+    nameInput.value          = '';
+    role.value               = 'Tabulator';
+    statusSelect.value       = 'active';
+    modalTitle.textContent   = 'Create Account';
+    submitButton.disabled    = false;
     submitButton.textContent = 'Create Account';
-    password.required = true;
+    passwordInput.required   = true;
+    applyRoleMode('Tabulator', true);
     openModal();
+    usernameInput.focus();
   }
 
   function openEditModal(row, endpoint) {
-    modal.dataset.endpoint = endpoint;
-    accountId.value = row.dataset.accountId || '';
-    username.value = row.dataset.username || '';
-    email.value = row.dataset.email || '';
-    password.value = '';
-    role.value = row.dataset.role || 'Tabulator';
-    statusSelect.value = row.dataset.status === 'active' ? 'active' : 'deactive';
-    modalTitle.textContent = 'Edit Account';
-    modalSubtitle.textContent = 'Update role and login details. Judges sign in on mobile with the email and password below.';
-    submitButton.disabled = false;
-    submitButton.textContent = 'Save Account';
-    password.required = false;
+    modal.dataset.endpoint   = endpoint;
+    form.dataset.doneMode    = '';
+    accountId.value          = row.dataset.accountId || '';
+    var validRoles           = ['Tabulator', 'Judge', 'Scorer'];
+    var assignedRole         = (row.dataset.role || 'Tabulator').trim();
+    var matched              = validRoles.find(function (r) {
+      return r.toLowerCase() === assignedRole.toLowerCase();
+    }) || 'Tabulator';
+
+    role.value               = matched;
+    statusSelect.value       = row.dataset.status === 'active' ? 'active' : 'deactive';
+    modalTitle.textContent   = 'Edit Account';
+    submitButton.disabled    = false;
+    submitButton.textContent = 'Save Changes';
+
+    if (isCodeRole(matched)) {
+      nameInput.value     = row.dataset.fullName || '';
+      usernameInput.value = '';
+      emailInput.value    = '';
+      passwordInput.value = '';
+    } else {
+      usernameInput.value = row.dataset.username || '';
+      emailInput.value    = row.dataset.email    || '';
+      passwordInput.value = '';
+      nameInput.value     = '';
+    }
+
+    passwordInput.required = false;
+    applyRoleMode(matched, false);
     openModal();
+    if (isCodeRole(matched)) { nameInput.focus(); } else { usernameInput.focus(); }
   }
 
   function openModal() {
     modal.classList.remove('hidden');
     modal.setAttribute('aria-hidden', 'false');
-    username.focus();
   }
 
   function closeModal() {
     modal.classList.add('hidden');
     modal.setAttribute('aria-hidden', 'true');
+    form.dataset.doneMode = '';
   }
 });
 
+// ── Shared utilities ──────────────────────────────────────────────────────────
+
 async function postJson(url, payload) {
   try {
-    const response = await fetch(url, {
-      method: 'POST',
+    var response = await fetch(url, {
+      method:  'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-CSRFToken': getCsrfToken(),
+        'X-CSRFToken':  getCsrfToken(),
       },
       body: JSON.stringify(payload || {}),
     });
-
-    const text = await response.text();
-    let data;
-    try {
-      data = JSON.parse(text);
-    } catch (parseError) {
-      return { success: false, message: `Request failed (${response.status}).` };
+    var text = await response.text();
+    var data;
+    try { data = JSON.parse(text); } catch (_) {
+      return { success: false, message: 'Request failed (' + response.status + ').' };
     }
-
     if (!response.ok) {
-      return { success: false, message: data.message || `Request failed (${response.status}).` };
+      return { success: false, message: data.message || 'Request failed (' + response.status + ').' };
     }
-
     return data;
-  } catch (error) {
+  } catch (_) {
     return { success: false, message: 'Network request failed.' };
   }
 }
 
 function getCsrfToken() {
-  const csrfInput = document.querySelector('input[name="csrfmiddlewaretoken"]');
-  if (csrfInput && csrfInput.value) {
-    return csrfInput.value;
-  }
-
-  const name = 'csrftoken=';
-  const cookies = document.cookie.split(';');
-  for (let index = 0; index < cookies.length; index += 1) {
-    const cookie = cookies[index].trim();
-    if (cookie.startsWith(name)) {
-      return decodeURIComponent(cookie.slice(name.length));
-    }
+  var el = document.querySelector('input[name="csrfmiddlewaretoken"]');
+  if (el && el.value) { return el.value; }
+  var name    = 'csrftoken=';
+  var cookies = document.cookie.split(';');
+  for (var i = 0; i < cookies.length; i++) {
+    var c = cookies[i].trim();
+    if (c.startsWith(name)) { return decodeURIComponent(c.slice(name.length)); }
   }
   return '';
 }
 
 function showToast(message, type) {
-  const toast = document.createElement('div');
-  toast.className = `toast-message ${type || 'success'}`;
+  var toast = document.createElement('div');
+  toast.className   = 'toast-message ' + (type || 'success');
   toast.textContent = message;
   document.body.appendChild(toast);
-  // Trigger reflow so the animation plays
   toast.offsetHeight;
   toast.classList.add('visible');
   setTimeout(function () {

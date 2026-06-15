@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Departments - EventTab</title>
-  <link rel="stylesheet" href="{% static 'admindash/department.css' %}?v=20260524a">
+  <link rel="stylesheet" href="{% static 'admindash/department.css' %}?v=20260615b">
 </head>
 <body class="admin-dashboard-page department-page admin-dashboard-v2">
   <div class="dashboard-shell">
@@ -24,108 +24,196 @@
         </div>
       </header>
 
-      <main class="main-content departments-main">
-        <section class="departments-header" aria-labelledby="dept-registry-title">
-          <div class="departments-header-text">
-            <h2 id="dept-registry-title">Department Registry</h2>
-            <p class="departments-lead">Review academic units, deans, and member counts. Departments are synced from user groups.</p>
-            <ul class="departments-stat-strip" aria-label="Department summary">
-              <li>
-                <span class="stat-strip-label">With dean</span>
-                <strong>{{ with_dean_count|default:"0" }}</strong>
-              </li>
+      <main class="main-content dept-main">
 
-              <li>
-                <span class="stat-strip-label">Shown</span>
-                <strong>{{ visible_department_count|default:"0" }}</strong>
-                {% if search_query %}<span class="stat-strip-hint">of {{ total_department_count }}</span>{% endif %}
-              </li>
-            </ul>
+        <!-- ── Page header ─────────────────────────────────────────────── -->
+        <div class="dept-page-header">
+          <div class="dept-page-header-text">
+            <h2>Department Registry</h2>
+            <p>Review academic units, deans, and member counts.<br>Departments are synced from user groups.</p>
           </div>
-          <article class="departments-total-card">
-            <span>Total Departments</span>
-            <strong>{{ total_department_count|default:"0" }}</strong>
-            <small>↗ +{{ new_department_count|default:"0" }} this semester</small>
-          </article>
-        </section>
+          <button class="btn-add-dept" id="openModalBtn" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2Z"/></svg>
+            Add Department
+          </button>
+        </div>
 
-        <section class="departments-panel" aria-label="Department management table">
-          <div class="departments-toolbar">
-            <div class="departments-panel-title">
+        <!-- ── Stat cards ──────────────────────────────────────────────── -->
+        <div class="dept-stats-grid">
+          <div class="dept-stat-card">
+            <div class="stat-icon stat-icon--blue">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 11H7V9h10v2Zm0 4H7v-2h10v2ZM19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Zm0 16H5V5h14v14Z"/></svg>
+            </div>
+            <div class="stat-text">
+              <span class="stat-label">Total Departments</span>
+              <strong class="stat-value">{{ total_department_count|default:"0" }}</strong>
+            </div>
+          </div>
+          <div class="dept-stat-card">
+            <div class="stat-icon stat-icon--green">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1 3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4Zm-2 16-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8Z"/></svg>
+            </div>
+            <div class="stat-text">
+              <span class="stat-label">Active Departments</span>
+              <strong class="stat-value">{{ active_department_count|default:"0" }}</strong>
+            </div>
+          </div>
+          <div class="dept-stat-card">
+            <div class="stat-icon stat-icon--purple">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4Zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4Z"/></svg>
+            </div>
+            <div class="stat-text">
+              <span class="stat-label">With Dean Assigned</span>
+              <strong class="stat-value">{{ with_dean_count|default:"0" }} / {{ total_department_count|default:"0" }}</strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Management panel ────────────────────────────────────────── -->
+        <section class="dept-panel" aria-label="Department management">
+          <div class="dept-panel-head">
+            <div>
               <h3>Department Management</h3>
-              <p class="departments-panel-sub">Search filters the table below. Scroll horizontally on small screens.</p>
-            </div>
-            <form class="departments-search" method="get" role="search" aria-label="Search departments">
-              <input type="search" name="q" value="{{ search_query }}" placeholder="Search name, dean, description…" autocomplete="off">
-              <button type="submit">Search</button>
-              {% if search_query %}
-                <a class="departments-clear" href="{% url 'admin_departments' %}">Clear</a>
-              {% endif %}
-            </form>
-            <div class="departments-actions">
-              <button class="btn-bulk-delete" id="bulkDeleteBtn" type="button" hidden>
-                🗑 Delete Selected (<span id="bulkSelectedCount">0</span>)
-              </button>
-              <button class="btn-add-dept" id="openModalBtn" type="button">+ Add Department</button>
+              <p>Search and filter departments. You can also perform bulk actions.</p>
             </div>
           </div>
 
+          <!-- Filter bar -->
+          <div class="dept-filter-bar">
+            <div class="dept-search-wrap">
+              <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5Zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14Z"/></svg>
+              <input type="text" id="deptSearchInput" placeholder="Search department name, dean, code…" value="{{ search_query }}" autocomplete="off">
+            </div>
+            <select id="filterStatus" class="dept-filter-select">
+              <option value="">Filter by Status</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+              <option value="archived">Archived</option>
+            </select>
+            <select id="filterDean" class="dept-filter-select">
+              <option value="">Filter by Dean</option>
+              {% for dean in unique_deans %}
+                <option value="{{ dean }}">{{ dean }}</option>
+              {% endfor %}
+            </select>
+            <select id="sortBy" class="dept-filter-select">
+              <option value="name-az">Sort by: Name (A–Z)</option>
+              <option value="name-za">Sort by: Name (Z–A)</option>
+              <option value="code-az">Sort by: Code (A–Z)</option>
+            </select>
+            <button type="button" id="clearFiltersBtn" class="btn-clear-filters">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
+              Clear Filters
+            </button>
+          </div>
+
+          <!-- Bulk action bar -->
+          <div class="dept-bulk-bar" id="deptBulkBar">
+            <label class="bulk-select-all-wrap">
+              <input type="checkbox" id="selectAllCheckbox" aria-label="Select all departments">
+              <span id="bulkSelectedCount" class="bulk-count-label">0 selected</span>
+            </label>
+            <div class="bulk-actions">
+              <button type="button" class="bulk-btn bulk-btn--delete" id="bulkDeleteBtn">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm1 7h2v8h-2v-8Zm4 0h2v8h-2v-8ZM6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7Z"/></svg>
+                Delete
+              </button>
+              <button type="button" class="bulk-btn bulk-btn--export" id="bulkExportBtn">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 9h-4V3H9v6H5l7 7 7-7ZM5 18v2h14v-2H5Z"/></svg>
+                Export
+              </button>
+            </div>
+          </div>
+
+          <!-- Table -->
           <div class="table-wrap">
-            <table class="departments-table">
+            <table class="departments-table" id="departmentsTable">
               <thead>
                 <tr>
-                  <th class="col-checkbox"><input type="checkbox" id="selectAllCheckbox" aria-label="Select all departments"></th>
+                  <th class="col-check"></th>
                   <th>Department</th>
                   <th>Dept Code</th>
                   <th>Dean</th>
-                  <th>Unit No.</th>
                   <th>Status</th>
                   <th>Actions</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody id="departmentsBody">
                 {% for row in department_rows %}
-                  <tr>
-                    <td class="col-checkbox"><input type="checkbox" class="row-checkbox" value="{{ row.id }}" data-name="{{ row.name|escapejs }}" aria-label="Select {{ row.name }}"></td>
+                  <tr
+                    data-id="{{ row.id }}"
+                    data-name="{{ row.name|escapejs }}"
+                    data-code="{{ row.code|escapejs }}"
+                    data-dean="{{ row.dean|escapejs }}"
+                    data-status="{{ row.status|default:'active'|escapejs }}"
+                  >
+                    <td class="col-check">
+                      <input type="checkbox" class="row-checkbox" value="{{ row.id }}" data-name="{{ row.name|escapejs }}" aria-label="Select {{ row.name }}">
+                    </td>
                     <td>
-                      <div class="department-cell">
+                      <div class="dept-cell">
                         {% if row.logo %}
-                          <img src="{{ row.logo }}" alt="{{ row.short_name }}" class="department-avatar" style="object-fit: cover;">
+                          <img src="{{ row.logo }}" alt="{{ row.short_name }}" class="dept-avatar dept-avatar--img">
                         {% else %}
-                          <span class="department-avatar">{{ row.short_name|slice:":2" }}</span>
+                          <span class="dept-avatar" style="background-color: {{ row.color|default:'#244b89' }};">{{ row.short_name|slice:":2"|upper }}</span>
                         {% endif %}
-                        <div>
+                        <div class="dept-cell-text">
                           <strong>{{ row.name }}</strong>
-                          <small>{{ row.description }}</small>
+                          <small>{{ row.description|default:"" }}</small>
                         </div>
                       </div>
                     </td>
-                    <td>{{ row.code }}</td>
-                    <td>{{ row.dean }}</td>
-                    <td>{{ row.unit_number|default:"--" }}</td>
-                    <td><span class="view-badge {{ row.status }}">{{ row.status|title }}</span></td>
+                    <td class="cell-code">{{ row.code }}</td>
+                    <td class="cell-dean">{{ row.dean }}</td>
                     <td>
-                      <div class="table-actions">
-                        <button class="ok" type="button" aria-label="Approve" data-id="{{ row.id }}">✓</button>
-                        <button class="edit" type="button" aria-label="Edit" data-id="{{ row.id }}" data-name="{{ row.name|escapejs }}" data-code="{{ row.code|escapejs }}" data-unit="{{ row.unit_number|escapejs }}" data-color="{{ row.color|escapejs }}" data-head="{{ row.head|escapejs }}" data-status="{{ row.status|escapejs }}" data-remarks="{{ row.remarks|escapejs }}">✎</button>
-                        <button class="view" type="button" aria-label="View" data-id="{{ row.id }}">◉</button>
-                        <button class="delete" type="button" aria-label="Delete" data-id="{{ row.id }}" data-name="{{ row.name|escapejs }}">🗑</button>
+                      <span class="status-badge status-badge--{{ row.status|default:'active' }}">{{ row.status|default:"active"|title }}</span>
+                    </td>
+                    <td class="col-actions">
+                      <div class="action-menu-wrap">
+                        <button
+                          class="action-menu-btn"
+                          type="button"
+                          aria-label="Actions for {{ row.name }}"
+                          aria-haspopup="true"
+                          aria-expanded="false"
+                        >
+                          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+                        </button>
+                        <div class="action-menu-dropdown" role="menu">
+                          <button
+                            class="action-menu-item edit"
+                            type="button"
+                            role="menuitem"
+                            data-id="{{ row.id }}"
+                            data-name="{{ row.name|escapejs }}"
+                            data-code="{{ row.code|escapejs }}"
+                            data-unit=""
+                            data-color="{{ row.color|default:'#022068'|escapejs }}"
+                            data-head="{{ row.head|default:''|escapejs }}"
+                            data-status="{{ row.status|default:'active'|escapejs }}"
+                            data-remarks="{{ row.remarks|default:''|escapejs }}"
+                          >
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 17.25 11.06-11.06 3.75 3.75L6.75 21H3v-3.75ZM19.71 8.04 15.96 4.3l1.33-1.33a1 1 0 0 1 1.42 0l2.33 2.33a1 1 0 0 1 0 1.42l-1.33 1.33Z"/></svg>
+                            Edit
+                          </button>
+                          <button class="action-menu-item view" type="button" role="menuitem" data-id="{{ row.id }}">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5ZM12 17a5 5 0 1 1 0-10 5 5 0 0 1 0 10Zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"/></svg>
+                            View
+                          </button>
+                          <button class="action-menu-item delete action-menu-item--danger" type="button" role="menuitem" data-id="{{ row.id }}" data-name="{{ row.name|escapejs }}">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm1 7h2v8h-2v-8Zm4 0h2v8h-2v-8ZM6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7Z"/></svg>
+                            Delete
+                          </button>
+                        </div>
                       </div>
                     </td>
                   </tr>
                 {% empty %}
-                  <tr>
-                    <td colspan="7" class="empty-state-cell">
+                  <tr class="empty-row">
+                    <td colspan="6">
                       <div class="empty-state">
-                        <p class="empty-state-title">{% if search_query %}No matches{% else %}No departments yet{% endif %}</p>
-                        <p class="empty-state-text">
-                          {% if search_query %}
-                            Try another keyword or <a href="{% url 'admin_departments' %}">clear the search</a>.
-                          {% else %}
-                            Create a group in Django admin (excluding reserved roles) to list it here. Assign staff members to show a dean.
-                          {% endif %}
-                        </p>
-                        <a class="empty-state-cta" href="{% url 'admin:auth_group_add' %}">Open group admin</a>
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Zm-7 14H7v-2h5v2Zm5-4H7v-2h10v2Zm0-4H7V7h10v2Z"/></svg>
+                        <p>{% if search_query %}No departments match your search.{% else %}No departments yet.{% endif %}</p>
                       </div>
                     </td>
                   </tr>
@@ -134,19 +222,25 @@
             </table>
           </div>
 
-          <div class="scroll-hint" aria-hidden="true">
-            <span class="arrow">‹</span>
-            <span class="track"><span class="fill"></span></span>
-            <span class="arrow">›</span>
+          <!-- Pagination -->
+          <div class="dept-pagination">
+            <span id="paginationInfo" class="pagination-info">Showing 1 to {{ department_rows|length }} of {{ department_rows|length }} entries</span>
+            <div class="pagination-controls">
+              <button type="button" class="page-btn" id="prevPageBtn" disabled aria-label="Previous page">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12l4.58-4.59Z"/></svg>
+              </button>
+              <span class="page-num active" id="currentPageNum">1</span>
+              <button type="button" class="page-btn" id="nextPageBtn" disabled aria-label="Next page">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6-6-6Z"/></svg>
+              </button>
+            </div>
           </div>
-
-
         </section>
       </main>
     </div>
   </div>
 
-  <!-- Create Department Modal -->
+  <!-- ── Create Department Modal ──────────────────────────────────────────── -->
   <div class="modal-overlay" id="deptModal">
     <div class="modal-container">
       <div class="modal-header">
@@ -166,10 +260,6 @@
               <input type="text" id="deptCode" name="code" placeholder="e.g. COE" required>
             </div>
             <div class="form-group">
-              <label for="unitNumber">Unit Number</label>
-              <input type="number" id="unitNumber" name="unit_number" placeholder="e.g. 101">
-            </div>
-            <div class="form-group">
               <label for="delegationColor">Delegation Color</label>
               <div class="color-input-wrap">
                 <input type="color" id="delegationColor" name="color" value="#022068">
@@ -177,7 +267,7 @@
               </div>
             </div>
             <div class="form-group full-width">
-              <label for="deptHead">Department Head</label>
+              <label for="deptHead">Department Head / Dean</label>
               <input type="text" id="deptHead" name="head" placeholder="Dean's Full Name">
             </div>
             <div class="form-group full-width">
@@ -206,7 +296,7 @@
     </div>
   </div>
 
-  <!-- Edit Department Modal -->
+  <!-- ── Edit Department Modal ────────────────────────────────────────────── -->
   <div class="modal-overlay" id="editDeptModal">
     <div class="modal-container">
       <div class="modal-header">
@@ -226,10 +316,6 @@
               <input type="text" id="editDeptCode" name="code" required>
             </div>
             <div class="form-group">
-              <label for="editUnitNumber">Unit Number</label>
-              <input type="number" id="editUnitNumber" name="unit_number">
-            </div>
-            <div class="form-group">
               <label for="editDelegationColor">Delegation Color</label>
               <div class="color-input-wrap">
                 <input type="color" id="editDelegationColor" name="color">
@@ -237,7 +323,7 @@
               </div>
             </div>
             <div class="form-group full-width">
-              <label for="editDeptHead">Department Head</label>
+              <label for="editDeptHead">Department Head / Dean</label>
               <input type="text" id="editDeptHead" name="head">
             </div>
             <div class="form-group full-width">
@@ -266,9 +352,9 @@
     </div>
   </div>
 
-  <!-- Delete Department Modal -->
+  <!-- ── Delete Department Modal ──────────────────────────────────────────── -->
   <div class="modal-overlay" id="deleteDeptModal">
-    <div class="modal-container delete-container">
+    <div class="modal-container modal-container--sm">
       <div class="modal-header">
         <h3>Delete Department</h3>
         <button class="close-modal" id="closeDeleteModalBtn" type="button">&times;</button>
@@ -283,15 +369,15 @@
     </div>
   </div>
 
-  <!-- Bulk Delete Confirmation Modal -->
+  <!-- ── Bulk Delete Modal ─────────────────────────────────────────────────── -->
   <div class="modal-overlay" id="bulkDeleteModal">
-    <div class="modal-container delete-container">
+    <div class="modal-container modal-container--sm">
       <div class="modal-header">
         <h3>Delete Selected Departments</h3>
         <button class="close-modal" id="closeBulkDeleteBtn" type="button">&times;</button>
       </div>
       <div class="modal-body">
-        <p>Are you sure you want to delete <strong id="bulkDeleteCount">0</strong> department(s)? This action cannot be undone.</p>
+        <p>Are you sure you want to delete <strong id="bulkDeleteCount">0</strong> department(s)? This cannot be undone.</p>
         <ul id="bulkDeleteList" class="bulk-delete-list"></ul>
       </div>
       <div class="modal-footer">
@@ -301,15 +387,15 @@
     </div>
   </div>
 
-  <!-- View Department Modal -->
+  <!-- ── View Department Modal ─────────────────────────────────────────────── -->
   <div class="modal-overlay" id="viewDeptModal">
-    <div class="modal-container view-container">
+    <div class="modal-container">
       <div class="modal-header">
         <h3>Department Details</h3>
         <button class="close-modal" id="closeViewModalBtn" type="button">&times;</button>
       </div>
       <div class="modal-body view-details" id="viewDeptDetails">
-        <div class="loading-spinner">Loading...</div>
+        <div class="loading-spinner">Loading…</div>
       </div>
       <div class="modal-footer">
         <button class="btn-cancel" id="closeViewModalFooterBtn" type="button">Close</button>
@@ -318,352 +404,364 @@
   </div>
 
   <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      // Create Modal elements
-      const createModal = document.getElementById('deptModal');
-      const openCreateBtn = document.getElementById('openModalBtn');
-      const closeCreateBtn = document.getElementById('closeModalBtn');
-      const cancelCreateBtn = document.getElementById('cancelModalBtn');
-      const createColorInput = document.getElementById('delegationColor');
-      const createColorHex = document.querySelector('.color-hex');
+  document.addEventListener('DOMContentLoaded', () => {
+    // ── Helpers ──────────────────────────────────────────────────────────────
+    const getCsrf = () =>
+      document.querySelector('[name=csrfmiddlewaretoken]')?.value ||
+      document.cookie.split('; ').find(r => r.startsWith('csrftoken='))?.split('=')[1] || '';
 
-      // Edit Modal elements
-      const editModal = document.getElementById('editDeptModal');
-      const closeEditBtn = document.getElementById('closeEditModalBtn');
-      const cancelEditBtn = document.getElementById('cancelEditModalBtn');
-      const editForm = document.getElementById('editDeptForm');
-      const editColorInput = document.getElementById('editDelegationColor');
-      const editColorHex = document.getElementById('editColorHex');
+    const showToast = (msg, type = 'success') => {
+      const t = document.createElement('div');
+      t.className = `toast-message ${type}`;
+      t.textContent = msg;
+      document.body.appendChild(t);
+      t.offsetHeight;
+      t.classList.add('visible');
+      setTimeout(() => { t.classList.remove('visible'); setTimeout(() => t.remove(), 350); }, 3000);
+    };
 
-      // Delete Modal elements
-      const deleteModal = document.getElementById('deleteDeptModal');
-      const closeDeleteBtn = document.getElementById('closeDeleteModalBtn');
-      const cancelDeleteBtn = document.getElementById('cancelDeleteModalBtn');
-      const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
-      const deleteDeptNameSpan = document.getElementById('deleteDeptName');
-      let deptIdToDelete = null;
+    const toggleModal = (modal, show) => {
+      if (!modal) return;
+      modal.classList.toggle('active', show);
+      document.body.style.overflow = show ? 'hidden' : '';
+    };
 
-      // View Modal elements
-      const viewModal = document.getElementById('viewDeptModal');
-      const closeViewBtn = document.getElementById('closeViewModalBtn');
-      const closeViewFooterBtn = document.getElementById('closeViewModalFooterBtn');
-      const viewDetailsContainer = document.getElementById('viewDeptDetails');
-
-      // Toast notification helper
-      const showToast = (message, type = 'success') => {
-        const toast = document.createElement('div');
-        toast.className = `toast-message ${type}`;
-        toast.textContent = message;
-        document.body.appendChild(toast);
-        setTimeout(() => toast.remove(), 3000);
-      };
-
-      // Helper function to toggle modals
-      const toggleModal = (modal, show) => {
-        if (!modal) return;
-        modal.classList.toggle('active', show);
-        document.body.style.overflow = show ? 'hidden' : '';
-      };
-
-      // Close modal on outside click for all modals
-      document.querySelectorAll('.modal-overlay').forEach(modal => {
-        modal.addEventListener('click', (e) => {
-          if (e.target === modal) toggleModal(modal, false);
-        });
-      });
-
-      // --- Create Department Logic ---
-      if (openCreateBtn) openCreateBtn.addEventListener('click', () => toggleModal(createModal, true));
-      if (closeCreateBtn) closeCreateBtn.addEventListener('click', () => toggleModal(createModal, false));
-      if (cancelCreateBtn) cancelCreateBtn.addEventListener('click', () => toggleModal(createModal, false));
-
-      if (createColorInput) {
-        createColorInput.addEventListener('input', (e) => {
-          if (createColorHex) createColorHex.textContent = e.target.value.toUpperCase();
-        });
-      }
-
-      const createForm = document.getElementById('createDeptForm');
-      if (createForm) {
-        createForm.addEventListener('submit', async (e) => {
-          e.preventDefault();
-          const form = e.target;
-          const formData = new FormData(form);
-
-          try {
-            const response = await fetch(form.action, {
-              method: 'POST',
-              headers: {
-                'X-CSRFToken': formData.get('csrfmiddlewaretoken')
-              },
-              body: formData // Send FormData directly to handle files
-            });
-
-            const result = await response.json();
-            if (result.success) {
-              showToast(result.message, 'success');
-              setTimeout(() => location.reload(), 1500); 
-            } else {
-              showToast('Error: ' + result.message, 'error');
-            }
-          } catch (error) {
-            showToast('Failed to create department: ' + error.message, 'error');
-          }
-        });
-      }
-
-      // --- Edit Department Logic ---
-      if (closeEditBtn) closeEditBtn.addEventListener('click', () => toggleModal(editModal, false));
-      if (cancelEditBtn) cancelEditBtn.addEventListener('click', () => toggleModal(editModal, false));
-
-      if (editColorInput) {
-        editColorInput.addEventListener('input', (e) => {
-          if (editColorHex) editColorHex.textContent = e.target.value.toUpperCase();
-        });
-      }
-
-      document.querySelectorAll('.table-actions .edit').forEach(btn => {
-        btn.addEventListener('click', function() {
-          const id = this.getAttribute('data-id');
-          editForm.action = `/admin/departments/${id}/edit/`;
-          
-          document.getElementById('editDeptName').value = this.getAttribute('data-name');
-          document.getElementById('editDeptCode').value = this.getAttribute('data-code');
-          document.getElementById('editUnitNumber').value = this.getAttribute('data-unit');
-          
-          const color = this.getAttribute('data-color') || '#022068';
-          editColorInput.value = color;
-          editColorHex.textContent = color.toUpperCase();
-          
-          document.getElementById('editDeptHead').value = this.getAttribute('data-head');
-          document.getElementById('editDeptStatus').value = this.getAttribute('data-status');
-          document.getElementById('editDeptRemarks').value = this.getAttribute('data-remarks');
-          
-          toggleModal(editModal, true);
-        });
-      });
-
-      if (editForm) {
-        editForm.addEventListener('submit', async (e) => {
-          e.preventDefault();
-          const form = e.target;
-          const formData = new FormData(form);
-
-          try {
-            const response = await fetch(form.action, {
-              method: 'POST',
-              headers: {
-                'X-CSRFToken': formData.get('csrfmiddlewaretoken')
-              },
-              body: formData
-            });
-
-            const result = await response.json();
-            if (result.success) {
-              showToast(result.message, 'success');
-              setTimeout(() => location.reload(), 1500);
-            } else {
-              showToast('Error: ' + result.message, 'error');
-            }
-          } catch (error) {
-            showToast('Failed to update department: ' + error.message, 'error');
-          }
-        });
-      }
-
-      // --- Delete Department Logic ---
-      if (closeDeleteBtn) closeDeleteBtn.addEventListener('click', () => toggleModal(deleteModal, false));
-      if (cancelDeleteBtn) cancelDeleteBtn.addEventListener('click', () => toggleModal(deleteModal, false));
-
-      document.querySelectorAll('.table-actions .delete').forEach(btn => {
-        btn.addEventListener('click', function() {
-          deptIdToDelete = this.getAttribute('data-id');
-          deleteDeptNameSpan.textContent = this.getAttribute('data-name');
-          toggleModal(deleteModal, true);
-        });
-      });
-
-      if (confirmDeleteBtn) {
-        confirmDeleteBtn.addEventListener('click', async () => {
-          if (!deptIdToDelete) return;
-          try {
-            // Get CSRF token from any form on the page
-            const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value
-              || document.cookie.split('; ').find(r => r.startsWith('csrftoken='))?.split('=')[1]
-              || '';
-            const response = await fetch(`/admin/departments/${deptIdToDelete}/delete/`, {
-              method: 'POST',
-              headers: {
-                'X-CSRFToken': csrfToken,
-                'Content-Type': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest',
-              },
-              body: JSON.stringify({}),
-            });
-
-            if (!response.ok) {
-              const text = await response.text();
-              throw new Error(`Server returned ${response.status}: ${text.substring(0, 100)}`);
-            }
-
-            const result = await response.json();
-            if (result.success) {
-              showToast(result.message, 'success');
-              toggleModal(deleteModal, false);
-              setTimeout(() => location.reload(), 1500);
-            } else {
-              showToast('Error: ' + result.message, 'error');
-            }
-          } catch (error) {
-            showToast('Failed to delete department: ' + error.message, 'error');
-          }
-        });
-      }
-
-      // --- View Department Logic ---
-      if (closeViewBtn) closeViewBtn.addEventListener('click', () => toggleModal(viewModal, false));
-      if (closeViewFooterBtn) closeViewFooterBtn.addEventListener('click', () => toggleModal(viewModal, false));
-
-      document.querySelectorAll('.table-actions .view').forEach(btn => {
-        btn.addEventListener('click', async function() {
-          const id = this.getAttribute('data-id');
-          toggleModal(viewModal, true);
-          viewDetailsContainer.innerHTML = '<div class="loading-spinner">Loading...</div>';
-
-          try {
-            const response = await fetch(`/admin/departments/${id}/view/`);
-            if (!response.ok) throw new Error('Network response was not ok');
-            const data = await response.json();
-            
-            viewDetailsContainer.innerHTML = `
-              <div class="view-header-details">
-                ${data.logo ? `<img src="${data.logo}" alt="${data.name} Logo" class="view-logo">` : `<div class="view-avatar" style="background-color: ${data.delegation_color}">${data.code.substring(0,2)}</div>`}
-                <div>
-                  <h4>${data.name}</h4>
-                  <span class="view-badge ${data.status}">${data.status.toUpperCase()}</span>
-                </div>
-              </div>
-              <div class="view-grid">
-                <div class="view-item">
-                  <span class="view-label">Code</span>
-                  <span class="view-value">${data.code}</span>
-                </div>
-                <div class="view-item">
-                  <span class="view-label">Unit Number</span>
-                  <span class="view-value">${data.unit_number || '--'}</span>
-                </div>
-                <div class="view-item">
-                  <span class="view-label">Head/Dean</span>
-                  <span class="view-value">${data.head || 'Not Assigned'}</span>
-                </div>
-                <div class="view-item">
-                  <span class="view-label">Students</span>
-                  <span class="view-value">${data.students}</span>
-                </div>
-                <div class="view-item">
-                  <span class="view-label">Color</span>
-                  <span class="view-value" style="display: flex; align-items: center; gap: 8px;">
-                    <span style="width: 16px; height: 16px; border-radius: 4px; background-color: ${data.delegation_color};"></span>
-                    ${data.delegation_color}
-                  </span>
-                </div>
-              </div>
-              <div class="view-item" style="margin-top: 16px;">
-                <span class="view-label">Remarks</span>
-                <p class="view-value">${data.remarks || 'No remarks added.'}</p>
-              </div>
-            `;
-          } catch (error) {
-            viewDetailsContainer.innerHTML = `<div class="error-msg">Failed to load details: ${error.message}</div>`;
-          }
-        });
-      });
-
-      // --- Bulk Delete Logic ---
-      const selectAllCheckbox = document.getElementById('selectAllCheckbox');
-      const rowCheckboxes = document.querySelectorAll('.row-checkbox');
-      const bulkDeleteBtn = document.getElementById('bulkDeleteBtn');
-      const bulkSelectedCount = document.getElementById('bulkSelectedCount');
-      const bulkDeleteModal = document.getElementById('bulkDeleteModal');
-      const closeBulkDeleteBtn = document.getElementById('closeBulkDeleteBtn');
-      const cancelBulkDeleteBtn = document.getElementById('cancelBulkDeleteBtn');
-      const confirmBulkDeleteBtn = document.getElementById('confirmBulkDeleteBtn');
-      const bulkDeleteCount = document.getElementById('bulkDeleteCount');
-      const bulkDeleteList = document.getElementById('bulkDeleteList');
-
-      const updateBulkBar = () => {
-        const selected = document.querySelectorAll('.row-checkbox:checked');
-        const count = selected.length;
-        bulkSelectedCount.textContent = count;
-        bulkDeleteBtn.hidden = count === 0;
-        // Sync select-all checkbox state
-        if (rowCheckboxes.length > 0) {
-          selectAllCheckbox.checked = count === rowCheckboxes.length;
-          selectAllCheckbox.indeterminate = count > 0 && count < rowCheckboxes.length;
-        }
-      };
-
-      if (selectAllCheckbox) {
-        selectAllCheckbox.addEventListener('change', () => {
-          rowCheckboxes.forEach(cb => { cb.checked = selectAllCheckbox.checked; });
-          updateBulkBar();
-        });
-      }
-
-      rowCheckboxes.forEach(cb => {
-        cb.addEventListener('change', updateBulkBar);
-      });
-
-      if (bulkDeleteBtn) {
-        bulkDeleteBtn.addEventListener('click', () => {
-          const selected = Array.from(document.querySelectorAll('.row-checkbox:checked'));
-          if (selected.length === 0) return;
-          bulkDeleteCount.textContent = selected.length;
-          bulkDeleteList.innerHTML = selected
-            .map(cb => `<li>${cb.dataset.name}</li>`)
-            .join('');
-          toggleModal(bulkDeleteModal, true);
-        });
-      }
-
-      if (closeBulkDeleteBtn) closeBulkDeleteBtn.addEventListener('click', () => toggleModal(bulkDeleteModal, false));
-      if (cancelBulkDeleteBtn) cancelBulkDeleteBtn.addEventListener('click', () => toggleModal(bulkDeleteModal, false));
-
-      if (confirmBulkDeleteBtn) {
-        confirmBulkDeleteBtn.addEventListener('click', async () => {
-          const ids = Array.from(document.querySelectorAll('.row-checkbox:checked'))
-            .map(cb => cb.value);
-          if (ids.length === 0) return;
-          try {
-            const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value
-              || document.cookie.split('; ').find(r => r.startsWith('csrftoken='))?.split('=')[1]
-              || '';
-            const response = await fetch('/admin/departments/bulk-delete/', {
-              method: 'POST',
-              headers: {
-                'X-CSRFToken': csrfToken,
-                'Content-Type': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest',
-              },
-              body: JSON.stringify({ ids }),
-            });
-            if (!response.ok) {
-              throw new Error(`Server returned ${response.status}`);
-            }
-            const result = await response.json();
-            if (result.success) {
-              showToast(result.message, 'success');
-              toggleModal(bulkDeleteModal, false);
-              setTimeout(() => location.reload(), 1500);
-            } else {
-              showToast('Error: ' + result.message, 'error');
-            }
-          } catch (error) {
-            showToast('Failed to delete departments: ' + error.message, 'error');
-          }
-        });
-      }
+    document.querySelectorAll('.modal-overlay').forEach(m => {
+      m.addEventListener('click', e => { if (e.target === m) toggleModal(m, false); });
     });
+
+    // ── Create Department ─────────────────────────────────────────────────────
+    const createModal    = document.getElementById('deptModal');
+    const openCreateBtn  = document.getElementById('openModalBtn');
+    const closeCreateBtn = document.getElementById('closeModalBtn');
+    const cancelCreateBtn = document.getElementById('cancelModalBtn');
+    const createColorInput = document.getElementById('delegationColor');
+    const createColorHex   = document.querySelector('.color-hex');
+
+    if (openCreateBtn)   openCreateBtn.addEventListener('click',   () => toggleModal(createModal, true));
+    if (closeCreateBtn)  closeCreateBtn.addEventListener('click',  () => toggleModal(createModal, false));
+    if (cancelCreateBtn) cancelCreateBtn.addEventListener('click', () => toggleModal(createModal, false));
+
+    if (createColorInput) {
+      createColorInput.addEventListener('input', e => {
+        if (createColorHex) createColorHex.textContent = e.target.value.toUpperCase();
+      });
+    }
+
+    const createForm = document.getElementById('createDeptForm');
+    if (createForm) {
+      createForm.addEventListener('submit', async e => {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        try {
+          const res = await fetch(e.target.action, { method: 'POST', headers: { 'X-CSRFToken': fd.get('csrfmiddlewaretoken') }, body: fd });
+          const result = await res.json();
+          if (result.success) { showToast(result.message); setTimeout(() => location.reload(), 1200); }
+          else showToast('Error: ' + result.message, 'error');
+        } catch (err) { showToast('Failed: ' + err.message, 'error'); }
+      });
+    }
+
+    // ── Edit Department ───────────────────────────────────────────────────────
+    const editModal    = document.getElementById('editDeptModal');
+    const closeEditBtn = document.getElementById('closeEditModalBtn');
+    const cancelEditBtn = document.getElementById('cancelEditModalBtn');
+    const editForm     = document.getElementById('editDeptForm');
+    const editColorInput = document.getElementById('editDelegationColor');
+    const editColorHex   = document.getElementById('editColorHex');
+
+    if (closeEditBtn)  closeEditBtn.addEventListener('click',  () => toggleModal(editModal, false));
+    if (cancelEditBtn) cancelEditBtn.addEventListener('click', () => toggleModal(editModal, false));
+
+    if (editColorInput) {
+      editColorInput.addEventListener('input', e => {
+        if (editColorHex) editColorHex.textContent = e.target.value.toUpperCase();
+      });
+    }
+
+    document.querySelectorAll('.action-menu-item.edit').forEach(btn => {
+      btn.addEventListener('click', function () {
+        const id = this.dataset.id;
+        editForm.action = `/admin/departments/${id}/edit/`;
+        document.getElementById('editDeptName').value    = this.dataset.name;
+        document.getElementById('editDeptCode').value    = this.dataset.code;
+        const color = this.dataset.color || '#022068';
+        editColorInput.value = color;
+        editColorHex.textContent = color.toUpperCase();
+        document.getElementById('editDeptHead').value    = this.dataset.head;
+        document.getElementById('editDeptStatus').value  = this.dataset.status;
+        document.getElementById('editDeptRemarks').value = this.dataset.remarks;
+        toggleModal(editModal, true);
+        closeAllMenus();
+      });
+    });
+
+    if (editForm) {
+      editForm.addEventListener('submit', async e => {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        try {
+          const res = await fetch(e.target.action, { method: 'POST', headers: { 'X-CSRFToken': fd.get('csrfmiddlewaretoken') }, body: fd });
+          const result = await res.json();
+          if (result.success) { showToast(result.message); setTimeout(() => location.reload(), 1200); }
+          else showToast('Error: ' + result.message, 'error');
+        } catch (err) { showToast('Failed: ' + err.message, 'error'); }
+      });
+    }
+
+    // ── Delete Department ─────────────────────────────────────────────────────
+    const deleteModal     = document.getElementById('deleteDeptModal');
+    const closeDeleteBtn  = document.getElementById('closeDeleteModalBtn');
+    const cancelDeleteBtn = document.getElementById('cancelDeleteModalBtn');
+    const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
+    const deleteDeptNameSpan = document.getElementById('deleteDeptName');
+    let deptIdToDelete = null;
+
+    if (closeDeleteBtn)  closeDeleteBtn.addEventListener('click',  () => toggleModal(deleteModal, false));
+    if (cancelDeleteBtn) cancelDeleteBtn.addEventListener('click', () => toggleModal(deleteModal, false));
+
+    document.querySelectorAll('.action-menu-item.delete').forEach(btn => {
+      btn.addEventListener('click', function () {
+        deptIdToDelete = this.dataset.id;
+        deleteDeptNameSpan.textContent = this.dataset.name;
+        toggleModal(deleteModal, true);
+        closeAllMenus();
+      });
+    });
+
+    if (confirmDeleteBtn) {
+      confirmDeleteBtn.addEventListener('click', async () => {
+        if (!deptIdToDelete) return;
+        try {
+          const res = await fetch(`/admin/departments/${deptIdToDelete}/delete/`, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': getCsrf(), 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify({}),
+          });
+          if (!res.ok) throw new Error(`Server ${res.status}`);
+          const result = await res.json();
+          if (result.success) { showToast(result.message); toggleModal(deleteModal, false); setTimeout(() => location.reload(), 1200); }
+          else showToast('Error: ' + result.message, 'error');
+        } catch (err) { showToast('Failed: ' + err.message, 'error'); }
+      });
+    }
+
+    // ── View Department ───────────────────────────────────────────────────────
+    const viewModal        = document.getElementById('viewDeptModal');
+    const closeViewBtn     = document.getElementById('closeViewModalBtn');
+    const closeViewFooterBtn = document.getElementById('closeViewModalFooterBtn');
+    const viewDetailsContainer = document.getElementById('viewDeptDetails');
+
+    if (closeViewBtn)      closeViewBtn.addEventListener('click',      () => toggleModal(viewModal, false));
+    if (closeViewFooterBtn) closeViewFooterBtn.addEventListener('click', () => toggleModal(viewModal, false));
+
+    document.querySelectorAll('.action-menu-item.view').forEach(btn => {
+      btn.addEventListener('click', async function () {
+        const id = this.dataset.id;
+        toggleModal(viewModal, true);
+        viewDetailsContainer.innerHTML = '<div class="loading-spinner">Loading…</div>';
+        closeAllMenus();
+        try {
+          const res = await fetch(`/admin/departments/${id}/view/`);
+          if (!res.ok) throw new Error('Network error');
+          const d = await res.json();
+          viewDetailsContainer.innerHTML = `
+            <div class="view-header-details">
+              ${d.logo
+                ? `<img src="${d.logo}" alt="${d.name}" class="view-logo">`
+                : `<div class="view-avatar" style="background:${d.delegation_color}">${d.code.slice(0,2)}</div>`}
+              <div>
+                <h4>${d.name}</h4>
+                <span class="status-badge status-badge--${d.status}">${d.status.toUpperCase()}</span>
+              </div>
+            </div>
+            <div class="view-grid">
+              <div class="view-item">
+                <span class="view-label">Code</span>
+                <span class="view-value">${d.code}</span>
+              </div>
+              <div class="view-item">
+                <span class="view-label">Head / Dean</span>
+                <span class="view-value">${d.head || 'Not Assigned'}</span>
+              </div>
+              <div class="view-item">
+                <span class="view-label">Members</span>
+                <span class="view-value">${d.students}</span>
+              </div>
+              <div class="view-item">
+                <span class="view-label">Color</span>
+                <span class="view-value view-value--color">
+                  <span class="color-swatch" style="background:${d.delegation_color}"></span>
+                  ${d.delegation_color}
+                </span>
+              </div>
+            </div>
+            <div class="view-item view-item--full" style="margin-top:16px">
+              <span class="view-label">Remarks</span>
+              <p class="view-value">${d.remarks || 'No remarks added.'}</p>
+            </div>`;
+        } catch (err) {
+          viewDetailsContainer.innerHTML = `<div class="error-msg">Failed to load: ${err.message}</div>`;
+        }
+      });
+    });
+
+    // ── 3-dot action menu ─────────────────────────────────────────────────────
+    const closeAllMenus = () => {
+      document.querySelectorAll('.action-menu-dropdown.open').forEach(d => {
+        d.classList.remove('open');
+        d.previousElementSibling?.setAttribute('aria-expanded', 'false');
+      });
+    };
+
+    document.querySelectorAll('.action-menu-btn').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const dropdown = btn.nextElementSibling;
+        const isOpen   = dropdown.classList.contains('open');
+        closeAllMenus();
+        if (!isOpen) {
+          dropdown.classList.add('open');
+          btn.setAttribute('aria-expanded', 'true');
+        }
+      });
+    });
+
+    document.addEventListener('click', closeAllMenus);
+
+    // ── Bulk selection & actions ──────────────────────────────────────────────
+    const selectAllCb     = document.getElementById('selectAllCheckbox');
+    const rowCheckboxes   = document.querySelectorAll('.row-checkbox');
+    const bulkCountLabel  = document.getElementById('bulkSelectedCount');
+
+    const updateBulkBar = () => {
+      const checked = document.querySelectorAll('.row-checkbox:checked');
+      const n = checked.length;
+      if (bulkCountLabel) bulkCountLabel.textContent = n + ' selected';
+      if (selectAllCb) {
+        selectAllCb.checked       = rowCheckboxes.length > 0 && n === rowCheckboxes.length;
+        selectAllCb.indeterminate = n > 0 && n < rowCheckboxes.length;
+      }
+      // Highlight selected rows
+      rowCheckboxes.forEach(cb => {
+        cb.closest('tr')?.classList.toggle('row-selected', cb.checked);
+      });
+    };
+
+    if (selectAllCb) {
+      selectAllCb.addEventListener('change', () => {
+        rowCheckboxes.forEach(cb => { cb.checked = selectAllCb.checked; });
+        updateBulkBar();
+      });
+    }
+    rowCheckboxes.forEach(cb => cb.addEventListener('change', updateBulkBar));
+
+    // Bulk delete
+    const bulkDeleteModal     = document.getElementById('bulkDeleteModal');
+    const closeBulkDeleteBtn  = document.getElementById('closeBulkDeleteBtn');
+    const cancelBulkDeleteBtn = document.getElementById('cancelBulkDeleteBtn');
+    const confirmBulkDeleteBtn = document.getElementById('confirmBulkDeleteBtn');
+    const bulkDeleteCount     = document.getElementById('bulkDeleteCount');
+    const bulkDeleteList      = document.getElementById('bulkDeleteList');
+    const bulkDeleteBtn       = document.getElementById('bulkDeleteBtn');
+
+    if (closeBulkDeleteBtn)  closeBulkDeleteBtn.addEventListener('click',  () => toggleModal(bulkDeleteModal, false));
+    if (cancelBulkDeleteBtn) cancelBulkDeleteBtn.addEventListener('click', () => toggleModal(bulkDeleteModal, false));
+
+    if (bulkDeleteBtn) {
+      bulkDeleteBtn.addEventListener('click', () => {
+        const selected = Array.from(document.querySelectorAll('.row-checkbox:checked'));
+        if (!selected.length) return;
+        bulkDeleteCount.textContent = selected.length;
+        bulkDeleteList.innerHTML = selected.map(cb => `<li>${cb.dataset.name}</li>`).join('');
+        toggleModal(bulkDeleteModal, true);
+      });
+    }
+
+    if (confirmBulkDeleteBtn) {
+      confirmBulkDeleteBtn.addEventListener('click', async () => {
+        const ids = Array.from(document.querySelectorAll('.row-checkbox:checked')).map(cb => cb.value);
+        if (!ids.length) return;
+        try {
+          const res = await fetch('/admin/departments/bulk-delete/', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': getCsrf(), 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify({ ids }),
+          });
+          if (!res.ok) throw new Error(`Server ${res.status}`);
+          const result = await res.json();
+          if (result.success) { showToast(result.message); toggleModal(bulkDeleteModal, false); setTimeout(() => location.reload(), 1200); }
+          else showToast('Error: ' + result.message, 'error');
+        } catch (err) { showToast('Failed: ' + err.message, 'error'); }
+      });
+    }
+
+    // ── Client-side filter / sort ─────────────────────────────────────────────
+    const searchInput   = document.getElementById('deptSearchInput');
+    const filterStatus  = document.getElementById('filterStatus');
+    const filterDean    = document.getElementById('filterDean');
+    const sortBy        = document.getElementById('sortBy');
+    const clearFilters  = document.getElementById('clearFiltersBtn');
+    const tbody         = document.getElementById('departmentsBody');
+    const paginationInfo = document.getElementById('paginationInfo');
+
+    const applyFilters = () => {
+      const q      = (searchInput?.value || '').trim().toLowerCase();
+      const status = filterStatus?.value  || '';
+      const dean   = filterDean?.value    || '';
+      const sort   = sortBy?.value        || 'name-az';
+
+      const rows = Array.from(tbody.querySelectorAll('tr:not(.empty-row)'));
+      let visible = rows.filter(tr => {
+        const name  = (tr.dataset.name  || '').toLowerCase();
+        const code  = (tr.dataset.code  || '').toLowerCase();
+        const deanV = (tr.dataset.dean  || '').toLowerCase();
+        const stV   = (tr.dataset.status || '').toLowerCase();
+        if (q && !name.includes(q) && !code.includes(q) && !deanV.includes(q)) return false;
+        if (status && stV !== status.toLowerCase()) return false;
+        if (dean   && !deanV.includes(dean.toLowerCase())) return false;
+        return true;
+      });
+
+      // Sort
+      visible.sort((a, b) => {
+        if (sort === 'name-za') return (b.dataset.name || '').localeCompare(a.dataset.name || '');
+        if (sort === 'code-az') return (a.dataset.code || '').localeCompare(b.dataset.code || '');
+        return (a.dataset.name || '').localeCompare(b.dataset.name || '');
+      });
+
+      rows.forEach(tr => tr.style.display = 'none');
+      visible.forEach(tr => { tr.style.display = ''; tbody.appendChild(tr); });
+
+      if (paginationInfo) paginationInfo.textContent = `Showing 1 to ${visible.length} of ${rows.length} entries`;
+
+      // Empty state
+      let emptyRow = tbody.querySelector('.filter-empty');
+      if (!visible.length) {
+        if (!emptyRow) {
+          emptyRow = document.createElement('tr');
+          emptyRow.className = 'filter-empty';
+          emptyRow.innerHTML = '<td colspan="6"><div class="empty-state"><p>No departments match your filters.</p></div></td>';
+          tbody.appendChild(emptyRow);
+        }
+      } else if (emptyRow) emptyRow.remove();
+    };
+
+    if (searchInput)  searchInput.addEventListener('input',  applyFilters);
+    if (filterStatus) filterStatus.addEventListener('change', applyFilters);
+    if (filterDean)   filterDean.addEventListener('change',   applyFilters);
+    if (sortBy)       sortBy.addEventListener('change',       applyFilters);
+
+    if (clearFilters) {
+      clearFilters.addEventListener('click', () => {
+        if (searchInput)  searchInput.value  = '';
+        if (filterStatus) filterStatus.value = '';
+        if (filterDean)   filterDean.value   = '';
+        if (sortBy)       sortBy.value       = 'name-az';
+        applyFilters();
+      });
+    }
+  });
   </script>
 </body>
 </html>

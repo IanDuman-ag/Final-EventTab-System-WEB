@@ -13,6 +13,9 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.contrib.contenttypes.models import ContentType
 import json
 import csv
+import re
+import random
+import string
 from datetime import datetime, timedelta
 
 from events.models import (
@@ -33,13 +36,14 @@ ROLE_CHOICES = {
     'tabulator': 'Tabulator',
 }
 
-ASSIGNMENT_ROLE_LABELS = {'Tabulator', 'Judge'}
+ASSIGNMENT_ROLE_LABELS = {'Tabulator', 'Judge', 'Scorer'}
 ASSIGNMENT_GROUP_ALIASES = {
     'tabulator': 'Tabulator',
     'judge': 'Judge',
     'judges': 'Judge',
+    'scorer': 'Scorer',
 }
-RESERVED_DEPARTMENT_NAMES = {'admin', 'tabulator', 'judge', 'judges', 'viewers'}
+RESERVED_DEPARTMENT_NAMES = {'admin', 'tabulator', 'judge', 'judges', 'viewers', 'scorer'}
 
 
 def normalize_event_availability_status(status):
@@ -272,6 +276,7 @@ def get_assignment_account_rows():
             Q(groups__name__iexact='Tabulator')
             | Q(groups__name__iexact='Judge')
             | Q(groups__name__iexact='Judges')
+            | Q(groups__name__iexact='Scorer')
         )
         .exclude(is_staff=True)
         .exclude(is_superuser=True)
@@ -376,7 +381,7 @@ def get_department_rows():
 
     if not departments.exists():
         # Fallback to Group-based logic for legacy support
-        reserved_groups = {'Admin', 'Tabulator', 'Judge', 'Judges', 'Viewers'}
+        reserved_groups = {'Admin', 'Tabulator', 'Judge', 'Judges', 'Viewers', 'Scorer'}
         department_groups = Group.objects.exclude(name__in=reserved_groups).order_by('name').prefetch_related('user_set')
         for group in department_groups:
             members = list(group.user_set.all())
@@ -394,7 +399,13 @@ def get_department_rows():
                 'dean': dean_name,
                 'est_year': '--',
                 'students': student_count,
-                'status': 'active'
+                'color': '#244b89',
+                'status': 'active',
+                'logo': None,
+                'code': ''.join(part[:1] for part in group.name.split()[:4]).upper() or group.name[:4].upper(),
+                'unit_number': '',
+                'head': dean_name if dean_name != 'Not Assigned' else '',
+                'remarks': '',
             })
     else:
         for dept in departments:
@@ -424,22 +435,20 @@ def get_department_rows():
     return department_rows
 
 
-@login_required
+@login_required(login_url='login')
 @user_passes_test(lambda user: user.is_staff, login_url='login')
 def admin_create_department(request):
     if request.method != 'POST':
         return JsonResponse({'success': False, 'message': 'Invalid request method.'}, status=400)
-    
+
     try:
-        # Support both JSON and Form data
-        if request.content_type == 'application/json':
+        if request.content_type and 'application/json' in request.content_type:
             data = json.loads(request.body)
         else:
             data = request.POST
 
         name = data.get('name', '').strip()
         code = data.get('code', '').strip()
-        unit_number = data.get('unit_number', '').strip()
         delegation_color = data.get('color', '#022068')
         head = data.get('head', '').strip()
         status = data.get('status', 'active')
@@ -448,24 +457,23 @@ def admin_create_department(request):
         if not name or not code:
             return JsonResponse({'success': False, 'message': 'Name and Code are required.'}, status=400)
 
-        # Create matching Group for role system
         Group.objects.get_or_create(name=name)
-        
+
         dept, created = Department.objects.update_or_create(
             code=code,
             defaults={
                 'name': name,
-                'unit_number': unit_number,
                 'delegation_color': delegation_color,
                 'head': head,
                 'status': status,
-                'remarks': remarks
+                'remarks': remarks,
             }
         )
 
-        # Log the action
-        from django.contrib.admin.models import LogEntry, ADDITION, CHANGE
-        from django.contrib.contenttypes.models import ContentType
+        if 'logo' in request.FILES:
+            dept.logo = request.FILES['logo']
+            dept.save()
+
         ct = ContentType.objects.get_for_model(Department)
         LogEntry.objects.create(
             user=request.user,
@@ -473,7 +481,7 @@ def admin_create_department(request):
             object_id=str(dept.id),
             object_repr=f'Department: {name}',
             action_flag=ADDITION if created else CHANGE,
-            change_message=f'{"Created" if created else "Updated"} department "{name}" (code: {code}).'
+            change_message=f'{"Created" if created else "Updated"} department "{name}" (code: {code}).',
         )
 
         return JsonResponse({'success': True, 'message': f'Department {name} created.', 'id': dept.id})
@@ -481,7 +489,7 @@ def admin_create_department(request):
         return JsonResponse({'success': False, 'message': str(e)}, status=500)
 
 
-@login_required
+@login_required(login_url='login')
 @user_passes_test(lambda user: user.is_staff, login_url='login')
 def admin_view_department(request, dept_id):
     """Return department detail as JSON for the View modal."""
@@ -505,7 +513,7 @@ def admin_view_department(request, dept_id):
     })
 
 
-@login_required
+@login_required(login_url='login')
 @user_passes_test(lambda user: user.is_staff, login_url='login')
 def admin_edit_department(request, dept_id):
     """Update an existing Department (supports logo upload via multipart)."""
@@ -579,7 +587,7 @@ def admin_delete_department(request, dept_id):
     try:
         group = Group.objects.get(id=dept_id)
         name = group.name
-        if name in {'Admin', 'Tabulator', 'Judge', 'Judges', 'Viewers'}:
+        if name in {'Admin', 'Tabulator', 'Judge', 'Judges', 'Viewers', 'Scorer'}:
             return JsonResponse(
                 {'success': False, 'message': f'Cannot delete reserved role "{name}".'},
                 status=400,
@@ -611,7 +619,7 @@ def admin_bulk_delete_departments(request):
 
     deleted_count = 0
     skipped_count = 0
-    reserved = {'Admin', 'Tabulator', 'Judge', 'Judges', 'Viewers'}
+    reserved = {'Admin', 'Tabulator', 'Judge', 'Judges', 'Viewers', 'Scorer'}
 
     for raw_id in ids:
         try:
@@ -1229,14 +1237,19 @@ def admin_departments(request):
             or query_lower in row['description'].lower()
         ]
     with_dean_count = sum(1 for row in all_rows if row['dean'] != 'Not Assigned')
+    active_department_count = sum(1 for row in all_rows if row.get('status', 'active') == 'active')
     total_students = sum(row['students'] for row in all_rows)
+    # Collect unique dean names for filter dropdown
+    unique_deans = sorted({row['dean'] for row in all_rows if row['dean'] != 'Not Assigned'})
     return render(request, 'admindash/department.html', {
         'department_rows': department_rows,
         'total_department_count': len(all_rows),
+        'active_department_count': active_department_count,
         'visible_department_count': len(department_rows),
         'search_query': search_query,
         'with_dean_count': with_dean_count,
         'total_students_count': total_students,
+        'unique_deans': unique_deans,
         'new_department_count': 0,
     })
 
@@ -1250,6 +1263,19 @@ def _split_full_name(full_name):
     return name_parts[0], ' '.join(name_parts[1:])
 
 
+def _generate_username_from_name(full_name):
+    """Auto-generate a unique username slug from a display name."""
+    User = get_user_model()
+    slug = re.sub(r'[^a-z0-9]', '_', full_name.strip().lower())
+    slug = re.sub(r'_+', '_', slug).strip('_')[:16] or 'user'
+    for _ in range(30):
+        suffix = ''.join(random.choices(string.digits, k=4))
+        candidate = f"{slug}_{suffix}"
+        if not User.objects.filter(username__iexact=candidate).exists():
+            return candidate
+    return 'user_' + ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+
+
 def _normalize_assignment_role(role):
     role_label = (role or '').strip().title()
     if role_label not in ASSIGNMENT_ROLE_LABELS:
@@ -1260,12 +1286,13 @@ def _normalize_assignment_role(role):
 def _apply_assignment_role(user, role, is_active):
     role_label = _normalize_assignment_role(role)
     if role_label is None:
-        raise ValueError('Select either Tabulator or Judge as the account role.')
+        raise ValueError('Select Tabulator, Judge, or Scorer as the account role.')
 
     assignment_groups = Group.objects.filter(
         Q(name__iexact='Tabulator')
         | Q(name__iexact='Judge')
         | Q(name__iexact='Judges')
+        | Q(name__iexact='Scorer')
     )
     user.groups.remove(*assignment_groups)
     role_group, _ = Group.objects.get_or_create(name=role_label)
@@ -1295,9 +1322,13 @@ def _assignment_payload(request):
         'username': (payload.get('username') or '').strip(),
         'email': (payload.get('email') or '').strip(),
         'password': payload.get('password') or '',
+        'access_code': (payload.get('access_code') or '').strip(),
         'role': (payload.get('role') or '').strip(),
         'is_active': bool(payload.get('is_active', True)),
     }
+
+
+CODE_ROLES = {'Judge', 'Scorer'}
 
 
 @login_required(login_url='login')
@@ -1307,14 +1338,51 @@ def create_assignment_account(request):
         return JsonResponse({'success': False, 'message': 'Invalid request method.'}, status=400)
 
     payload = _assignment_payload(request)
+    role_label = _normalize_assignment_role(payload['role'])
+    if role_label is None:
+        return JsonResponse({'success': False, 'message': 'Select Tabulator, Judge, or Scorer as the account role.'}, status=400)
+
+    User = get_user_model()
+
+    # ── Judge / Scorer: name + access-code flow ──────────────────────────────
+    if role_label in CODE_ROLES:
+        full_name = payload['full_name']
+        access_code = payload['access_code']
+        if not full_name:
+            return JsonResponse({'success': False, 'message': 'Name is required.'}, status=400)
+        if not access_code:
+            return JsonResponse({'success': False, 'message': 'Generate an access code before creating the account.'}, status=400)
+        try:
+            auto_username = _generate_username_from_name(full_name)
+            first_name, last_name = _split_full_name(full_name)
+            user = User.objects.create_user(username=auto_username, password=access_code)
+            user.first_name = first_name
+            user.last_name = last_name
+            _apply_assignment_role(user, role_label, payload['is_active'])
+            user.save()
+            if role_label == 'Judge':
+                sync_judge_to_mobile_events(user)
+            LogEntry.objects.create(
+                user=request.user,
+                content_type_id=ContentType.objects.get_for_model(User).id,
+                object_id=user.id,
+                object_repr=str(user),
+                action_flag=ADDITION,
+                change_message=f'Created {role_label} account (access-code flow)',
+            )
+            return JsonResponse({
+                'success': True,
+                'message': f'{role_label} account for {full_name} created.',
+                'username': auto_username,
+                'access_code': access_code,
+            })
+        except Exception as e:
+            return JsonResponse({'success': False, 'message': str(e)}, status=500)
+
+    # ── Tabulator: standard username / email / password flow ─────────────────
     if not payload['username'] or not payload['email'] or not payload['password']:
         return JsonResponse({'success': False, 'message': 'Username, email, and password are required.'}, status=400)
 
-    role_label = _normalize_assignment_role(payload['role'])
-    if role_label is None:
-        return JsonResponse({'success': False, 'message': 'Select either Tabulator or Judge as the account role.'}, status=400)
-
-    User = get_user_model()
     if User.objects.filter(username__iexact=payload['username']).exists():
         return JsonResponse({'success': False, 'message': 'Username already exists.'}, status=400)
     if User.objects.filter(email__iexact=payload['email']).exists():
@@ -1361,14 +1429,46 @@ def update_assignment_account(request, account_id):
         return JsonResponse({'success': False, 'message': 'Account not found.'}, status=404)
 
     payload = _assignment_payload(request)
+    role_label = _normalize_assignment_role(payload['role'])
+    if role_label is None:
+        return JsonResponse({'success': False, 'message': 'Select Tabulator, Judge, or Scorer as the account role.'}, status=400)
+
+    User = get_user_model()
+
+    # ── Judge / Scorer: name + optional new access-code ──────────────────────
+    if role_label in CODE_ROLES:
+        full_name = payload['full_name']
+        if not full_name:
+            return JsonResponse({'success': False, 'message': 'Name is required.'}, status=400)
+        try:
+            first_name, last_name = _split_full_name(full_name)
+            account_user.first_name = first_name
+            account_user.last_name = last_name
+            if payload['access_code']:
+                account_user.set_password(payload['access_code'])
+            _apply_assignment_role(account_user, role_label, payload['is_active'])
+            account_user.save()
+            if role_label == 'Judge':
+                sync_judge_to_mobile_events(account_user)
+            LogEntry.objects.create(
+                user=request.user,
+                content_type_id=ContentType.objects.get_for_model(User).id,
+                object_id=account_user.id,
+                object_repr=str(account_user),
+                action_flag=CHANGE,
+                change_message=f'Updated {role_label} account (access-code flow)',
+            )
+            resp = {'success': True, 'message': f'Account for {full_name} updated.'}
+            if payload['access_code']:
+                resp['access_code'] = payload['access_code']
+            return JsonResponse(resp)
+        except Exception as e:
+            return JsonResponse({'success': False, 'message': str(e)}, status=500)
+
+    # ── Tabulator: standard username / email / password flow ─────────────────
     if not payload['username'] or not payload['email']:
         return JsonResponse({'success': False, 'message': 'Username and email are required.'}, status=400)
 
-    role_label = _normalize_assignment_role(payload['role'])
-    if role_label is None:
-        return JsonResponse({'success': False, 'message': 'Select either Tabulator or Judge as the account role.'}, status=400)
-
-    User = get_user_model()
     if User.objects.filter(username__iexact=payload['username']).exclude(id=account_user.id).exists():
         return JsonResponse({'success': False, 'message': 'Username already exists.'}, status=400)
     if User.objects.filter(email__iexact=payload['email']).exclude(id=account_user.id).exists():
@@ -1426,6 +1526,57 @@ def delete_assignment_account(request, account_id):
         return JsonResponse({'success': True, 'message': f'Account {username} deleted.'})
     except Exception as e:
         return JsonResponse({'success': False, 'message': str(e)}, status=500)
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def bulk_delete_assignment_accounts(request):
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': 'Invalid request method.'}, status=400)
+
+    payload = _parse_json_request(request)
+    ids = payload.get('ids') or []
+    if not isinstance(ids, list) or not ids:
+        return JsonResponse({'success': False, 'message': 'No account IDs provided.'}, status=400)
+
+    User = get_user_model()
+    deleted = 0
+    skipped = 0
+    ct_id = ContentType.objects.get_for_model(User).id
+
+    for raw_id in ids:
+        try:
+            uid = int(raw_id)
+        except (TypeError, ValueError):
+            skipped += 1
+            continue
+
+        account_user = _assignment_user_or_none(uid)
+        if account_user is None:
+            skipped += 1
+            continue
+
+        try:
+            LogEntry.objects.create(
+                user=request.user,
+                content_type_id=ct_id,
+                object_id=account_user.id,
+                object_repr=str(account_user),
+                action_flag=DELETION,
+                change_message='Bulk deleted assignment account',
+            )
+            account_user.delete()
+            deleted += 1
+        except Exception:
+            skipped += 1
+
+    if deleted == 0:
+        return JsonResponse({'success': False, 'message': 'No accounts were deleted.'}, status=400)
+
+    msg = f'{deleted} account{"s" if deleted != 1 else ""} deleted.'
+    if skipped:
+        msg += f' {skipped} skipped.'
+    return JsonResponse({'success': True, 'message': msg, 'deleted': deleted})
 
 
 def get_session_events(request):
