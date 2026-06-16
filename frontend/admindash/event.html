@@ -461,22 +461,38 @@
         <input type="hidden" name="num_teams" id="ced-numt-hidden" value="">
         <input type="hidden" name="student_in_charge" value="">
 
-        <!-- Assigned Judges (collapsed) -->
+        <!-- Assigned Scorers / Judges (switches with scoring method) -->
         <section class="ced-section ced-section--judges" id="ced-judges-section">
-          <h3 class="ced-section-title" id="ced-judges-title">6. Assigned Judges <span class="ced-opt">(Optional)</span></h3>
+          <h3 class="ced-section-title" id="ced-judges-title">6. Assigned Scorers <span class="ced-opt">(Optional)</span></h3>
           <div class="judge-select-wrap">
-            {% if judge_options %}
-              {% for judge in judge_options %}
-              <label class="judge-checkbox-item">
-                <input type="checkbox" name="assigned_judges" value="{{ judge.id }}">
-                <span class="judge-avatar">{{ judge.label|slice:":2"|upper }}</span>
-                <span class="judge-name">{{ judge.label }}</span>
-                <small class="judge-username">@{{ judge.username }}</small>
-              </label>
-              {% endfor %}
-            {% else %}
-              <p class="judge-empty">No judge accounts found. Create judge accounts in Manage Account first.</p>
-            {% endif %}
+            <div class="ced-scorers-wrap" id="ced-scorers-wrap">
+              {% if scorer_options %}
+                {% for scorer in scorer_options %}
+                <label class="judge-checkbox-item">
+                  <input type="checkbox" name="assigned_judges" value="{{ scorer.id }}">
+                  <span class="judge-avatar">{{ scorer.label|slice:":2"|upper }}</span>
+                  <span class="judge-name">{{ scorer.label }}</span>
+                  <small class="judge-username">@{{ scorer.username }}</small>
+                </label>
+                {% endfor %}
+              {% else %}
+                <p class="judge-empty">No scorer accounts found. Create scorer accounts in Manage Account first.</p>
+              {% endif %}
+            </div>
+            <div class="ced-judges-wrap" id="ced-judges-wrap" hidden>
+              {% if judge_options %}
+                {% for judge in judge_options %}
+                <label class="judge-checkbox-item">
+                  <input type="checkbox" name="assigned_judges" value="{{ judge.id }}" disabled>
+                  <span class="judge-avatar">{{ judge.label|slice:":2"|upper }}</span>
+                  <span class="judge-name">{{ judge.label }}</span>
+                  <small class="judge-username">@{{ judge.username }}</small>
+                </label>
+                {% endfor %}
+              {% else %}
+                <p class="judge-empty">No judge accounts found. Create judge accounts in Manage Account first.</p>
+              {% endif %}
+            </div>
           </div>
         </section>
 
@@ -890,20 +906,36 @@
         </section>
 
         <section class="ced-section ced-section--judges">
-          <h3 class="ced-section-title" id="edit-judges-title">6. Assigned Judges <span class="ced-opt">(Optional)</span></h3>
+          <h3 class="ced-section-title" id="edit-judges-title">6. Assigned Scorers <span class="ced-opt">(Optional)</span></h3>
           <div class="judge-select-wrap" id="edit-judges-wrap">
-            {% if judge_options %}
-              {% for judge in judge_options %}
-              <label class="judge-checkbox-item">
-                <input type="checkbox" name="assigned_judges" value="{{ judge.id }}" class="edit-judge-checkbox" data-judge-id="{{ judge.id }}">
-                <span class="judge-avatar">{{ judge.label|slice:":2"|upper }}</span>
-                <span class="judge-name">{{ judge.label }}</span>
-                <small class="judge-username">@{{ judge.username }}</small>
-              </label>
-              {% endfor %}
-            {% else %}
-              <p class="judge-empty">No judge accounts found.</p>
-            {% endif %}
+            <div class="ced-scorers-wrap" id="edit-scorers-wrap">
+              {% if scorer_options %}
+                {% for scorer in scorer_options %}
+                <label class="judge-checkbox-item">
+                  <input type="checkbox" name="assigned_judges" value="{{ scorer.id }}" class="edit-assignee-checkbox edit-scorer-checkbox" data-user-id="{{ scorer.id }}">
+                  <span class="judge-avatar">{{ scorer.label|slice:":2"|upper }}</span>
+                  <span class="judge-name">{{ scorer.label }}</span>
+                  <small class="judge-username">@{{ scorer.username }}</small>
+                </label>
+                {% endfor %}
+              {% else %}
+                <p class="judge-empty">No scorer accounts found.</p>
+              {% endif %}
+            </div>
+            <div class="ced-judges-wrap" id="edit-judges-list-wrap" hidden>
+              {% if judge_options %}
+                {% for judge in judge_options %}
+                <label class="judge-checkbox-item">
+                  <input type="checkbox" name="assigned_judges" value="{{ judge.id }}" class="edit-assignee-checkbox edit-judge-checkbox" data-user-id="{{ judge.id }}" disabled>
+                  <span class="judge-avatar">{{ judge.label|slice:":2"|upper }}</span>
+                  <span class="judge-name">{{ judge.label }}</span>
+                  <small class="judge-username">@{{ judge.username }}</small>
+                </label>
+                {% endfor %}
+              {% else %}
+                <p class="judge-empty">No judge accounts found.</p>
+              {% endif %}
+            </div>
           </div>
         </section>
 
@@ -1143,6 +1175,8 @@
         var matchCard = document.querySelector('.ced-scard[data-method="match"]');
         if (matchCard) { matchCard.classList.add('is-selected'); matchCard.querySelector('.ced-scard-radio').checked = true; }
         switchScoringPanel('match');
+        if (scorersWrap) scorersWrap.querySelectorAll('input[type="checkbox"]').forEach(function (cb) { cb.checked = false; });
+        if (judgesWrap) judgesWrap.querySelectorAll('input[type="checkbox"]').forEach(function (cb) { cb.checked = false; });
         if (teamsList) teamsList.innerHTML = '';
         if (candidatesList) candidatesList.innerHTML = '';
         if (teamsData) teamsData.value = '[]';
@@ -1174,6 +1208,23 @@
     var matchPanel    = document.getElementById('ced-match-panel');
     var criteriaPanel = document.getElementById('ced-criteria-panel');
     var judgesTitleEl = document.getElementById('ced-judges-title');
+    var scorersWrap   = document.getElementById('ced-scorers-wrap');
+    var judgesWrap    = document.getElementById('ced-judges-wrap');
+
+    function setAssigneeInputsEnabled(scorersEl, judgesEl, method) {
+      if (scorersEl) {
+        scorersEl.hidden = (method !== 'match');
+        scorersEl.querySelectorAll('input[type="checkbox"]').forEach(function (cb) {
+          cb.disabled = (method !== 'match');
+        });
+      }
+      if (judgesEl) {
+        judgesEl.hidden = (method !== 'criteria');
+        judgesEl.querySelectorAll('input[type="checkbox"]').forEach(function (cb) {
+          cb.disabled = (method !== 'criteria');
+        });
+      }
+    }
 
     function switchScoringPanel(method) {
       if (matchPanel)    matchPanel.hidden    = (method !== 'match');
@@ -1183,15 +1234,20 @@
           ? '6. Assigned Scorers <span class="ced-opt">(Optional)</span>'
           : '6. Assigned Judges <span class="ced-opt">(Optional)</span>';
       }
+      setAssigneeInputsEnabled(scorersWrap, judgesWrap, method);
     }
 
     scoringCards.forEach(function (card) {
       card.addEventListener('click', function () {
         scoringCards.forEach(function (c) { c.classList.remove('is-selected'); });
         card.classList.add('is-selected');
+        var radio = card.querySelector('.ced-scard-radio');
+        if (radio) radio.checked = true;
         switchScoringPanel(card.dataset.method);
       });
     });
+
+    switchScoringPanel('match');
 
     /* ── Edit dialog scoring panels ──────────────────────────────── */
     var editDlgEarly = document.getElementById('edit-event-dialog');
@@ -1199,6 +1255,8 @@
     var editMatchPanel = document.getElementById('edit-match-panel');
     var editCriteriaPanel = document.getElementById('edit-criteria-panel');
     var editJudgesTitleEl = document.getElementById('edit-judges-title');
+    var editScorersWrap = document.getElementById('edit-scorers-wrap');
+    var editJudgesListWrap = document.getElementById('edit-judges-list-wrap');
 
     function switchEditScoringPanel(method) {
       if (editMatchPanel) editMatchPanel.hidden = (method !== 'match');
@@ -1208,6 +1266,7 @@
           ? '6. Assigned Scorers <span class="ced-opt">(Optional)</span>'
           : '6. Assigned Judges <span class="ced-opt">(Optional)</span>';
       }
+      setAssigneeInputsEnabled(editScorersWrap, editJudgesListWrap, method);
     }
 
     editScoringCards.forEach(function (card) {
@@ -1530,6 +1589,7 @@
         /* Assigned judges */
         var judgesEl = document.getElementById('vd-judges');
         if (judgesEl) {
+          var noneLabel = method === 'match' ? 'No scorers assigned' : 'No judges assigned';
           if (ev.assigned_judges_display && ev.assigned_judges_display.trim()) {
             var names = ev.assigned_judges_display.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
             judgesEl.innerHTML = names.map(function(n) {
@@ -1539,7 +1599,7 @@
               '</span>';
             }).join('');
           } else {
-            judgesEl.innerHTML = '<span class="vd-judge-none">No judges assigned</span>';
+            judgesEl.innerHTML = '<span class="vd-judge-none">' + noneLabel + '</span>';
           }
         }
         var imgContainer = document.getElementById('vd-image-container');
@@ -1644,10 +1704,10 @@
           }
         });
         switchEditScoringPanel(method);
-        /* Pre-check assigned judges */
+        /* Pre-check assigned scorers/judges */
         var assignedIds = ev.assigned_judge_ids || [];
-        document.querySelectorAll('.edit-judge-checkbox').forEach(function (cb) {
-          cb.checked = assignedIds.indexOf(parseInt(cb.dataset.judgeId, 10)) !== -1;
+        document.querySelectorAll('.edit-assignee-checkbox').forEach(function (cb) {
+          cb.checked = assignedIds.indexOf(parseInt(cb.dataset.userId, 10)) !== -1;
         });
         if (editBuilder && editBuilder._loadValue) {
           editBuilder._loadValue(ev.scoring_criteria || '');

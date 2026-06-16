@@ -1801,6 +1801,16 @@ def admin_manage_events(request):
         for u in judge_accounts
     ]
 
+    scorer_accounts = list(
+        User.objects.filter(groups__name__iexact='Scorer').distinct().order_by(
+            'first_name', 'last_name', 'username'
+        )
+    )
+    scorer_options = [
+        {'id': u.id, 'label': u.get_full_name().strip() or u.username, 'username': u.username}
+        for u in scorer_accounts
+    ]
+
     department_names = list(Department.objects.values_list('name', flat=True).order_by('name'))
 
     return render(request, 'admindash/event.html', {
@@ -1814,6 +1824,7 @@ def admin_manage_events(request):
         'create_category_options': create_category_options,
         'create_division_options': create_division_options,
         'judge_options':          judge_options,
+        'scorer_options':         scorer_options,
         'department_options_json': json.dumps(department_names),
         'selected_category':      category_filter,
         'selected_status':        status_filter,
@@ -3267,203 +3278,347 @@ def tabulator_assigned_events(request):
 @login_required(login_url='login')
 @user_passes_test(lambda u: user_has_role(u, 'tabulator'), login_url='login')
 def tabulator_scoresheets(request):
-    """Tabulator scoresheet list — real judge scores from JudgeScore + legacy ScoreSheet."""
-    from events.models import (
-        Event, ScoreSheet, JudgeScore, JudgingEvent, Candidate, Criterion,
-    )
-    from django.core.paginator import Paginator
-    from django.db.models import Count, Sum, Max, F, Q
-    from decimal import Decimal
+    """Tabulator score sheets — bracket match sheets and judge mobile submissions."""
+    from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 
+    rows, stats, filter_options = _build_tabulator_scoresheet_rows()
+
+    tab = request.GET.get('tab', 'event').strip().lower()
+    if tab not in ('event', 'submission'):
+        tab = 'event'
+
+    event_type_filter = request.GET.get('event_type', 'all').strip()
     event_filter = request.GET.get('event', 'all').strip()
+    round_filter = request.GET.get('round', 'all').strip()
     status_filter = request.GET.get('status', 'all').strip().lower()
-    search_q = request.GET.get('q', '').strip().lower()
+    search_q = (request.GET.get('q') or '').strip().lower()
+    selected_sheet = (request.GET.get('sheet') or '').strip()
 
-    # ── Build judge scoresheet rows from JudgeScore ────────────
-    # Group by (judge, candidate__event) to create one "scoresheet" per judge per event
-    judge_sheets_qs = (
+    date_from_raw = (request.GET.get('date_from') or '').strip()
+    date_to_raw = (request.GET.get('date_to') or '').strip()
+    date_from = date_to = None
+    if date_from_raw:
+        try:
+            date_from = datetime.strptime(date_from_raw, '%Y-%m-%d').date()
+        except ValueError:
+            pass
+    if date_to_raw:
+        try:
+            date_to = datetime.strptime(date_to_raw, '%Y-%m-%d').date()
+        except ValueError:
+            pass
+
+    filtered = rows
+    if event_type_filter != 'all':
+        filtered = [r for r in filtered if r.get('category_lower') == event_type_filter]
+    if event_filter != 'all':
+        filtered = [r for r in filtered if r['event_name'] == event_filter]
+    if round_filter != 'all':
+        filtered = [r for r in filtered if r.get('round_label') == round_filter]
+    if status_filter != 'all':
+        filtered = [r for r in filtered if r.get('status_key') == status_filter]
+    if date_from:
+        filtered = [r for r in filtered if r.get('submitted_dt') and r['submitted_dt'].date() >= date_from]
+    if date_to:
+        filtered = [r for r in filtered if r.get('submitted_dt') and r['submitted_dt'].date() <= date_to]
+    if search_q:
+        filtered = [
+            r for r in filtered
+            if search_q in r['entry_title'].lower()
+            or search_q in r['event_name'].lower()
+            or search_q in r.get('submitted_by_name', '').lower()
+            or search_q in r.get('type_label', '').lower()
+        ]
+
+    if tab == 'event':
+        epoch = timezone.make_aware(datetime(1970, 1, 1))
+        filtered.sort(key=lambda r: r.get('submitted_dt') or epoch, reverse=True)
+        filtered.sort(key=lambda r: r['event_name'].lower())
+    else:
+        epoch = timezone.make_aware(datetime(1970, 1, 1))
+        filtered.sort(key=lambda r: r.get('submitted_dt') or epoch, reverse=True)
+
+    paginator = Paginator(filtered, 6)
+    page_number = request.GET.get('page', 1)
+    try:
+        page_obj = paginator.page(page_number)
+    except PageNotAnInteger:
+        page_obj = paginator.page(1)
+    except EmptyPage:
+        page_obj = paginator.page(paginator.num_pages)
+
+    page_rows = page_obj.object_list
+    active_row = None
+    if selected_sheet:
+        active_row = next((r for r in filtered if r['row_key'] == selected_sheet), None)
+    if not active_row and page_rows:
+        active_row = page_rows[0]
+
+    detail_json = [
+        {k: v for k, v in row.items() if k not in ('submitted_dt',)}
+        for row in filtered
+    ]
+
+    user_initials = request.user.username[:2].upper() if request.user.username else 'TA'
+
+    return render(request, 'tabulatordash/scoresheets.html', {
+        'display_name': _tabulator_display_name(request.user),
+        'sheet_rows': page_rows,
+        'active_row': active_row,
+        'detail_json': detail_json,
+        'page_obj': page_obj,
+        'filtered_count': len(filtered),
+        'active_tab': tab,
+        'event_types': filter_options['event_types'],
+        'events': filter_options['events'],
+        'rounds': filter_options['rounds'],
+        'selected_event_type': event_type_filter,
+        'selected_event': event_filter,
+        'selected_round': round_filter,
+        'selected_status': status_filter,
+        'search_query': request.GET.get('q', ''),
+        'date_from': date_from.isoformat() if date_from else '',
+        'date_to': date_to.isoformat() if date_to else '',
+        'selected_sheet': active_row['row_key'] if active_row else '',
+        'user_initials': user_initials,
+        **stats,
+    })
+
+
+def _tabulator_scoresheet_status(raw_status, event_status=None):
+    """Map model status to mockup display status."""
+    from events.models import Event
+    if raw_status in ('pending', 'in_progress', 'pending_review'):
+        return 'pending_review', 'PENDING REVIEW'
+    if raw_status == 'confirmed':
+        return 'pending_review', 'PENDING REVIEW'
+    if raw_status in ('finalized', 'encoded', 'submitted'):
+        if event_status == Event.STATUS_COMPLETED:
+            return 'archived', 'ARCHIVED'
+        return 'encoded', 'ENCODED'
+    if raw_status == 'archived':
+        return 'archived', 'ARCHIVED'
+    return 'pending_review', 'PENDING REVIEW'
+
+
+def _tabulator_scoresheet_avatar_tone(user_id):
+    tones = ('blue', 'teal', 'purple', 'orange', 'rose', 'indigo')
+    return tones[user_id % len(tones)] if user_id else 'blue'
+
+
+def _tabulator_scoresheet_submitter(user_id, fallback_role='Scorer'):
+    user = get_user_model().objects.filter(id=user_id).first()
+    if not user:
+        return f'User #{user_id}', 'U?', fallback_role, _tabulator_scoresheet_avatar_tone(user_id or 0)
+    name = user.get_full_name() or user.username
+    parts = name.split()
+    initials = (parts[0][0] + parts[1][0]).upper() if len(parts) >= 2 else name[:2].upper()
+    role = 'Judge' if fallback_role == 'Judge' else 'Scorer'
+    return name, initials, role, _tabulator_scoresheet_avatar_tone(user.id)
+
+
+def _build_tabulator_scoresheet_rows():
+    """Build unified score sheet rows from bracket ScoreSheet and JudgeScore data."""
+    from datetime import datetime as dt
+    from django.db.models import Max, Count, Q
+    from events.models import Event, ScoreSheet, JudgeScore, JudgingEvent
+    from django.contrib.contenttypes.models import ContentType
+    from django.contrib.admin.models import LogEntry
+
+    rows = []
+    ss_ct = ContentType.objects.get_for_model(ScoreSheet)
+
+    portal_map = {}
+    for ev in Event.objects.select_related('judging_event'):
+        if ev.judging_event_id:
+            portal_map[ev.judging_event_id] = ev
+
+    je_map = {je.id: je for je in JudgingEvent.objects.select_related('category')}
+
+    judge_ids = JudgeScore.objects.values_list('judge_id', flat=True).distinct()
+
+    judge_groups = (
         JudgeScore.objects
-        .values('judge', 'candidate__event')
+        .values('judge_id', 'candidate__event')
         .annotate(
             total_scores=Count('id'),
             locked_count=Count('id', filter=Q(is_locked=True)),
             latest_submit=Max('submitted_at'),
-            latest_vid=Max('verification_id'),
         )
         .order_by('-latest_submit')
     )
 
-    # Pre-fetch lookup dicts
-    judge_map = {}
-    for u in get_user_model().objects.filter(
-        id__in=JudgeScore.objects.values_list('judge_id', flat=True).distinct()
-    ):
-        judge_map[u.id] = u
-
-    je_map = {}
-    for je in JudgingEvent.objects.select_related('category'):
-        je_map[je.id] = je
-
-    # Map JudgingEvent -> portal Event for names
-    portal_map = {}
-    for ev in Event.objects.select_related('judging_event').exclude(judging_event__isnull=True):
-        portal_map[ev.judging_event_id] = ev
-
-    sheet_rows = []
     seq = 0
-    for row in judge_sheets_qs:
-        judge = judge_map.get(row['judge'])
-        je = je_map.get(row['candidate__event'])
-        if not judge or not je:
+    for group in judge_groups:
+        je = je_map.get(group['candidate__event'])
+        if not je:
             continue
-
         portal_ev = portal_map.get(je.id)
         event_name = portal_ev.name if portal_ev else je.title
-        category = portal_ev.category if portal_ev else (je.category.name if je.category else '')
-
-        all_locked = row['locked_count'] == row['total_scores'] and row['total_scores'] > 0
-        if all_locked:
-            status_key = 'finalized'
-            status_label = 'Submitted'
-        else:
-            status_key = 'pending'
-            status_label = 'In Progress'
-
-        # Compute weighted total for this judge+event
-        scores = JudgeScore.objects.filter(
-            judge_id=row['judge'], candidate__event_id=row['candidate__event']
-        ).select_related('criterion', 'candidate')
-
-        candidates_scored = set()
-        for s in scores:
-            candidates_scored.add(s.candidate_id)
-
-        total_candidates = Candidate.objects.filter(event_id=row['candidate__event']).count()
-
-        # Apply filters
-        if event_filter != 'all' and event_filter:
-            if event_filter.lower() != event_name.lower():
-                continue
-        if status_filter != 'all':
-            if status_filter == 'finalized' and not all_locked:
-                continue
-            if status_filter == 'pending' and all_locked:
-                continue
-        if search_q:
-            combined = f'{event_name} {judge.username} {judge.email} {category}'.lower()
-            if search_q not in combined:
-                continue
-
+        category = portal_ev.category if portal_ev else (je.category.name if je.category else 'General')
+        cat_key = _normalize_category_key(category)
+        all_locked = group['locked_count'] == group['total_scores'] and group['total_scores'] > 0
+        raw_status = 'submitted' if all_locked else 'in_progress'
+        event_status = portal_ev.status if portal_ev else je.status
+        status_key, status_label = _tabulator_scoresheet_status(raw_status, event_status)
+        submit_dt = group['latest_submit']
+        judge_name, judge_initials, judge_role, avatar_tone = _tabulator_scoresheet_submitter(
+            group['judge_id'], 'Judge'
+        )
+        scoring = portal_ev.scoring_method if portal_ev and portal_ev.scoring_method else 'Criteria Based'
+        type_label = f'{scoring} / {category}' if category else scoring
         seq += 1
-        submit_date = row['latest_submit']
-        date_str = submit_date.strftime('%b %d, %Y %I:%M %p') if submit_date else '—'
-
-        full_name = f'{judge.first_name} {judge.last_name}'.strip()
-        judge_display_name = full_name if full_name else judge.username
-        judge_label = f'{judge_display_name} ({judge.email})' if judge.email else judge_display_name
-
-        sheet_rows.append({
-            'id': f"j-{row['judge']}-{row['candidate__event']}",
-            'ss_id': f'JS-{seq:03d}',
+        row_key = f"j-{group['judge_id']}-{group['candidate__event']}"
+        rows.append({
+            'row_key': row_key,
+            'id': row_key,
+            'source': 'judge',
+            'entry_title': event_name,
             'event_name': event_name,
             'category': category,
-            'judge_name': judge_label,
-            'candidates_scored': len(candidates_scored),
-            'total_candidates': total_candidates,
-            'total_scores': row['total_scores'],
-            'date_received': date_str,
-            'status': status_key,
+            'category_lower': cat_key,
+            'round_label': je.get_status_display(),
+            'type_label': type_label,
+            'submitted_by_name': judge_name,
+            'submitted_by_initials': judge_initials,
+            'submitted_by_role': judge_role,
+            'avatar_tone': avatar_tone,
+            'submitted_at': submit_dt.strftime('%b %d, %Y') if submit_dt else '—',
+            'submitted_time': submit_dt.strftime('%I:%M %p') if submit_dt else '',
+            'submitted_dt': submit_dt,
+            'status_key': status_key,
             'status_label': status_label,
-            'verification_id': row['latest_vid'] or '—',
-            'source': 'judge',
-            'action_label': 'View',
-            'action_kind': 'view',
+            'scores_display': '—',
+            'event_date': je.date.strftime('%b %d, %Y') if je.date else '—',
+            'event_time': je.time.strftime('%I:%M %p') if je.time else '—',
+            'venue': je.venue or (portal_ev.venue if portal_ev else '—'),
+            'reviewed_by': '—',
+            'reviewed_at': '—',
+            'remarks': '—',
+            'file_name': '',
+            'file_url': '',
+            'view_url': '/tabulator/pending-results/?tab=judge',
+            'review_url': '/tabulator/pending-results/?tab=judge',
         })
 
-    # ── Also include legacy bracket ScoreSheets ────────────────
-    legacy_qs = ScoreSheet.objects.select_related('event', 'match', 'tabulator').order_by('-created_at')
-    if event_filter != 'all' and event_filter:
-        legacy_qs = legacy_qs.filter(event__name=event_filter)
-    if status_filter != 'all':
-        legacy_qs = legacy_qs.filter(status=status_filter)
-
-    # Pre-fetch assigned judges per event to avoid N+1 queries
     event_judges_cache = {}
-    event_judges_list_cache = {}
-    for ev in Event.objects.prefetch_related('assigned_judges').all():
+    for ev in Event.objects.prefetch_related('assigned_judges'):
         judges = ev.assigned_judges.all()
         if judges.exists():
-            names = []
-            for j in judges:
-                full = f"{j.first_name} {j.last_name}".strip()
-                names.append(full if full else j.username)
-            event_judges_cache[ev.id] = ', '.join(names)
-            event_judges_list_cache[ev.id] = names
+            j = judges.first()
+            full = f'{j.first_name} {j.last_name}'.strip() or j.username
+            event_judges_cache[ev.id] = (full, j.id)
         else:
-            event_judges_cache[ev.id] = ''
-            event_judges_list_cache[ev.id] = []
+            event_judges_cache[ev.id] = (None, None)
 
-    for i, s in enumerate(legacy_qs):
-        event_name = s.event.name
-        judge_display = event_judges_cache.get(s.event_id, '') or s.judges_names or 'Unknown Judge'
-        if search_q:
-            combined = f'{event_name} {judge_display}'.lower()
-            if search_q not in combined:
-                continue
-        seq += 1
+    review_logs = {}
+    for log in LogEntry.objects.filter(content_type=ss_ct, change_message__icontains='Verified').select_related('user'):
+        oid = str(log.object_id or '')
+        if oid.isdigit():
+            review_logs[int(oid)] = log
+
+    legacy_qs = ScoreSheet.objects.select_related(
+        'event', 'match', 'match__team_a', 'match__team_b', 'tabulator'
+    ).order_by('-created_at')
+
+    for s in legacy_qs:
+        team_a = s.match.team_a.name if s.match and s.match.team_a else 'TBD'
+        team_b = s.match.team_b.name if s.match and s.match.team_b else 'TBD'
+        entry_title = f'{team_a} vs {team_b}'
+        category = s.event.category or 'General'
+        cat_key = _normalize_category_key(category)
+        status_key, status_label = _tabulator_scoresheet_status(s.status, s.event.status)
+        submit_dt = s.updated_at or s.created_at
+        submitter_id = s.tabulator_id
+        if not submitter_id:
+            cached = event_judges_cache.get(s.event_id, (None, None))
+            submitter_id = cached[1] or 0
+        submitter_name, submitter_initials, submitter_role, avatar_tone = _tabulator_scoresheet_submitter(
+            submitter_id or 0, 'Scorer'
+        )
+        if s.tabulator:
+            submitter_name = s.tabulator.get_full_name() or s.tabulator.username
+        elif s.judges_names:
+            submitter_name = s.judges_names.split(',')[0].strip()
+
+        tournament = s.event.tournament_type or 'Single Elimination'
+        type_label = f'Match Result / {tournament}'
+        score_a = s.score_team_a
+        score_b = s.score_team_b
+        scores_display = f'{team_a} {float(score_a):g} vs {team_b} {float(score_b):g}'
+
+        review_log = review_logs.get(s.id)
+        reviewed_by = '—'
+        reviewed_at = '—'
+        if review_log:
+            reviewed_by = review_log.user.get_full_name() or review_log.user.username if review_log.user else 'Tabulator'
+            reviewed_at = timezone.localtime(review_log.action_time).strftime('%b %d, %Y %I:%M %p')
+
         if s.status == 'pending':
-            action_label, action_kind = 'Encode', 'encode'
+            view_url = f'/tabulator/encode/?sheet={s.id}'
+            review_url = f'/tabulator/encode/?sheet={s.id}'
         elif s.status == 'confirmed':
-            action_label, action_kind = 'Continue', 'continue'
+            view_url = f'/tabulator/review/?sheet={s.id}'
+            review_url = f'/tabulator/review/?sheet={s.id}'
         else:
-            action_label, action_kind = 'View', 'view'
+            view_url = f'/tabulator/review/?sheet={s.id}'
+            review_url = f'/tabulator/review/?sheet={s.id}'
 
-        sheet_rows.append({
+        file_url = s.ocr_image.url if s.ocr_image else ''
+        file_name = s.ocr_image.name.split('/')[-1] if s.ocr_image else ''
+
+        seq += 1
+        row_key = f'b-{s.id}'
+        match = s.match
+        rows.append({
+            'row_key': row_key,
             'id': s.id,
-            'ss_id': f'SS-{s.created_at.year}-{str(i + 1).zfill(3)}',
-            'event_name': event_name,
-            'category': s.event.category,
-            'judge_name': judge_display,
-            'judge_names_list': event_judges_list_cache.get(s.event_id, []),
-            'candidates_scored': None,
-            'total_candidates': None,
-            'total_scores': None,
-            'date_received': s.created_at.strftime('%b %d, %Y %I:%M %p'),
-            'status': s.status,
-            'status_label': s.get_status_display(),
-            'verification_id': None,
             'source': 'bracket',
-            'action_label': action_label,
-            'action_kind': action_kind,
+            'entry_title': entry_title,
+            'event_name': s.event.name,
+            'category': category,
+            'category_lower': cat_key,
+            'round_label': match.round_name if match else '—',
+            'type_label': type_label,
+            'submitted_by_name': submitter_name,
+            'submitted_by_initials': submitter_initials,
+            'submitted_by_role': submitter_role,
+            'avatar_tone': avatar_tone,
+            'submitted_at': submit_dt.strftime('%b %d, %Y'),
+            'submitted_time': submit_dt.strftime('%I:%M %p'),
+            'submitted_dt': submit_dt,
+            'status_key': status_key,
+            'status_label': status_label,
+            'scores_display': scores_display,
+            'event_date': (match.match_date or s.event.event_date).strftime('%b %d, %Y') if match else s.event.event_date.strftime('%b %d, %Y'),
+            'event_time': match.match_time.strftime('%I:%M %p') if match and match.match_time else (
+                s.event.event_time.strftime('%I:%M %p') if s.event.event_time else '—'
+            ),
+            'venue': (match.venue if match and match.venue else s.event.venue) or '—',
+            'reviewed_by': reviewed_by,
+            'reviewed_at': reviewed_at,
+            'remarks': s.remarks or '—',
+            'file_name': file_name,
+            'file_url': file_url,
+            'view_url': view_url,
+            'review_url': review_url,
         })
 
-    # Sort all rows by date (newest first)
-    sheet_rows.sort(key=lambda r: r['date_received'], reverse=True)
+    epoch = timezone.make_aware(datetime(1970, 1, 1))
+    rows.sort(key=lambda r: r.get('submitted_dt') or epoch, reverse=True)
 
-    total_sheets = len(sheet_rows)
-    encoded = sum(1 for r in sheet_rows if r['status'] in ('confirmed', 'finalized'))
-    pending = sum(1 for r in sheet_rows if r['status'] == 'pending')
-    validated = sum(1 for r in sheet_rows if r['status'] == 'finalized')
-
-    paginator = Paginator(sheet_rows, 10)
-    page_obj = paginator.get_page(request.GET.get('page', 1))
-
-    events = list(Event.objects.values_list('name', flat=True).order_by('name'))
-
-    return render(request, 'tabulatordash/scoresheets.html', {
-        'display_name': _tabulator_display_name(request.user),
-        'total_sheets': total_sheets,
-        'encoded': encoded,
-        'pending': pending,
-        'validated': validated,
-        'sheet_rows': page_obj.object_list,
-        'page_obj': page_obj,
-        'total_count': total_sheets,
-        'events': events,
-        'selected_event': event_filter,
-        'selected_status': status_filter,
-        'search_query': search_q,
-    })
+    stats = {
+        'total_sheets': len(rows),
+        'encoded_count': sum(1 for r in rows if r['status_key'] == 'encoded'),
+        'pending_review_count': sum(1 for r in rows if r['status_key'] == 'pending_review'),
+        'archived_count': sum(1 for r in rows if r['status_key'] == 'archived'),
+    }
+    filter_options = {
+        'event_types': sorted({r['category_lower'] for r in rows}),
+        'events': sorted({r['event_name'] for r in rows}),
+        'rounds': sorted({r['round_label'] for r in rows if r.get('round_label') and r['round_label'] != '—'}),
+    }
+    return rows, stats, filter_options
 
 
 @login_required(login_url='login')
