@@ -1,0 +1,144 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Approved Results — EventTab Tabulator</title>
+  <link rel="stylesheet" href="{% static 'tabulatordash/tab_v2.css' %}?v=20260616b">
+  <link rel="stylesheet" href="{% static 'tabulatordash/approveresult.css' %}?v=20260616a">
+</head>
+<body class="tab-v2">
+<div class="tab-shell">
+
+  <aside class="tab-sidebar">
+    <div class="tab-brand"><h1>EventTab</h1><span>TABULATOR PORTAL</span></div>
+    <nav class="tab-nav">
+      <a class="tab-nav-link" href="{% url 'tabulator_dashboard' %}"><svg viewBox="0 0 24 24"><path d="M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm9 0h7v7h-7v-7Z"/></svg><span>Dashboard</span></a>
+      <a class="tab-nav-link" href="{% url 'tabulator_assigned' %}"><svg viewBox="0 0 24 24"><path d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2Zm0 16H5V10h14v10Zm0-12H5V6h14v2Z"/></svg><span>My Assignments</span></a>
+      <a class="tab-nav-link" href="{% url 'tabulator_scoresheets' %}"><svg viewBox="0 0 24 24"><path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Zm0 16H5V5h14v14zM7 7h10v2H7V7zm0 4h10v2H7v-2zm0 4h7v2H7v-2z"/></svg><span>Score Sheets</span></a>
+      <a class="tab-nav-link" href="{% url 'tabulator_pending_results' %}"><svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2Zm1 15h-2v-2h2v2Zm0-4h-2V7h2v6Z"/></svg><span>Pending Results</span></a>
+      <a class="tab-nav-link is-active" href="{% url 'tabulator_approved_results' %}" aria-current="page"><svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2Zm-2 15-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9Z"/></svg><span>Approved Results</span></a>
+      <a class="tab-nav-link" href="{% url 'tabulator_reports' %}"><svg viewBox="0 0 24 24"><path d="M3 3v18h18V3H3Zm16 16H5V5h14v14ZM7 17h2v-7H7v7Zm4 0h2V7h-2v10Zm4 0h2v-4h-2v4Z"/></svg><span>Reports</span></a>
+      <a class="tab-nav-link" href="{% url 'tabulator_activity_logs' %}"><svg viewBox="0 0 24 24"><path d="M13 3a9 9 0 1 1-8.74 11.19l1.94-.49A7 7 0 1 0 13 5v4L7.5 3.5 13-2v5Zm-1 6h2v5l4 2-.9 1.79L12 15V9Z"/></svg><span>Activity Logs</span></a>
+    </nav>
+    <div class="tab-user-card">
+      <div class="tab-user-avatar-sm">{{ request.user.username|default:"TA"|slice:":2"|upper }}</div>
+      <div class="tab-user-info">
+        <strong>{{ display_name }}</strong>
+        <small>{{ request.user.email|default:"tabulator@eventtab.com" }}</small>
+      </div>
+    </div>
+    <a class="tab-logout" href="{% url 'logout' %}"><svg viewBox="0 0 24 24"><path d="M10 17v-3H3v-4h7V7l5 5-5 5Zm2-14h8v18h-8v-2h6V5h-6V3Z"/></svg><span>Logout</span></a>
+  </aside>
+
+  <div class="tab-main">
+    <header class="tab-topbar">
+      <div class="tab-topbar-left">
+        <h2>Approved Results</h2>
+        <p>All verified and approved results from scorers and judges.</p>
+      </div>
+      <div class="tab-topbar-right">
+        <a class="tab-bell" href="{% url 'tabulator_reports' %}" aria-label="Notifications">
+          <svg viewBox="0 0 24 24"><path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm8-6-2-2v-5a6 6 0 1 0-12 0v5l-2 2v1h16v-1Z"/></svg>
+          <span class="tab-bell-dot"></span>
+        </a>
+        <div class="tab-avatar-pill">{{ request.user.username|default:"TA"|slice:":2"|upper }}</div>
+      </div>
+    </header>
+
+    <div class="tab-content">
+
+      <!-- Stats -->
+      <section class="ar-stats">
+        <article class="ar-stat">
+          <div class="ar-stat-icon ar-stat-icon--green">
+            <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2Zm-2 15-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9Z"/></svg>
+          </div>
+          <div class="ar-stat-body">
+            <span class="ar-stat-label">Total Approved</span>
+            <strong class="ar-stat-value">{{ total_approved }}</strong>
+            <small class="ar-stat-sub">results</small>
+          </div>
+        </article>
+        <article class="ar-stat">
+          <div class="ar-stat-icon ar-stat-icon--blue">
+            <svg viewBox="0 0 24 24"><path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Zm-4 14H7v-2h8v2Zm2-4H7v-2h10v2Zm0-4H7V7h10v2Z"/></svg>
+          </div>
+          <div class="ar-stat-body">
+            <span class="ar-stat-label">Match Results</span>
+            <strong class="ar-stat-value">{{ match_count }}</strong>
+            <small class="ar-stat-sub">approved</small>
+          </div>
+        </article>
+        <article class="ar-stat">
+          <div class="ar-stat-icon ar-stat-icon--purple">
+            <svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm0 2c-3.33 0-6 1.34-6 3v2h12v-2c0-1.66-2.67-3-6-3Z"/></svg>
+          </div>
+          <div class="ar-stat-body">
+            <span class="ar-stat-label">Judge Scores</span>
+            <strong class="ar-stat-value">{{ judge_count }}</strong>
+            <small class="ar-stat-sub">verified</small>
+          </div>
+        </article>
+      </section>
+
+      <!-- Table -->
+      <div class="ar-table-card">
+        <div class="ar-table-header">
+          <h3>Approved Results</h3>
+        </div>
+        <div class="ar-table-wrap">
+          <table class="ar-table">
+            <thead>
+              <tr>
+                <th>Event / Category</th>
+                <th>Match / Entry</th>
+                <th>Submitted By</th>
+                <th>Approved At</th>
+                <th>Type</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for ar in approved_rows %}
+              <tr>
+                <td>
+                  <div class="ar-event-cell">
+                    <div class="ar-event-icon">{% if ar.category_lower == 'sports' %}🏀{% elif ar.category_lower == 'esports' %}🎮{% elif ar.category_lower == 'academic' %}📚{% else %}🎭{% endif %}</div>
+                    <div>
+                      <strong>{{ ar.event_name }}</strong>
+                      <span class="ar-cat ar-cat--{{ ar.category_lower }}">{{ ar.event_category }}</span>
+                    </div>
+                  </div>
+                </td>
+                <td>
+                  <strong class="ar-entry">{{ ar.entry }}</strong>
+                  <small class="ar-entry-sub">{{ ar.entry_sub }}</small>
+                </td>
+                <td>
+                  <div class="ar-submitter">
+                    <span class="ar-submitter-avatar" style="background:{% if ar.submitted_role == 'Judge' %}#16a34a{% else %}#2563eb{% endif %}">{{ ar.submitted_initials }}</span>
+                    <div><strong>{{ ar.submitted_by }}</strong><small>{{ ar.submitted_role }}</small></div>
+                  </div>
+                </td>
+                <td>
+                  <strong class="ar-date">{{ ar.approved_at }}</strong>
+                  <small class="ar-time">{{ ar.approved_time }}</small>
+                </td>
+                <td><span class="ar-type-badge ar-type--{{ ar.type }}">{{ ar.type_label }}</span></td>
+                <td><span class="ar-status-badge">{{ ar.status_label }}</span></td>
+              </tr>
+              {% empty %}
+              <tr><td colspan="6" class="ar-empty">No approved results yet.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+</body>
+</html>

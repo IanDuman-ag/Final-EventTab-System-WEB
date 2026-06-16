@@ -1,0 +1,182 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pending Results — EventTab Tabulator</title>
+  <link rel="stylesheet" href="{% static 'tabulatordash/tab_v2.css' %}?v=20260616b">
+  <link rel="stylesheet" href="{% static 'tabulatordash/pendingresult.css' %}?v=20260616a">
+</head>
+<body class="tab-v2">
+<div class="tab-shell">
+
+  <aside class="tab-sidebar">
+    <div class="tab-brand"><h1>EventTab</h1><span>TABULATOR PORTAL</span></div>
+    <nav class="tab-nav">
+      <a class="tab-nav-link" href="{% url 'tabulator_dashboard' %}"><svg viewBox="0 0 24 24"><path d="M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm9 0h7v7h-7v-7Z"/></svg><span>Dashboard</span></a>
+      <a class="tab-nav-link" href="{% url 'tabulator_assigned' %}"><svg viewBox="0 0 24 24"><path d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2Zm0 16H5V10h14v10Zm0-12H5V6h14v2Z"/></svg><span>My Assignments</span></a>
+      <a class="tab-nav-link" href="{% url 'tabulator_scoresheets' %}"><svg viewBox="0 0 24 24"><path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Zm0 16H5V5h14v14zM7 7h10v2H7V7zm0 4h10v2H7v-2zm0 4h7v2H7v-2z"/></svg><span>Score Sheets</span></a>
+      <a class="tab-nav-link is-active" href="{% url 'tabulator_pending_results' %}" aria-current="page"><svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2Zm1 15h-2v-2h2v2Zm0-4h-2V7h2v6Z"/></svg><span>Pending Results</span></a>
+      <a class="tab-nav-link" href="{% url 'tabulator_approved_results' %}"><svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2Zm-2 15-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9Z"/></svg><span>Approved Results</span></a>
+      <a class="tab-nav-link" href="{% url 'tabulator_reports' %}"><svg viewBox="0 0 24 24"><path d="M3 3v18h18V3H3Zm16 16H5V5h14v14ZM7 17h2v-7H7v7Zm4 0h2V7h-2v10Zm4 0h2v-4h-2v4Z"/></svg><span>Reports</span></a>
+      <a class="tab-nav-link" href="{% url 'tabulator_activity_logs' %}"><svg viewBox="0 0 24 24"><path d="M13 3a9 9 0 1 1-8.74 11.19l1.94-.49A7 7 0 1 0 13 5v4L7.5 3.5 13-2v5Zm-1 6h2v5l4 2-.9 1.79L12 15V9Z"/></svg><span>Activity Logs</span></a>
+    </nav>
+    <div class="tab-user-card">
+      <div class="tab-user-avatar-sm">{{ request.user.username|default:"TA"|slice:":2"|upper }}</div>
+      <div class="tab-user-info">
+        <strong>{{ display_name }}</strong>
+        <small>{{ request.user.email|default:"tabulator@eventtab.com" }}</small>
+      </div>
+    </div>
+    <a class="tab-logout" href="{% url 'logout' %}"><svg viewBox="0 0 24 24"><path d="M10 17v-3H3v-4h7V7l5 5-5 5Zm2-14h8v18h-8v-2h6V5h-6V3Z"/></svg><span>Logout</span></a>
+  </aside>
+
+  <div class="tab-main">
+    <header class="tab-topbar">
+      <div class="tab-topbar-left">
+        <h2>Pending Results</h2>
+        <p>Results submitted by scorers and judges awaiting your verification.</p>
+      </div>
+      <div class="tab-topbar-right">
+        <a class="tab-bell" href="{% url 'tabulator_reports' %}" aria-label="Notifications">
+          <svg viewBox="0 0 24 24"><path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm8-6-2-2v-5a6 6 0 1 0-12 0v5l-2 2v1h16v-1Z"/></svg>
+          <span class="tab-bell-dot"></span>
+        </a>
+        <div class="tab-avatar-pill">{{ request.user.username|default:"TA"|slice:":2"|upper }}</div>
+      </div>
+    </header>
+
+    <div class="tab-content">
+
+      <!-- Stats -->
+      <section class="pr-stats">
+        <article class="pr-stat">
+          <div class="pr-stat-icon pr-stat-icon--orange">
+            <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2Zm1 15h-2v-2h2v2Zm0-4h-2V7h2v6Z"/></svg>
+          </div>
+          <div class="pr-stat-body">
+            <span class="pr-stat-label">Total Pending</span>
+            <strong class="pr-stat-value">{{ total_pending }}</strong>
+            <small class="pr-stat-sub">results</small>
+          </div>
+        </article>
+        <article class="pr-stat">
+          <div class="pr-stat-icon pr-stat-icon--blue">
+            <svg viewBox="0 0 24 24"><path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Zm-4 14H7v-2h8v2Zm2-4H7v-2h10v2Zm0-4H7V7h10v2Z"/></svg>
+          </div>
+          <div class="pr-stat-body">
+            <span class="pr-stat-label">Match Results</span>
+            <strong class="pr-stat-value">{{ match_count }}</strong>
+            <small class="pr-stat-sub">pending</small>
+          </div>
+        </article>
+        <article class="pr-stat">
+          <div class="pr-stat-icon pr-stat-icon--purple">
+            <svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm0 2c-3.33 0-6 1.34-6 3v2h12v-2c0-1.66-2.67-3-6-3Z"/></svg>
+          </div>
+          <div class="pr-stat-body">
+            <span class="pr-stat-label">Judge Scores</span>
+            <strong class="pr-stat-value">{{ judge_count }}</strong>
+            <small class="pr-stat-sub">pending</small>
+          </div>
+        </article>
+      </section>
+
+      <!-- Table -->
+      <div class="pr-table-card">
+        <div class="pr-table-header">
+          <h3>Pending Results</h3>
+        </div>
+        <div class="pr-table-wrap">
+          <table class="pr-table">
+            <thead>
+              <tr>
+                <th>Event / Category</th>
+                <th>Match / Entry</th>
+                <th>Submitted By</th>
+                <th>Submitted At</th>
+                <th>Type</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for pr in pending_rows %}
+              <tr data-type="{{ pr.type }}" data-id="{{ pr.id }}">
+                <td>
+                  <div class="pr-event-cell">
+                    <div class="pr-event-icon">{% if pr.category_lower == 'sports' %}🏀{% elif pr.category_lower == 'esports' %}🎮{% elif pr.category_lower == 'academic' %}📚{% else %}🎭{% endif %}</div>
+                    <div>
+                      <strong>{{ pr.event_name }}</strong>
+                      <span class="pr-cat pr-cat--{{ pr.category_lower }}">{{ pr.event_category }}</span>
+                    </div>
+                  </div>
+                </td>
+                <td>
+                  <strong class="pr-entry">{{ pr.entry }}</strong>
+                  <small class="pr-entry-sub">{{ pr.entry_sub }}</small>
+                </td>
+                <td>
+                  <div class="pr-submitter">
+                    <span class="pr-submitter-avatar" style="background:{% if pr.submitted_role == 'Judge' %}#16a34a{% else %}#2563eb{% endif %}">{{ pr.submitted_initials }}</span>
+                    <div><strong>{{ pr.submitted_by }}</strong><small>{{ pr.submitted_role }}</small></div>
+                  </div>
+                </td>
+                <td>
+                  <strong class="pr-date">{{ pr.submitted_at }}</strong>
+                  <small class="pr-time">{{ pr.submitted_time }}</small>
+                </td>
+                <td><span class="pr-type-badge pr-type--{{ pr.type }}">{{ pr.type_label }}</span></td>
+                <td>
+                  <div class="pr-actions">
+                    <button class="pr-approve-btn" data-type="{{ pr.type }}" data-id="{{ pr.id }}" type="button">
+                      <svg viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17Z"/></svg> Approve
+                    </button>
+                    <button class="pr-reject-btn" data-type="{{ pr.type }}" data-id="{{ pr.id }}" type="button">
+                      <svg viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg> Reject
+                    </button>
+                  </div>
+                </td>
+              </tr>
+              {% empty %}
+              <tr><td colspan="6" class="pr-empty">No pending results. All caught up!</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+function getCsrf() { const c = document.cookie.match(/csrftoken=([^;]+)/); return c ? c[1] : ''; }
+
+async function handleAction(btn, action) {
+  const type = btn.dataset.type, id = btn.dataset.id;
+  if (!confirm(`${action === 'approve' ? 'Approve' : 'Reject'} this result?`)) return;
+  btn.disabled = true;
+  btn.textContent = action === 'approve' ? 'Approving…' : 'Rejecting…';
+  try {
+    const res = await fetch(`/tabulator/result/${type}/${id}/${action}/`, {
+      method: 'POST', headers: {'X-CSRFToken': getCsrf(), 'Content-Type': 'application/json'},
+    });
+    const data = await res.json();
+    if (data.success) {
+      const row = btn.closest('tr');
+      row.style.opacity = '0.4';
+      row.style.pointerEvents = 'none';
+      const cell = row.querySelector('.pr-actions');
+      cell.innerHTML = action === 'approve'
+        ? '<span style="color:#16a34a;font-weight:700;font-size:13px;">✓ Approved</span>'
+        : '<span style="color:#dc2626;font-weight:700;font-size:13px;">✗ Rejected</span>';
+    } else { alert(data.message || 'Failed'); btn.disabled = false; }
+  } catch { alert('Network error'); btn.disabled = false; }
+}
+
+document.querySelectorAll('.pr-approve-btn').forEach(b => b.addEventListener('click', () => handleAction(b, 'approve')));
+document.querySelectorAll('.pr-reject-btn').forEach(b => b.addEventListener('click', () => handleAction(b, 'reject')));
+</script>
+</body>
+</html>

@@ -26,27 +26,14 @@
         <svg viewBox="0 0 24 24"><path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Zm0 16H5V5h14v14zM7 7h10v2H7V7zm0 4h10v2H7v-2zm0 4h7v2H7v-2z"/></svg>
         <span>Score Sheets</span>
       </a>
-      <div class="tab-nav-collapsible">
-        <button type="button" class="tab-nav-collapsible-btn open" id="tabulationToggle">
-          <svg viewBox="0 0 24 24"><path d="M3 3v18h18V3H3Zm16 16H5V5h14v14ZM7 17h2v-7H7v7Zm4 0h2V7h-2v10Zm4 0h2v-4h-2v4Z"/></svg>
-          <span>Tabulation</span>
-          <svg class="chevron" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg>
-        </button>
-        <div class="tab-nav-sub open" id="tabulationSub">
-          <a href="{% url 'tabulator_encode_score' %}">
-            <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2Zm-1 14-4-4 1.41-1.41L11 13.17l4.59-4.58L17 10l-6 6Z"/></svg>
-            Encoded Scores
-          </a>
-          <a href="{% url 'tabulator_review' %}">
-            <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2Zm1 15h-2v-2h2v2Zm0-4h-2V7h2v6Z"/></svg>
-            Review &amp; Verify
-          </a>
-          <a href="{% url 'tabulator_results' %}">
-            <svg viewBox="0 0 24 24"><path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Zm-7 14-5-5 1.41-1.41L12 14.17l7.59-7.59L21 8l-9 9Z"/></svg>
-            Results
-          </a>
-        </div>
-      </div>
+      <a class="tab-nav-link" href="{% url 'tabulator_pending_results' %}">
+        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2Zm1 15h-2v-2h2v2Zm0-4h-2V7h2v6Z"/></svg>
+        <span>Pending Results</span>
+      </a>
+      <a class="tab-nav-link" href="{% url 'tabulator_approved_results' %}">
+        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2Zm-2 15-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9Z"/></svg>
+        <span>Approved Results</span>
+      </a>
       <a class="tab-nav-link" href="{% url 'tabulator_reports' %}">
         <svg viewBox="0 0 24 24"><path d="M3 3v18h18V3H3Zm16 16H5V5h14v14ZM7 17h2v-7H7v7Zm4 0h2V7h-2v10Zm4 0h2v-4h-2v4Z"/></svg>
         <span>Reports</span>

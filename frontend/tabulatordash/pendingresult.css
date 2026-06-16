@@ -1,0 +1,62 @@
+/* ── Pending Results page ───────────────────────────────────────────────── */
+.pr-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
+.pr-stat {
+  background: #fff; border: 1px solid #e8edf5; border-radius: 14px;
+  padding: 20px 22px; display: flex; align-items: center; gap: 16px;
+  box-shadow: 0 2px 6px rgba(0,0,0,.03);
+}
+.pr-stat-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.pr-stat-icon svg { width: 24px; height: 24px; fill: currentColor; }
+.pr-stat-icon--orange { background: #ffedd5; color: #9a3412; }
+.pr-stat-icon--blue   { background: #dbeafe; color: #1e40af; }
+.pr-stat-icon--purple { background: #ede9fe; color: #5b21b6; }
+.pr-stat-body { flex: 1; }
+.pr-stat-label { display: block; font-size: 11px; font-weight: 700; letter-spacing: .06em; color: #64748b; text-transform: uppercase; margin-bottom: 4px; }
+.pr-stat-value { display: block; font-size: 30px; font-weight: 900; color: #0f172a; line-height: 1; }
+.pr-stat-sub { display: block; font-size: 11.5px; color: #94a3b8; margin-top: 4px; }
+
+.pr-table-card { background: #fff; border: 1px solid #e8edf5; border-radius: 14px; box-shadow: 0 2px 6px rgba(0,0,0,.03); overflow: hidden; }
+.pr-table-header { padding: 20px 24px; border-bottom: 1px solid #f0f3f8; }
+.pr-table-header h3 { font-size: 18px; font-weight: 800; color: #0f172a; }
+.pr-table-wrap { overflow-x: auto; }
+.pr-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.pr-table thead th { text-align: left; padding: 12px 16px; font-size: 10.5px; font-weight: 700; letter-spacing: .06em; color: #64748b; text-transform: uppercase; border-bottom: 1px solid #f0f3f8; background: #fafbfd; white-space: nowrap; }
+.pr-table tbody td { padding: 16px; border-bottom: 1px solid #f6f8fc; vertical-align: middle; }
+.pr-table tbody tr:last-child td { border-bottom: 0; }
+.pr-table tbody tr:hover { background: #fafbff; }
+.pr-empty { text-align: center; color: #94a3b8; padding: 48px 16px !important; font-size: 14px; }
+
+.pr-event-cell { display: flex; align-items: center; gap: 12px; }
+.pr-event-icon { width: 40px; height: 40px; border-radius: 50%; background: #f1f5f9; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+.pr-event-cell strong { display: block; font-size: 13.5px; font-weight: 700; color: #0f172a; margin-bottom: 3px; }
+.pr-cat { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 10.5px; font-weight: 700; }
+.pr-cat--sports { background: #dbeafe; color: #1e40af; }
+.pr-cat--academic { background: #d1fae5; color: #065f46; }
+.pr-cat--esports { background: #ede9fe; color: #5b21b6; }
+.pr-cat--socio-cultural, .pr-cat--cultural { background: #fef3c7; color: #92400e; }
+.pr-cat--general { background: #f1f5f9; color: #475569; }
+
+.pr-entry { display: block; font-size: 13.5px; font-weight: 600; color: #0f172a; }
+.pr-entry-sub { display: block; font-size: 12px; color: #64748b; margin-top: 2px; }
+
+.pr-submitter { display: flex; align-items: center; gap: 10px; }
+.pr-submitter-avatar { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; color: #fff; flex-shrink: 0; }
+.pr-submitter strong { display: block; font-size: 13px; font-weight: 600; color: #0f172a; }
+.pr-submitter small { display: block; font-size: 11px; color: #64748b; }
+
+.pr-date { display: block; font-size: 13px; font-weight: 500; color: #374151; }
+.pr-time { display: block; font-size: 11.5px; color: #94a3b8; margin-top: 1px; }
+
+.pr-type-badge { display: inline-block; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+.pr-type--match { background: #dbeafe; color: #1e40af; }
+.pr-type--judge { background: #fef3c7; color: #92400e; }
+
+.pr-actions { display: flex; gap: 8px; }
+.pr-approve-btn, .pr-reject-btn { display: inline-flex; align-items: center; gap: 4px; padding: 7px 14px; border-radius: 7px; font-size: 12.5px; font-weight: 700; border: 1px solid transparent; cursor: pointer; font-family: inherit; }
+.pr-approve-btn svg, .pr-reject-btn svg { width: 14px; height: 14px; fill: currentColor; }
+.pr-approve-btn { background: #d1fae5; color: #065f46; border-color: #bbf7d0; }
+.pr-approve-btn:hover { background: #bbf7d0; }
+.pr-reject-btn { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+.pr-reject-btn:hover { background: #fecaca; }
+
+@media (max-width: 900px) { .pr-stats { grid-template-columns: 1fr; } }

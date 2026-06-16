@@ -2496,9 +2496,9 @@ def _get_tab_event_rows(request):
 @login_required(login_url='login')
 @user_passes_test(lambda u: user_has_role(u, 'tabulator'), login_url='login')
 def tabulator_dashboard(request):
-    """Tabulator home: assigned events and verification queue."""
-    from events.models import Event, ScoreSheet
-    from django.contrib.admin.models import LogEntry
+    """Tabulator home: pending results, upcoming assignments, recent activity."""
+    from events.models import Event, ScoreSheet, JudgeScore, JudgingEvent, Candidate
+    from django.contrib.admin.models import LogEntry, ADDITION, CHANGE
     from django.utils import timezone
 
     event_rows = _get_tab_event_rows(request)
@@ -2508,9 +2508,88 @@ def tabulator_dashboard(request):
     in_progress = sum(1 for r in event_rows if r['tab_status'] == 'in_progress')
     completed_count = verified
 
-    # Recent activity from LogEntry
+    # Pending results: scoresheets awaiting verification + unverified judge scores
+    pending_results = []
+    pending_sheets = ScoreSheet.objects.filter(status='pending').select_related(
+        'event', 'match', 'match__team_a', 'match__team_b', 'tabulator'
+    ).order_by('-created_at')[:10]
+    for ss in pending_sheets:
+        team_a = ss.match.team_a.name if ss.match and ss.match.team_a else 'TBD'
+        team_b = ss.match.team_b.name if ss.match and ss.match.team_b else 'TBD'
+        submitter = ss.tabulator
+        pending_results.append({
+            'id': ss.id,
+            'type': 'match',
+            'type_label': 'Match Result',
+            'event_name': ss.event.name,
+            'event_category': ss.event.category or 'General',
+            'category_lower': (ss.event.category or 'general').lower().replace(' ', '-'),
+            'entry': f'{team_a} vs {team_b}',
+            'entry_sub': ss.match.round_name if ss.match else '',
+            'submitted_by': (submitter.get_full_name() or submitter.username) if submitter else 'Unknown',
+            'submitted_role': 'Scorer',
+            'submitted_initials': (submitter.username[:2].upper()) if submitter else 'UN',
+            'submitted_at': ss.created_at.strftime('%b %d, %Y'),
+            'submitted_time': ss.created_at.strftime('%I:%M %p'),
+        })
+
+    unlocked_scores = JudgeScore.objects.filter(is_locked=False, submitted_at__isnull=False).select_related(
+        'judge', 'candidate', 'candidate__event'
+    ).order_by('-submitted_at')[:10]
+    seen_candidates = set()
+    for js in unlocked_scores:
+        cand = js.candidate
+        if cand.id in seen_candidates:
+            continue
+        seen_candidates.add(cand.id)
+        je = cand.event
+        pending_results.append({
+            'id': js.id,
+            'type': 'judge',
+            'type_label': 'Judge Score',
+            'event_name': je.title,
+            'event_category': je.category.name if je.category else 'General',
+            'category_lower': (je.category.category_type if je.category else 'general'),
+            'entry': f'Contestant #{cand.number}',
+            'entry_sub': cand.name,
+            'submitted_by': js.judge.get_full_name() or js.judge.username,
+            'submitted_role': 'Judge',
+            'submitted_initials': js.judge.username[:2].upper(),
+            'submitted_at': js.submitted_at.strftime('%b %d, %Y') if js.submitted_at else '—',
+            'submitted_time': js.submitted_at.strftime('%I:%M %p') if js.submitted_at else '',
+        })
+    pending_results.sort(key=lambda x: x.get('submitted_at', ''), reverse=True)
+    pending_results = pending_results[:5]
+    pending_count = ScoreSheet.objects.filter(status='pending').count() + \
+                    JudgeScore.objects.filter(is_locked=False, submitted_at__isnull=False).values('candidate').distinct().count()
+
+    # Upcoming assignments: future events not yet completed
+    today = timezone.localdate()
+    upcoming_events = Event.objects.filter(
+        event_date__gte=today
+    ).exclude(status='completed').order_by('event_date', 'event_time')[:5]
+    upcoming_assignments = []
+    for ev in upcoming_events:
+        month = ev.event_date.strftime('%b').upper() if ev.event_date else ''
+        day = ev.event_date.strftime('%d') if ev.event_date else ''
+        time_str = ev.event_time.strftime('%I:%M %p') if ev.event_time else ''
+        row_for_ev = next((r for r in event_rows if r['id'] == ev.id), None)
+        status_label = row_for_ev['tab_status_label'] if row_for_ev else 'Upcoming'
+        upcoming_assignments.append({
+            'id': ev.id,
+            'name': ev.name,
+            'round': ev.tournament_type or ev.scoring_method or 'Finals',
+            'month': month,
+            'day': day,
+            'time': time_str,
+            'venue': ev.venue or '',
+            'status_label': status_label,
+        })
+
+    # Recent activity
     recent_logs = LogEntry.objects.select_related('user').order_by('-action_time')[:5]
     activity_rows = []
+    action_icons = {ADDITION: 'add', CHANGE: 'edit'}
     for log in recent_logs:
         delta = timezone.now() - log.action_time
         if delta.days >= 1:
@@ -2525,11 +2604,11 @@ def tabulator_dashboard(request):
             'message': log.change_message or log.object_repr,
             'user': log.user.get_full_name() or log.user.username if log.user else 'System',
             'ago': ago,
-            'date': log.action_time.strftime('%b %d, %Y · %I:%M %p'),
+            'time_str': log.action_time.strftime('%I:%M %p'),
+            'icon': action_icons.get(log.action_flag, 'info'),
+            'accent': {ADDITION: 'green', CHANGE: 'blue'}.get(log.action_flag, 'gray'),
         })
 
-    # Current event (most recent active)
-    today = timezone.localdate()
     current_event = Event.objects.filter(status='active').order_by('-event_date').first()
     if not current_event:
         current_event = Event.objects.order_by('-event_date').first()
@@ -2541,15 +2620,233 @@ def tabulator_dashboard(request):
         'verified': verified,
         'in_progress': in_progress,
         'completed_count': completed_count,
+        'pending_results': pending_results,
+        'pending_count': pending_count,
+        'upcoming_assignments': upcoming_assignments,
         'event_rows': event_rows[:5],
         'activity_rows': activity_rows,
         'current_event': current_event,
-        'status_counts_json': json.dumps({
-            'verified': verified,
-            'pending': pending_encode,
-            'in_progress': in_progress,
-            'not_started': sum(1 for r in event_rows if r['tab_status'] == 'not_started'),
-        }),
+    })
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda u: user_has_role(u, 'tabulator'), login_url='login')
+def tabulator_approve_result(request, result_type, result_id):
+    """Approve a pending scoresheet or judge score."""
+    from events.models import ScoreSheet, JudgeScore
+    from django.contrib.admin.models import LogEntry, CHANGE
+    from django.contrib.contenttypes.models import ContentType
+
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': 'POST required'}, status=405)
+
+    try:
+        if result_type == 'match':
+            ss = ScoreSheet.objects.get(id=result_id)
+            ss.status = 'confirmed'
+            ss.save()
+            obj_repr = str(ss)
+            ct = ContentType.objects.get_for_model(ScoreSheet)
+            obj_id = ss.id
+        elif result_type == 'judge':
+            js = JudgeScore.objects.get(id=result_id)
+            js.is_locked = True
+            js.save()
+            obj_repr = str(js)
+            ct = ContentType.objects.get_for_model(JudgeScore)
+            obj_id = js.id
+        else:
+            return JsonResponse({'success': False, 'message': 'Invalid type'}, status=400)
+
+        LogEntry.objects.create(
+            user=request.user, content_type=ct, object_id=obj_id,
+            object_repr=obj_repr, action_flag=CHANGE,
+            change_message=f'Approved {result_type} result',
+        )
+        return JsonResponse({'success': True, 'message': 'Result approved'})
+    except (ScoreSheet.DoesNotExist, JudgeScore.DoesNotExist):
+        return JsonResponse({'success': False, 'message': 'Not found'}, status=404)
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda u: user_has_role(u, 'tabulator'), login_url='login')
+def tabulator_reject_result(request, result_type, result_id):
+    """Reject a pending scoresheet or judge score."""
+    from events.models import ScoreSheet, JudgeScore
+    from django.contrib.admin.models import LogEntry, CHANGE
+    from django.contrib.contenttypes.models import ContentType
+
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': 'POST required'}, status=405)
+
+    try:
+        if result_type == 'match':
+            ss = ScoreSheet.objects.get(id=result_id)
+            ss.status = 'pending'
+            ss.remarks = (ss.remarks or '') + '\n[Rejected by tabulator]'
+            ss.save()
+            obj_repr = str(ss)
+            ct = ContentType.objects.get_for_model(ScoreSheet)
+            obj_id = ss.id
+        elif result_type == 'judge':
+            js = JudgeScore.objects.get(id=result_id)
+            js.is_locked = False
+            js.submitted_at = None
+            js.save()
+            obj_repr = str(js)
+            ct = ContentType.objects.get_for_model(JudgeScore)
+            obj_id = js.id
+        else:
+            return JsonResponse({'success': False, 'message': 'Invalid type'}, status=400)
+
+        LogEntry.objects.create(
+            user=request.user, content_type=ct, object_id=obj_id,
+            object_repr=obj_repr, action_flag=CHANGE,
+            change_message=f'Rejected {result_type} result',
+        )
+        return JsonResponse({'success': True, 'message': 'Result rejected'})
+    except (ScoreSheet.DoesNotExist, JudgeScore.DoesNotExist):
+        return JsonResponse({'success': False, 'message': 'Not found'}, status=404)
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda u: user_has_role(u, 'tabulator'), login_url='login')
+def tabulator_pending_results(request):
+    """Page listing all pending (unverified) results for the tabulator."""
+    from events.models import ScoreSheet, JudgeScore
+    from django.utils import timezone
+
+    pending_rows = []
+
+    pending_sheets = ScoreSheet.objects.filter(status='pending').select_related(
+        'event', 'match', 'match__team_a', 'match__team_b', 'tabulator'
+    ).order_by('-created_at')
+    for ss in pending_sheets:
+        team_a = ss.match.team_a.name if ss.match and ss.match.team_a else 'TBD'
+        team_b = ss.match.team_b.name if ss.match and ss.match.team_b else 'TBD'
+        sub = ss.tabulator
+        pending_rows.append({
+            'id': ss.id,
+            'type': 'match',
+            'type_label': 'Match Result',
+            'event_name': ss.event.name,
+            'event_category': ss.event.category or 'General',
+            'category_lower': (ss.event.category or 'general').lower().replace(' ', '-'),
+            'entry': f'{team_a} vs {team_b}',
+            'entry_sub': ss.match.round_name if ss.match else '',
+            'submitted_by': (sub.get_full_name() or sub.username) if sub else 'Unknown',
+            'submitted_role': 'Scorer',
+            'submitted_initials': sub.username[:2].upper() if sub else 'UN',
+            'submitted_at': ss.created_at.strftime('%b %d, %Y'),
+            'submitted_time': ss.created_at.strftime('%I:%M %p'),
+        })
+
+    unlocked_scores = JudgeScore.objects.filter(
+        is_locked=False, submitted_at__isnull=False
+    ).select_related('judge', 'candidate', 'candidate__event').order_by('-submitted_at')
+    seen = set()
+    for js in unlocked_scores:
+        cand = js.candidate
+        if cand.id in seen:
+            continue
+        seen.add(cand.id)
+        je = cand.event
+        pending_rows.append({
+            'id': js.id,
+            'type': 'judge',
+            'type_label': 'Judge Score',
+            'event_name': je.title,
+            'event_category': je.category.name if je.category else 'General',
+            'category_lower': je.category.category_type if je.category else 'general',
+            'entry': f'Contestant #{cand.number}',
+            'entry_sub': cand.name,
+            'submitted_by': js.judge.get_full_name() or js.judge.username,
+            'submitted_role': 'Judge',
+            'submitted_initials': js.judge.username[:2].upper(),
+            'submitted_at': js.submitted_at.strftime('%b %d, %Y') if js.submitted_at else '—',
+            'submitted_time': js.submitted_at.strftime('%I:%M %p') if js.submitted_at else '',
+        })
+
+    pending_rows.sort(key=lambda x: x.get('submitted_at', ''), reverse=True)
+
+    return render(request, 'tabulatordash/pendingresult.html', {
+        'display_name': _tabulator_display_name(request.user),
+        'pending_rows': pending_rows,
+        'total_pending': len(pending_rows),
+        'match_count': sum(1 for r in pending_rows if r['type'] == 'match'),
+        'judge_count': sum(1 for r in pending_rows if r['type'] == 'judge'),
+    })
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda u: user_has_role(u, 'tabulator'), login_url='login')
+def tabulator_approved_results(request):
+    """Page listing all approved/verified results."""
+    from events.models import ScoreSheet, JudgeScore
+
+    approved_rows = []
+
+    confirmed_sheets = ScoreSheet.objects.filter(
+        status__in=['confirmed', 'finalized']
+    ).select_related(
+        'event', 'match', 'match__team_a', 'match__team_b', 'tabulator'
+    ).order_by('-updated_at')
+    for ss in confirmed_sheets:
+        team_a = ss.match.team_a.name if ss.match and ss.match.team_a else 'TBD'
+        team_b = ss.match.team_b.name if ss.match and ss.match.team_b else 'TBD'
+        sub = ss.tabulator
+        approved_rows.append({
+            'id': ss.id,
+            'type': 'match',
+            'type_label': 'Match Result',
+            'event_name': ss.event.name,
+            'event_category': ss.event.category or 'General',
+            'category_lower': (ss.event.category or 'general').lower().replace(' ', '-'),
+            'entry': f'{team_a} vs {team_b}',
+            'entry_sub': ss.match.round_name if ss.match else '',
+            'submitted_by': (sub.get_full_name() or sub.username) if sub else 'Unknown',
+            'submitted_role': 'Scorer',
+            'submitted_initials': sub.username[:2].upper() if sub else 'UN',
+            'approved_at': ss.updated_at.strftime('%b %d, %Y'),
+            'approved_time': ss.updated_at.strftime('%I:%M %p'),
+            'status_label': ss.get_status_display(),
+        })
+
+    locked_scores = JudgeScore.objects.filter(
+        is_locked=True
+    ).select_related('judge', 'candidate', 'candidate__event').order_by('-submitted_at')
+    seen = set()
+    for js in locked_scores:
+        cand = js.candidate
+        if cand.id in seen:
+            continue
+        seen.add(cand.id)
+        je = cand.event
+        approved_rows.append({
+            'id': js.id,
+            'type': 'judge',
+            'type_label': 'Judge Score',
+            'event_name': je.title,
+            'event_category': je.category.name if je.category else 'General',
+            'category_lower': je.category.category_type if je.category else 'general',
+            'entry': f'Contestant #{cand.number}',
+            'entry_sub': cand.name,
+            'submitted_by': js.judge.get_full_name() or js.judge.username,
+            'submitted_role': 'Judge',
+            'submitted_initials': js.judge.username[:2].upper(),
+            'approved_at': js.submitted_at.strftime('%b %d, %Y') if js.submitted_at else '—',
+            'approved_time': js.submitted_at.strftime('%I:%M %p') if js.submitted_at else '',
+            'status_label': 'Verified',
+        })
+
+    approved_rows.sort(key=lambda x: x.get('approved_at', ''), reverse=True)
+
+    return render(request, 'tabulatordash/approveresult.html', {
+        'display_name': _tabulator_display_name(request.user),
+        'approved_rows': approved_rows,
+        'total_approved': len(approved_rows),
+        'match_count': sum(1 for r in approved_rows if r['type'] == 'match'),
+        'judge_count': sum(1 for r in approved_rows if r['type'] == 'judge'),
     })
 
 
@@ -2566,6 +2863,34 @@ def tabulator_assigned_events(request):
 
     event_rows = _get_tab_event_rows(request)
 
+    # Enrich rows with extra event details for the new design
+    events_by_name = {ev.name: ev for ev in Event.objects.all()}
+    for row in event_rows:
+        ev = events_by_name.get(row['title'])
+        if ev:
+            row['scoring_method'] = ev.scoring_method or ''
+            row['tournament_type'] = ev.tournament_type or ''
+            row['time_str'] = ev.event_time.strftime('%I:%M %p') if ev.event_time else ''
+            row['venue'] = ev.venue or ''
+            # Determine type label for display
+            if ev.scoring_method == 'criteria':
+                row['type_label'] = 'Criteria Based'
+                row['type_sub'] = ev.tournament_type or ev.category or ''
+            else:
+                row['type_label'] = 'Match Result'
+                row['type_sub'] = ev.tournament_type or ''
+            # Scorer/judge info
+            scorer_judges = list(ev.assigned_judges.all()[:1])
+            if scorer_judges:
+                j = scorer_judges[0]
+                row['panel_name'] = j.get_full_name() or j.username
+                row['panel_label'] = f'{ev.assigned_judges.count()} Judge{"s" if ev.assigned_judges.count() != 1 else ""}'
+                row['panel_sub'] = 'Panel 1'
+            else:
+                row['panel_name'] = ''
+                row['panel_label'] = f'{row["judge_count"]} Scorer' if row['judge_count'] == 1 else f'{row["judge_count"]} Scorers'
+                row['panel_sub'] = row.get('panel_initials', [''])[0] if row.get('panel_initials') else ''
+
     if status_filter != 'all':
         event_rows = [r for r in event_rows if r['tab_status'] == status_filter]
     if cat_filter != 'all':
@@ -2577,11 +2902,12 @@ def tabulator_assigned_events(request):
     pending = sum(1 for r in event_rows if r['tab_status'] in ('pending', 'not_started'))
     in_progress = sum(1 for r in event_rows if r['tab_status'] == 'in_progress')
     completed = sum(1 for r in event_rows if r['tab_status'] == 'completed')
+    upcoming = sum(1 for r in event_rows if r['tab_status'] == 'not_started')
+    ongoing = in_progress + pending
 
     paginator = Paginator(event_rows, 10)
     page_obj = paginator.get_page(request.GET.get('page', 1))
 
-    # Category options
     all_rows = _get_tab_event_rows(request)
     categories = sorted({r['category'] for r in all_rows if r['category']})
 
@@ -2589,6 +2915,8 @@ def tabulator_assigned_events(request):
         'display_name': _tabulator_display_name(request.user),
         'total_assigned': total,
         'pending': pending,
+        'upcoming': upcoming,
+        'ongoing': ongoing,
         'in_progress': in_progress,
         'completed': completed,
         'event_rows': page_obj.object_list,
