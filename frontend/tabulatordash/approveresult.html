@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Approved Results — EventTab Tabulator</title>
   <link rel="stylesheet" href="{% static 'tabulatordash/tab_v2.css' %}?v=20260616b">
-  <link rel="stylesheet" href="{% static 'tabulatordash/approveresult.css' %}?v=20260616a">
+  <link rel="stylesheet" href="{% static 'tabulatordash/approveresult.css' %}?v=20260616b">
 </head>
 <body class="tab-v2">
 <div class="tab-shell">
@@ -36,14 +36,21 @@
     <header class="tab-topbar">
       <div class="tab-topbar-left">
         <h2>Approved Results</h2>
-        <p>All verified and approved results from scorers and judges.</p>
+        <p>View all results you have approved and finalized.</p>
       </div>
       <div class="tab-topbar-right">
-        <a class="tab-bell" href="{% url 'tabulator_reports' %}" aria-label="Notifications">
+        <span class="ar-breadcrumb">Home &gt; Approved Results</span>
+        <a class="tab-bell" href="{% url 'tabulator_pending_results' %}" aria-label="Notifications">
           <svg viewBox="0 0 24 24"><path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm8-6-2-2v-5a6 6 0 1 0-12 0v5l-2 2v1h16v-1Z"/></svg>
           <span class="tab-bell-dot"></span>
         </a>
-        <div class="tab-avatar-pill">{{ request.user.username|default:"TA"|slice:":2"|upper }}</div>
+        <div class="ar-user-wrap">
+          <div class="tab-avatar-pill">{{ user_initials }}</div>
+          <div class="ar-user-name">
+            <strong>Tabulator Account</strong>
+            <small>Tabulator</small>
+          </div>
+        </div>
       </div>
     </header>
 
@@ -51,7 +58,7 @@
 
       <!-- Stats -->
       <section class="ar-stats">
-        <article class="ar-stat">
+        <article class="ar-stat-card">
           <div class="ar-stat-icon ar-stat-icon--green">
             <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2Zm-2 15-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9Z"/></svg>
           </div>
@@ -61,51 +68,93 @@
             <small class="ar-stat-sub">results</small>
           </div>
         </article>
-        <article class="ar-stat">
-          <div class="ar-stat-icon ar-stat-icon--blue">
+        <article class="ar-stat-card">
+          <div class="ar-stat-icon ar-stat-icon--purple">
             <svg viewBox="0 0 24 24"><path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Zm-4 14H7v-2h8v2Zm2-4H7v-2h10v2Zm0-4H7V7h10v2Z"/></svg>
           </div>
           <div class="ar-stat-body">
-            <span class="ar-stat-label">Match Results</span>
-            <strong class="ar-stat-value">{{ match_count }}</strong>
-            <small class="ar-stat-sub">approved</small>
+            <span class="ar-stat-label">This Month</span>
+            <strong class="ar-stat-value">{{ this_month }}</strong>
+            <small class="ar-stat-sub">results</small>
           </div>
         </article>
-        <article class="ar-stat">
-          <div class="ar-stat-icon ar-stat-icon--purple">
-            <svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm0 2c-3.33 0-6 1.34-6 3v2h12v-2c0-1.66-2.67-3-6-3Z"/></svg>
+        <article class="ar-stat-card">
+          <div class="ar-stat-icon ar-stat-icon--orange">
+            <svg viewBox="0 0 24 24"><path d="M19 5h-2V3H7v2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2ZM5 19V7h14v12H5Zm7-8 2.5 3.01L17 11l1 1-4.5 5.5L8 13l1-1 3 2Z"/></svg>
           </div>
           <div class="ar-stat-body">
-            <span class="ar-stat-label">Judge Scores</span>
-            <strong class="ar-stat-value">{{ judge_count }}</strong>
-            <small class="ar-stat-sub">verified</small>
+            <span class="ar-stat-label">Events Completed</span>
+            <strong class="ar-stat-value">{{ events_completed }}</strong>
+            <small class="ar-stat-sub">events</small>
+          </div>
+        </article>
+        <article class="ar-stat-card">
+          <div class="ar-stat-icon ar-stat-icon--blue">
+            <svg viewBox="0 0 24 24"><path d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2Zm0 16H5V10h14v10Zm0-12H5V6h14v2Z"/></svg>
+          </div>
+          <div class="ar-stat-body">
+            <span class="ar-stat-label">Latest Approval</span>
+            <strong class="ar-stat-value ar-stat-value--sm">{{ latest_approval_date }}</strong>
+            {% if latest_approval_time %}<small class="ar-stat-sub">{{ latest_approval_time }}</small>{% endif %}
           </div>
         </article>
       </section>
 
+      <!-- Filters -->
+      <form class="ar-filter-bar" method="get" id="arFilterForm">
+        <input type="hidden" name="tab" value="{{ active_tab }}" id="arTabInput">
+        <select class="ar-filter-select" name="status" onchange="this.form.submit()">
+          <option value="all" {% if status_filter == 'all' %}selected{% endif %}>All Statuses</option>
+          <option value="approved" {% if status_filter == 'approved' %}selected{% endif %}>Approved</option>
+        </select>
+        <select class="ar-filter-select" name="category" onchange="this.form.submit()">
+          <option value="all" {% if category_filter == 'all' %}selected{% endif %}>All Categories</option>
+          {% for cat in categories %}
+          <option value="{{ cat }}" {% if category_filter == cat %}selected{% endif %}>{{ cat|title }}</option>
+          {% endfor %}
+        </select>
+        <div class="ar-date-range">
+          <svg viewBox="0 0 24 24"><path d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2Zm0 16H5V10h14v10Zm0-12H5V6h14v2Z"/></svg>
+          <span>All dates</span>
+        </div>
+        <div class="ar-search-wrap">
+          <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5Zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14Z"/></svg>
+          <input class="ar-search-input" type="search" name="q" value="{{ search_query }}" placeholder="Search events, matches...">
+        </div>
+      </form>
+
+      <!-- Tabs -->
+      <div class="ar-tabs-bar">
+        <nav class="ar-tabs">
+          <a class="ar-tab{% if active_tab == 'all' %} is-active{% endif %}" href="?tab=all&amp;status={{ status_filter }}&amp;category={{ category_filter }}&amp;q={{ search_query|urlencode }}">All ({{ total_approved }})</a>
+          <a class="ar-tab{% if active_tab == 'match' %} is-active{% endif %}" href="?tab=match&amp;status={{ status_filter }}&amp;category={{ category_filter }}&amp;q={{ search_query|urlencode }}">Match Results ({{ match_count }})</a>
+          <a class="ar-tab{% if active_tab == 'judge' %} is-active{% endif %}" href="?tab=judge&amp;status={{ status_filter }}&amp;category={{ category_filter }}&amp;q={{ search_query|urlencode }}">Judge Scores ({{ judge_count }})</a>
+          <a class="ar-tab{% if active_tab == 'completed' %} is-active{% endif %}" href="?tab=completed&amp;status={{ status_filter }}&amp;category={{ category_filter }}&amp;q={{ search_query|urlencode }}">Completed Events ({{ events_completed }})</a>
+        </nav>
+      </div>
+
       <!-- Table -->
       <div class="ar-table-card">
-        <div class="ar-table-header">
-          <h3>Approved Results</h3>
-        </div>
         <div class="ar-table-wrap">
           <table class="ar-table">
             <thead>
               <tr>
                 <th>Event / Category</th>
-                <th>Match / Entry</th>
-                <th>Submitted By</th>
+                <th>Result Details</th>
+                <th>Approved By</th>
                 <th>Approved At</th>
-                <th>Type</th>
                 <th>Status</th>
+                <th>Action</th>
               </tr>
             </thead>
             <tbody>
               {% for ar in approved_rows %}
-              <tr>
+              <tr class="ar-row">
                 <td>
                   <div class="ar-event-cell">
-                    <div class="ar-event-icon">{% if ar.category_lower == 'sports' %}🏀{% elif ar.category_lower == 'esports' %}🎮{% elif ar.category_lower == 'academic' %}📚{% else %}🎭{% endif %}</div>
+                    <div class="ar-event-icon">
+                      {% if ar.category_lower == 'sports' %}🏀{% elif ar.category_lower == 'esports' %}🎮{% elif ar.category_lower == 'academic' %}📚{% else %}🎭{% endif %}
+                    </div>
                     <div>
                       <strong>{{ ar.event_name }}</strong>
                       <span class="ar-cat ar-cat--{{ ar.category_lower }}">{{ ar.event_category }}</span>
@@ -114,31 +163,187 @@
                 </td>
                 <td>
                   <strong class="ar-entry">{{ ar.entry }}</strong>
-                  <small class="ar-entry-sub">{{ ar.entry_sub }}</small>
+                  <small class="ar-round">{{ ar.round_label }}</small>
+                  <strong class="ar-score">{{ ar.score_display }}</strong>
                 </td>
                 <td>
-                  <div class="ar-submitter">
-                    <span class="ar-submitter-avatar" style="background:{% if ar.submitted_role == 'Judge' %}#16a34a{% else %}#2563eb{% endif %}">{{ ar.submitted_initials }}</span>
-                    <div><strong>{{ ar.submitted_by }}</strong><small>{{ ar.submitted_role }}</small></div>
+                  <div class="ar-approver">
+                    <span class="ar-approver-avatar">{{ ar.approved_by_initials }}</span>
+                    <div>
+                      <strong>{{ ar.approved_by_name }}</strong>
+                      {% if ar.approved_by_self %}<small>You</small>{% endif %}
+                    </div>
                   </div>
                 </td>
                 <td>
-                  <strong class="ar-date">{{ ar.approved_at }}</strong>
-                  <small class="ar-time">{{ ar.approved_time }}</small>
+                  <div class="ar-when">
+                    <span class="ar-when-line">
+                      <svg viewBox="0 0 24 24"><path d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2Zm0 16H5V10h14v10Zm0-12H5V6h14v2Z"/></svg>
+                      {{ ar.approved_at }}
+                    </span>
+                    <span class="ar-when-line">
+                      <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2Zm1 15h-2v-2h2v2Zm0-4h-2V7h2v6Z"/></svg>
+                      {{ ar.approved_time }}
+                    </span>
+                    <span class="ar-when-line ar-when-line--venue">
+                      <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7Zm0 9.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5Z"/></svg>
+                      {{ ar.venue }}
+                    </span>
+                  </div>
                 </td>
-                <td><span class="ar-type-badge ar-type--{{ ar.type }}">{{ ar.type_label }}</span></td>
                 <td><span class="ar-status-badge">{{ ar.status_label }}</span></td>
+                <td>
+                  <div class="ar-actions">
+                    <button type="button" class="ar-detail-btn" data-detail-id="{{ ar.id }}-{{ ar.type }}">
+                      <svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17a5 5 0 1 1 0-10 5 5 0 0 1 0 10Zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"/></svg>
+                      View Details
+                    </button>
+                    <button type="button" class="ar-row-chevron" data-detail-id="{{ ar.id }}-{{ ar.type }}" aria-label="View details">
+                      <svg viewBox="0 0 24 24"><path d="M8.59 16.59 13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41Z"/></svg>
+                    </button>
+                  </div>
+                </td>
               </tr>
               {% empty %}
-              <tr><td colspan="6" class="ar-empty">No approved results yet.</td></tr>
+              <tr><td colspan="6" class="ar-empty">No approved results match your filters.</td></tr>
               {% endfor %}
             </tbody>
           </table>
         </div>
+
+        <footer class="ar-table-footer">
+          <span class="ar-showing">
+            {% if filtered_count %}
+              Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ filtered_count }} entr{{ filtered_count|pluralize:"y,ies" }}
+            {% else %}
+              Showing 0 entries
+            {% endif %}
+          </span>
+          {% if page_obj.has_other_pages %}
+          <nav class="ar-pager" aria-label="Pagination">
+            {% if page_obj.has_previous %}
+            <a class="ar-page-btn" href="?tab={{ active_tab }}&amp;status={{ status_filter }}&amp;category={{ category_filter }}&amp;q={{ search_query|urlencode }}&amp;page={{ page_obj.previous_page_number }}">‹</a>
+            {% else %}
+            <span class="ar-page-btn is-disabled">‹</span>
+            {% endif %}
+            {% for num in page_obj.paginator.page_range %}
+              {% if num == page_obj.number %}
+              <span class="ar-page-num is-active">{{ num }}</span>
+              {% elif num <= 3 or num > page_obj.paginator.num_pages|add:"-2" or num >= page_obj.number|add:"-1" and num <= page_obj.number|add:"1" %}
+              <a class="ar-page-num" href="?tab={{ active_tab }}&amp;status={{ status_filter }}&amp;category={{ category_filter }}&amp;q={{ search_query|urlencode }}&amp;page={{ num }}">{{ num }}</a>
+              {% endif %}
+            {% endfor %}
+            {% if page_obj.has_next %}
+            <a class="ar-page-btn" href="?tab={{ active_tab }}&amp;status={{ status_filter }}&amp;category={{ category_filter }}&amp;q={{ search_query|urlencode }}&amp;page={{ page_obj.next_page_number }}">›</a>
+            {% else %}
+            <span class="ar-page-btn is-disabled">›</span>
+            {% endif %}
+          </nav>
+          {% endif %}
+        </footer>
       </div>
 
     </div>
   </div>
 </div>
+
+<!-- Details modal -->
+<div class="ar-modal" id="arDetailModal" hidden>
+  <div class="ar-modal-backdrop" data-close-modal></div>
+  <div class="ar-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="arModalTitle">
+    <header class="ar-modal-header">
+      <div>
+        <span class="ar-modal-eyebrow">Approved Result</span>
+        <h3 id="arModalTitle">Result Details</h3>
+      </div>
+      <button type="button" class="ar-modal-close" data-close-modal aria-label="Close">&times;</button>
+    </header>
+    <div class="ar-modal-body">
+      <div class="ar-modal-meta">
+        <div><span>Event</span><strong id="arModalEvent">—</strong></div>
+        <div><span>Entry</span><strong id="arModalEntry">—</strong></div>
+        <div><span>Submitted By</span><strong id="arModalSubmitter">—</strong></div>
+        <div><span>Approved</span><strong id="arModalApproved">—</strong></div>
+        <div><span>Venue</span><strong id="arModalVenue">—</strong></div>
+        <div><span>Status</span><strong id="arModalStatus">—</strong></div>
+      </div>
+      <section class="ar-modal-scores">
+        <h4>Final Scores</h4>
+        <ul id="arModalScoreList"></ul>
+        <p class="ar-modal-total">Total: <strong id="arModalTotal">—</strong></p>
+      </section>
+      <div class="ar-modal-remarks" id="arModalRemarksWrap" hidden>
+        <h4>Remarks</h4>
+        <p id="arModalRemarks"></p>
+      </div>
+    </div>
+    <footer class="ar-modal-footer">
+      <button type="button" class="ar-modal-close-btn" data-close-modal>Close</button>
+    </footer>
+  </div>
+</div>
+
+{{ detail_json|json_script:"ar-detail-data" }}
+<script>
+(function () {
+  const detailData = JSON.parse(document.getElementById('ar-detail-data').textContent || '[]');
+  const detailMap = {};
+  detailData.forEach(row => { detailMap[row.id + '-' + row.type] = row; });
+
+  function openModal(key) {
+    const row = detailMap[key];
+    if (!row) return;
+    document.getElementById('arModalTitle').textContent = row.event_name;
+    document.getElementById('arModalEvent').textContent = row.event_name + ' · ' + row.event_category;
+    document.getElementById('arModalEntry').textContent = row.entry + (row.round_label ? ' · ' + row.round_label : '');
+    document.getElementById('arModalSubmitter').textContent = row.submitted_by;
+    document.getElementById('arModalApproved').textContent = row.approved_at + ' at ' + row.approved_time;
+    document.getElementById('arModalVenue').textContent = row.venue || '—';
+    document.getElementById('arModalStatus').textContent = row.status_label;
+    document.getElementById('arModalTotal').textContent = row.score_display;
+
+    const list = document.getElementById('arModalScoreList');
+    list.innerHTML = (row.detail_lines || []).map(line =>
+      '<li><span>' + line.label + '</span><strong>' + line.value + '</strong></li>'
+    ).join('') || '<li><span>Score</span><strong>' + row.score_display + '</strong></li>';
+
+    const remarksWrap = document.getElementById('arModalRemarksWrap');
+    const remarks = (row.remarks || '').trim();
+    if (remarks) {
+      remarksWrap.hidden = false;
+      document.getElementById('arModalRemarks').textContent = remarks;
+    } else {
+      remarksWrap.hidden = true;
+    }
+
+    document.getElementById('arDetailModal').hidden = false;
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeModal() {
+    document.getElementById('arDetailModal').hidden = true;
+    document.body.style.overflow = '';
+  }
+
+  document.querySelectorAll('[data-detail-id]').forEach(btn => {
+    btn.addEventListener('click', () => openModal(btn.dataset.detailId));
+  });
+
+  document.querySelectorAll('[data-close-modal]').forEach(el => {
+    el.addEventListener('click', closeModal);
+  });
+
+  const searchInput = document.querySelector('.ar-search-input');
+  if (searchInput) {
+    searchInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') document.getElementById('arFilterForm').submit();
+    });
+  }
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeModal();
+  });
+})();
+</script>
 </body>
 </html>
