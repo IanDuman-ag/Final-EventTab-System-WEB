@@ -34,6 +34,10 @@ class Event(models.Model):
     student_in_charge  = models.CharField(max_length=150, blank=True, default='')
     mechanics          = models.TextField(blank=True, default='')
     scoring_criteria   = models.TextField(blank=True, default='')
+    champion_points    = models.PositiveIntegerField(null=True, blank=True)
+    first_runner_points = models.PositiveIntegerField(null=True, blank=True)
+    second_runner_points = models.PositiveIntegerField(null=True, blank=True)
+    participation_points = models.PositiveIntegerField(null=True, blank=True)
     created_by         = models.ForeignKey(
         User,
         null=True, blank=True,
@@ -53,7 +57,11 @@ class Event(models.Model):
         User,
         blank=True,
         related_name='judging_events',
-        limit_choices_to=Q(groups__name__iexact='Judge') | Q(groups__name__iexact='Judges'),
+        limit_choices_to=(
+            Q(groups__name__iexact='Judge')
+            | Q(groups__name__iexact='Judges')
+            | Q(groups__name__iexact='Scorer')
+        ),
     )
 
     class Meta:
@@ -249,6 +257,7 @@ class Candidate(models.Model):
     event = models.ForeignKey(JudgingEvent, on_delete=models.CASCADE, related_name='candidates')
     name = models.CharField(max_length=200)
     number = models.PositiveIntegerField()
+    department = models.CharField(max_length=150, blank=True, default='')
     photo = models.ImageField(upload_to='candidates/', null=True, blank=True)
     description = models.TextField(blank=True)
 

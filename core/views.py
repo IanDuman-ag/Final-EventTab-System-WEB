@@ -106,11 +106,56 @@ def serialize_event_candidates(event):
         {
             'name': c.name,
             'number': c.number,
-            'department': '',
+            'department': c.department or '',
             'description': c.description or '',
         }
         for c in Candidate.objects.filter(event=event.judging_event).order_by('number')
     ]
+
+
+def _parse_event_candidates_json(raw):
+    """Parse candidates_data JSON from admin event forms."""
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return []
+    return parsed if isinstance(parsed, list) else []
+
+
+def _resolve_event_assignees(user_ids, scoring_method):
+    """Return assignees for match (Scorer) or criteria (Judge) events."""
+    User = get_user_model()
+    ids = [int(j) for j in user_ids if str(j).isdigit()]
+    if not ids:
+        return User.objects.none()
+    qs = User.objects.filter(id__in=ids)
+    if scoring_method == 'match':
+        return qs.filter(groups__name__iexact='Scorer').distinct()
+    return qs.filter(
+        Q(groups__name__iexact='Judge') | Q(groups__name__iexact='Judges')
+    ).distinct()
+
+
+def _parse_event_points(post):
+    """Parse points configuration from admin event forms."""
+
+    def _int_or_none(key):
+        val = post.get(key, '').strip()
+        if not val:
+            return None
+        try:
+            return max(0, int(val))
+        except (ValueError, TypeError):
+            return None
+
+    return {
+        'champion_points': _int_or_none('champion_points'),
+        'first_runner_points': _int_or_none('first_runner_points'),
+        'second_runner_points': _int_or_none('second_runner_points'),
+        'participation_points': _int_or_none('participation_points'),
+    }
 
 
 def get_event_status_meta(event, today=None):
@@ -1619,6 +1664,8 @@ def admin_manage_events(request):
             except (ValueError, IndexError):
                 event_time_val = None
 
+        scoring_method    = request.POST.get('scoring_method', '').strip()
+        points = _parse_event_points(request.POST)
         event = Event.objects.create(
             name              = event_name[:200],
             category          = category,
@@ -1631,24 +1678,22 @@ def admin_manage_events(request):
             status            = normalize_event_availability_status(request.POST.get('status', 'active')),
             max_participants  = _int_or_none(request.POST.get('max_participants', '')),
             num_teams         = _int_or_none(request.POST.get('num_teams', '')),
-            scoring_method    = request.POST.get('scoring_method', '').strip(),
+            scoring_method    = scoring_method,
             tournament_type   = request.POST.get('tournament_type', '').strip(),
             faculty_in_charge = request.POST.get('faculty_in_charge', '').strip(),
             student_in_charge = request.POST.get('student_in_charge', '').strip(),
             mechanics         = request.POST.get('mechanics', '').strip(),
             scoring_criteria  = request.POST.get('scoring_criteria', '').strip(),
+            champion_points   = points['champion_points'],
+            first_runner_points = points['first_runner_points'],
+            second_runner_points = points['second_runner_points'],
+            participation_points = points['participation_points'],
             created_by        = request.user,
         )
-        # Save assigned judges (multi-select)
-        judge_ids = request.POST.getlist('assigned_judges')
-        if judge_ids:
-            User = get_user_model()
-            judges = User.objects.filter(
-                id__in=[int(j) for j in judge_ids if j.isdigit()],
-            ).filter(
-                Q(groups__name__iexact='Judge') | Q(groups__name__iexact='Judges')
-            )
-            event.assigned_judges.set(judges)
+        # Save assigned scorers (match) or judges (criteria)
+        assignee_ids = request.POST.getlist('assigned_judges')
+        assignees = _resolve_event_assignees(assignee_ids, scoring_method)
+        event.assigned_judges.set(assignees)
         # Create teams (match-based) if provided
         teams_json = request.POST.get('teams_data', '').strip()
         if teams_json:
@@ -1672,26 +1717,13 @@ def admin_manage_events(request):
             except (json.JSONDecodeError, TypeError):
                 pass
 
-        # Create candidates (criteria-based) if provided
+        scoring_method = request.POST.get('scoring_method', '').strip()
         candidates_json = request.POST.get('candidates_data', '').strip()
-        if candidates_json and event.judging_event:
-            try:
-                cand_list = json.loads(candidates_json)
-                from events.models import Candidate as CandModel
-                for c in cand_list:
-                    cand_name = (c.get('name') or '').strip()
-                    if not cand_name:
-                        continue
-                    CandModel.objects.create(
-                        event=event.judging_event,
-                        name=cand_name,
-                        number=c.get('number', 0),
-                        description=(c.get('description') or '').strip(),
-                    )
-            except (json.JSONDecodeError, TypeError):
-                pass
-
-        sync_event_to_mobile(event)
+        explicit_candidates = (
+            _parse_event_candidates_json(candidates_json)
+            if scoring_method == 'criteria' else None
+        )
+        sync_event_to_mobile(event, explicit_candidates=explicit_candidates)
         messages.success(request, f'Event "{event_name}" created and published to the judge mobile app.')
         return redirect('admin_manage_events')
 
@@ -1766,6 +1798,10 @@ def admin_manage_events(request):
             'scoring_criteria': ev.scoring_criteria,
             'scoring_method':   ev.scoring_method or type_key,
             'tournament_type':  ev.tournament_type or '',
+            'champion_points':  ev.champion_points if ev.champion_points is not None else '',
+            'first_runner_points': ev.first_runner_points if ev.first_runner_points is not None else '',
+            'second_runner_points': ev.second_runner_points if ev.second_runner_points is not None else '',
+            'participation_points': ev.participation_points if ev.participation_points is not None else '',
             'assigned_judge_ids': list(ev.assigned_judges.values_list('id', flat=True)),
             'assigned_judges_display': ', '.join(
                 u.get_full_name() or u.username
@@ -1903,16 +1939,17 @@ def admin_edit_event(request, event_id):
     ev.student_in_charge = request.POST.get('student_in_charge', '').strip()
     ev.mechanics         = request.POST.get('mechanics', '').strip()
     ev.scoring_criteria  = request.POST.get('scoring_criteria', '').strip()
+    points = _parse_event_points(request.POST)
+    ev.champion_points = points['champion_points']
+    ev.first_runner_points = points['first_runner_points']
+    ev.second_runner_points = points['second_runner_points']
+    ev.participation_points = points['participation_points']
     ev.save()
-    # Save assigned judges
-    judge_ids = request.POST.getlist('assigned_judges')
-    User = get_user_model()
-    judges = User.objects.filter(
-        id__in=[int(j) for j in judge_ids if j.isdigit()],
-    ).filter(
-        Q(groups__name__iexact='Judge') | Q(groups__name__iexact='Judges')
-    ) if judge_ids else User.objects.none()
-    ev.assigned_judges.set(judges)
+    scoring_method = request.POST.get('scoring_method', '').strip() or ev.scoring_method
+    # Save assigned scorers (match) or judges (criteria)
+    assignee_ids = request.POST.getlist('assigned_judges')
+    assignees = _resolve_event_assignees(assignee_ids, scoring_method)
+    ev.assigned_judges.set(assignees)
 
     teams_json = request.POST.get('teams_data', '').strip()
     if teams_json:
@@ -1937,26 +1974,13 @@ def admin_edit_event(request, event_id):
         except (json.JSONDecodeError, TypeError):
             pass
 
+    scoring_method = request.POST.get('scoring_method', '').strip() or ev.scoring_method
     candidates_json = request.POST.get('candidates_data', '').strip()
-    if candidates_json and ev.judging_event_id:
-        try:
-            cand_list = json.loads(candidates_json)
-            from events.models import Candidate as CandModel
-            CandModel.objects.filter(event=ev.judging_event).delete()
-            for c in cand_list:
-                cand_name = (c.get('name') or '').strip()
-                if not cand_name:
-                    continue
-                CandModel.objects.create(
-                    event=ev.judging_event,
-                    name=cand_name,
-                    number=c.get('number', 0),
-                    description=(c.get('description') or '').strip(),
-                )
-        except (json.JSONDecodeError, TypeError):
-            pass
-
-    sync_event_to_mobile(ev)
+    explicit_candidates = (
+        _parse_event_candidates_json(candidates_json)
+        if scoring_method == 'criteria' else None
+    )
+    sync_event_to_mobile(ev, explicit_candidates=explicit_candidates)
 
     messages.success(request, f'Event "{event_name}" updated and synced to the judge mobile app.')
     return redirect('admin_manage_events')

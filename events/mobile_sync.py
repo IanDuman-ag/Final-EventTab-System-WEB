@@ -123,15 +123,33 @@ def _sync_criteria(judging_event, scoring_criteria_text):
         )
 
 
-def _sync_candidates(judging_event, event):
+def _sync_candidates(judging_event, event, explicit_candidates=None):
+    """Sync mobile candidates from admin form, bracket teams, or placeholders."""
+    if explicit_candidates:
+        judging_event.candidates.all().delete()
+        for index, c in enumerate(explicit_candidates, start=1):
+            cand_name = (c.get('name') or '').strip()
+            if not cand_name:
+                continue
+            Candidate.objects.create(
+                event=judging_event,
+                name=cand_name,
+                number=c.get('number') or index,
+                department=(c.get('department') or '').strip(),
+                description=(c.get('description') or '').strip(),
+            )
+        return
+
     judging_event.candidates.all().delete()
     teams = list(event.bracket_teams.order_by('seed', 'name'))
     if teams:
         for index, team in enumerate(teams, start=1):
+            dept_name = team.department.name if team.department else ''
             Candidate.objects.create(
                 event=judging_event,
                 name=team.name,
                 number=index,
+                department=dept_name,
                 description=team.members or '',
             )
         return
@@ -143,6 +161,7 @@ def _sync_candidates(judging_event, event):
             event=judging_event,
             name=f'Participant {index}',
             number=index,
+            department='',
             description='',
         )
 
@@ -151,12 +170,16 @@ def _assign_judges(judging_event, event):
     if map_judging_status(event) != 'active':
         judging_event.assigned_judges.clear()
         return
+    portal_assignees = list(event.assigned_judges.all())
+    if portal_assignees:
+        judging_event.assigned_judges.set(portal_assignees)
+        return
     judges = get_active_judge_users()
     judging_event.assigned_judges.set(judges)
 
 
 @transaction.atomic
-def sync_event_to_mobile(event):
+def sync_event_to_mobile(event, explicit_candidates=None):
     """Create or update the mobile JudgingEvent for a web Event."""
     category = get_or_create_mobile_category(event)
     event_time = event.event_time or DEFAULT_EVENT_TIME
@@ -194,7 +217,7 @@ def sync_event_to_mobile(event):
         judging_event.save()
 
     _sync_criteria(judging_event, event.scoring_criteria)
-    _sync_candidates(judging_event, event)
+    _sync_candidates(judging_event, event, explicit_candidates=explicit_candidates)
     _assign_judges(judging_event, event)
     return judging_event
 

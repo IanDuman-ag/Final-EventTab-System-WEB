@@ -1543,11 +1543,38 @@
       ], teams, 'No teams added');
     }
 
+    function formatPointsDisplay(val) {
+      return (val !== '' && val != null && val !== undefined) ? String(val) : '—';
+    }
+
+    function setPointsViewValues(ev) {
+      var championEl = document.getElementById('vd-champion-points');
+      var firstEl = document.getElementById('vd-first-runner-points');
+      var secondEl = document.getElementById('vd-second-runner-points');
+      var partEl = document.getElementById('vd-participation-points');
+      if (championEl) championEl.textContent = formatPointsDisplay(ev.champion_points);
+      if (firstEl) firstEl.textContent = formatPointsDisplay(ev.first_runner_points);
+      if (secondEl) secondEl.textContent = formatPointsDisplay(ev.second_runner_points);
+      if (partEl) partEl.textContent = formatPointsDisplay(ev.participation_points);
+    }
+
+    function setPointsEditValues(ev) {
+      var championEl = document.getElementById('edit-champion-points');
+      var firstEl = document.getElementById('edit-first-runner-points');
+      var secondEl = document.getElementById('edit-second-runner-points');
+      var partEl = document.getElementById('edit-participation-points');
+      if (championEl) championEl.value = ev.champion_points != null && ev.champion_points !== '' ? ev.champion_points : '';
+      if (firstEl) firstEl.value = ev.first_runner_points != null && ev.first_runner_points !== '' ? ev.first_runner_points : '';
+      if (secondEl) secondEl.value = ev.second_runner_points != null && ev.second_runner_points !== '' ? ev.second_runner_points : '';
+      if (partEl) partEl.value = ev.participation_points != null && ev.participation_points !== '' ? ev.participation_points : '';
+    }
+
     function renderViewCandidatesList(candidates) {
       renderViewTableList('vd-candidates-list', [
         { label: '#', value: function (c) { return c.number; } },
-        { label: 'Candidate Name', value: function (c) { return c.name; } },
-        { label: 'Description', value: function (c) { return c.description; } },
+        { label: 'Candidate Name', value: function (c) { return c.name || '—'; } },
+        { label: 'Department', value: function (c) { return c.department || '—'; } },
+        { label: 'Description', value: function (c) { return c.description || '—'; } },
       ], candidates, 'No candidates added');
     }
 
@@ -1579,6 +1606,7 @@
         document.getElementById('vd-require-verification').textContent = 'Enabled';
         renderViewTeamsList(ev.teams_list || []);
         renderViewCandidatesList(ev.candidates_list || []);
+        setPointsViewValues(ev);
         switchViewScoringPanel(method);
         if (method === 'criteria') {
           renderScoringView(ev.scoring_criteria || '');
@@ -1693,6 +1721,7 @@
         setSelectValue(document.getElementById('edit-status'), ev.availability_status || 'active');
         populateDynamicList(editTeamsList, renderTeamRow, wireEditTeamRowEvents, syncEditTeamsData, ev.teams_list || []);
         populateDynamicList(editCandidatesList, renderCandidateRow, wireEditCandidateRowEvents, syncEditCandidatesData, ev.candidates_list || []);
+        setPointsEditValues(ev);
         var reqVer = document.getElementById('edit-require-verification');
         if (reqVer) reqVer.checked = true;
         editScoringCards.forEach(function (c) {
