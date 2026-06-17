@@ -241,6 +241,11 @@ def get_bracket_status_meta(has_bracket, total=0, completed=0, ongoing=0):
     }
 
 
+def authenticate_username(request, username, password):
+    """Authenticate by username and password."""
+    return authenticate(request, username=username, password=password)
+
+
 def authenticate_email(request, email, password):
     user = authenticate(request, username=email, password=password)
     if user is not None:
@@ -313,7 +318,16 @@ def get_assignment_role(user):
     return None
 
 
-def get_assignment_account_rows():
+def _save_assignment_access_code(user, access_code):
+    if not access_code:
+        return
+    from events.models import AssignmentAccountProfile
+    profile, _ = AssignmentAccountProfile.objects.get_or_create(user=user)
+    profile.access_code = access_code
+    profile.save(update_fields=['access_code'])
+
+
+def get_assignment_account_rows(account_type='all'):
     User = get_user_model()
     assignment_users = (
         User.objects
@@ -325,7 +339,7 @@ def get_assignment_account_rows():
         )
         .exclude(is_staff=True)
         .exclude(is_superuser=True)
-        .prefetch_related('groups')
+        .prefetch_related('groups', 'assignment_profile')
         .distinct()
         .order_by('id')
     )
@@ -341,6 +355,11 @@ def get_assignment_account_rows():
         if role is None:
             continue
 
+        if account_type == 'tabulator' and role != 'Tabulator':
+            continue
+        if account_type == 'judge_scorer' and role not in ('Judge', 'Scorer'):
+            continue
+
         # Match user's groups against department names to find their dept code
         dept_code = ''
         for group in user.groups.all():
@@ -350,11 +369,14 @@ def get_assignment_account_rows():
                 break
 
         full_name = user.get_full_name().strip() or user.username
+        profile = getattr(user, 'assignment_profile', None)
+        access_code = profile.access_code if profile and profile.access_code else '—'
         account_rows.append({
             'user': user,
             'full_name': full_name,
             'role': role,
             'department_code': dept_code,
+            'access_code': access_code,
             'status': 'Active' if user.is_active else 'Inactive',
             'status_key': 'active' if user.is_active else 'inactive',
             'contact': 'Not set',
@@ -364,13 +386,13 @@ def get_assignment_account_rows():
     return account_rows
 
 
-def get_assignment_account_context(request):
+def get_assignment_account_context(request, account_type='all'):
     status_filter = request.GET.get('status', 'all').strip().lower()
     role_filter = request.GET.get('role', 'all').strip().lower()
     dept_filter = request.GET.get('dept', 'all').strip()
     search_query = request.GET.get('q', '').strip()
 
-    account_rows = get_assignment_account_rows()
+    account_rows = get_assignment_account_rows(account_type)
     total_user_count = len(account_rows)
     active_user_count = sum(1 for row in account_rows if row['status_key'] == 'active')
 
@@ -383,15 +405,16 @@ def get_assignment_account_context(request):
             or query_lower in (row['user'].email or '').lower()
             or query_lower in row['role'].lower()
             or query_lower in row['department_code'].lower()
+            or query_lower in (row.get('access_code') or '').lower()
         ]
 
-    if role_filter != 'all':
+    if role_filter != 'all' and account_type != 'tabulator':
         account_rows = [row for row in account_rows if row['role'].lower() == role_filter]
 
     if status_filter != 'all':
         account_rows = [row for row in account_rows if row['status_key'] == status_filter]
 
-    if dept_filter != 'all':
+    if dept_filter != 'all' and account_type == 'all':
         account_rows = [row for row in account_rows if row['department_code'].lower() == dept_filter.lower()]
 
     # Department codes for the filter dropdown
@@ -406,6 +429,7 @@ def get_assignment_account_context(request):
 
     return {
         'account_rows': page_obj.object_list,
+        'account_type': account_type,
         'total_user_count': total_user_count,
         'filtered_user_count': len(account_rows),
         'active_user_count': active_user_count,
@@ -742,14 +766,14 @@ def login_view(request):
     context = {}
 
     if request.method == 'POST':
-        email = request.POST.get('email', '').strip()
+        username = request.POST.get('username', '').strip()
         password = request.POST.get('password', '')
 
-        context['email'] = email
+        context['username'] = username
 
-        user = authenticate_email(request, email, password)
+        user = authenticate_username(request, username, password)
         if user is None:
-            context['error'] = 'Invalid email or password.'
+            context['error'] = 'Invalid username or password.'
             return render(request, 'login.html', context)
 
         role = _detect_user_role(user)
@@ -766,7 +790,7 @@ def login_view(request):
 
         context['success'] = (
             f'Logged in as {_ROLE_LABELS[role]}. '
-            'Open the EventTab judge mobile app and sign in with this email and password.'
+            'Open the EventTab judge mobile app and sign in with this username and password.'
         )
 
     return render(request, 'login.html', context)
@@ -933,7 +957,21 @@ def admin_dashboard(request):
 @login_required(login_url='login')
 @user_passes_test(lambda user: user.is_staff, login_url='login')
 def admin_manage_account(request):
-    return render(request, 'admindash/manageacc.html', get_assignment_account_context(request))
+    return redirect('admin_tabulator_accounts')
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def admin_tabulator_accounts(request):
+    ctx = get_assignment_account_context(request, account_type='tabulator')
+    return render(request, 'admindash/tabulatoraccount.html', ctx)
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def admin_judge_scorer_accounts(request):
+    ctx = get_assignment_account_context(request, account_type='judge_scorer')
+    return render(request, 'admindash/judgescoreraccount.html', ctx)
 
 
 @login_required(login_url='login')
@@ -1405,6 +1443,7 @@ def create_assignment_account(request):
             user.last_name = last_name
             _apply_assignment_role(user, role_label, payload['is_active'])
             user.save()
+            _save_assignment_access_code(user, access_code)
             if role_label == 'Judge':
                 sync_judge_to_mobile_events(user)
             LogEntry.objects.create(
@@ -1424,13 +1463,13 @@ def create_assignment_account(request):
         except Exception as e:
             return JsonResponse({'success': False, 'message': str(e)}, status=500)
 
-    # ── Tabulator: standard username / email / password flow ─────────────────
-    if not payload['username'] or not payload['email'] or not payload['password']:
-        return JsonResponse({'success': False, 'message': 'Username, email, and password are required.'}, status=400)
+    # ── Tabulator: username / password flow ─────────────────────────────────
+    if not payload['username'] or not payload['password']:
+        return JsonResponse({'success': False, 'message': 'Username and password are required.'}, status=400)
 
     if User.objects.filter(username__iexact=payload['username']).exists():
         return JsonResponse({'success': False, 'message': 'Username already exists.'}, status=400)
-    if User.objects.filter(email__iexact=payload['email']).exists():
+    if payload['email'] and User.objects.filter(email__iexact=payload['email']).exists():
         return JsonResponse({'success': False, 'message': 'Email already exists.'}, status=400)
 
     try:
@@ -1440,7 +1479,7 @@ def create_assignment_account(request):
             first_name, last_name = payload['username'], ''
         user = User.objects.create_user(
             username=payload['username'],
-            email=payload['email'],
+            email=payload['email'] or '',
             password=payload['password'],
             first_name=first_name,
             last_name=last_name,
@@ -1491,6 +1530,7 @@ def update_assignment_account(request, account_id):
             account_user.last_name = last_name
             if payload['access_code']:
                 account_user.set_password(payload['access_code'])
+                _save_assignment_access_code(account_user, payload['access_code'])
             _apply_assignment_role(account_user, role_label, payload['is_active'])
             account_user.save()
             if role_label == 'Judge':
@@ -1510,18 +1550,18 @@ def update_assignment_account(request, account_id):
         except Exception as e:
             return JsonResponse({'success': False, 'message': str(e)}, status=500)
 
-    # ── Tabulator: standard username / email / password flow ─────────────────
-    if not payload['username'] or not payload['email']:
-        return JsonResponse({'success': False, 'message': 'Username and email are required.'}, status=400)
+    # ── Tabulator: username / password flow ─────────────────────────────────
+    if not payload['username']:
+        return JsonResponse({'success': False, 'message': 'Username is required.'}, status=400)
 
     if User.objects.filter(username__iexact=payload['username']).exclude(id=account_user.id).exists():
         return JsonResponse({'success': False, 'message': 'Username already exists.'}, status=400)
-    if User.objects.filter(email__iexact=payload['email']).exclude(id=account_user.id).exists():
+    if payload['email'] and User.objects.filter(email__iexact=payload['email']).exclude(id=account_user.id).exists():
         return JsonResponse({'success': False, 'message': 'Email already exists.'}, status=400)
 
     try:
         account_user.username = payload['username']
-        account_user.email = payload['email']
+        account_user.email = payload['email'] or ''
         if payload['full_name']:
             first_name, last_name = _split_full_name(payload['full_name'])
             account_user.first_name = first_name

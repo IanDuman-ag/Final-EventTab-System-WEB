@@ -4,8 +4,8 @@
     {% include 'admindash/_sidebar.html' with active='dashboard' %}
 
   Pass `active` as one of:
-    dashboard, events, accounts, departments, brackets, scoresheets,
-    analytics, reports
+    dashboard, events, accounts, accounts_tabulator, accounts_judge_scorer,
+    departments, brackets, scoresheets, analytics, reports
 {% endcomment %}
 <aside class="sidebar v2-sidebar" aria-label="Admin navigation">
   <div class="brand v2-brand">
@@ -25,10 +25,29 @@
       <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 2v2H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2H7Zm12 8H5V7h14v3Zm-8 3H7v4h4v-4Z"/></svg>
       <span>Manage Events</span>
     </a>
-    <a class="{% if active == 'accounts' %}active{% endif %}" href="{% url 'admin_manage_account' %}" {% if active == 'accounts' %}aria-current="page"{% endif %}>
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M16 11c1.66 0 3-1.57 3-3.5S17.66 4 16 4s-3 1.57-3 3.5 1.34 3.5 3 3.5ZM8 11c1.66 0 3-1.57 3-3.5S9.66 4 8 4 5 5.57 5 7.5 6.34 11 8 11Zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 14.17 10.33 13 8 13Zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5Z"/></svg>
-      <span>Manage Account</span>
-    </a>
+    <div class="v2-nav-group{% if active == 'accounts_tabulator' or active == 'accounts_judge_scorer' %} is-open{% endif %}" id="accounts-nav-group">
+      <button
+        type="button"
+        class="v2-nav-toggle{% if active == 'accounts_tabulator' or active == 'accounts_judge_scorer' %} active{% endif %}"
+        id="accounts-nav-toggle"
+        aria-expanded="{% if active == 'accounts_tabulator' or active == 'accounts_judge_scorer' %}true{% else %}false{% endif %}"
+        aria-controls="accounts-nav-sub"
+      >
+        <svg class="v2-nav-toggle-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M16 11c1.66 0 3-1.57 3-3.5S17.66 4 16 4s-3 1.57-3 3.5 1.34 3.5 3 3.5ZM8 11c1.66 0 3-1.57 3-3.5S9.66 4 8 4 5 5.57 5 7.5 6.34 11 8 11Zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 14.17 10.33 13 8 13Zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5Z"/></svg>
+        <span class="v2-nav-toggle-label">Manage Account</span>
+        <svg class="v2-nav-chevron" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41Z"/></svg>
+      </button>
+      <div class="v2-nav-sub" id="accounts-nav-sub">
+        <a class="v2-nav-sub-link{% if active == 'accounts_tabulator' %} active{% endif %}" href="{% url 'admin_tabulator_accounts' %}" {% if active == 'accounts_tabulator' %}aria-current="page"{% endif %}>
+          <span class="v2-nav-sub-dot" aria-hidden="true"></span>
+          <span>Tabulator</span>
+        </a>
+        <a class="v2-nav-sub-link{% if active == 'accounts_judge_scorer' %} active{% endif %}" href="{% url 'admin_judge_scorer_accounts' %}" {% if active == 'accounts_judge_scorer' %}aria-current="page"{% endif %}>
+          <span class="v2-nav-sub-dot" aria-hidden="true"></span>
+          <span>Judge and Scorer</span>
+        </a>
+      </div>
+    </div>
     <a class="{% if active == 'departments' %}active{% endif %}" href="{% url 'admin_departments' %}" {% if active == 'departments' %}aria-current="page"{% endif %}>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 21V9h5V3h6v8h5v10H4Zm2-2h3v-3H6v3Zm0-5h3v-3H6v3Zm5 5h2v-3h-2v3Zm0-5h2v-3h-2v3Zm0-5h2V5h-2v4Zm4 10h3v-3h-3v3Zm0-5h3v-1h-3v1Z"/></svg>
       <span>Departments</span>
@@ -63,3 +82,4 @@
     <span>Logout</span>
   </a>
 </aside>
+<script src="{% static 'js/admin_sidebar.js' %}?v=20260616c"></script>

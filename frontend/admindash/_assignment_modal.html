@@ -1,0 +1,125 @@
+{% load static %}
+<div id="assignment-modal" class="assignment-modal hidden" aria-hidden="true">
+  <div class="modal-backdrop" data-close-modal="true"></div>
+  <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="assignment-modal-title">
+    <div class="modal-header">
+      <div>
+        <h3 id="assignment-modal-title">Create Account</h3>
+        <p id="assignment-modal-subtitle">Create a tabulator, judge, or scorer account.</p>
+      </div>
+      <button class="modal-close" type="button" data-close-modal="true" aria-label="Close">&times;</button>
+    </div>
+
+    <form id="assignment-account-form" class="account-modal-form">
+      {% csrf_token %}
+      <input type="hidden" id="assignment-account-id">
+
+      <div class="form-grid form-grid--top">
+        <label>
+          Role
+          <select id="assignment-role" required>
+            <option value="Tabulator">Tabulator</option>
+            <option value="Judge">Judge</option>
+            <option value="Scorer">Scorer</option>
+          </select>
+        </label>
+        <label>
+          Status
+          <select id="assignment-status" required>
+            <option value="active">Active</option>
+            <option value="deactive">Deactive</option>
+          </select>
+        </label>
+      </div>
+
+      <div id="acc-standard-section" class="form-grid">
+        <label class="acc-field--full">
+          Username
+          <input type="text" id="assignment-username">
+        </label>
+        <label class="acc-field--full">
+          Password <small>(required for new accounts)</small>
+          <input type="password" id="assignment-password">
+        </label>
+      </div>
+
+      <div id="acc-code-section" class="form-grid acc-code-section--hidden">
+        <label class="acc-field--full">
+          Name
+          <input type="text" id="assignment-name" placeholder="Full name of this person">
+        </label>
+        <div class="acc-code-row acc-field--full">
+          <button type="button" id="btn-generate-code" class="generate-code-btn">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 8C8 10 5.9 16.17 3.82 19.82L5.71 21l1-1.85A4.52 4.52 0 0 0 8 20c4 0 4-2 8-2s4 2 8 2v-2c-4 0-4-2-8-2-.63 0-1.17.06-1.67.14C14.43 11.22 15.06 8.07 17 8Z"/></svg>
+            Generate Access Code
+          </button>
+          <div id="acc-code-display" class="acc-code-display acc-code-display--hidden">
+            <span class="acc-code-label">Access Code</span>
+            <strong id="acc-code-value"></strong>
+            <button type="button" id="btn-copy-code" class="copy-code-btn" title="Copy code">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1Zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2Zm0 16H8V7h11v14Z"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div id="acc-success-card" class="acc-success-card acc-success-card--hidden">
+        <svg class="acc-success-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2Zm-2 14.5-4-4 1.41-1.41L10 13.67l6.59-6.59L18 8.5l-8 8Z"/></svg>
+        <p id="acc-success-msg" class="acc-success-msg"></p>
+        <div class="acc-success-code-wrap">
+          <span class="acc-code-label">Access Code</span>
+          <strong id="acc-success-code"></strong>
+          <button type="button" id="btn-copy-success-code" class="copy-code-btn" title="Copy code">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1Zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2Zm0 16H8V7h11v14Z"/></svg>
+          </button>
+        </div>
+        <p class="acc-success-hint">Share this code with the person so they can sign in.</p>
+      </div>
+
+      <div class="modal-actions">
+        <button class="secondary-btn" type="button" data-close-modal="true">Cancel</button>
+        <button class="primary-btn" type="submit" id="assignment-submit">Create Account</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="view-account-modal" class="assignment-modal hidden" aria-hidden="true">
+  <div class="modal-backdrop" data-close-view-modal="true"></div>
+  <div class="modal-panel modal-panel--view" role="dialog" aria-modal="true" aria-labelledby="view-account-title">
+    <div class="modal-header">
+      <div>
+        <h3 id="view-account-title">Account Details</h3>
+        <p id="view-account-subtitle">View account information.</p>
+      </div>
+      <button class="modal-close" type="button" data-close-view-modal="true" aria-label="Close">&times;</button>
+    </div>
+    <div class="view-account-body">
+      <div class="view-account-grid">
+        <div class="view-account-field" id="view-field-name" hidden>
+          <span class="view-account-label">Name</span>
+          <p id="view-account-name">—</p>
+        </div>
+        <div class="view-account-field">
+          <span class="view-account-label">Username</span>
+          <p id="view-account-username">—</p>
+        </div>
+        <div class="view-account-field" id="view-field-code" hidden>
+          <span class="view-account-label">Access Code</span>
+          <p id="view-account-code" class="view-account-code">—</p>
+        </div>
+        <div class="view-account-field">
+          <span class="view-account-label">Role</span>
+          <p id="view-account-role">—</p>
+        </div>
+        <div class="view-account-field">
+          <span class="view-account-label">Status</span>
+          <p id="view-account-status">—</p>
+        </div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="primary-btn" type="button" data-close-view-modal="true">Close</button>
+    </div>
+  </div>
+</div>

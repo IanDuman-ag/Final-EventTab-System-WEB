@@ -86,18 +86,16 @@ document.addEventListener('DOMContentLoaded', function () {
   var submitButton   = document.getElementById('assignment-submit');
   var modalTitle     = document.getElementById('assignment-modal-title');
   var modalSubtitle  = document.getElementById('assignment-modal-subtitle');
+  var viewModal      = document.getElementById('view-account-modal');
 
   var accountId      = document.getElementById('assignment-account-id');
   var role           = document.getElementById('assignment-role');
   var statusSelect   = document.getElementById('assignment-status');
 
-  // Standard fields (Tabulator)
   var standardSection = document.getElementById('acc-standard-section');
   var usernameInput   = document.getElementById('assignment-username');
-  var emailInput      = document.getElementById('assignment-email');
   var passwordInput   = document.getElementById('assignment-password');
 
-  // Code fields (Judge / Scorer)
   var codeSection   = document.getElementById('acc-code-section');
   var nameInput     = document.getElementById('assignment-name');
   var btnGenerate   = document.getElementById('btn-generate-code');
@@ -105,15 +103,39 @@ document.addEventListener('DOMContentLoaded', function () {
   var codeValue     = document.getElementById('acc-code-value');
   var btnCopyCode   = document.getElementById('btn-copy-code');
 
-  // Success card (shown after code-role account is created)
   var successCard        = document.getElementById('acc-success-card');
   var successMsg         = document.getElementById('acc-success-msg');
   var successCode        = document.getElementById('acc-success-code');
   var btnCopySuccessCode = document.getElementById('btn-copy-success-code');
 
+  var pageType = (document.body.dataset.accountPage || 'all');
+  var defaultRole = document.body.dataset.defaultRole || 'Tabulator';
+
   var _generatedCode = '';
 
   if (!openButton || !modal || !form) { return; }
+
+  configureRoleSelect();
+
+  function configureRoleSelect() {
+    if (!role) return;
+    Array.prototype.forEach.call(role.options, function (opt) {
+      if (pageType === 'tabulator') {
+        opt.hidden = opt.value !== 'Tabulator';
+        opt.disabled = opt.value !== 'Tabulator';
+      } else if (pageType === 'judge_scorer') {
+        opt.hidden = opt.value === 'Tabulator';
+        opt.disabled = opt.value === 'Tabulator';
+      }
+    });
+    if (pageType === 'tabulator') {
+      role.value = 'Tabulator';
+      role.disabled = true;
+    } else if (pageType === 'judge_scorer') {
+      role.disabled = false;
+      if (role.value === 'Tabulator') role.value = defaultRole;
+    }
+  }
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -144,7 +166,6 @@ document.addEventListener('DOMContentLoaded', function () {
     successCard.classList.add('acc-success-card--hidden');
 
     usernameInput.required = !code;
-    emailInput.required    = !code;
     nameInput.required     = code;
 
     _generatedCode = '';
@@ -263,6 +284,14 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   });
 
+  document.querySelectorAll('.view-account').forEach(function (button) {
+    button.addEventListener('click', function () {
+      var row = button.closest('tr');
+      if (!row) { return; }
+      openViewModal(row);
+    });
+  });
+
   document.querySelectorAll('.delete-account').forEach(function (button) {
     button.addEventListener('click', async function () {
       var row  = button.closest('tr');
@@ -287,8 +316,17 @@ document.addEventListener('DOMContentLoaded', function () {
     if (e.target.dataset.closeModal === 'true') { closeModal(); }
   });
 
+  if (viewModal) {
+    viewModal.addEventListener('click', function (e) {
+      if (e.target.dataset.closeViewModal === 'true') { closeViewModal(); }
+    });
+  }
+
   document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && !modal.classList.contains('hidden')) { closeModal(); }
+    if (e.key === 'Escape') {
+      if (viewModal && !viewModal.classList.contains('hidden')) { closeViewModal(); return; }
+      if (!modal.classList.contains('hidden')) { closeModal(); }
+    }
   });
 
   // ── Form submit (Tabulator create/edit, Judge/Scorer edit-save, Done) ──────
@@ -318,13 +356,11 @@ document.addEventListener('DOMContentLoaded', function () {
         return;
       }
     } else {
-      // Tabulator (create or edit)
       payload.full_name = usernameInput.value.trim();
       payload.username  = usernameInput.value.trim();
-      payload.email     = emailInput.value.trim();
       payload.password  = passwordInput.value;
-      if (!payload.username || !payload.email || (!editing && !payload.password)) {
-        showToast('Username, email, and password are required.', 'warning');
+      if (!payload.username || (!editing && !payload.password)) {
+        showToast('Username and password are required.', 'warning');
         return;
       }
     }
@@ -376,18 +412,18 @@ document.addEventListener('DOMContentLoaded', function () {
     form.dataset.doneMode    = '';
     accountId.value          = '';
     usernameInput.value      = '';
-    emailInput.value         = '';
     passwordInput.value      = '';
     nameInput.value          = '';
-    role.value               = 'Tabulator';
+    role.value               = pageType === 'judge_scorer' ? defaultRole : 'Tabulator';
     statusSelect.value       = 'active';
     modalTitle.textContent   = 'Create Account';
     submitButton.disabled    = false;
     submitButton.textContent = 'Create Account';
     passwordInput.required   = true;
-    applyRoleMode('Tabulator', true);
+    configureRoleSelect();
+    applyRoleMode(role.value, true);
     openModal();
-    usernameInput.focus();
+    if (isCodeRole(role.value)) { nameInput.focus(); } else { usernameInput.focus(); }
   }
 
   function openEditModal(row, endpoint) {
@@ -395,25 +431,30 @@ document.addEventListener('DOMContentLoaded', function () {
     form.dataset.doneMode    = '';
     accountId.value          = row.dataset.accountId || '';
     var validRoles           = ['Tabulator', 'Judge', 'Scorer'];
-    var assignedRole         = (row.dataset.role || 'Tabulator').trim();
+    var assignedRole         = (row.dataset.role || defaultRole).trim();
     var matched              = validRoles.find(function (r) {
       return r.toLowerCase() === assignedRole.toLowerCase();
-    }) || 'Tabulator';
+    }) || defaultRole;
 
     role.value               = matched;
     statusSelect.value       = row.dataset.status === 'active' ? 'active' : 'deactive';
     modalTitle.textContent   = 'Edit Account';
     submitButton.disabled    = false;
     submitButton.textContent = 'Save Changes';
+    configureRoleSelect();
 
     if (isCodeRole(matched)) {
       nameInput.value     = row.dataset.fullName || '';
       usernameInput.value = '';
-      emailInput.value    = '';
       passwordInput.value = '';
+      _generatedCode = '';
+      if (row.dataset.accessCode && row.dataset.accessCode !== '—') {
+        _generatedCode = row.dataset.accessCode;
+        codeValue.textContent = _generatedCode;
+        codeDisplay.classList.remove('acc-code-display--hidden');
+      }
     } else {
       usernameInput.value = row.dataset.username || '';
-      emailInput.value    = row.dataset.email    || '';
       passwordInput.value = '';
       nameInput.value     = '';
     }
@@ -422,6 +463,38 @@ document.addEventListener('DOMContentLoaded', function () {
     applyRoleMode(matched, false);
     openModal();
     if (isCodeRole(matched)) { nameInput.focus(); } else { usernameInput.focus(); }
+  }
+
+  function openViewModal(row) {
+    if (!viewModal) return;
+    var assignedRole = (row.dataset.role || '').trim();
+    var isCode = isCodeRole(assignedRole);
+    var nameField = document.getElementById('view-field-name');
+    var codeField = document.getElementById('view-field-code');
+    var nameEl = document.getElementById('view-account-name');
+    var usernameEl = document.getElementById('view-account-username');
+    var codeEl = document.getElementById('view-account-code');
+    var roleEl = document.getElementById('view-account-role');
+    var statusEl = document.getElementById('view-account-status');
+
+    if (nameField) nameField.hidden = !isCode;
+    if (codeField) codeField.hidden = !isCode;
+    if (nameEl) nameEl.textContent = row.dataset.fullName || '—';
+    if (usernameEl) usernameEl.textContent = row.dataset.username || '—';
+    if (codeEl) codeEl.textContent = row.dataset.accessCode || '—';
+    if (roleEl) roleEl.textContent = assignedRole || '—';
+    if (statusEl) {
+      statusEl.textContent = row.dataset.status === 'active' ? 'Active' : 'Inactive';
+    }
+
+    viewModal.classList.remove('hidden');
+    viewModal.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeViewModal() {
+    if (!viewModal) return;
+    viewModal.classList.add('hidden');
+    viewModal.setAttribute('aria-hidden', 'true');
   }
 
   function openModal() {

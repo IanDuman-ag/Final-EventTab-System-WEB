@@ -1,4 +1,4 @@
-@import url("admindashboard.css?v=20260524c");
+@import url("admindashboard.css?v=20260616c");
 
 /* ── Checkbox column ── */
 .col-check {
@@ -199,8 +199,37 @@
   color: #0e7a5f;
 }
 
-.manage-account-page .side-nav a.active {
+.manage-account-page .side-nav a.active,
+.manage-account-page .v2-nav-sub-link.active {
   color: #ffffff;
+}
+
+.manage-account-page .main-content {
+  width: min(100%, 1120px);
+}
+
+.manage-account-page .account-hero {
+  grid-template-columns: minmax(240px, 1fr) 160px 170px;
+  gap: 28px;
+}
+
+.manage-account-page .accounts-panel {
+  border-radius: 12px;
+}
+
+.manage-account-page .account-toolbar {
+  border-bottom: 1px solid #edf1f7;
+}
+
+.manage-account-page .pagination-bar {
+  border-top: 1px solid #edf1f7;
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  color: #6a7482;
 }
 
 /* ── Toast notification — top center ── */
@@ -243,4 +272,59 @@
 .toast-message.error {
   background: #f04955;
   color: #ffffff;
+}
+
+.access-code-cell {
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: #0f1d3a;
+  background: #f0f4ff;
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+
+.row-action.view-account svg {
+  fill: #244b89;
+}
+
+.view-account-body {
+  padding: 8px 4px 4px;
+}
+
+.view-account-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.view-account-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.view-account-label {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #7a8aab;
+}
+
+.view-account-field p {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f1d3a;
+}
+
+.view-account-code {
+  font-family: 'Courier New', monospace;
+  letter-spacing: 0.14em;
+}
+
+.modal-panel--view {
+  max-width: 520px;
 }

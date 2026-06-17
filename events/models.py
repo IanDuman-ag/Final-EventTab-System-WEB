@@ -381,3 +381,16 @@ class JudgeActivityLog(models.Model):
             candidate=candidate,
             ip_address=ip_address,
         )
+
+
+class AssignmentAccountProfile(models.Model):
+    """Stores display-only access codes for judge/scorer portal accounts."""
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='assignment_profile',
+    )
+    access_code = models.CharField(max_length=32, blank=True, default='')
+
+    def __str__(self):
+        return f'Profile for {self.user.username}'
