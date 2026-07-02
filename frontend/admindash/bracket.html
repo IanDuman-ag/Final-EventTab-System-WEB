@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Brackets - EventTab</title>
-  <link rel="stylesheet" href="{% static 'admindash/bracket.css' %}?v=20260616c">
+  <link rel="stylesheet" href="{% static 'admindash/bracket.css' %}?v=20260702a">
 </head>
 <body class="admin-dashboard-page bracket-page admin-dashboard-v2">
   <div class="dashboard-shell">
@@ -345,9 +345,9 @@
             <span class="legend-item"><span class="legend-dot legend-dot--pending"></span>Pending</span>
           </div>
           <div class="bracket-view-actions">
-            <button type="button" class="btn-toolbar" id="exportBracketBtn" title="Print or save as PDF">
-              <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M5 20h14v-2H5v2Zm7-18-5 5h3v6h4V9h3l-5-5Z"/></svg>
-              Export PDF
+            <button type="button" class="btn-toolbar" id="exportBracketBtn" title="Print bracket">
+              <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M19 8H5a3 3 0 0 0-3 3v6h4v4h12v-4h4v-6a3 3 0 0 0-3-3Zm-1 10H6v-5h12v5Zm-1-9V4H7v5h10Z"/></svg>
+              Print
             </button>
             <button type="button" class="btn-toolbar" id="regenerateFromViewBtn" title="Regenerate bracket (only if not locked)">
               <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M17.65 6.35A7.95 7.95 0 0 0 12 4a8 8 0 1 0 7.74 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
@@ -443,6 +443,8 @@
       </div>
     </div>
   </div>
+
+  <div id="bracketPrintSheet" class="bracket-print-sheet" aria-hidden="true"></div>
 
   <script>
     /**
@@ -1655,11 +1657,29 @@
 
       if (exportBracketBtn) {
         exportBracketBtn.addEventListener('click', () => {
-          const area = document.querySelector('.bracket-modal-view--wide');
-          if (!area) { window.print(); return; }
+          const printSheet = document.getElementById('bracketPrintSheet');
+          const bracketCanvas = document.getElementById('bracketVisualizer');
+          if (!printSheet || !bracketCanvas) {
+            window.print();
+            return;
+          }
+
+          printSheet.innerHTML = '';
+          const bracketClone = bracketCanvas.cloneNode(true);
+          bracketClone.removeAttribute('id');
+          bracketClone.classList.add('bracket-print-canvas');
+          printSheet.appendChild(bracketClone);
+
+          const cleanupPrint = () => {
+            document.body.classList.remove('bracket-print-mode');
+            printSheet.innerHTML = '';
+            window.removeEventListener('afterprint', cleanupPrint);
+          };
+
           document.body.classList.add('bracket-print-mode');
+          window.addEventListener('afterprint', cleanupPrint);
           window.print();
-          setTimeout(() => document.body.classList.remove('bracket-print-mode'), 500);
+          setTimeout(cleanupPrint, 1000);
         });
       }
 

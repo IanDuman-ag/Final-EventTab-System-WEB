@@ -2548,26 +2548,37 @@
   text-transform: uppercase;
 }
 
-/* Print / export */
+.bracket-print-sheet {
+  display: none;
+}
+
+/* Print — bracket tree only (injected into #bracketPrintSheet) */
 @media print {
-  body.bracket-print-mode * {
-    visibility: hidden;
-  }
-  body.bracket-print-mode .bracket-modal-view--wide,
-  body.bracket-print-mode .bracket-modal-view--wide * {
-    visibility: visible;
-  }
-  body.bracket-print-mode .bracket-modal-view--wide {
-    position: fixed;
-    left: 0;
-    top: 0;
-    width: 100%;
-    max-width: 100%;
-    box-shadow: none;
-  }
-  body.bracket-print-mode .bracket-view-actions,
-  body.bracket-print-mode .bracket-close-modal {
+  body.bracket-print-mode > *:not(#bracketPrintSheet) {
     display: none !important;
+  }
+
+  body.bracket-print-mode #bracketPrintSheet {
+    display: block !important;
+    position: static;
+    width: 100%;
+    margin: 0;
+    padding: 10mm;
+    box-sizing: border-box;
+    background: #fff;
+  }
+
+  body.bracket-print-mode #bracketPrintSheet .bracket-print-canvas,
+  body.bracket-print-mode #bracketPrintSheet .bracket-flow {
+    overflow: visible !important;
+    max-height: none !important;
+    height: auto !important;
+    width: 100% !important;
+  }
+
+  body.bracket-print-mode #bracketPrintSheet .bracket-flow-scroll {
+    overflow: visible !important;
+    max-height: none !important;
   }
 }
 

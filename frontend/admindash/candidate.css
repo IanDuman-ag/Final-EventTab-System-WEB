@@ -1,1 +1,68 @@
 @import url("teams.css?v=20260619a");
+
+/* Make candidate modal scroll vertically when content is long */
+#candidate-form-modal .candidate-form-panel {
+  max-height: min(90vh, 640px);
+}
+
+#candidate-form-modal .team-modal-form {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+#candidate-form-modal .team-modal-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.candidate-thumb {
+  width: 42px;
+  height: 42px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #dbe5f1;
+  background: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: #94a3b8;
+}
+
+.candidate-thumb--empty {
+  width: 62px;
+  height: 26px;
+  border-radius: 999px;
+  background: #f8fafc;
+}
+
+.candidate-preview-wrap {
+  margin-top: 8px;
+}
+
+.candidate-preview-wrap.hidden {
+  display: none;
+}
+
+.candidate-preview-img {
+  width: 84px;
+  height: 84px;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid #dbe5f1;
+  background: #fff;
+}
+
+.candidate-remove-wrap {
+  margin-top: 8px;
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+}

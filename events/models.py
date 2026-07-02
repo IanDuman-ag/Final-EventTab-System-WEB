@@ -155,6 +155,7 @@ class RegistryCandidate(models.Model):
         blank=True,
         related_name='registry_candidates',
     )
+    image = models.ImageField(upload_to='registry_candidates/', null=True, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_ACTIVE)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

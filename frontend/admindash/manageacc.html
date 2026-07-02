@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Manage Account - EventTab</title>
+  <title>Users - EventTab</title>
   <link rel="stylesheet" href="{% static 'admindash/tabulatoraccount.css' %}?v=20260616c">
 </head>
 <body class="admin-dashboard-page manage-account-page admin-dashboard-v2">
@@ -27,7 +27,7 @@
       <main class="main-content">
         <section class="account-hero" aria-label="Account management overview">
           <div class="account-title">
-            <h2>Account<br>Management</h2>
+            <h2>User<br>Management</h2>
             <p>Manage administrative access and user permissions.</p>
           </div>
 
@@ -48,7 +48,7 @@
           </button>
         </section>
 
-        <section class="accounts-panel" aria-label="Manage account table">
+        <section class="accounts-panel" aria-label="Users table">
           <div class="account-toolbar">
             <form class="account-filters" method="get" role="search">
               <input type="text" name="q" value="{{ search_query }}" placeholder="Search accounts" aria-label="Search accounts">

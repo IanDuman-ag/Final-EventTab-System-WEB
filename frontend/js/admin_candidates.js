@@ -10,6 +10,9 @@ document.addEventListener('DOMContentLoaded', function () {
   var candidateNumber = document.getElementById('candidate-number');
   var candidateName = document.getElementById('candidate-name');
   var candidateDepartment = document.getElementById('candidate-department');
+  var candidateImage = document.getElementById('candidate-image');
+  var candidateImagePreview = document.getElementById('candidate-image-preview');
+  var candidateImagePreviewWrap = document.getElementById('candidate-image-preview-wrap');
   var candidateStatus = document.getElementById('candidate-status');
   var submitBtn = document.getElementById('candidate-submit-btn');
   var modalTitle = document.getElementById('candidate-modal-title');
@@ -45,15 +48,14 @@ document.addEventListener('DOMContentLoaded', function () {
     }, 3500);
   }
 
-  async function postJson(url, payload) {
+  async function postForm(url, formData) {
     try {
       var response = await fetch(url, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           'X-CSRFToken': getCsrfToken(),
         },
-        body: JSON.stringify(payload || {}),
+        body: formData,
       });
       var text = await response.text();
       var data;
@@ -84,6 +86,8 @@ document.addEventListener('DOMContentLoaded', function () {
     candidateNumber.value = '';
     candidateName.value = '';
     candidateDepartment.value = '';
+    if (candidateImage) candidateImage.value = '';
+    if (candidateImagePreviewWrap) candidateImagePreviewWrap.classList.add('hidden');
     candidateStatus.value = 'active';
     modalTitle.textContent = 'Add Candidate';
     modalSubtitle.textContent = 'Register a candidate with number, name, and department.';
@@ -101,6 +105,16 @@ document.addEventListener('DOMContentLoaded', function () {
     candidateNumber.value = row.dataset.number || '';
     candidateName.value = row.dataset.name || '';
     candidateDepartment.value = row.dataset.departmentId || '';
+    if (candidateImage) candidateImage.value = '';
+    if (candidateImagePreview && candidateImagePreviewWrap) {
+      if (row.dataset.imageUrl) {
+        candidateImagePreview.src = row.dataset.imageUrl;
+        candidateImagePreviewWrap.classList.remove('hidden');
+      } else {
+        candidateImagePreview.removeAttribute('src');
+        candidateImagePreviewWrap.classList.add('hidden');
+      }
+    }
     candidateStatus.value = row.dataset.status || 'active';
     modalTitle.textContent = 'Edit Candidate';
     modalSubtitle.textContent = 'Update candidate details.';
@@ -142,6 +156,17 @@ document.addEventListener('DOMContentLoaded', function () {
         document.getElementById('view-candidate-name').textContent = data.name || '—';
         document.getElementById('view-candidate-department').textContent = data.department_name || '—';
         document.getElementById('view-candidate-status').textContent = data.status_label || '—';
+        var viewImage = document.getElementById('view-candidate-image');
+        var viewImageWrap = document.getElementById('view-candidate-image-wrap');
+        if (viewImage && viewImageWrap) {
+          if (data.image_url) {
+            viewImage.src = data.image_url;
+            viewImageWrap.classList.remove('hidden');
+          } else {
+            viewImage.removeAttribute('src');
+            viewImageWrap.classList.add('hidden');
+          }
+        }
         openModal(viewModal);
       } catch (_) {
         showToast('Could not load candidate details.', 'error');
@@ -179,25 +204,46 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
+  if (candidateImage && candidateImagePreview && candidateImagePreviewWrap) {
+    candidateImage.addEventListener('change', function () {
+      var file = candidateImage.files && candidateImage.files[0];
+      if (!file) {
+        candidateImagePreview.removeAttribute('src');
+        candidateImagePreviewWrap.classList.add('hidden');
+        return;
+      }
+      var reader = new FileReader();
+      reader.onload = function () {
+        candidateImagePreview.src = String(reader.result || '');
+        candidateImagePreviewWrap.classList.remove('hidden');
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
   form.addEventListener('submit', async function (e) {
     e.preventDefault();
-    var payload = {
-      number: candidateNumber.value.trim(),
-      name: candidateName.value.trim(),
-      department_id: candidateDepartment.value || null,
-      status: candidateStatus.value,
-    };
-    if (!payload.number || !payload.name || !payload.department_id) {
+    var number = candidateNumber.value.trim();
+    var name = candidateName.value.trim();
+    var departmentId = candidateDepartment.value || null;
+    if (!number || !name || !departmentId) {
       showToast('Candidate number, name, and department are required.', 'error');
       return;
     }
-
+    var formData = new FormData();
+    formData.append('number', number);
+    formData.append('name', name);
+    formData.append('department_id', departmentId);
+    formData.append('status', candidateStatus.value);
+    if (candidateImage && candidateImage.files && candidateImage.files[0]) {
+      formData.append('image', candidateImage.files[0]);
+    }
     submitBtn.disabled = true;
     var isEdit = !!candidateId.value;
     var url = isEdit
       ? '/admin/candidates/' + candidateId.value + '/edit/'
       : createUrl;
-    var result = await postJson(url, payload);
+    var result = await postForm(url, formData);
     submitBtn.disabled = false;
 
     if (result.success) {

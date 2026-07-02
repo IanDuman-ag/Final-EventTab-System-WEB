@@ -1556,6 +1556,7 @@ def get_candidate_rows():
             'department_id': cand.department_id,
             'department_name': cand.department.name if cand.department else '—',
             'department_code': cand.department.code if cand.department else '',
+            'image_url': cand.image.url if cand.image else '',
             'status': cand.status,
             'status_label': 'Active' if cand.status == RegistryCandidate.STATUS_ACTIVE else 'Inactive',
             'avatar_tone': cand.id % 5,
@@ -1569,11 +1570,13 @@ def admin_create_candidate(request):
     if request.method != 'POST':
         return JsonResponse({'success': False, 'message': 'Invalid request method.'}, status=400)
 
-    data = _parse_json_request(request)
+    is_multipart = (request.content_type or '').startswith('multipart/form-data')
+    data = request.POST if is_multipart else _parse_json_request(request)
     number = (data.get('number') or '').strip()
     name = (data.get('name') or '').strip()
     status = (data.get('status') or RegistryCandidate.STATUS_ACTIVE).strip().lower()
     dept_id = data.get('department_id')
+    image = request.FILES.get('image') if is_multipart else None
 
     if not number or not name:
         return JsonResponse({'success': False, 'message': 'Candidate number and name are required.'}, status=400)
@@ -1595,6 +1598,7 @@ def admin_create_candidate(request):
         number=number,
         name=name,
         department=department,
+        image=image,
         status=status,
     )
     return JsonResponse({'success': True, 'message': f'Candidate "{cand.name}" created.', 'id': cand.id})
@@ -1609,6 +1613,7 @@ def admin_view_candidate(request, candidate_id):
         'number': cand.number,
         'name': cand.name,
         'department_name': cand.department.name if cand.department else '—',
+        'image_url': cand.image.url if cand.image else '',
         'status': cand.status,
         'status_label': 'Active' if cand.status == RegistryCandidate.STATUS_ACTIVE else 'Inactive',
     })
@@ -1621,11 +1626,14 @@ def admin_edit_candidate(request, candidate_id):
         return JsonResponse({'success': False, 'message': 'Invalid request method.'}, status=400)
 
     cand = get_object_or_404(RegistryCandidate, id=candidate_id)
-    data = _parse_json_request(request)
+    is_multipart = (request.content_type or '').startswith('multipart/form-data')
+    data = request.POST if is_multipart else _parse_json_request(request)
     number = (data.get('number') or '').strip()
     name = (data.get('name') or '').strip()
     status = (data.get('status') or cand.status).strip().lower()
     dept_id = data.get('department_id')
+    image = request.FILES.get('image') if is_multipart else None
+    remove_image = str(data.get('remove_image') or '').strip().lower() in ('1', 'true', 'yes', 'on')
 
     if not number or not name:
         return JsonResponse({'success': False, 'message': 'Candidate number and name are required.'}, status=400)
@@ -1646,6 +1654,13 @@ def admin_edit_candidate(request, candidate_id):
     cand.number = number
     cand.name = name
     cand.department = department
+    if remove_image and cand.image:
+        cand.image.delete(save=False)
+        cand.image = None
+    if image:
+        if cand.image:
+            cand.image.delete(save=False)
+        cand.image = image
     cand.status = status
     cand.save()
     return JsonResponse({'success': True, 'message': f'Candidate "{cand.name}" updated.'})
