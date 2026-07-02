@@ -166,6 +166,7 @@ document.addEventListener('DOMContentLoaded', function () {
     successCard.classList.add('acc-success-card--hidden');
 
     usernameInput.required = !code;
+    passwordInput.required = !code && isCreating;
     nameInput.required     = code;
 
     _generatedCode = '';
@@ -329,16 +330,28 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   });
 
+  function finishDoneFlow() {
+    form.dataset.doneMode = '';
+    submitButton.type = 'submit';
+    submitButton.removeEventListener('click', onDoneClick);
+    closeModal();
+    window.location.reload();
+  }
+
+  function onDoneClick(e) {
+    if (form.dataset.doneMode !== '1') return;
+    e.preventDefault();
+    e.stopPropagation();
+    finishDoneFlow();
+  }
+
   // ── Form submit (Tabulator create/edit, Judge/Scorer edit-save, Done) ──────
 
   form.addEventListener('submit', async function (e) {
     e.preventDefault();
 
-    // "Done" mode: just close and reload
     if (form.dataset.doneMode === '1') {
-      form.dataset.doneMode = '';
-      closeModal();
-      setTimeout(function () { window.location.reload(); }, 300);
+      finishDoneFlow();
       return;
     }
 
@@ -399,9 +412,15 @@ document.addEventListener('DOMContentLoaded', function () {
     successMsg.textContent  = line;
     successCode.textContent = code;
 
+    usernameInput.required = false;
+    passwordInput.required = false;
+    nameInput.required = false;
+
     submitButton.classList.remove('acc-btn--hidden');
     submitButton.disabled    = false;
     submitButton.textContent = 'Done';
+    submitButton.type = 'button';
+    submitButton.addEventListener('click', onDoneClick);
     form.dataset.doneMode    = '1';
   }
 
@@ -410,6 +429,8 @@ document.addEventListener('DOMContentLoaded', function () {
   function openCreateModal() {
     modal.dataset.endpoint   = openButton.dataset.createUrl;
     form.dataset.doneMode    = '';
+    submitButton.type = 'submit';
+    submitButton.removeEventListener('click', onDoneClick);
     accountId.value          = '';
     usernameInput.value      = '';
     passwordInput.value      = '';
@@ -419,7 +440,6 @@ document.addEventListener('DOMContentLoaded', function () {
     modalTitle.textContent   = 'Create Account';
     submitButton.disabled    = false;
     submitButton.textContent = 'Create Account';
-    passwordInput.required   = true;
     configureRoleSelect();
     applyRoleMode(role.value, true);
     openModal();
@@ -429,6 +449,8 @@ document.addEventListener('DOMContentLoaded', function () {
   function openEditModal(row, endpoint) {
     modal.dataset.endpoint   = endpoint;
     form.dataset.doneMode    = '';
+    submitButton.type = 'submit';
+    submitButton.removeEventListener('click', onDoneClick);
     accountId.value          = row.dataset.accountId || '';
     var validRoles           = ['Tabulator', 'Judge', 'Scorer'];
     var assignedRole         = (row.dataset.role || defaultRole).trim();
@@ -506,6 +528,8 @@ document.addEventListener('DOMContentLoaded', function () {
     modal.classList.add('hidden');
     modal.setAttribute('aria-hidden', 'true');
     form.dataset.doneMode = '';
+    submitButton.type = 'submit';
+    submitButton.removeEventListener('click', onDoneClick);
   }
 });
 

@@ -1,0 +1,85 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Candidates - EventTab</title>
+  <link rel="stylesheet" href="{% static 'admindash/teams.css' %}?v=20260619a">
+  <link rel="stylesheet" href="{% static 'admindash/candidate.css' %}?v=20260619a">
+</head>
+<body class="admin-dashboard-page teams-page admin-dashboard-v2">
+  <div class="dashboard-shell">
+    {% include 'admindash/_sidebar.html' with active='candidates' %}
+    <div class="content-area v2-content">
+      <header class="topbar">
+        <span class="topbar-spacer" aria-hidden="true"></span>
+        <div class="topbar-actions">
+          <button class="icon-button" type="button" aria-label="Notifications">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm8-6-2-2v-5a6 6 0 1 0-12 0v5l-2 2v1h16v-1Z"></path></svg>
+          </button>
+          <div class="profile-avatar" aria-label="{{ request.user.username }}">{{ request.user.username|default:"AD"|slice:":2"|upper }}</div>
+        </div>
+      </header>
+      <main class="teams-main">
+        <header class="teams-page-header">
+          <div class="teams-page-intro">
+            <h1>Candidates</h1>
+            <p>Manage registered candidates for criteria-based events.</p>
+          </div>
+          <button class="teams-add-btn" type="button" id="open-candidate-modal" data-create-url="{% url 'admin_create_candidate' %}">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 11V5h2v6h6v2h-6v6h-2v-6H5v-2h6Z"/></svg>
+            Add Candidate
+          </button>
+        </header>
+
+        <section class="teams-stats teams-stats--candidates" aria-label="Candidate statistics">
+          <article class="teams-stat-card teams-stat-card--blue"><div class="teams-stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4Zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4Z"/></svg></div><div class="teams-stat-copy"><span>Total Candidates</span><strong>{{ total_candidate_count|default:"0" }}</strong><small>All candidates</small></div></article>
+          <article class="teams-stat-card teams-stat-card--green"><div class="teams-stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17Z"/></svg></div><div class="teams-stat-copy"><span>Active Candidates</span><strong>{{ active_candidate_count|default:"0" }}</strong><small>{{ active_candidate_percent|default:"0" }}% active</small></div></article>
+        </section>
+
+        <section class="teams-panel" aria-label="Candidates table">
+          <div class="teams-toolbar">
+            <form class="teams-filters" method="get" role="search">
+              <label class="teams-search"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5Zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14Z"/></svg><input type="text" name="q" value="{{ search_query }}" placeholder="Search candidates by name or number..." aria-label="Search candidates"></label>
+              <select name="dept" class="teams-select" aria-label="Department"><option value="all" {% if selected_dept == 'all' %}selected{% endif %}>All Departments</option>{% for dept in active_departments %}<option value="{{ dept.id }}" {% if selected_dept == dept.id|stringformat:"s" %}selected{% endif %}>{{ dept.name }}</option>{% endfor %}</select>
+              <select name="status" class="teams-select" aria-label="Status"><option value="all" {% if selected_status == 'all' %}selected{% endif %}>All Status</option><option value="active" {% if selected_status == 'active' %}selected{% endif %}>Active</option><option value="inactive" {% if selected_status == 'inactive' %}selected{% endif %}>Inactive</option></select>
+              <button type="submit" class="teams-filter-btn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 18h4v-2h-4v2ZM3 6v2h18V6H3Zm3 7h12v-2H6v2Z"/></svg>Filters</button>
+            </form>
+          </div>
+
+          <div class="teams-table-wrap">
+            <table class="teams-table" id="candidates-table">
+              <thead><tr><th>Candidate No.</th><th>Candidate Name</th><th>Department</th><th>Status</th><th>Actions</th></tr></thead>
+              <tbody>
+                {% for row in candidate_rows %}
+                  <tr data-candidate-id="{{ row.id }}" data-number="{{ row.number }}" data-name="{{ row.name }}" data-department-id="{{ row.department_id|default:'' }}" data-status="{{ row.status }}">
+                    <td data-label="Candidate No."><span class="teams-code-pill">#{{ row.number }}</span></td>
+                    <td data-label="Candidate Name"><div class="teams-name-cell"><span class="teams-avatar teams-avatar--{{ row.avatar_tone }}">{{ row.name|slice:":2"|upper }}</span><div><strong>{{ row.name }}</strong><small>{% if row.department_code %}{{ row.department_code }}{% else %}{{ row.department_name }}{% endif %}</small></div></div></td>
+                    <td data-label="Department">{{ row.department_name }}</td>
+                    <td data-label="Status"><span class="teams-status teams-status--{{ row.status }}"><span class="teams-status-dot" aria-hidden="true"></span>{{ row.status_label|upper }}</span></td>
+                    <td data-label="Actions"><div class="teams-row-actions"><button class="teams-action-btn view-candidate" type="button" title="View details" data-view-url="{% url 'admin_view_candidate' row.id %}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5C21.27 7.61 17 4.5 12 4.5Zm0 12.5a5 5 0 1 1 0-10 5 5 0 0 1 0 10Zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"/></svg></button><button class="teams-action-btn edit-candidate" type="button" title="Edit" data-update-url="{% url 'admin_edit_candidate' row.id %}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 17.25 11.06-11.06 3.75 3.75L6.75 21H3v-3.75ZM19.71 8.04 15.96 4.3l1.33-1.33a1 1 0 0 1 1.42 0l2.33 2.33a1 1 0 0 1 0 1.42l-1.33 1.33Z"/></svg></button><button class="teams-action-btn teams-action-btn--danger delete-candidate" type="button" title="Delete" data-delete-url="{% url 'admin_delete_candidate' row.id %}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm1 7h2v8h-2v-8Zm4 0h2v8h-2v-8ZM6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7Z"/></svg></button></div></td>
+                  </tr>
+                {% empty %}<tr><td colspan="5" class="teams-empty">No candidates found.</td></tr>{% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <footer class="teams-pagination" aria-label="Candidates pagination">
+            <span>Showing {{ start_index }} to {{ end_index }} of {{ filtered_candidate_count|default:"0" }} candidates</span>
+            <div class="teams-pagination-controls">
+              {% if page_obj.has_previous %}<a class="teams-page-btn" href="?q={{ search_query|urlencode }}&dept={{ selected_dept }}&status={{ selected_status }}&page={{ page_obj.previous_page_number }}" aria-label="Previous page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12l4.58-4.59Z"/></svg></a>{% else %}<span class="teams-page-btn is-disabled" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12l4.58-4.59Z"/></svg></span>{% endif %}
+              {% for num in page_obj.paginator.page_range %}{% if num == page_obj.number %}<span class="teams-page-num is-active">{{ num }}</span>{% else %}<a class="teams-page-num" href="?q={{ search_query|urlencode }}&dept={{ selected_dept }}&status={{ selected_status }}&page={{ num }}">{{ num }}</a>{% endif %}{% endfor %}
+              {% if page_obj.has_next %}<a class="teams-page-btn" href="?q={{ search_query|urlencode }}&dept={{ selected_dept }}&status={{ selected_status }}&page={{ page_obj.next_page_number }}" aria-label="Next page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.59 16.59 13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41Z"/></svg></a>{% else %}<span class="teams-page-btn is-disabled" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8.59 16.59 13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41Z"/></svg></span>{% endif %}
+            </div>
+          </footer>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div id="candidate-form-modal" class="assignment-modal teams-modal hidden" aria-hidden="true"><div class="modal-backdrop" data-close-candidate-modal="true"></div><div class="teams-modal-panel candidate-form-panel" role="dialog" aria-modal="true" aria-labelledby="candidate-modal-title"><div class="teams-modal-header"><div><h3 id="candidate-modal-title">Add Candidate</h3><p id="candidate-modal-subtitle">Register a candidate with number, name, and department.</p></div><button class="teams-modal-close" type="button" data-close-candidate-modal="true" aria-label="Close">&times;</button></div><form id="candidate-form" class="team-modal-form">{% csrf_token %}<input type="hidden" id="candidate-id"><div class="team-modal-body"><div class="team-form-grid"><label class="team-field"><span class="team-field-label">Candidate No. <span class="ced-req">*</span></span><input type="text" id="candidate-number" required></label><label class="team-field"><span class="team-field-label">Candidate Name <span class="ced-req">*</span></span><input type="text" id="candidate-name" required></label><label class="team-field team-field--full"><span class="team-field-label">Department <span class="ced-req">*</span></span><select id="candidate-department" required><option value="">Select active department</option>{% for dept in active_departments %}<option value="{{ dept.id }}">{{ dept.name }} ({{ dept.code }})</option>{% endfor %}</select></label><label class="team-field"><span class="team-field-label">Status</span><select id="candidate-status"><option value="active">Active</option><option value="inactive">Inactive</option></select></label></div></div><div class="teams-modal-footer"><button class="teams-btn teams-btn--ghost" type="button" data-close-candidate-modal="true">Cancel</button><button class="teams-btn teams-btn--primary" type="submit" id="candidate-submit-btn">Add Candidate</button></div></form></div></div>
+  <div id="candidate-view-modal" class="assignment-modal teams-modal hidden" aria-hidden="true"><div class="modal-backdrop" data-close-candidate-view-modal="true"></div><div class="teams-modal-panel candidate-view-panel" role="dialog" aria-modal="true" aria-labelledby="candidate-view-title"><div class="teams-modal-header teams-modal-header--view"><div><h3 id="candidate-view-title">Candidate</h3><p id="candidate-view-subtitle">No. —</p></div><button class="teams-modal-close" type="button" data-close-candidate-view-modal="true" aria-label="Close">&times;</button></div><div class="team-view-body"><dl class="team-view-details"><div class="team-view-detail"><dt>Candidate Name</dt><dd id="view-candidate-name">—</dd></div><div class="team-view-detail"><dt>Department</dt><dd id="view-candidate-department">—</dd></div><div class="team-view-detail"><dt>Status</dt><dd id="view-candidate-status">—</dd></div></dl></div><div class="teams-modal-footer teams-modal-footer--single"><button class="teams-btn teams-btn--primary" type="button" data-close-candidate-view-modal="true">Close</button></div></div></div>
+  <div id="candidate-delete-modal" class="assignment-modal teams-modal hidden" aria-hidden="true"><div class="modal-backdrop" data-close-candidate-delete-modal="true"></div><div class="teams-modal-panel team-delete-panel" role="dialog" aria-modal="true" aria-labelledby="candidate-delete-title"><div class="team-delete-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm1 7h2v8h-2v-8Zm4 0h2v8h-2v-8ZM6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7Z"/></svg></div><h3 id="candidate-delete-title">Delete Candidate</h3><p class="team-delete-message">Are you sure you want to delete <strong id="delete-candidate-name">this candidate</strong>? This action cannot be undone.</p><div class="teams-modal-footer teams-modal-footer--center"><button class="teams-btn teams-btn--ghost" type="button" data-close-candidate-delete-modal="true">Cancel</button><button class="teams-btn teams-btn--danger" type="button" id="confirm-delete-candidate-btn">Delete Candidate</button></div></div></div>
+  <script src="{% static 'js/admin_candidates.js' %}?v=20260619a"></script>
+</body>
+</html>

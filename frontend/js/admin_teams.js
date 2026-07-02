@@ -1,0 +1,377 @@
+document.addEventListener('DOMContentLoaded', function () {
+  var openBtn = document.getElementById('open-team-modal');
+  var formModal = document.getElementById('team-form-modal');
+  var membersModal = document.getElementById('team-members-modal');
+  var deleteModal = document.getElementById('team-delete-modal');
+  var deleteTeamNameEl = document.getElementById('delete-team-name');
+  var confirmDeleteBtn = document.getElementById('confirm-delete-team-btn');
+  var form = document.getElementById('team-form');
+  var teamId = document.getElementById('team-id');
+  var teamName = document.getElementById('team-name');
+  var teamCode = document.getElementById('team-code');
+  var teamDepartment = document.getElementById('team-department');
+  var teamMembers = document.getElementById('team-members');
+  var teamCoach = document.getElementById('team-coach');
+  var teamStatus = document.getElementById('team-status');
+  var submitBtn = document.getElementById('team-submit-btn');
+  var modalTitle = document.getElementById('team-modal-title');
+  var membersListEl = document.getElementById('team-members-editor-list');
+  var memberInput = document.getElementById('team-member-input');
+  var addMemberBtn = document.getElementById('add-team-member-btn');
+
+  if (!openBtn || !formModal || !form) return;
+
+  var createUrl = openBtn.dataset.createUrl || '/admin/teams/create/';
+  var memberNames = [];
+  var pendingDelete = { url: '', triggerBtn: null };
+
+  function getCsrfToken() {
+    var el = document.querySelector('input[name="csrfmiddlewaretoken"]');
+    if (el && el.value) return el.value;
+    var name = 'csrftoken=';
+    var cookies = document.cookie.split(';');
+    for (var i = 0; i < cookies.length; i++) {
+      var c = cookies[i].trim();
+      if (c.startsWith(name)) return decodeURIComponent(c.slice(name.length));
+    }
+    return '';
+  }
+
+  function showToast(message, type) {
+    var toast = document.createElement('div');
+    toast.className = 'toast-message ' + (type || 'success');
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    toast.offsetHeight;
+    toast.classList.add('visible');
+    setTimeout(function () {
+      toast.classList.remove('visible');
+      setTimeout(function () { toast.remove(); }, 350);
+    }, 3500);
+  }
+
+  async function postJson(url, payload) {
+    try {
+      var response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getCsrfToken(),
+        },
+        body: JSON.stringify(payload || {}),
+      });
+      var text = await response.text();
+      var data;
+      try { data = JSON.parse(text); } catch (_) {
+        return { success: false, message: 'Request failed (' + response.status + ').' };
+      }
+      if (!response.ok) {
+        return { success: false, message: data.message || 'Request failed (' + response.status + ').' };
+      }
+      return data;
+    } catch (_) {
+      return { success: false, message: 'Network request failed.' };
+    }
+  }
+
+  function openModal(el) {
+    el.classList.remove('hidden');
+    el.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeModal(el) {
+    el.classList.add('hidden');
+    el.setAttribute('aria-hidden', 'true');
+  }
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function parseMembersRaw(raw) {
+    var value = (raw || '').trim();
+    if (!value) return [];
+    if (value.startsWith('[')) {
+      try {
+        var parsed = JSON.parse(value);
+        if (Array.isArray(parsed)) {
+          return parsed.map(function (name) { return String(name).trim(); }).filter(Boolean);
+        }
+      } catch (_) {}
+    }
+    return value.split(/[\n,]+/).map(function (name) { return name.trim(); }).filter(Boolean);
+  }
+
+  function syncMembersHiddenField() {
+    if (teamMembers) {
+      teamMembers.value = memberNames.join(', ');
+    }
+  }
+
+  function renderMemberEditorList() {
+    if (!membersListEl) return;
+    membersListEl.innerHTML = '';
+    memberNames.forEach(function (name, idx) {
+      var li = document.createElement('li');
+      li.className = 'team-members-editor-item';
+      li.innerHTML =
+        '<span class="member-num">' + (idx + 1) + '</span>' +
+        '<span class="member-name">' + escapeHtml(name) + '</span>' +
+        '<button type="button" class="member-remove" aria-label="Remove ' + escapeHtml(name) + '">&times;</button>';
+      li.querySelector('.member-remove').addEventListener('click', function () {
+        memberNames.splice(idx, 1);
+        renderMemberEditorList();
+      });
+      membersListEl.appendChild(li);
+    });
+    syncMembersHiddenField();
+  }
+
+  function resetMemberEditor(names) {
+    memberNames = Array.isArray(names) ? names.slice() : [];
+    if (memberInput) memberInput.value = '';
+    renderMemberEditorList();
+  }
+
+  function addMemberFromInput() {
+    if (!memberInput) return false;
+    var name = memberInput.value.trim();
+    if (!name) {
+      showToast('Enter a player name before adding.', 'warning');
+      memberInput.focus();
+      return false;
+    }
+    var exists = memberNames.some(function (existing) {
+      return existing.toLowerCase() === name.toLowerCase();
+    });
+    if (exists) {
+      showToast('That player is already on the team.', 'warning');
+      memberInput.focus();
+      memberInput.select();
+      return false;
+    }
+    memberNames.push(name);
+    memberInput.value = '';
+    renderMemberEditorList();
+    memberInput.focus();
+    return true;
+  }
+
+  function openCreateModal() {
+    formModal.dataset.endpoint = createUrl;
+    teamId.value = '';
+    teamName.value = '';
+    teamCode.value = '';
+    teamDepartment.value = '';
+    resetMemberEditor([]);
+    teamCoach.value = '';
+    teamStatus.value = 'active';
+    modalTitle.textContent = 'Add Team';
+    submitBtn.textContent = 'Add Team';
+    openModal(formModal);
+    teamName.focus();
+  }
+
+  function openEditModal(row, endpoint) {
+    formModal.dataset.endpoint = endpoint;
+    teamId.value = row.dataset.teamId || '';
+    teamName.value = row.dataset.name || '';
+    teamCode.value = row.dataset.code || '';
+    teamDepartment.value = row.dataset.departmentId || '';
+    resetMemberEditor(parseMembersRaw(row.dataset.members || ''));
+    teamCoach.value = row.dataset.coach === '—' ? '' : (row.dataset.coach || '');
+    teamStatus.value = row.dataset.status || 'active';
+    modalTitle.textContent = 'Edit Team';
+    submitBtn.textContent = 'Save Changes';
+    openModal(formModal);
+    teamName.focus();
+  }
+
+  async function openMembersModal(url, fallbackName) {
+    var response = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    var data;
+    try { data = await response.json(); } catch (_) {
+      showToast('Unable to load team members.', 'error');
+      return;
+    }
+    document.getElementById('team-members-title').textContent = data.name || fallbackName || 'Team';
+    document.getElementById('team-members-subtitle').textContent = data.code ? ('Code: ' + data.code) : '';
+    document.getElementById('view-team-department').textContent = data.department_name || '—';
+    document.getElementById('view-team-coach').textContent = data.coach || '—';
+    document.getElementById('view-team-count').textContent = String(data.player_count || 0);
+    document.getElementById('view-team-status').textContent = data.status_label || '—';
+
+    var listEl = document.getElementById('team-members-list');
+    listEl.innerHTML = '';
+    var members = data.members || [];
+    if (!members.length) {
+      var emptyLi = document.createElement('li');
+      emptyLi.className = 'team-members-empty-item';
+      emptyLi.textContent = 'No team members listed.';
+      listEl.appendChild(emptyLi);
+    } else {
+      members.forEach(function (name, idx) {
+        var li = document.createElement('li');
+        li.innerHTML = '<span class="member-num">' + (idx + 1) + '</span><span>' + escapeHtml(name) + '</span>';
+        listEl.appendChild(li);
+      });
+    }
+    openModal(membersModal);
+  }
+
+  function openDeleteModal(name, deleteUrl, triggerBtn) {
+    if (!deleteModal) return;
+    pendingDelete.url = deleteUrl || '';
+    pendingDelete.triggerBtn = triggerBtn || null;
+    if (deleteTeamNameEl) deleteTeamNameEl.textContent = name || 'this team';
+    if (confirmDeleteBtn) {
+      confirmDeleteBtn.disabled = false;
+      confirmDeleteBtn.textContent = 'Delete Team';
+    }
+    openModal(deleteModal);
+  }
+
+  function closeDeleteModal() {
+    if (!deleteModal) return;
+    closeModal(deleteModal);
+    pendingDelete.url = '';
+    pendingDelete.triggerBtn = null;
+  }
+
+  async function confirmDeleteTeam() {
+    if (!pendingDelete.url || !confirmDeleteBtn) return;
+    confirmDeleteBtn.disabled = true;
+    confirmDeleteBtn.textContent = 'Deleting…';
+    if (pendingDelete.triggerBtn) pendingDelete.triggerBtn.disabled = true;
+    var result = await postJson(pendingDelete.url, {});
+    if (!result.success) {
+      confirmDeleteBtn.disabled = false;
+      confirmDeleteBtn.textContent = 'Delete Team';
+      if (pendingDelete.triggerBtn) pendingDelete.triggerBtn.disabled = false;
+      showToast(result.message || 'Unable to delete team.', 'error');
+      return;
+    }
+    closeDeleteModal();
+    showToast(result.message || 'Team deleted.', 'success');
+    setTimeout(function () { window.location.reload(); }, 500);
+  }
+
+  openBtn.addEventListener('click', openCreateModal);
+
+  if (addMemberBtn) {
+    addMemberBtn.addEventListener('click', addMemberFromInput);
+  }
+
+  if (memberInput) {
+    memberInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        addMemberFromInput();
+      }
+    });
+  }
+
+  function getTeamRowEl(btn) {
+    return btn.closest('tr') || btn.closest('.teams-grid-card');
+  }
+
+  function bindTeamActions() {
+    document.querySelectorAll('.edit-team').forEach(function (btn) {
+      if (btn.dataset.bound === '1') return;
+      btn.dataset.bound = '1';
+      btn.addEventListener('click', function () {
+        var row = getTeamRowEl(btn);
+        if (!row) return;
+        openEditModal(row, btn.dataset.updateUrl);
+      });
+    });
+
+    document.querySelectorAll('.view-team').forEach(function (btn) {
+      if (btn.dataset.bound === '1') return;
+      btn.dataset.bound = '1';
+      btn.addEventListener('click', function () {
+        var row = getTeamRowEl(btn);
+        openMembersModal(btn.dataset.viewUrl, row ? row.dataset.name : '');
+      });
+    });
+
+    document.querySelectorAll('.delete-team').forEach(function (btn) {
+      if (btn.dataset.bound === '1') return;
+      btn.dataset.bound = '1';
+      btn.addEventListener('click', function () {
+        var row = getTeamRowEl(btn);
+        var name = row ? row.dataset.name : 'this team';
+        openDeleteModal(name, btn.dataset.deleteUrl, btn);
+      });
+    });
+  }
+
+  var listView = document.getElementById('teams-list-view');
+  var gridView = document.getElementById('teams-grid-view');
+  document.querySelectorAll('.teams-view-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var mode = btn.dataset.view || 'list';
+      document.querySelectorAll('.teams-view-btn').forEach(function (b) {
+        var active = b === btn;
+        b.classList.toggle('is-active', active);
+        b.setAttribute('aria-pressed', active ? 'true' : 'false');
+      });
+      if (listView) listView.classList.toggle('is-hidden', mode !== 'list');
+      if (gridView) {
+        gridView.classList.toggle('hidden', mode !== 'grid');
+        gridView.setAttribute('aria-hidden', mode === 'grid' ? 'false' : 'true');
+      }
+    });
+  });
+
+  bindTeamActions();
+
+  formModal.addEventListener('click', function (e) {
+    if (e.target.dataset.closeTeamModal === 'true') closeModal(formModal);
+  });
+  if (membersModal) {
+    membersModal.addEventListener('click', function (e) {
+      if (e.target.dataset.closeMembersModal === 'true') closeModal(membersModal);
+    });
+  }
+  if (deleteModal) {
+    deleteModal.addEventListener('click', function (e) {
+      if (e.target.dataset.closeDeleteModal === 'true') closeDeleteModal();
+    });
+  }
+  if (confirmDeleteBtn) {
+    confirmDeleteBtn.addEventListener('click', confirmDeleteTeam);
+  }
+
+  form.addEventListener('submit', async function (e) {
+    e.preventDefault();
+    syncMembersHiddenField();
+    var payload = {
+      name: teamName.value.trim(),
+      code: teamCode.value.trim(),
+      department_id: teamDepartment.value || null,
+      members: memberNames,
+      coach: teamCoach.value.trim(),
+      status: teamStatus.value,
+    };
+    if (!payload.name || !payload.code || !payload.department_id) {
+      showToast('Team name, team code, and department are required.', 'warning');
+      return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = teamId.value ? 'Saving…' : 'Adding…';
+    var result = await postJson(formModal.dataset.endpoint, payload);
+    if (!result.success) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = teamId.value ? 'Save Changes' : 'Add Team';
+      showToast(result.message || 'Unable to save team.', 'error');
+      return;
+    }
+    showToast(result.message || 'Team saved.', 'success');
+    closeModal(formModal);
+    setTimeout(function () { window.location.reload(); }, 500);
+  });
+});

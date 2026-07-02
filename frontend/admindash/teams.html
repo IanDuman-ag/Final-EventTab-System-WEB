@@ -1,0 +1,108 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Teams - EventTab</title>
+  <link rel="stylesheet" href="{% static 'admindash/teams.css' %}?v=20260619a">
+</head>
+<body class="admin-dashboard-page teams-page admin-dashboard-v2">
+  <div class="dashboard-shell">
+    {% include 'admindash/_sidebar.html' with active='teams' %}
+    <div class="content-area v2-content">
+      <header class="topbar">
+        <span class="topbar-spacer" aria-hidden="true"></span>
+        <div class="topbar-actions">
+          <button class="icon-button" type="button" aria-label="Notifications">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm8-6-2-2v-5a6 6 0 1 0-12 0v5l-2 2v1h16v-1Z"></path></svg>
+          </button>
+          <div class="profile-avatar" aria-label="{{ request.user.username }}">{{ request.user.username|default:"AD"|slice:":2"|upper }}</div>
+        </div>
+      </header>
+      <main class="teams-main">
+        <header class="teams-page-header">
+          <div class="teams-page-intro">
+            <h1>Teams</h1>
+            <p>Manage registered teams, departments, coaches, and players.</p>
+          </div>
+          <button class="teams-add-btn" type="button" id="open-team-modal" data-create-url="{% url 'admin_create_team' %}">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 11V5h2v6h6v2h-6v6h-2v-6H5v-2h6Z"/></svg>
+            Add Team
+          </button>
+        </header>
+
+        <section class="teams-stats" aria-label="Team statistics">
+          <article class="teams-stat-card teams-stat-card--blue"><div class="teams-stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3Zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3Zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 14.17 10.33 13 8 13Zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5Z"/></svg></div><div class="teams-stat-copy"><span>Total Teams</span><strong>{{ total_team_count|default:"0" }}</strong><small>All teams</small></div></article>
+          <article class="teams-stat-card teams-stat-card--green"><div class="teams-stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17Z"/></svg></div><div class="teams-stat-copy"><span>Active Teams</span><strong>{{ active_team_count|default:"0" }}</strong><small>{{ active_team_percent|default:"0" }}% active</small></div></article>
+          <article class="teams-stat-card teams-stat-card--purple"><div class="teams-stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4Zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4Z"/></svg></div><div class="teams-stat-copy"><span>Total Players</span><strong>{{ total_player_count|default:"0" }}</strong><small>Across all teams</small></div></article>
+        </section>
+
+        <section class="teams-panel" aria-label="Teams table">
+          <div class="teams-toolbar">
+            <form class="teams-filters" method="get" role="search">
+              <label class="teams-search"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5Zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14Z"/></svg><input type="text" name="q" value="{{ search_query }}" placeholder="Search teams by name or code..." aria-label="Search teams"></label>
+              <select name="dept" class="teams-select" aria-label="Department"><option value="all" {% if selected_dept == 'all' %}selected{% endif %}>All Departments</option>{% for dept in active_departments %}<option value="{{ dept.id }}" {% if selected_dept == dept.id|stringformat:"s" %}selected{% endif %}>{{ dept.name }}</option>{% endfor %}</select>
+              <select name="status" class="teams-select" aria-label="Status"><option value="all" {% if selected_status == 'all' %}selected{% endif %}>All Status</option><option value="active" {% if selected_status == 'active' %}selected{% endif %}>Active</option><option value="inactive" {% if selected_status == 'inactive' %}selected{% endif %}>Inactive</option></select>
+              <button type="submit" class="teams-filter-btn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 18h4v-2h-4v2ZM3 6v2h18V6H3Zm3 7h12v-2H6v2Z"/></svg>Filters</button>
+            </form>
+            <div class="teams-view-toggle" role="group" aria-label="View mode">
+              <button type="button" class="teams-view-btn is-active" data-view="list" aria-pressed="true" title="List view"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 13h2v-2H3v2Zm0 4h2v-2H3v2ZM0 9h2V7H0v2Zm0 4h2v-2H0v2Zm0-8h2V3H0v2Zm4 4h16V7H4v2Zm0 6h16v-2H4v2Zm0 4h16v-2H4v2Z"/></svg></button>
+              <button type="button" class="teams-view-btn" data-view="grid" aria-pressed="false" title="Grid view"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v8h8V3H3Zm10 0v8h8V3h-8ZM3 13v8h8v-8H3Zm10 0v8h8v-8h-8Z"/></svg></button>
+            </div>
+          </div>
+          <div class="teams-table-wrap" id="teams-list-view">
+            <table class="teams-table" id="teams-table">
+              <thead><tr><th>Team Name</th><th>Team Code</th><th>Department</th><th>Coach</th><th>Players</th><th>Status</th><th>Actions</th></tr></thead>
+              <tbody>
+                {% for row in team_rows %}
+                  <tr data-team-id="{{ row.id }}" data-name="{{ row.name }}" data-code="{{ row.code }}" data-department-id="{{ row.department_id|default:'' }}" data-members="{{ row.members }}" data-coach="{{ row.coach }}" data-status="{{ row.status }}">
+                    <td data-label="Team Name"><div class="teams-name-cell"><span class="teams-avatar teams-avatar--{{ row.avatar_tone }}">{{ row.name|slice:":2"|upper }}</span><div><strong>{{ row.name }}</strong><small>{% if row.department_code %}{{ row.department_code }}{% else %}{{ row.department_name }}{% endif %}</small></div></div></td>
+                    <td data-label="Team Code"><span class="teams-code-pill">{{ row.code }}</span></td><td data-label="Department">{{ row.department_name }}</td><td data-label="Coach">{{ row.coach }}</td>
+                    <td data-label="Players"><span class="teams-players"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3Zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3Zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 14.17 10.33 13 8 13Zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5Z"/></svg>{{ row.player_count }} Player{{ row.player_count|pluralize }}</span></td>
+                    <td data-label="Status"><span class="teams-status teams-status--{{ row.status }}"><span class="teams-status-dot" aria-hidden="true"></span>{{ row.status_label|upper }}</span></td>
+                    <td data-label="Actions"><div class="teams-row-actions"><button class="teams-action-btn view-team" type="button" title="View members" data-view-url="{% url 'admin_view_team' row.id %}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5C21.27 7.61 17 4.5 12 4.5Zm0 12.5a5 5 0 1 1 0-10 5 5 0 0 1 0 10Zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"/></svg></button><button class="teams-action-btn edit-team" type="button" title="Edit" data-update-url="{% url 'admin_edit_team' row.id %}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 17.25 11.06-11.06 3.75 3.75L6.75 21H3v-3.75ZM19.71 8.04 15.96 4.3l1.33-1.33a1 1 0 0 1 1.42 0l2.33 2.33a1 1 0 0 1 0 1.42l-1.33 1.33Z"/></svg></button><button class="teams-action-btn teams-action-btn--danger delete-team" type="button" title="Delete" data-delete-url="{% url 'admin_delete_team' row.id %}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm1 7h2v8h-2v-8Zm4 0h2v8h-2v-8ZM6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7Z"/></svg></button></div></td>
+                  </tr>
+                {% empty %}<tr><td colspan="7" class="teams-empty">No teams found.</td></tr>{% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <footer class="teams-pagination" aria-label="Teams pagination">
+            <span>Showing {{ start_index }} to {{ end_index }} of {{ filtered_team_count|default:"0" }} teams</span>
+            <div class="teams-pagination-controls">
+              {% if page_obj.has_previous %}<a class="teams-page-btn" href="?q={{ search_query|urlencode }}&dept={{ selected_dept }}&status={{ selected_status }}&page={{ page_obj.previous_page_number }}" aria-label="Previous page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12l4.58-4.59Z"/></svg></a>{% else %}<span class="teams-page-btn is-disabled" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12l4.58-4.59Z"/></svg></span>{% endif %}
+              {% for num in page_obj.paginator.page_range %}{% if num == page_obj.number %}<span class="teams-page-num is-active">{{ num }}</span>{% else %}<a class="teams-page-num" href="?q={{ search_query|urlencode }}&dept={{ selected_dept }}&status={{ selected_status }}&page={{ num }}">{{ num }}</a>{% endif %}{% endfor %}
+              {% if page_obj.has_next %}<a class="teams-page-btn" href="?q={{ search_query|urlencode }}&dept={{ selected_dept }}&status={{ selected_status }}&page={{ page_obj.next_page_number }}" aria-label="Next page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.59 16.59 13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41Z"/></svg></a>{% else %}<span class="teams-page-btn is-disabled" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8.59 16.59 13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41Z"/></svg></span>{% endif %}
+            </div>
+          </footer>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div id="team-form-modal" class="assignment-modal teams-modal hidden" aria-hidden="true">
+    <div class="modal-backdrop" data-close-team-modal="true"></div>
+    <div class="teams-modal-panel team-form-panel" role="dialog" aria-modal="true" aria-labelledby="team-modal-title">
+      <div class="teams-modal-header"><div><h3 id="team-modal-title">Add Team</h3><p id="team-modal-subtitle">Register a team with department, members, and coach.</p></div><button class="teams-modal-close" type="button" data-close-team-modal="true" aria-label="Close">&times;</button></div>
+      <form id="team-form" class="team-modal-form">
+        {% csrf_token %}
+        <input type="hidden" id="team-id">
+        <div class="team-modal-body">
+          <div class="team-form-grid">
+            <label class="team-field"><span class="team-field-label">Team Name <span class="ced-req">*</span></span><input type="text" id="team-name" required></label>
+            <label class="team-field"><span class="team-field-label">Team Code <span class="ced-req">*</span></span><input type="text" id="team-code" required></label>
+            <label class="team-field team-field--full"><span class="team-field-label">Department <span class="ced-req">*</span></span><select id="team-department" required><option value="">Select active department</option>{% for dept in active_departments %}<option value="{{ dept.id }}">{{ dept.name }} ({{ dept.code }})</option>{% endfor %}</select></label>
+            <div class="team-members-field team-field team-field--full"><span class="team-field-label">Team Members</span><div class="team-members-editor"><ul id="team-members-editor-list" class="team-members-editor-list" aria-live="polite"></ul><p class="team-members-empty" id="team-members-empty">No members added yet.</p><div class="team-members-add-stack"><input type="text" id="team-member-input" placeholder="Player full name"><button type="button" id="add-team-member-btn" class="add-team-member-btn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 11V5h2v6h6v2h-6v6h-2v-6H5v-2h6Z"/></svg>Add Team Member</button></div></div><input type="hidden" id="team-members"></div>
+            <label class="team-field"><span class="team-field-label">Coach</span><input type="text" id="team-coach"></label>
+            <label class="team-field"><span class="team-field-label">Status</span><select id="team-status"><option value="active">Active</option><option value="inactive">Inactive</option></select></label>
+          </div>
+        </div>
+        <div class="teams-modal-footer"><button class="teams-btn teams-btn--ghost" type="button" data-close-team-modal="true">Cancel</button><button class="teams-btn teams-btn--primary" type="submit" id="team-submit-btn">Add Team</button></div>
+      </form>
+    </div>
+  </div>
+  <div id="team-members-modal" class="assignment-modal teams-modal hidden" aria-hidden="true"><div class="modal-backdrop" data-close-members-modal="true"></div><div class="teams-modal-panel team-view-panel" role="dialog" aria-modal="true" aria-labelledby="team-members-title"><div class="teams-modal-header teams-modal-header--view"><div><h3 id="team-members-title">Team</h3><p id="team-members-subtitle">Code: —</p></div><button class="teams-modal-close" type="button" data-close-members-modal="true" aria-label="Close">&times;</button></div><div class="team-view-body"><dl class="team-view-details"><div class="team-view-detail"><dt>Department</dt><dd id="view-team-department">—</dd></div><div class="team-view-detail"><dt>Coach</dt><dd id="view-team-coach">—</dd></div><div class="team-view-detail"><dt>Players</dt><dd id="view-team-count">—</dd></div><div class="team-view-detail"><dt>Status</dt><dd id="view-team-status">—</dd></div></dl><div class="team-view-members-wrap"><h4 class="team-view-members-title">Team Members</h4><ul id="team-members-list" class="team-members-list"></ul></div></div><div class="teams-modal-footer teams-modal-footer--single"><button class="teams-btn teams-btn--primary" type="button" data-close-members-modal="true">Close</button></div></div></div>
+  <div id="team-delete-modal" class="assignment-modal teams-modal hidden" aria-hidden="true"><div class="modal-backdrop" data-close-delete-modal="true"></div><div class="teams-modal-panel team-delete-panel" role="dialog" aria-modal="true" aria-labelledby="team-delete-title"><div class="team-delete-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm1 7h2v8h-2v-8Zm4 0h2v8h-2v-8ZM6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7Z"/></svg></div><h3 id="team-delete-title">Delete Team</h3><p class="team-delete-message">Are you sure you want to delete <strong id="delete-team-name">this team</strong>? This action cannot be undone.</p><div class="teams-modal-footer teams-modal-footer--center"><button class="teams-btn teams-btn--ghost" type="button" data-close-delete-modal="true">Cancel</button><button class="teams-btn teams-btn--danger" type="button" id="confirm-delete-team-btn">Delete Team</button></div></div></div>
+  <script src="{% static 'js/admin_teams.js' %}?v=20260619a"></script>
+</body>
+</html>

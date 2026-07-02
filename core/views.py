@@ -4,6 +4,7 @@ from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.admin.models import ADDITION, CHANGE, DELETION, LogEntry
 from django.contrib.auth.models import Group
 from django.core.paginator import Paginator
+from django.db import IntegrityError
 from django.db.models import Q, Count
 from django.shortcuts import redirect, render, get_object_or_404
 from django.utils import timezone
@@ -19,7 +20,7 @@ import string
 from datetime import datetime, timedelta
 
 from events.models import (
-    Event, Department,
+    Event, Department, Team, RegistryCandidate,
     Portion, CandidateNumber, Contestant, JudgeAssignment,
     ScoringCriterion, Chairperson, BracketMatch, JudgeActivityLog,
 )
@@ -68,6 +69,9 @@ def resolve_department(dept_val):
 
 def parse_team_members(members_raw):
     """Return a comma-separated member string and count from stored value."""
+    if isinstance(members_raw, list):
+        names = [str(m).strip() for m in members_raw if str(m).strip()]
+        return ', '.join(names), len(names)
     raw = (members_raw or '').strip()
     if not raw:
         return '', 0
@@ -83,13 +87,89 @@ def parse_team_members(members_raw):
     return ', '.join(names), len(names)
 
 
+def serialize_registry_teams():
+    """Serialize active Team registry rows for event team picker."""
+    teams = []
+    for team in Team.objects.filter(status=Team.STATUS_ACTIVE).select_related('department').order_by('name'):
+        members_str, player_count = parse_team_members(team.members)
+        teams.append({
+            'id': team.id,
+            'name': team.name,
+            'code': team.code,
+            'department': team.department.name if team.department else '',
+            'members': members_str,
+            'player_count': player_count,
+            'coach': team.coach or '',
+        })
+    return teams
+
+
+def serialize_registry_candidates():
+    """Serialize active registry candidates for event picker."""
+    rows = []
+    for cand in RegistryCandidate.objects.filter(
+        status=RegistryCandidate.STATUS_ACTIVE,
+    ).select_related('department').order_by('number', 'name'):
+        rows.append({
+            'id': cand.id,
+            'number': cand.number,
+            'name': cand.name,
+            'department': cand.department.name if cand.department else '',
+            'department_id': cand.department_id,
+        })
+    return rows
+
+
+def resolve_event_candidate_payload(entry):
+    """Normalize candidate JSON from admin forms, optionally from registry."""
+    registry_id = entry.get('registry_id')
+    if registry_id:
+        reg = RegistryCandidate.objects.filter(
+            id=registry_id,
+            status=RegistryCandidate.STATUS_ACTIVE,
+        ).select_related('department').first()
+        if reg:
+            try:
+                number = int(reg.number)
+            except (TypeError, ValueError):
+                number = reg.number
+            return {
+                'registry_id': reg.id,
+                'number': number,
+                'name': reg.name,
+                'department': reg.department.name if reg.department else '',
+                'description': (entry.get('description') or '').strip(),
+            }
+    number = entry.get('number')
+    try:
+        number = int(number) if number not in (None, '') else None
+    except (TypeError, ValueError):
+        pass
+    return {
+        'registry_id': registry_id,
+        'number': number,
+        'name': (entry.get('name') or '').strip(),
+        'department': (entry.get('department') or '').strip(),
+        'description': (entry.get('description') or '').strip(),
+    }
+
+
 def serialize_event_teams(event):
     """Serialize BracketTeam rows for admin event dialogs."""
+    registry_by_name = {
+        t.name.lower(): t.id for t in Team.objects.filter(status=Team.STATUS_ACTIVE)
+    }
+    registry_by_code = {
+        t.code.lower(): t.id for t in Team.objects.filter(status=Team.STATUS_ACTIVE)
+    }
     teams = []
     for t in event.bracket_teams.select_related('department').order_by('seed', 'name'):
         members_str, _ = parse_team_members(t.members)
+        registry_id = registry_by_name.get(t.name.lower()) or registry_by_code.get(t.name.lower())
         teams.append({
+            'registry_id': registry_id,
             'name': t.name,
+            'code': t.name,
             'department': t.department.name if t.department else '',
             'members': members_str,
             'seed': t.seed or 0,
@@ -102,8 +182,15 @@ def serialize_event_candidates(event):
     if not event.judging_event_id:
         return []
     from events.models import Candidate
+    registry_by_name = {
+        c.name.lower(): c.id for c in RegistryCandidate.objects.filter(status=RegistryCandidate.STATUS_ACTIVE)
+    }
+    registry_by_number = {
+        str(c.number).lower(): c.id for c in RegistryCandidate.objects.filter(status=RegistryCandidate.STATUS_ACTIVE)
+    }
     return [
         {
+            'registry_id': registry_by_number.get(str(c.number).lower()) or registry_by_name.get(c.name.lower()),
             'name': c.name,
             'number': c.number,
             'department': c.department or '',
@@ -121,7 +208,19 @@ def _parse_event_candidates_json(raw):
         parsed = json.loads(raw)
     except (json.JSONDecodeError, TypeError):
         return []
-    return parsed if isinstance(parsed, list) else []
+    if not isinstance(parsed, list):
+        return []
+    resolved = []
+    for index, entry in enumerate(parsed, start=1):
+        if not isinstance(entry, dict):
+            continue
+        item = resolve_event_candidate_payload(entry)
+        if not item.get('name'):
+            continue
+        if not item.get('number'):
+            item['number'] = index
+        resolved.append(item)
+    return resolved
 
 
 def _resolve_event_assignees(user_ids, scoring_method):
@@ -976,153 +1075,6 @@ def admin_judge_scorer_accounts(request):
 
 @login_required(login_url='login')
 @user_passes_test(lambda user: user.is_staff, login_url='login')
-def admin_analytics(request):
-    """Analytics overview page (dashboard with deeper metrics)."""
-    from datetime import timedelta as _td
-    from collections import OrderedDict
-
-    all_events = list(Event.objects.all())
-    today = timezone.localdate()
-    status_counts = get_event_status_counts(all_events, today)
-
-    total_events = len(all_events)
-    total_participants = sum(int(ev.max_participants or 0) for ev in all_events)
-    total_teams = sum(int(ev.num_teams or 0) for ev in all_events)
-    completed_events = status_counts['completed']
-    participation_rate = int(round(completed_events / total_events * 100)) if total_events else 0
-
-    # Top categories by participants
-    cat_data = {}
-    for ev in all_events:
-        cat = (ev.category or 'Other').strip() or 'Other'
-        if cat not in cat_data:
-            cat_data[cat] = {'count': 0, 'participants': 0}
-        cat_data[cat]['count'] += 1
-        cat_data[cat]['participants'] += int(ev.max_participants or 0)
-    top_categories = sorted(
-        [{'name': k, 'count': v['count'], 'participants': v['participants']} for k, v in cat_data.items()],
-        key=lambda x: x['participants'], reverse=True
-    )[:5]
-    total_part_for_pct = total_participants or 1
-    for c in top_categories:
-        c['pct'] = int(round(c['participants'] / total_part_for_pct * 100))
-
-    # Participation by Department (sum of participants from events whose
-    # department code matches; falls back to event count if none match)
-    dept_rows = []
-    departments = Department.objects.all()
-    for dept in departments:
-        evs = [e for e in all_events if (e.department or '').lower() == dept.name.lower() or (e.department or '').lower() == dept.code.lower()]
-        participants = sum(int(e.max_participants or 0) for e in evs)
-        teams = sum(int(e.num_teams or 0) for e in evs)
-        dept_rows.append({
-            'name': dept.name[:14],
-            'participants': participants,
-            'teams': teams,
-        })
-    dept_rows.sort(key=lambda x: x['participants'], reverse=True)
-    dept_rows = dept_rows[:6]
-
-    # Daily series for "Events & Participants Over Time" — last 31 days
-    daily_labels = []
-    daily_events = []
-    daily_participants = []
-    for i in range(30, -1, -1):
-        day = today - _td(days=i)
-        evs = [e for e in all_events if e.event_date == day]
-        if i % 5 == 0 or i == 0:
-            daily_labels.append(day.strftime('%b %d'))
-        else:
-            daily_labels.append('')
-        daily_events.append(len(evs))
-        daily_participants.append(sum(int(e.max_participants or 0) for e in evs))
-
-    # Event Completion Rate (by month, last 6 months)
-    months = []
-    cursor = today.replace(day=1)
-    for _ in range(6):
-        months.append(cursor)
-        prev_month_end = cursor - _td(days=1)
-        cursor = prev_month_end.replace(day=1)
-    months.reverse()
-
-    completion_labels = []
-    completion_rates = []
-    monthly_total_labels = []
-    monthly_avg_participants = []
-    for m_start in months:
-        next_month = (m_start.replace(day=28) + _td(days=4)).replace(day=1)
-        m_end = next_month - _td(days=1)
-        in_month = [e for e in all_events if e.event_date and m_start <= e.event_date <= m_end]
-        total_in = len(in_month)
-        completed_in = sum(1 for e in in_month if get_event_status_meta(e, today)['status'] == 'completed')
-        rate = int(round(completed_in / total_in * 100)) if total_in else 0
-        completion_labels.append(m_start.strftime('%b'))
-        completion_rates.append(rate)
-
-        avg_p = int(round(sum(int(e.max_participants or 0) for e in in_month) / total_in)) if total_in else 0
-        monthly_total_labels.append(m_start.strftime('%b'))
-        monthly_avg_participants.append(avg_p)
-
-    # Status counts for doughnut
-    status_doughnut = {
-        'ongoing': status_counts['ongoing'],
-        'upcoming': status_counts['upcoming'],
-        'completed': status_counts['completed'],
-        'cancelled': status_counts['inactive'],
-    }
-
-    # Event performance table (top 5 by participants)
-    perf_rows = []
-    for ev in sorted(all_events, key=lambda e: int(e.max_participants or 0), reverse=True)[:5]:
-        sm = get_event_status_meta(ev, today)
-        completion = 100 if sm['status'] == 'completed' else (75 if sm['status'] == 'ongoing' else 0)
-        perf_rows.append({
-            'name': ev.name,
-            'category': ev.category,
-            'status': sm['status'],
-            'status_label': sm['status_label'],
-            'participants': ev.max_participants or 0,
-            'teams': ev.num_teams or 0,
-            'completion': completion,
-        })
-
-    # Participant Engagement metrics (computed from current data)
-    User = get_user_model()
-    new_participants = User.objects.filter(date_joined__gte=today - _td(days=30)).count()
-    returning_participants = max(total_participants - new_participants, 0)
-    avg_events_per_participant = round(total_events / total_participants, 2) if total_participants else 0
-    avg_minutes_per_event = 144  # ~2.4 hours; static placeholder until time-tracking exists
-
-    return render(request, 'admindash/analytics.html', {
-        'total_events': total_events,
-        'total_participants': total_participants,
-        'total_teams': total_teams,
-        'completed_events': completed_events,
-        'participation_rate': participation_rate,
-        'top_categories': top_categories,
-        'dept_rows': dept_rows,
-        'daily_labels_json': json.dumps(daily_labels),
-        'daily_events_json': json.dumps(daily_events),
-        'daily_participants_json': json.dumps(daily_participants),
-        'completion_labels_json': json.dumps(completion_labels),
-        'completion_rates_json': json.dumps(completion_rates),
-        'monthly_avg_labels_json': json.dumps(monthly_total_labels),
-        'monthly_avg_participants_json': json.dumps(monthly_avg_participants),
-        'status_doughnut_json': json.dumps(status_doughnut),
-        'dept_rows_json': json.dumps(dept_rows),
-        'perf_rows': perf_rows,
-        'new_participants': new_participants,
-        'returning_participants': returning_participants,
-        'avg_events_per_participant': avg_events_per_participant,
-        'avg_minutes_per_event': avg_minutes_per_event,
-        'avg_hours_per_event': round(avg_minutes_per_event / 60, 1),
-        'date_range_label': today.replace(day=1).strftime('%b 1') + ' – ' + today.strftime('%b %d, %Y'),
-    })
-
-
-@login_required(login_url='login')
-@user_passes_test(lambda user: user.is_staff, login_url='login')
 def admin_generate_report(request):
     """Generate Report page — admin-level, uses existing report generator."""
     from datetime import timedelta as _td
@@ -1335,6 +1287,389 @@ def admin_departments(request):
         'unique_deans': unique_deans,
         'new_department_count': 0,
     })
+
+
+def get_active_departments():
+    return list(
+        Department.objects.filter(status=Department.STATUS_ACTIVE).order_by('name')
+    )
+
+
+def get_team_rows():
+    rows = []
+    for team in Team.objects.select_related('department').order_by('name'):
+        members_display, player_count = parse_team_members(team.members)
+        rows.append({
+            'id': team.id,
+            'name': team.name,
+            'code': team.code,
+            'department_id': team.department_id,
+            'department_name': team.department.name if team.department else '—',
+            'department_code': team.department.code if team.department else '',
+            'members': team.members,
+            'members_display': members_display or '—',
+            'player_count': player_count,
+            'coach': team.coach or '—',
+            'status': team.status,
+            'status_label': 'Active' if team.status == Team.STATUS_ACTIVE else 'Inactive',
+            'avatar_tone': team.id % 5,
+        })
+    return rows
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def admin_teams(request):
+    search_query = request.GET.get('q', '').strip()
+    status_filter = request.GET.get('status', 'all').strip().lower()
+    dept_filter = request.GET.get('dept', 'all').strip()
+
+    team_rows = get_team_rows()
+    if search_query:
+        q = search_query.lower()
+        team_rows = [
+            row for row in team_rows
+            if q in row['name'].lower()
+            or q in row['code'].lower()
+            or q in row['department_name'].lower()
+            or q in row['coach'].lower()
+            or q in row['members_display'].lower()
+        ]
+    if status_filter != 'all':
+        team_rows = [row for row in team_rows if row['status'] == status_filter]
+    if dept_filter != 'all':
+        team_rows = [
+            row for row in team_rows
+            if str(row['department_id'] or '') == dept_filter
+        ]
+
+    paginator = Paginator(team_rows, 10)
+    page_obj = paginator.get_page(request.GET.get('page', 1))
+    start_index = page_obj.start_index() if paginator.count else 0
+    end_index = page_obj.end_index() if paginator.count else 0
+
+    all_teams = Team.objects.all()
+    total_team_count = all_teams.count()
+    active_team_count = all_teams.filter(status=Team.STATUS_ACTIVE).count()
+    total_player_count = sum(parse_team_members(team.members)[1] for team in all_teams)
+    active_team_percent = round((active_team_count / total_team_count) * 100) if total_team_count else 0
+
+    return render(request, 'admindash/teams.html', {
+        'team_rows': page_obj.object_list,
+        'total_team_count': total_team_count,
+        'active_team_count': active_team_count,
+        'active_team_percent': active_team_percent,
+        'total_player_count': total_player_count,
+        'filtered_team_count': len(team_rows),
+        'active_departments': get_active_departments(),
+        'search_query': search_query,
+        'selected_status': status_filter,
+        'selected_dept': dept_filter,
+        'page_obj': page_obj,
+        'start_index': start_index,
+        'end_index': end_index,
+    })
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def admin_candidates(request):
+    search_query = request.GET.get('q', '').strip()
+    status_filter = request.GET.get('status', 'all').strip().lower()
+    dept_filter = request.GET.get('dept', 'all').strip()
+
+    candidate_rows = get_candidate_rows()
+    if search_query:
+        q = search_query.lower()
+        candidate_rows = [
+            row for row in candidate_rows
+            if q in row['name'].lower()
+            or q in row['number'].lower()
+            or q in row['department_name'].lower()
+        ]
+    if status_filter != 'all':
+        candidate_rows = [row for row in candidate_rows if row['status'] == status_filter]
+    if dept_filter != 'all':
+        candidate_rows = [
+            row for row in candidate_rows
+            if str(row['department_id'] or '') == dept_filter
+        ]
+
+    paginator = Paginator(candidate_rows, 10)
+    page_obj = paginator.get_page(request.GET.get('page', 1))
+    start_index = page_obj.start_index() if paginator.count else 0
+    end_index = page_obj.end_index() if paginator.count else 0
+
+    all_candidates = RegistryCandidate.objects.all()
+    total_candidate_count = all_candidates.count()
+    active_candidate_count = all_candidates.filter(status=RegistryCandidate.STATUS_ACTIVE).count()
+    active_candidate_percent = round((active_candidate_count / total_candidate_count) * 100) if total_candidate_count else 0
+
+    return render(request, 'admindash/candidate.html', {
+        'candidate_rows': page_obj.object_list,
+        'total_candidate_count': total_candidate_count,
+        'active_candidate_count': active_candidate_count,
+        'active_candidate_percent': active_candidate_percent,
+        'filtered_candidate_count': len(candidate_rows),
+        'active_departments': get_active_departments(),
+        'search_query': search_query,
+        'selected_status': status_filter,
+        'selected_dept': dept_filter,
+        'page_obj': page_obj,
+        'start_index': start_index,
+        'end_index': end_index,
+    })
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def admin_create_team(request):
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': 'Invalid request method.'}, status=400)
+
+    data = _parse_json_request(request)
+    name = (data.get('name') or '').strip()
+    code = (data.get('code') or '').strip()
+    coach = (data.get('coach') or '').strip()
+    members = data.get('members', '')
+    status = (data.get('status') or Team.STATUS_ACTIVE).strip().lower()
+    dept_id = data.get('department_id')
+
+    if not name or not code:
+        return JsonResponse({'success': False, 'message': 'Team name and team code are required.'}, status=400)
+    if Team.objects.filter(code__iexact=code).exists():
+        return JsonResponse({'success': False, 'message': 'Team code already exists.'}, status=400)
+    if status not in (Team.STATUS_ACTIVE, Team.STATUS_INACTIVE):
+        status = Team.STATUS_ACTIVE
+
+    department = None
+    if dept_id:
+        department = Department.objects.filter(
+            id=dept_id,
+            status=Department.STATUS_ACTIVE,
+        ).first()
+        if department is None:
+            return JsonResponse({'success': False, 'message': 'Select a valid active department.'}, status=400)
+
+    members_str, _ = parse_team_members(members)
+    team = Team.objects.create(
+        name=name,
+        code=code,
+        department=department,
+        members=members_str,
+        coach=coach,
+        status=status,
+    )
+    return JsonResponse({'success': True, 'message': f'Team "{team.name}" created.', 'id': team.id})
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def admin_view_team(request, team_id):
+    team = get_object_or_404(Team.objects.select_related('department'), id=team_id)
+    members_display, player_count = parse_team_members(team.members)
+    member_names = [m.strip() for m in members_display.split(',') if m.strip()] if members_display else []
+    return JsonResponse({
+        'id': team.id,
+        'name': team.name,
+        'code': team.code,
+        'department_name': team.department.name if team.department else '—',
+        'coach': team.coach or '—',
+        'status': team.status,
+        'status_label': 'Active' if team.status == Team.STATUS_ACTIVE else 'Inactive',
+        'player_count': player_count,
+        'members': member_names,
+        'members_display': members_display or '—',
+    })
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def admin_edit_team(request, team_id):
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': 'Invalid request method.'}, status=400)
+
+    team = get_object_or_404(Team, id=team_id)
+    data = _parse_json_request(request)
+    name = (data.get('name') or '').strip()
+    code = (data.get('code') or '').strip()
+    coach = (data.get('coach') or '').strip()
+    members = data.get('members', '')
+    status = (data.get('status') or team.status).strip().lower()
+    dept_id = data.get('department_id')
+
+    if not name or not code:
+        return JsonResponse({'success': False, 'message': 'Team name and team code are required.'}, status=400)
+    if Team.objects.filter(code__iexact=code).exclude(id=team.id).exists():
+        return JsonResponse({'success': False, 'message': 'Team code already exists.'}, status=400)
+    if status not in (Team.STATUS_ACTIVE, Team.STATUS_INACTIVE):
+        status = team.status
+
+    department = None
+    if dept_id:
+        department = Department.objects.filter(
+            id=dept_id,
+            status=Department.STATUS_ACTIVE,
+        ).first()
+        if department is None:
+            return JsonResponse({'success': False, 'message': 'Select a valid active department.'}, status=400)
+
+    members_str, _ = parse_team_members(members)
+    team.name = name
+    team.code = code
+    team.department = department
+    team.members = members_str
+    team.coach = coach
+    team.status = status
+    team.save()
+    return JsonResponse({'success': True, 'message': f'Team "{team.name}" updated.'})
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def admin_delete_team(request, team_id):
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': 'Invalid request method.'}, status=400)
+
+    team = get_object_or_404(Team, id=team_id)
+    name = team.name
+    try:
+        team.delete()
+    except IntegrityError:
+        return JsonResponse({
+            'success': False,
+            'message': (
+                f'Cannot delete "{name}" because it is still linked to existing records. '
+                'Remove those links first, then try again.'
+            ),
+        }, status=400)
+    return JsonResponse({'success': True, 'message': f'Team "{name}" deleted.'})
+
+
+def get_candidate_rows():
+    rows = []
+    for cand in RegistryCandidate.objects.select_related('department').order_by('number', 'name'):
+        rows.append({
+            'id': cand.id,
+            'number': cand.number,
+            'name': cand.name,
+            'department_id': cand.department_id,
+            'department_name': cand.department.name if cand.department else '—',
+            'department_code': cand.department.code if cand.department else '',
+            'status': cand.status,
+            'status_label': 'Active' if cand.status == RegistryCandidate.STATUS_ACTIVE else 'Inactive',
+            'avatar_tone': cand.id % 5,
+        })
+    return rows
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def admin_create_candidate(request):
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': 'Invalid request method.'}, status=400)
+
+    data = _parse_json_request(request)
+    number = (data.get('number') or '').strip()
+    name = (data.get('name') or '').strip()
+    status = (data.get('status') or RegistryCandidate.STATUS_ACTIVE).strip().lower()
+    dept_id = data.get('department_id')
+
+    if not number or not name:
+        return JsonResponse({'success': False, 'message': 'Candidate number and name are required.'}, status=400)
+    if RegistryCandidate.objects.filter(number__iexact=number).exists():
+        return JsonResponse({'success': False, 'message': 'Candidate number already exists.'}, status=400)
+    if status not in (RegistryCandidate.STATUS_ACTIVE, RegistryCandidate.STATUS_INACTIVE):
+        status = RegistryCandidate.STATUS_ACTIVE
+
+    department = None
+    if dept_id:
+        department = Department.objects.filter(
+            id=dept_id,
+            status=Department.STATUS_ACTIVE,
+        ).first()
+        if department is None:
+            return JsonResponse({'success': False, 'message': 'Select a valid active department.'}, status=400)
+
+    cand = RegistryCandidate.objects.create(
+        number=number,
+        name=name,
+        department=department,
+        status=status,
+    )
+    return JsonResponse({'success': True, 'message': f'Candidate "{cand.name}" created.', 'id': cand.id})
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def admin_view_candidate(request, candidate_id):
+    cand = get_object_or_404(RegistryCandidate.objects.select_related('department'), id=candidate_id)
+    return JsonResponse({
+        'id': cand.id,
+        'number': cand.number,
+        'name': cand.name,
+        'department_name': cand.department.name if cand.department else '—',
+        'status': cand.status,
+        'status_label': 'Active' if cand.status == RegistryCandidate.STATUS_ACTIVE else 'Inactive',
+    })
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def admin_edit_candidate(request, candidate_id):
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': 'Invalid request method.'}, status=400)
+
+    cand = get_object_or_404(RegistryCandidate, id=candidate_id)
+    data = _parse_json_request(request)
+    number = (data.get('number') or '').strip()
+    name = (data.get('name') or '').strip()
+    status = (data.get('status') or cand.status).strip().lower()
+    dept_id = data.get('department_id')
+
+    if not number or not name:
+        return JsonResponse({'success': False, 'message': 'Candidate number and name are required.'}, status=400)
+    if RegistryCandidate.objects.filter(number__iexact=number).exclude(id=cand.id).exists():
+        return JsonResponse({'success': False, 'message': 'Candidate number already exists.'}, status=400)
+    if status not in (RegistryCandidate.STATUS_ACTIVE, RegistryCandidate.STATUS_INACTIVE):
+        status = cand.status
+
+    department = None
+    if dept_id:
+        department = Department.objects.filter(
+            id=dept_id,
+            status=Department.STATUS_ACTIVE,
+        ).first()
+        if department is None:
+            return JsonResponse({'success': False, 'message': 'Select a valid active department.'}, status=400)
+
+    cand.number = number
+    cand.name = name
+    cand.department = department
+    cand.status = status
+    cand.save()
+    return JsonResponse({'success': True, 'message': f'Candidate "{cand.name}" updated.'})
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def admin_delete_candidate(request, candidate_id):
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': 'Invalid request method.'}, status=400)
+
+    cand = get_object_or_404(RegistryCandidate, id=candidate_id)
+    name = cand.name
+    try:
+        cand.delete()
+    except IntegrityError:
+        return JsonResponse({
+            'success': False,
+            'message': (
+                f'Cannot delete "{name}" because it is still linked to existing records. '
+                'Remove those links first, then try again.'
+            ),
+        }, status=400)
+    return JsonResponse({'success': True, 'message': f'Candidate "{name}" deleted.'})
 
 
 def _split_full_name(full_name):
@@ -1741,12 +2076,25 @@ def admin_manage_events(request):
                 teams_list = json.loads(teams_json)
                 from events.models import BracketTeam
                 for i, t in enumerate(teams_list):
+                    registry_id = t.get('registry_id')
                     team_name = (t.get('name') or '').strip()
+                    dept_obj = None
+                    members_str = (t.get('members') or '').strip()
+                    if registry_id:
+                        reg = Team.objects.filter(
+                            id=registry_id,
+                            status=Team.STATUS_ACTIVE,
+                        ).select_related('department').first()
+                        if reg:
+                            team_name = reg.name
+                            dept_obj = reg.department
+                            members_str, _ = parse_team_members(reg.members)
                     if not team_name:
                         continue
-                    dept_obj = resolve_department(t.get('department'))
-                    members_raw = (t.get('members') or '').strip()
-                    members_str, _ = parse_team_members(members_raw)
+                    if dept_obj is None:
+                        dept_obj = resolve_department(t.get('department'))
+                    if not members_str:
+                        members_str, _ = parse_team_members(t.get('members'))
                     BracketTeam.objects.create(
                         event=event,
                         name=team_name,
@@ -1902,6 +2250,8 @@ def admin_manage_events(request):
         'judge_options':          judge_options,
         'scorer_options':         scorer_options,
         'department_options_json': json.dumps(department_names),
+        'registry_teams_json': json.dumps(serialize_registry_teams()),
+        'registry_candidates_json': json.dumps(serialize_registry_candidates()),
         'selected_category':      category_filter,
         'selected_status':        status_filter,
         'search_query':           search_query,
@@ -1998,12 +2348,25 @@ def admin_edit_event(request, event_id):
             from events.models import BracketTeam
             BracketTeam.objects.filter(event=ev).delete()
             for i, t in enumerate(teams_list):
+                registry_id = t.get('registry_id')
                 team_name = (t.get('name') or '').strip()
+                dept_obj = None
+                members_str = (t.get('members') or '').strip()
+                if registry_id:
+                    reg = Team.objects.filter(
+                        id=registry_id,
+                        status=Team.STATUS_ACTIVE,
+                    ).select_related('department').first()
+                    if reg:
+                        team_name = reg.name
+                        dept_obj = reg.department
+                        members_str, _ = parse_team_members(reg.members)
                 if not team_name:
                     continue
-                dept_obj = resolve_department(t.get('department'))
-                members_raw = (t.get('members') or '').strip()
-                members_str, _ = parse_team_members(members_raw)
+                if dept_obj is None:
+                    dept_obj = resolve_department(t.get('department'))
+                if not members_str:
+                    members_str, _ = parse_team_members(t.get('members'))
                 BracketTeam.objects.create(
                     event=ev,
                     name=team_name,

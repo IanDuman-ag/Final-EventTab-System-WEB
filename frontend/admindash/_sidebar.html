@@ -5,7 +5,7 @@
 
   Pass `active` as one of:
     dashboard, events, accounts, accounts_tabulator, accounts_judge_scorer,
-    departments, brackets, scoresheets, analytics, reports
+    departments, teams, candidates, brackets, scoresheets, reports
 {% endcomment %}
 <aside class="sidebar v2-sidebar" aria-label="Admin navigation">
   <div class="brand v2-brand">
@@ -52,17 +52,35 @@
       <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 21V9h5V3h6v8h5v10H4Zm2-2h3v-3H6v3Zm0-5h3v-3H6v3Zm5 5h2v-3h-2v3Zm0-5h2v-3h-2v3Zm0-5h2V5h-2v4Zm4 10h3v-3h-3v3Zm0-5h3v-1h-3v1Z"/></svg>
       <span>Departments</span>
     </a>
+    <div class="v2-nav-group{% if active == 'teams' or active == 'candidates' %} is-open{% endif %}" id="participants-nav-group">
+      <button
+        type="button"
+        class="v2-nav-toggle{% if active == 'teams' or active == 'candidates' %} active{% endif %}"
+        id="participants-nav-toggle"
+        aria-expanded="{% if active == 'teams' or active == 'candidates' %}true{% else %}false{% endif %}"
+        aria-controls="participants-nav-sub"
+      >
+        <svg class="v2-nav-toggle-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M16 11c1.66 0 3-1.57 3-3.5S17.66 4 16 4s-3 1.57-3 3.5 1.34 3.5 3 3.5ZM8 11c1.66 0 3-1.57 3-3.5S9.66 4 8 4 5 5.57 5 7.5 6.34 11 8 11Zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 14.17 10.33 13 8 13Zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5Z"/></svg>
+        <span class="v2-nav-toggle-label">Participants</span>
+        <svg class="v2-nav-chevron" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41Z"/></svg>
+      </button>
+      <div class="v2-nav-sub" id="participants-nav-sub">
+        <a class="v2-nav-sub-link{% if active == 'teams' %} active{% endif %}" href="{% url 'admin_teams' %}" {% if active == 'teams' %}aria-current="page"{% endif %}>
+          <span class="v2-nav-sub-dot" aria-hidden="true"></span>
+          <span>Teams</span>
+        </a>
+        <a class="v2-nav-sub-link{% if active == 'candidates' %} active{% endif %}" href="{% url 'admin_candidates' %}" {% if active == 'candidates' %}aria-current="page"{% endif %}>
+          <span class="v2-nav-sub-dot" aria-hidden="true"></span>
+          <span>Candidates</span>
+        </a>
+      </div>
+    </div>
     <a class="{% if active == 'brackets' %}active{% endif %}" href="{% url 'admin_brackets' %}" {% if active == 'brackets' %}aria-current="page"{% endif %}>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M2 4h4v4H2V4Zm0 6h4v4H2v-4Zm0 6h4v4H2v-4ZM8 5h2v2h2v4h-2v2H8v-2H6V9h2V5Zm6 2h2v2h2v2h-2v2h-2v-2h-2V9h2V7Zm4 2h4v2h-4V9ZM8 17h2v-2h2v-2h2v2h2v2h2v2h4v2h-4v-2h-2v-2h-2v2h-2v-2H8v-2Z"/></svg>
       <span>Brackets</span>
     </a>
     <div class="v2-nav-section">REPORTS</div>
 
-    <a class="{% if active == 'analytics' %}active{% endif %}" href="{% url 'admin_analytics' %}" {% if active == 'analytics' %}aria-current="page"{% endif %}>
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 3v18h18V3H3Zm16 16H5V5h14v14ZM7 17h2v-7H7v7Zm4 0h2V7h-2v10Zm4 0h2v-4h-2v4Z"/></svg>
-      <span>Analytics</span>
-      <span class="v2-pill v2-pill--new">New</span>
-    </a>
     <a class="{% if active == 'reports' %}active{% endif %}" href="{% url 'admin_generate_report' %}" {% if active == 'reports' %}aria-current="page"{% endif %}>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 4h16v16H4V4Zm2 2v12h12V6H6Zm2 2h8v2H8V8Zm0 4h5v2H8v-2Z"/></svg>
       <span>Generate Report</span>
@@ -82,4 +100,4 @@
     <span>Logout</span>
   </a>
 </aside>
-<script src="{% static 'js/admin_sidebar.js' %}?v=20260616c"></script>
+<script src="{% static 'js/admin_sidebar.js' %}?v=20260619a"></script>

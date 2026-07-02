@@ -215,16 +215,6 @@
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M16 11c1.66 0 3-1.57 3-3.5S17.66 4 16 4s-3 1.57-3 3.5 1.34 3.5 3 3.5ZM8 11c1.66 0 3-1.57 3-3.5S9.66 4 8 4 5 5.57 5 7.5 6.34 11 8 11Zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 14.17 10.33 13 8 13Zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5Z"/></svg>
                   TEAMS (<span id="team-count">0</span>)
                 </span>
-                <div class="teams-section-actions">
-                  <button type="button" class="btn-secondary-small" id="importTeamsBtn">
-                    <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M5 20h14v-2H5v2Zm7-18-5 5h3v6h4v-6h3l-5-5Z"/></svg>
-                    Import Teams
-                  </button>
-                  <button type="button" class="btn-primary-small" id="addTeamBtn">
-                    <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
-                    Add Team
-                  </button>
-                </div>
               </div>
 
               <div class="teams-table-wrap">
@@ -235,20 +225,16 @@
                       <th>TEAM NAME</th>
                       <th>DEPARTMENT</th>
                       <th>MEMBERS</th>
-                      <th>ACTIONS</th>
                     </tr>
                   </thead>
                   <tbody id="teamsTableBody">
-                    <tr class="teams-table-empty"><td colspan="5">No teams yet. Click <strong>Add Team</strong> to start.</td></tr>
+                    <tr class="teams-table-empty"><td colspan="4">Select an event to load teams from the event roster.</td></tr>
                   </tbody>
                 </table>
               </div>
 
               <div class="teams-total">Total Teams: <strong id="total-teams">0</strong></div>
             </div>
-
-            <!-- Hidden file input for Import Teams -->
-            <input type="file" id="importTeamsFile" accept=".csv,.txt" hidden>
 
             <!-- Hidden teams container (populated on submit) -->
             <div id="teamsContainer" hidden></div>
@@ -458,58 +444,6 @@
     </div>
   </div>
 
-  <!-- Add / Edit Team Mini Dialog -->
-  <div class="bracket-modal-overlay" id="teamDialogOverlay" aria-hidden="true">
-    <div class="bracket-modal-container" role="dialog" aria-modal="true" style="max-width: 480px; width: 95%;">
-      <div class="bracket-modal-header">
-        <h3 id="teamDialogTitle">Add Team</h3>
-        <button class="bracket-close-modal" id="closeTeamDialogBtn" type="button" aria-label="Close">&times;</button>
-      </div>
-      <div class="bracket-modal-body">
-        <div class="form-row">
-          <div class="form-group full-width">
-            <label>Team Name <span class="required">*</span></label>
-            <input type="text" id="teamDialogName" placeholder="e.g. Blue Falcons">
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label>Department <span class="required">*</span></label>
-            <select id="teamDialogDept">
-              <option value="">Select Department</option>
-              {% for dept in departments %}
-              <option value="{{ dept.id }}" data-name="{{ dept.name }}" data-code="{{ dept.code }}">{{ dept.name }} ({{ dept.code }})</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Seed</label>
-            <input type="number" id="teamDialogSeed" min="1" placeholder="Auto">
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group full-width">
-            <label>Members</label>
-            <div class="members-builder">
-              <ul class="members-list" id="teamDialogMembersList"></ul>
-              <div class="members-add-row">
-                <input type="text" id="teamDialogMemberInput" placeholder="Type a member name and press Enter or click +">
-                <button type="button" class="btn-primary-small" id="teamDialogAddMemberBtn" aria-label="Add member">
-                  <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
-                </button>
-              </div>
-            </div>
-            <p class="helper-text" id="teamDialogMemberCount">0 member(s)</p>
-          </div>
-        </div>
-      </div>
-      <div class="bracket-modal-footer">
-        <button type="button" class="btn-cancel" id="cancelTeamDialogBtn">Cancel</button>
-        <button type="button" class="btn-save" id="saveTeamDialogBtn">Save Team</button>
-      </div>
-    </div>
-  </div>
-
   <script>
     /**
      * Structured tournament format definitions for documentation and
@@ -638,9 +572,6 @@
       const openBtn = document.getElementById('openCreateBracketBtn');
       const closeBtn = document.getElementById('closeBracketBtn');
       const cancelBtn = document.getElementById('cancelBracketBtn');
-      const addTeamBtn = document.getElementById('addTeamBtn');
-      const importTeamsBtn = document.getElementById('importTeamsBtn');
-      const importTeamsFile = document.getElementById('importTeamsFile');
       const eventSelect = document.getElementById('bracket_event');
       const categoryInput = document.getElementById('event_category');
       const divisionInput = document.getElementById('event_division');
@@ -837,129 +768,7 @@
       modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
 
       /* ─────────────────────────────────────────────────────────
-         Team add / edit mini dialog
-         ───────────────────────────────────────────────────────── */
-      const teamDlg = document.getElementById('teamDialogOverlay');
-      const teamDlgTitle = document.getElementById('teamDialogTitle');
-      const teamDlgName = document.getElementById('teamDialogName');
-      const teamDlgDept = document.getElementById('teamDialogDept');
-      const teamDlgSeed = document.getElementById('teamDialogSeed');
-      const teamDlgMembersList = document.getElementById('teamDialogMembersList');
-      const teamDlgMemberInput = document.getElementById('teamDialogMemberInput');
-      const teamDlgAddMemberBtn = document.getElementById('teamDialogAddMemberBtn');
-      const teamDlgMemberCount = document.getElementById('teamDialogMemberCount');
-      const closeTeamDlgBtn = document.getElementById('closeTeamDialogBtn');
-      const cancelTeamDlgBtn = document.getElementById('cancelTeamDialogBtn');
-      const saveTeamDlgBtn = document.getElementById('saveTeamDialogBtn');
-      let editingTeamId = null;
-      let dialogMembers = []; /* current members in the open dialog */
-
-      function renderDialogMembers() {
-        if (!dialogMembers.length) {
-          teamDlgMembersList.innerHTML = '<li class="members-empty">No members yet. Add one below.</li>';
-        } else {
-          teamDlgMembersList.innerHTML = dialogMembers.map((m, i) => (
-            '<li class="member-chip" data-idx="' + i + '">' +
-              '<span>' + escapeHtml(m) + '</span>' +
-              '<button type="button" class="member-chip-remove" aria-label="Remove member">×</button>' +
-            '</li>'
-          )).join('');
-          teamDlgMembersList.querySelectorAll('.member-chip-remove').forEach(btn => {
-            btn.addEventListener('click', () => {
-              const idx = parseInt(btn.closest('.member-chip').dataset.idx);
-              dialogMembers.splice(idx, 1);
-              renderDialogMembers();
-            });
-          });
-        }
-        teamDlgMemberCount.textContent = dialogMembers.length + ' member(s)';
-      }
-
-      function addDialogMember() {
-        const value = (teamDlgMemberInput.value || '').trim();
-        if (!value) return;
-        /* Allow comma-separated batch entry */
-        value.split(',').map(s => s.trim()).filter(Boolean).forEach(name => {
-          if (!dialogMembers.includes(name)) dialogMembers.push(name);
-        });
-        teamDlgMemberInput.value = '';
-        renderDialogMembers();
-        teamDlgMemberInput.focus();
-      }
-
-      teamDlgAddMemberBtn.addEventListener('click', addDialogMember);
-      teamDlgMemberInput.addEventListener('keydown', e => {
-        if (e.key === 'Enter') { e.preventDefault(); addDialogMember(); }
-      });
-
-      function openTeamDialog(team) {
-        editingTeamId = team ? team.id : null;
-        teamDlgTitle.textContent = team ? 'Edit Team' : 'Add Team';
-        teamDlgName.value = team ? team.name : '';
-        teamDlgDept.value = team ? String(team.dept_id || '') : '';
-        if (team && !team.dept_id && team.dept_label && teamDlgDept) {
-          Array.prototype.forEach.call(teamDlgDept.options, function (opt) {
-            if (opt.getAttribute('data-name') === team.dept_label) {
-              teamDlgDept.value = opt.value;
-            }
-          });
-        }
-        teamDlgSeed.value = team ? team.seed : nextSeed();
-        /* Members: split saved string into array of names */
-        dialogMembers = team && team.members
-          ? String(team.members).split(',').map(s => s.trim()).filter(Boolean)
-          : [];
-        renderDialogMembers();
-        teamDlgMemberInput.value = '';
-        teamDlg.classList.add('active');
-        teamDlg.setAttribute('aria-hidden', 'false');
-        setTimeout(() => teamDlgName.focus(), 50);
-      }
-      function closeTeamDialog() {
-        teamDlg.classList.remove('active');
-        teamDlg.setAttribute('aria-hidden', 'true');
-        editingTeamId = null;
-        dialogMembers = [];
-      }
-
-      addTeamBtn.addEventListener('click', () => openTeamDialog(null));
-      closeTeamDlgBtn.addEventListener('click', closeTeamDialog);
-      cancelTeamDlgBtn.addEventListener('click', closeTeamDialog);
-      teamDlg.addEventListener('click', e => { if (e.target === teamDlg) closeTeamDialog(); });
-
-      saveTeamDlgBtn.addEventListener('click', () => {
-        const name = teamDlgName.value.trim();
-        const deptOpt = teamDlgDept.options[teamDlgDept.selectedIndex];
-        const deptId = teamDlgDept.value;
-        const deptLabel = deptOpt ? (deptOpt.getAttribute('data-name') || deptOpt.text) : '';
-        const seed = parseInt(teamDlgSeed.value) || nextSeed();
-        /* If user typed in the input but didn't click +, capture it on save */
-        if (teamDlgMemberInput.value.trim()) addDialogMember();
-        const members = dialogMembers.join(', ');
-
-        if (!name) { alert('Team name is required.'); return; }
-        if (!deptId) { alert('Please select a department.'); return; }
-
-        if (editingTeamId) {
-          const t = teams.find(x => x.id === editingTeamId);
-          if (t) {
-            t.name = name; t.dept_id = deptId; t.dept_label = deptLabel; t.seed = seed;
-            t.members = members; t.member_count = dialogMembers.length;
-          }
-        } else {
-          teams.push({
-            id: teamIdCounter++, name, dept_id: deptId, dept_label: deptLabel,
-            seed, members, member_count: dialogMembers.length,
-          });
-        }
-        teams.sort((a, b) => (a.seed || 0) - (b.seed || 0));
-        renderTeams();
-        renderPreview();
-        closeTeamDialog();
-      });
-
-      /* ─────────────────────────────────────────────────────────
-         Render teams table
+         Render teams table (read-only from selected event)
          ───────────────────────────────────────────────────────── */
       function renderTeams() {
         document.getElementById('team-count').textContent = teams.length;
@@ -967,7 +776,7 @@
         computeRoundsForTeamCount(teams.length);
 
         if (!teams.length) {
-          teamsTableBody.innerHTML = '<tr class="teams-table-empty"><td colspan="5">No teams yet. Click <strong>Add Team</strong> to start.</td></tr>';
+          teamsTableBody.innerHTML = '<tr class="teams-table-empty"><td colspan="4">Select an event to load teams from the event roster.</td></tr>';
           return;
         }
         teamsTableBody.innerHTML = teams.map(t => {
@@ -980,34 +789,9 @@
               <td><strong>${escapeHtml(t.name)}</strong></td>
               <td>${escapeHtml(t.dept_label || '—')}</td>
               <td>${memberCount}</td>
-              <td>
-                <div class="row-actions">
-                  <button type="button" class="row-action edit" data-act="edit" data-id="${t.id}" aria-label="Edit team">
-                    <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="m3 17.25 11.06-11.06 3.75 3.75L6.75 21H3v-3.75ZM19.71 8.04 15.96 4.3l1.33-1.33a1 1 0 0 1 1.42 0l2.33 2.33a1 1 0 0 1 0 1.42l-1.33 1.33Z"/></svg>
-                  </button>
-                  <button type="button" class="row-action danger" data-act="delete" data-id="${t.id}" aria-label="Delete team">
-                    <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M9 3h6l1 2h4v2H4V5h4l1-2Zm1 7h2v8h-2v-8Zm4 0h2v8h-2v-8ZM6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7Z"/></svg>
-                  </button>
-                </div>
-              </td>
             </tr>
           `;
         }).join('');
-
-        teamsTableBody.querySelectorAll('.row-action').forEach(btn => {
-          btn.addEventListener('click', () => {
-            const id = parseInt(btn.dataset.id);
-            const t = teams.find(x => x.id === id);
-            if (!t) return;
-            if (btn.dataset.act === 'edit') {
-              openTeamDialog(t);
-            } else if (btn.dataset.act === 'delete') {
-              teams = teams.filter(x => x.id !== id);
-              renderTeams();
-              renderPreview();
-            }
-          });
-        });
       }
 
       function escapeHtml(s) {
@@ -1452,45 +1236,6 @@
           }
         });
         renderPreview();
-      });
-
-      /* ─────────────────────────────────────────────────────────
-         Import Teams (CSV: name,department_code,seed,members)
-         ───────────────────────────────────────────────────────── */
-      importTeamsBtn.addEventListener('click', () => importTeamsFile.click());
-      importTeamsFile.addEventListener('change', e => {
-        const file = e.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = () => {
-          const lines = String(reader.result || '').split(/\r?\n/).filter(Boolean);
-          /* Build dept code → id map from the dialog select */
-          const deptMap = {};
-          teamDlgDept.querySelectorAll('option').forEach(opt => {
-            if (opt.value) {
-              deptMap[(opt.getAttribute('data-code') || '').toLowerCase()] = { id: opt.value, name: opt.getAttribute('data-name') };
-              deptMap[(opt.getAttribute('data-name') || '').toLowerCase()] = { id: opt.value, name: opt.getAttribute('data-name') };
-            }
-          });
-          let added = 0;
-          lines.forEach((line, idx) => {
-            /* Skip header row if first cell is "name" or "team" */
-            if (idx === 0 && /^(team\s*name|name)\b/i.test(line)) return;
-            const cells = line.split(',').map(c => c.trim());
-            const name = cells[0]; if (!name) return;
-            const deptKey = (cells[1] || '').toLowerCase();
-            const dept = deptMap[deptKey] || { id: '', name: cells[1] || '' };
-            const seed = parseInt(cells[2]) || nextSeed();
-            const members = cells.slice(3).join(', ');
-            teams.push({ id: teamIdCounter++, name, dept_id: dept.id, dept_label: dept.name, seed, members });
-            added++;
-          });
-          teams.sort((a, b) => (a.seed || 0) - (b.seed || 0));
-          renderTeams(); renderPreview();
-          showToast(added + ' team(s) imported.');
-          importTeamsFile.value = '';
-        };
-        reader.readAsText(file);
       });
 
       /* ─────────────────────────────────────────────────────────

@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Manage Events - EventTab</title>
-  <link rel="stylesheet" href="{% static 'admindash/event.css' %}?v=20260616c">
+  <link rel="stylesheet" href="{% static 'admindash/event.css' %}?v=20260618a">
 </head>
 <body class="admin-dashboard-page manage-events-page admin-dashboard-v2">
   <div class="dashboard-shell">
@@ -386,10 +386,11 @@
               <span class="ced-badge ced-badge--blue">Teams</span>
               <button type="button" class="ced-add-btn" id="ced-add-team">
                 <svg viewBox="0 0 24 24" width="14" height="14"><path d="M11 11V5h2v6h6v2h-6v6h-2v-6H5v-2h6Z" fill="currentColor"/></svg>
-                Add Team
+                Select Teams
               </button>
             </div>
-            <div class="ced-dynamic-list" id="ced-teams-list"></div>
+            <p class="ced-teams-hint">Choose teams from your registered team list.</p>
+            <div class="ced-dynamic-list ced-teams-selected-list" id="ced-teams-list"></div>
             <textarea name="teams_data" id="ced-teams-data" hidden></textarea>
           </div>
 
@@ -430,10 +431,11 @@
               <span class="ced-badge ced-badge--green">Candidates</span>
               <button type="button" class="ced-add-btn" id="ced-add-candidate">
                 <svg viewBox="0 0 24 24" width="14" height="14"><path d="M11 11V5h2v6h6v2h-6v6h-2v-6H5v-2h6Z" fill="currentColor"/></svg>
-                Add Candidate
+                Select Candidates
               </button>
             </div>
-            <div class="ced-dynamic-list" id="ced-candidates-list"></div>
+            <p class="ced-teams-hint">Choose candidates from your registered candidate list.</p>
+            <div class="ced-dynamic-list ced-teams-selected-list" id="ced-candidates-list"></div>
             <textarea name="candidates_data" id="ced-candidates-data" hidden></textarea>
             <textarea name="scoring_criteria" class="scoring-data" hidden></textarea>
           </div>
@@ -835,10 +837,11 @@
               <span class="ced-badge ced-badge--blue">Teams</span>
               <button type="button" class="ced-add-btn" id="edit-add-team">
                 <svg viewBox="0 0 24 24" width="14" height="14"><path d="M11 11V5h2v6h6v2h-6v6h-2v-6H5v-2h6Z" fill="currentColor"/></svg>
-                Add Team
+                Select Teams
               </button>
             </div>
-            <div class="ced-dynamic-list" id="edit-teams-list"></div>
+            <p class="ced-teams-hint">Choose teams from your registered team list.</p>
+            <div class="ced-dynamic-list ced-teams-selected-list" id="edit-teams-list"></div>
             <textarea name="teams_data" id="edit-teams-data" hidden></textarea>
             <input type="hidden" name="num_teams" id="edit-num-teams-hidden" value="">
           </div>
@@ -876,10 +879,11 @@
               <span class="ced-badge ced-badge--green">Candidates</span>
               <button type="button" class="ced-add-btn" id="edit-add-candidate">
                 <svg viewBox="0 0 24 24" width="14" height="14"><path d="M11 11V5h2v6h6v2h-6v6h-2v-6H5v-2h6Z" fill="currentColor"/></svg>
-                Add Candidate
+                Select Candidates
               </button>
             </div>
-            <div class="ced-dynamic-list" id="edit-candidates-list"></div>
+            <p class="ced-teams-hint">Choose candidates from your registered candidate list.</p>
+            <div class="ced-dynamic-list ced-teams-selected-list" id="edit-candidates-list"></div>
             <textarea name="candidates_data" id="edit-candidates-data" hidden></textarea>
           </div>
         </section>
@@ -946,6 +950,50 @@
         <button type="submit" class="ced-btn-submit">Save Changes</button>
       </footer>
     </form>
+  </dialog>
+
+  <!-- ── Team Picker Dialog (registered teams) ───────────────────── -->
+  <dialog id="event-team-picker-dialog" class="ced-team-picker-dialog" aria-labelledby="event-team-picker-title">
+    <div class="ced-team-picker-inner">
+      <header class="ced-team-picker-head">
+        <div>
+          <h2 id="event-team-picker-title">Select Teams</h2>
+          <p>Pick teams you already created in the Teams page.</p>
+        </div>
+        <button type="button" class="ced-close" id="close-team-picker" aria-label="Close">&times;</button>
+      </header>
+      <div class="ced-team-picker-search-wrap">
+        <input type="search" id="event-team-picker-search" placeholder="Search by team name or code..." aria-label="Search teams">
+      </div>
+      <div class="ced-team-picker-list" id="event-team-picker-list" role="listbox" aria-multiselectable="true"></div>
+      <p class="ced-team-picker-empty hidden" id="event-team-picker-empty">No registered teams found. Create teams in the Teams page first.</p>
+      <footer class="ced-team-picker-footer">
+        <button type="button" class="ced-btn-cancel" id="cancel-team-picker">Cancel</button>
+        <button type="button" class="ced-btn-submit" id="confirm-team-picker">Add Selected Teams</button>
+      </footer>
+    </div>
+  </dialog>
+
+  <!-- ── Candidate Picker Dialog (registered candidates) ─────────── -->
+  <dialog id="event-candidate-picker-dialog" class="ced-team-picker-dialog" aria-labelledby="event-candidate-picker-title">
+    <div class="ced-team-picker-inner">
+      <header class="ced-team-picker-head">
+        <div>
+          <h2 id="event-candidate-picker-title">Select Candidates</h2>
+          <p>Pick candidates you already created on the Teams page.</p>
+        </div>
+        <button type="button" class="ced-close" id="close-candidate-picker" aria-label="Close">&times;</button>
+      </header>
+      <div class="ced-team-picker-search-wrap">
+        <input type="search" id="event-candidate-picker-search" placeholder="Search by candidate name or number..." aria-label="Search candidates">
+      </div>
+      <div class="ced-team-picker-list" id="event-candidate-picker-list" role="listbox" aria-multiselectable="true"></div>
+      <p class="ced-team-picker-empty hidden" id="event-candidate-picker-empty">No registered candidates found. Create candidates on the Teams page first.</p>
+      <footer class="ced-team-picker-footer">
+        <button type="button" class="ced-btn-cancel" id="cancel-candidate-picker">Cancel</button>
+        <button type="button" class="ced-btn-submit" id="confirm-candidate-picker">Add Selected Candidates</button>
+      </footer>
+    </div>
   </dialog>
 
   <!-- ── Delete Confirmation Dialog ──────────────────────────────── -->
@@ -1177,8 +1225,8 @@
         switchScoringPanel('match');
         if (scorersWrap) scorersWrap.querySelectorAll('input[type="checkbox"]').forEach(function (cb) { cb.checked = false; });
         if (judgesWrap) judgesWrap.querySelectorAll('input[type="checkbox"]').forEach(function (cb) { cb.checked = false; });
-        if (teamsList) teamsList.innerHTML = '';
-        if (candidatesList) candidatesList.innerHTML = '';
+        setTeamsForTarget('create', []);
+        setCandidatesForTarget('create', []);
         if (teamsData) teamsData.value = '[]';
         if (candidatesData) candidatesData.value = '[]';
         openDialog(createDlg);
@@ -1195,9 +1243,7 @@
             if (typeof syncTeamsData === 'function') syncTeamsData();
             if (typeof syncCandidatesData === 'function') syncCandidatesData();
             var numtHidden = document.getElementById('ced-numt-hidden');
-            if (numtHidden && teamsList) {
-              numtHidden.value = teamsList.querySelectorAll('.ced-dyn-row').length || '';
-            }
+            if (numtHidden) numtHidden.value = createSelectedTeams.length || '';
           });
         }
       }
@@ -1295,223 +1341,433 @@
       return ev.scoring_method || ev.event_type_key || 'match';
     }
 
-    /* ── Teams builder (match-based) ─────────────────────────────── */
+    /* ── Teams picker (registered teams) ─────────────────────────── */
     var teamsList  = document.getElementById('ced-teams-list');
     var teamsData  = document.getElementById('ced-teams-data');
     var addTeamBtn = document.getElementById('ced-add-team');
+    var editTeamsList = document.getElementById('edit-teams-list');
+    var editTeamsData = document.getElementById('edit-teams-data');
+    var editAddTeamBtn = document.getElementById('edit-add-team');
+    var teamPickerDialog = document.getElementById('event-team-picker-dialog');
+    var teamPickerList = document.getElementById('event-team-picker-list');
+    var teamPickerSearch = document.getElementById('event-team-picker-search');
+    var teamPickerEmpty = document.getElementById('event-team-picker-empty');
+    var confirmTeamPickerBtn = document.getElementById('confirm-team-picker');
 
-    var departmentOptions = {{ department_options_json|safe }};
+    var registryTeams = {{ registry_teams_json|safe }};
+    var registryCandidates = {{ registry_candidates_json|safe }};
+    var teamPickerTarget = 'create';
+    var createSelectedTeams = [];
+    var editSelectedTeams = [];
 
-    function deptOptionsHtml(selected) {
-      var html = '<option value="">Select department</option>';
-      departmentOptions.forEach(function (d) {
-        html += '<option value="' + escHtml(d) + '"' + (d === selected ? ' selected' : '') + '>' + escHtml(d) + '</option>';
-      });
-      return html;
+    function findRegistryTeam(id) {
+      return registryTeams.find(function (t) { return String(t.id) === String(id); });
     }
 
-    function renderTeamRow(team, idx) {
-      return '<div class="ced-dyn-row" data-idx="' + idx + '">' +
+    function normalizeEventTeam(team) {
+      if (!team) return null;
+      var registryId = team.registry_id || team.id || null;
+      if (!registryId && team.name) {
+        var match = registryTeams.find(function (r) {
+          return r.name.toLowerCase() === String(team.name).toLowerCase()
+            || r.code.toLowerCase() === String(team.name).toLowerCase()
+            || (team.code && r.code.toLowerCase() === String(team.code).toLowerCase());
+        });
+        if (match) registryId = match.id;
+      }
+      var reg = registryId ? findRegistryTeam(registryId) : null;
+      return {
+        registry_id: registryId || null,
+        name: reg ? reg.name : (team.name || ''),
+        code: reg ? reg.code : (team.code || team.name || ''),
+        department: reg ? reg.department : (team.department || ''),
+        members: reg ? reg.members : (team.members || ''),
+        player_count: reg ? reg.player_count : 0,
+      };
+    }
+
+    function renderSelectedTeamRow(team, idx) {
+      var meta = escHtml(team.department || 'No department');
+      if (team.player_count) meta += ' · ' + team.player_count + ' player' + (team.player_count === 1 ? '' : 's');
+      return '<div class="ced-team-pick-row" data-registry-id="' + escHtml(team.registry_id || '') + '">' +
         '<span class="ced-dyn-num">' + (idx + 1) + '</span>' +
-        '<input type="text" class="ced-dyn-input ced-team-name" placeholder="Team name" value="' + escHtml(team.name || '') + '">' +
-        '<select class="ced-dyn-select ced-team-dept">' + deptOptionsHtml(team.department || '') + '</select>' +
-        '<input type="text" class="ced-dyn-input ced-team-members" placeholder="Members (comma-separated)" value="' + escHtml(team.members || '') + '">' +
+        '<div class="ced-team-pick-meta">' +
+          '<strong>' + escHtml(team.name || '') + '</strong>' +
+          '<small>' + escHtml(team.code || '') + ' · ' + meta + '</small>' +
+        '</div>' +
         '<button type="button" class="ced-dyn-remove" aria-label="Remove team">×</button>' +
       '</div>';
     }
 
-    function syncTeamsData() {
-      if (!teamsList || !teamsData) return;
-      var rows = teamsList.querySelectorAll('.ced-dyn-row');
-      var teams = [];
-      rows.forEach(function (row, i) {
-        var name = row.querySelector('.ced-team-name').value.trim();
-        var dept = row.querySelector('.ced-team-dept').value;
-        var members = row.querySelector('.ced-team-members').value.trim();
-        row.querySelector('.ced-dyn-num').textContent = (i + 1);
-        if (name) teams.push({ name: name, department: dept, members: members });
-      });
-      teamsData.value = JSON.stringify(teams);
-    }
-
-    function wireTeamRowEvents() {
-      if (!teamsList) return;
-      teamsList.querySelectorAll('.ced-dyn-row').forEach(function (row) {
-        row.querySelectorAll('input, select').forEach(function (el) {
-          el.addEventListener('input', syncTeamsData);
-          el.addEventListener('change', syncTeamsData);
+    function renderSelectedTeamsList(listEl, teams, syncFn) {
+      if (!listEl) return;
+      listEl.innerHTML = '';
+      if (!teams.length) {
+        listEl.innerHTML = '<p class="ced-teams-empty">No teams selected yet. Click <strong>Select Teams</strong> to add from your registry.</p>';
+      } else {
+        teams.forEach(function (team, idx) {
+          var temp = document.createElement('div');
+          temp.innerHTML = renderSelectedTeamRow(team, idx);
+          var row = temp.firstChild;
+          var rm = row.querySelector('.ced-dyn-remove');
+          if (rm) {
+            rm.addEventListener('click', function () {
+              var rows = Array.from(listEl.querySelectorAll('.ced-team-pick-row'));
+              var removeIdx = rows.indexOf(row);
+              if (removeIdx !== -1) teams.splice(removeIdx, 1);
+              renderSelectedTeamsList(listEl, teams, syncFn);
+            });
+          }
+          listEl.appendChild(row);
         });
-        var rm = row.querySelector('.ced-dyn-remove');
-        if (rm) rm.addEventListener('click', function () { row.remove(); syncTeamsData(); });
+      }
+      if (syncFn) syncFn();
+    }
+
+    function teamsToPayload(teams) {
+      return teams.map(function (team) {
+        return {
+          registry_id: team.registry_id || null,
+          name: team.name,
+          code: team.code,
+          department: team.department,
+          members: team.members,
+        };
       });
     }
 
-    if (addTeamBtn) {
-      addTeamBtn.addEventListener('click', function () {
-        var idx = teamsList.querySelectorAll('.ced-dyn-row').length;
-        var temp = document.createElement('div');
-        temp.innerHTML = renderTeamRow({}, idx);
-        var newRow = temp.firstChild;
-        teamsList.appendChild(newRow);
-        wireTeamRowEvents();
-        syncTeamsData();
-        newRow.querySelector('.ced-team-name').focus();
+    function syncTeamsData() {
+      if (!teamsData) return;
+      teamsData.value = JSON.stringify(teamsToPayload(createSelectedTeams));
+      var numHidden = document.getElementById('ced-numt-hidden');
+      if (numHidden) numHidden.value = createSelectedTeams.length || '';
+    }
+
+    function syncEditTeamsData() {
+      if (!editTeamsData) return;
+      editTeamsData.value = JSON.stringify(teamsToPayload(editSelectedTeams));
+      var numHidden = document.getElementById('edit-num-teams-hidden');
+      if (numHidden) numHidden.value = editSelectedTeams.length || '';
+    }
+
+    function getTeamsForTarget(target) {
+      return target === 'edit' ? editSelectedTeams : createSelectedTeams;
+    }
+
+    function getListForTarget(target) {
+      return target === 'edit' ? editTeamsList : teamsList;
+    }
+
+    function getSyncForTarget(target) {
+      return target === 'edit' ? syncEditTeamsData : syncTeamsData;
+    }
+
+    function setTeamsForTarget(target, teams) {
+      var normalized = (teams || []).map(normalizeEventTeam).filter(function (t) { return t && t.name; });
+      if (target === 'edit') {
+        editSelectedTeams = normalized;
+        renderSelectedTeamsList(editTeamsList, editSelectedTeams, syncEditTeamsData);
+      } else {
+        createSelectedTeams = normalized;
+        renderSelectedTeamsList(teamsList, createSelectedTeams, syncTeamsData);
+      }
+    }
+
+    function renderTeamPickerList() {
+      if (!teamPickerList) return;
+      var query = (teamPickerSearch && teamPickerSearch.value || '').trim().toLowerCase();
+      var current = getTeamsForTarget(teamPickerTarget);
+      var pickedIds = current.map(function (t) { return String(t.registry_id || ''); });
+      var visible = registryTeams.filter(function (team) {
+        if (!query) return true;
+        return team.name.toLowerCase().includes(query)
+          || team.code.toLowerCase().includes(query)
+          || (team.department || '').toLowerCase().includes(query);
+      });
+
+      teamPickerList.innerHTML = '';
+      if (!registryTeams.length) {
+        if (teamPickerEmpty) teamPickerEmpty.classList.remove('hidden');
+        return;
+      }
+      if (teamPickerEmpty) teamPickerEmpty.classList.add('hidden');
+
+      if (!visible.length) {
+        teamPickerList.innerHTML = '<p class="ced-teams-empty">No teams match your search.</p>';
+        return;
+      }
+
+      visible.forEach(function (team) {
+        var id = String(team.id);
+        var already = pickedIds.indexOf(id) !== -1;
+        var item = document.createElement('label');
+        item.className = 'ced-team-picker-item' + (already ? ' is-disabled' : '');
+        item.innerHTML =
+          '<input type="checkbox" value="' + escHtml(id) + '"' + (already ? ' disabled checked' : '') + '>' +
+          '<span class="ced-team-picker-avatar">' + escHtml((team.name || '').slice(0, 2).toUpperCase()) + '</span>' +
+          '<span class="ced-team-picker-copy">' +
+            '<strong>' + escHtml(team.name) + '</strong>' +
+            '<small>' + escHtml(team.code) + ' · ' + escHtml(team.department || 'No department') + ' · ' + escHtml(String(team.player_count || 0)) + ' players</small>' +
+          '</span>';
+        teamPickerList.appendChild(item);
       });
     }
 
-    /* ── Candidates builder (criteria-based) ─────────────────────── */
+    function openTeamPicker(target) {
+      teamPickerTarget = target || 'create';
+      if (!registryTeams.length) {
+        window.alert('No registered teams yet. Go to Teams and create teams first.');
+        return;
+      }
+      if (teamPickerSearch) teamPickerSearch.value = '';
+      renderTeamPickerList();
+      if (teamPickerDialog && typeof teamPickerDialog.showModal === 'function') {
+        teamPickerDialog.showModal();
+      }
+    }
+
+    function closeTeamPicker() {
+      if (teamPickerDialog && teamPickerDialog.open) teamPickerDialog.close();
+    }
+
+    function applyTeamPickerSelection() {
+      if (!teamPickerList) return;
+      var current = getTeamsForTarget(teamPickerTarget);
+      var pickedIds = current.map(function (t) { return String(t.registry_id || ''); });
+      teamPickerList.querySelectorAll('input[type="checkbox"]:checked:not(:disabled)').forEach(function (input) {
+        var reg = findRegistryTeam(input.value);
+        if (!reg) return;
+        if (pickedIds.indexOf(String(reg.id)) !== -1) return;
+        current.push(normalizeEventTeam(reg));
+      });
+      renderSelectedTeamsList(getListForTarget(teamPickerTarget), current, getSyncForTarget(teamPickerTarget));
+      closeTeamPicker();
+    }
+
+    if (addTeamBtn) addTeamBtn.addEventListener('click', function () { openTeamPicker('create'); });
+    if (editAddTeamBtn) editAddTeamBtn.addEventListener('click', function () { openTeamPicker('edit'); });
+    if (teamPickerSearch) teamPickerSearch.addEventListener('input', renderTeamPickerList);
+    if (confirmTeamPickerBtn) confirmTeamPickerBtn.addEventListener('click', applyTeamPickerSelection);
+    document.getElementById('close-team-picker')?.addEventListener('click', closeTeamPicker);
+    document.getElementById('cancel-team-picker')?.addEventListener('click', closeTeamPicker);
+
+    renderSelectedTeamsList(teamsList, createSelectedTeams, syncTeamsData);
+    renderSelectedTeamsList(editTeamsList, editSelectedTeams, syncEditTeamsData);
+
+    /* ── Candidates picker (registered candidates) ───────────────── */
     var candidatesList  = document.getElementById('ced-candidates-list');
     var candidatesData  = document.getElementById('ced-candidates-data');
     var addCandidateBtn = document.getElementById('ced-add-candidate');
+    var editCandidatesList = document.getElementById('edit-candidates-list');
+    var editCandidatesData = document.getElementById('edit-candidates-data');
+    var editAddCandidateBtn = document.getElementById('edit-add-candidate');
+    var candidatePickerDialog = document.getElementById('event-candidate-picker-dialog');
+    var candidatePickerList = document.getElementById('event-candidate-picker-list');
+    var candidatePickerSearch = document.getElementById('event-candidate-picker-search');
+    var candidatePickerEmpty = document.getElementById('event-candidate-picker-empty');
+    var confirmCandidatePickerBtn = document.getElementById('confirm-candidate-picker');
+    var candidatePickerTarget = 'create';
+    var createSelectedCandidates = [];
+    var editSelectedCandidates = [];
 
-    function renderCandidateRow(cand, idx) {
-      return '<div class="ced-dyn-row" data-idx="' + idx + '">' +
-        '<span class="ced-dyn-num">' + (idx + 1) + '</span>' +
-        '<input type="text" class="ced-dyn-input ced-cand-name" placeholder="Candidate name" value="' + escHtml(cand.name || '') + '">' +
-        '<select class="ced-dyn-select ced-cand-dept">' + deptOptionsHtml(cand.department || '') + '</select>' +
-        '<input type="text" class="ced-dyn-input ced-cand-desc" placeholder="Description (optional)" value="' + escHtml(cand.description || '') + '">' +
+    function findRegistryCandidate(id) {
+      return registryCandidates.find(function (c) { return String(c.id) === String(id); });
+    }
+
+    function normalizeEventCandidate(cand) {
+      if (!cand) return null;
+      var registryId = cand.registry_id || cand.id || null;
+      if (!registryId && cand.name) {
+        var match = registryCandidates.find(function (r) {
+          return r.name.toLowerCase() === String(cand.name).toLowerCase()
+            || String(r.number).toLowerCase() === String(cand.number || '').toLowerCase();
+        });
+        if (match) registryId = match.id;
+      }
+      var reg = registryId ? findRegistryCandidate(registryId) : null;
+      return {
+        registry_id: registryId || null,
+        number: reg ? reg.number : (cand.number || ''),
+        name: reg ? reg.name : (cand.name || ''),
+        department: reg ? reg.department : (cand.department || ''),
+        description: cand.description || '',
+      };
+    }
+
+    function renderSelectedCandidateRow(cand, idx) {
+      return '<div class="ced-team-pick-row" data-registry-id="' + escHtml(cand.registry_id || '') + '">' +
+        '<span class="ced-dyn-num">' + escHtml(String(cand.number || (idx + 1))) + '</span>' +
+        '<div class="ced-team-pick-meta">' +
+          '<strong>' + escHtml(cand.name || '') + '</strong>' +
+          '<small>' + escHtml(cand.department || 'No department') + '</small>' +
+        '</div>' +
         '<button type="button" class="ced-dyn-remove" aria-label="Remove candidate">×</button>' +
       '</div>';
     }
 
-    function syncCandidatesData() {
-      if (!candidatesList || !candidatesData) return;
-      var rows = candidatesList.querySelectorAll('.ced-dyn-row');
-      var candidates = [];
-      rows.forEach(function (row, i) {
-        var name = row.querySelector('.ced-cand-name').value.trim();
-        var dept = row.querySelector('.ced-cand-dept').value;
-        var desc = row.querySelector('.ced-cand-desc').value.trim();
-        row.querySelector('.ced-dyn-num').textContent = (i + 1);
-        if (name) candidates.push({ number: i + 1, name: name, department: dept, description: desc });
-      });
-      candidatesData.value = JSON.stringify(candidates);
-    }
-
-    function wireCandidateRowEvents() {
-      if (!candidatesList) return;
-      candidatesList.querySelectorAll('.ced-dyn-row').forEach(function (row) {
-        row.querySelectorAll('input, select').forEach(function (el) {
-          el.addEventListener('input', syncCandidatesData);
-          el.addEventListener('change', syncCandidatesData);
-        });
-        var rm = row.querySelector('.ced-dyn-remove');
-        if (rm) rm.addEventListener('click', function () { row.remove(); syncCandidatesData(); });
-      });
-    }
-
-    if (addCandidateBtn) {
-      addCandidateBtn.addEventListener('click', function () {
-        var idx = candidatesList.querySelectorAll('.ced-dyn-row').length;
-        var temp = document.createElement('div');
-        temp.innerHTML = renderCandidateRow({}, idx);
-        var newRow = temp.firstChild;
-        candidatesList.appendChild(newRow);
-        wireCandidateRowEvents();
-        syncCandidatesData();
-        newRow.querySelector('.ced-cand-name').focus();
-      });
-    }
-
-    /* ── Edit dialog teams / candidates builders ─────────────────── */
-    var editTeamsList = document.getElementById('edit-teams-list');
-    var editTeamsData = document.getElementById('edit-teams-data');
-    var editAddTeamBtn = document.getElementById('edit-add-team');
-    var editCandidatesList = document.getElementById('edit-candidates-list');
-    var editCandidatesData = document.getElementById('edit-candidates-data');
-    var editAddCandidateBtn = document.getElementById('edit-add-candidate');
-
-    function populateDynamicList(listEl, renderRowFn, wireFn, syncFn, items) {
+    function renderSelectedCandidatesList(listEl, candidates, syncFn) {
       if (!listEl) return;
       listEl.innerHTML = '';
-      (items || []).forEach(function (item, idx) {
-        var temp = document.createElement('div');
-        temp.innerHTML = renderRowFn(item, idx);
-        listEl.appendChild(temp.firstChild);
-      });
-      if (wireFn) wireFn();
+      if (!candidates.length) {
+        listEl.innerHTML = '<p class="ced-teams-empty">No candidates selected yet. Click <strong>Select Candidates</strong> to add from your registry.</p>';
+      } else {
+        candidates.forEach(function (cand, idx) {
+          var temp = document.createElement('div');
+          temp.innerHTML = renderSelectedCandidateRow(cand, idx);
+          var row = temp.firstChild;
+          var rm = row.querySelector('.ced-dyn-remove');
+          if (rm) {
+            rm.addEventListener('click', function () {
+              var rows = Array.from(listEl.querySelectorAll('.ced-team-pick-row'));
+              var removeIdx = rows.indexOf(row);
+              if (removeIdx !== -1) candidates.splice(removeIdx, 1);
+              renderSelectedCandidatesList(listEl, candidates, syncFn);
+            });
+          }
+          listEl.appendChild(row);
+        });
+      }
       if (syncFn) syncFn();
     }
 
-    function syncEditTeamsData() {
-      if (!editTeamsList || !editTeamsData) return;
-      var rows = editTeamsList.querySelectorAll('.ced-dyn-row');
-      var teams = [];
-      rows.forEach(function (row, i) {
-        var name = row.querySelector('.ced-team-name').value.trim();
-        var dept = row.querySelector('.ced-team-dept').value;
-        var members = row.querySelector('.ced-team-members').value.trim();
-        row.querySelector('.ced-dyn-num').textContent = (i + 1);
-        if (name) teams.push({ name: name, department: dept, members: members });
+    function candidatesToPayload(candidates) {
+      return candidates.map(function (cand, idx) {
+        var number = cand.number;
+        try {
+          number = parseInt(number, 10);
+          if (isNaN(number)) number = idx + 1;
+        } catch (_) {
+          number = idx + 1;
+        }
+        return {
+          registry_id: cand.registry_id || null,
+          number: number,
+          name: cand.name,
+          department: cand.department,
+          description: cand.description || '',
+        };
       });
-      editTeamsData.value = JSON.stringify(teams);
-      var numHidden = document.getElementById('edit-num-teams-hidden');
-      if (numHidden) numHidden.value = teams.length || '';
     }
 
-    function wireEditTeamRowEvents() {
-      if (!editTeamsList) return;
-      editTeamsList.querySelectorAll('.ced-dyn-row').forEach(function (row) {
-        row.querySelectorAll('input, select').forEach(function (el) {
-          el.addEventListener('input', syncEditTeamsData);
-          el.addEventListener('change', syncEditTeamsData);
-        });
-        var rm = row.querySelector('.ced-dyn-remove');
-        if (rm) rm.addEventListener('click', function () { row.remove(); syncEditTeamsData(); });
-      });
+    function syncCandidatesData() {
+      if (!candidatesData) return;
+      candidatesData.value = JSON.stringify(candidatesToPayload(createSelectedCandidates));
     }
 
     function syncEditCandidatesData() {
-      if (!editCandidatesList || !editCandidatesData) return;
-      var rows = editCandidatesList.querySelectorAll('.ced-dyn-row');
-      var candidates = [];
-      rows.forEach(function (row, i) {
-        var name = row.querySelector('.ced-cand-name').value.trim();
-        var dept = row.querySelector('.ced-cand-dept').value;
-        var desc = row.querySelector('.ced-cand-desc').value.trim();
-        row.querySelector('.ced-dyn-num').textContent = (i + 1);
-        if (name) candidates.push({ number: i + 1, name: name, department: dept, description: desc });
-      });
-      editCandidatesData.value = JSON.stringify(candidates);
+      if (!editCandidatesData) return;
+      editCandidatesData.value = JSON.stringify(candidatesToPayload(editSelectedCandidates));
     }
 
-    function wireEditCandidateRowEvents() {
-      if (!editCandidatesList) return;
-      editCandidatesList.querySelectorAll('.ced-dyn-row').forEach(function (row) {
-        row.querySelectorAll('input, select').forEach(function (el) {
-          el.addEventListener('input', syncEditCandidatesData);
-          el.addEventListener('change', syncEditCandidatesData);
-        });
-        var rm = row.querySelector('.ced-dyn-remove');
-        if (rm) rm.addEventListener('click', function () { row.remove(); syncEditCandidatesData(); });
+    function getCandidatesForTarget(target) {
+      return target === 'edit' ? editSelectedCandidates : createSelectedCandidates;
+    }
+
+    function getCandidateListForTarget(target) {
+      return target === 'edit' ? editCandidatesList : candidatesList;
+    }
+
+    function getCandidateSyncForTarget(target) {
+      return target === 'edit' ? syncEditCandidatesData : syncCandidatesData;
+    }
+
+    function setCandidatesForTarget(target, candidates) {
+      var normalized = (candidates || []).map(normalizeEventCandidate).filter(function (c) { return c && c.name; });
+      if (target === 'edit') {
+        editSelectedCandidates = normalized;
+        renderSelectedCandidatesList(editCandidatesList, editSelectedCandidates, syncEditCandidatesData);
+      } else {
+        createSelectedCandidates = normalized;
+        renderSelectedCandidatesList(candidatesList, createSelectedCandidates, syncCandidatesData);
+      }
+    }
+
+    function renderCandidatePickerList() {
+      if (!candidatePickerList) return;
+      var query = (candidatePickerSearch && candidatePickerSearch.value || '').trim().toLowerCase();
+      var current = getCandidatesForTarget(candidatePickerTarget);
+      var pickedIds = current.map(function (c) { return String(c.registry_id || ''); });
+      var visible = registryCandidates.filter(function (cand) {
+        if (!query) return true;
+        return cand.name.toLowerCase().includes(query)
+          || String(cand.number).toLowerCase().includes(query)
+          || (cand.department || '').toLowerCase().includes(query);
+      });
+
+      candidatePickerList.innerHTML = '';
+      if (!registryCandidates.length) {
+        if (candidatePickerEmpty) candidatePickerEmpty.classList.remove('hidden');
+        return;
+      }
+      if (candidatePickerEmpty) candidatePickerEmpty.classList.add('hidden');
+
+      if (!visible.length) {
+        candidatePickerList.innerHTML = '<p class="ced-teams-empty">No candidates match your search.</p>';
+        return;
+      }
+
+      visible.forEach(function (cand) {
+        var id = String(cand.id);
+        var already = pickedIds.indexOf(id) !== -1;
+        var item = document.createElement('label');
+        item.className = 'ced-team-picker-item' + (already ? ' is-disabled' : '');
+        item.innerHTML =
+          '<input type="checkbox" value="' + escHtml(id) + '"' + (already ? ' disabled checked' : '') + '>' +
+          '<span class="ced-team-picker-avatar">' + escHtml((cand.name || '').slice(0, 2).toUpperCase()) + '</span>' +
+          '<span class="ced-team-picker-copy">' +
+            '<strong>#' + escHtml(String(cand.number)) + ' ' + escHtml(cand.name) + '</strong>' +
+            '<small>' + escHtml(cand.department || 'No department') + '</small>' +
+          '</span>';
+        candidatePickerList.appendChild(item);
       });
     }
 
-    if (editAddTeamBtn) {
-      editAddTeamBtn.addEventListener('click', function () {
-        var idx = editTeamsList.querySelectorAll('.ced-dyn-row').length;
-        var temp = document.createElement('div');
-        temp.innerHTML = renderTeamRow({}, idx);
-        var newRow = temp.firstChild;
-        editTeamsList.appendChild(newRow);
-        wireEditTeamRowEvents();
-        syncEditTeamsData();
-        newRow.querySelector('.ced-team-name').focus();
-      });
+    function openCandidatePicker(target) {
+      candidatePickerTarget = target || 'create';
+      if (!registryCandidates.length) {
+        window.alert('No registered candidates yet. Go to Teams and create candidates first.');
+        return;
+      }
+      if (candidatePickerSearch) candidatePickerSearch.value = '';
+      renderCandidatePickerList();
+      if (candidatePickerDialog && typeof candidatePickerDialog.showModal === 'function') {
+        candidatePickerDialog.showModal();
+      }
     }
 
-    if (editAddCandidateBtn) {
-      editAddCandidateBtn.addEventListener('click', function () {
-        var idx = editCandidatesList.querySelectorAll('.ced-dyn-row').length;
-        var temp = document.createElement('div');
-        temp.innerHTML = renderCandidateRow({}, idx);
-        var newRow = temp.firstChild;
-        editCandidatesList.appendChild(newRow);
-        wireEditCandidateRowEvents();
-        syncEditCandidatesData();
-        newRow.querySelector('.ced-cand-name').focus();
-      });
+    function closeCandidatePicker() {
+      if (candidatePickerDialog && candidatePickerDialog.open) candidatePickerDialog.close();
     }
+
+    function applyCandidatePickerSelection() {
+      if (!candidatePickerList) return;
+      var current = getCandidatesForTarget(candidatePickerTarget);
+      var pickedIds = current.map(function (c) { return String(c.registry_id || ''); });
+      candidatePickerList.querySelectorAll('input[type="checkbox"]:checked:not(:disabled)').forEach(function (input) {
+        var reg = findRegistryCandidate(input.value);
+        if (!reg) return;
+        if (pickedIds.indexOf(String(reg.id)) !== -1) return;
+        current.push(normalizeEventCandidate(reg));
+      });
+      renderSelectedCandidatesList(
+        getCandidateListForTarget(candidatePickerTarget),
+        current,
+        getCandidateSyncForTarget(candidatePickerTarget)
+      );
+      closeCandidatePicker();
+    }
+
+    if (addCandidateBtn) addCandidateBtn.addEventListener('click', function () { openCandidatePicker('create'); });
+    if (editAddCandidateBtn) editAddCandidateBtn.addEventListener('click', function () { openCandidatePicker('edit'); });
+    if (candidatePickerSearch) candidatePickerSearch.addEventListener('input', renderCandidatePickerList);
+    if (confirmCandidatePickerBtn) confirmCandidatePickerBtn.addEventListener('click', applyCandidatePickerSelection);
+    document.getElementById('close-candidate-picker')?.addEventListener('click', closeCandidatePicker);
+    document.getElementById('cancel-candidate-picker')?.addEventListener('click', closeCandidatePicker);
+
+    renderSelectedCandidatesList(candidatesList, createSelectedCandidates, syncCandidatesData);
+    renderSelectedCandidatesList(editCandidatesList, editSelectedCandidates, syncEditCandidatesData);
+
+    var departmentOptions = {{ department_options_json|safe }};
 
     function renderViewTableList(containerId, columns, rows, emptyLabel) {
       var el = document.getElementById(containerId);
@@ -1719,8 +1975,8 @@
         document.getElementById('edit-venue').value             = ev.venue || '';
         setSelectValue(document.getElementById('edit-tournament-type'), ev.tournament_type);
         setSelectValue(document.getElementById('edit-status'), ev.availability_status || 'active');
-        populateDynamicList(editTeamsList, renderTeamRow, wireEditTeamRowEvents, syncEditTeamsData, ev.teams_list || []);
-        populateDynamicList(editCandidatesList, renderCandidateRow, wireEditCandidateRowEvents, syncEditCandidatesData, ev.candidates_list || []);
+        setTeamsForTarget('edit', ev.teams_list || []);
+        setCandidatesForTarget('edit', ev.candidates_list || []);
         setPointsEditValues(ev);
         var reqVer = document.getElementById('edit-require-verification');
         if (reqVer) reqVer.checked = true;
