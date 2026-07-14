@@ -80,6 +80,15 @@
   grid-column: 1 / -1;
 }
 
+.acc-field-hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #64748b;
+  line-height: 1.4;
+}
+
 /* ── Generate / Regenerate button ── */
 .generate-code-btn {
   display: inline-flex;

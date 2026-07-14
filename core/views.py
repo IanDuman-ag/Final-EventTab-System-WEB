@@ -426,6 +426,49 @@ def _save_assignment_access_code(user, access_code):
     profile.save(update_fields=['access_code'])
 
 
+def _access_code_prefix(role_label):
+    """Judge → JDG, Scorer → SCR (3-letter role prefix)."""
+    if role_label == 'Judge':
+        return 'JDG'
+    if role_label == 'Scorer':
+        return 'SCR'
+    return ''
+
+
+def _allocate_access_code(role_label, exclude_user_id=None):
+    """
+    Next available access code for the role: JDG01, JDG02… / SCR01, SCR02…
+    Uses the highest existing numeric suffix for that prefix and increments.
+    """
+    import re
+    from events.models import AssignmentAccountProfile
+
+    prefix = _access_code_prefix(role_label)
+    if not prefix:
+        return ''
+
+    pattern = re.compile(rf'^{re.escape(prefix)}(\d+)$', re.IGNORECASE)
+    qs = AssignmentAccountProfile.objects.filter(access_code__istartswith=prefix)
+    if exclude_user_id is not None:
+        qs = qs.exclude(user_id=exclude_user_id)
+
+    max_n = 0
+    for code in qs.values_list('access_code', flat=True):
+        match = pattern.match((code or '').strip())
+        if match:
+            max_n = max(max_n, int(match.group(1)))
+
+    next_n = max_n + 1
+    while True:
+        candidate = f'{prefix}{next_n:02d}'
+        taken = AssignmentAccountProfile.objects.filter(access_code__iexact=candidate)
+        if exclude_user_id is not None:
+            taken = taken.exclude(user_id=exclude_user_id)
+        if not taken.exists():
+            return candidate
+        next_n += 1
+
+
 def get_assignment_account_rows(account_type='all'):
     User = get_user_model()
     assignment_users = (
@@ -1697,16 +1740,25 @@ def _split_full_name(full_name):
 
 
 def _generate_username_from_name(full_name):
-    """Auto-generate a unique username slug from a display name."""
+    """
+    Use the official name the admin entered as the username.
+    Only appends _2, _3… if that exact name is already taken — never a random nickname.
+    """
     User = get_user_model()
-    slug = re.sub(r'[^a-z0-9]', '_', full_name.strip().lower())
-    slug = re.sub(r'_+', '_', slug).strip('_')[:16] or 'user'
-    for _ in range(30):
-        suffix = ''.join(random.choices(string.digits, k=4))
-        candidate = f"{slug}_{suffix}"
-        if not User.objects.filter(username__iexact=candidate).exists():
-            return candidate
-    return 'user_' + ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+    base = (full_name or '').strip()
+    # Django usernames allow letters, digits, and @/./+/-/_
+    if base and not re.fullmatch(r'[\w.@+-]+', base, flags=re.UNICODE):
+        base = re.sub(r'[^\w.@+-]', '_', base, flags=re.UNICODE)
+        base = re.sub(r'_+', '_', base).strip('_')
+    base = (base or 'user')[:150]
+
+    candidate = base
+    n = 2
+    while User.objects.filter(username__iexact=candidate).exists():
+        suffix = f'_{n}'
+        candidate = base[: max(1, 150 - len(suffix))] + suffix
+        n += 1
+    return candidate
 
 
 def _normalize_assignment_role(role):
@@ -1756,12 +1808,31 @@ def _assignment_payload(request):
         'email': (payload.get('email') or '').strip(),
         'password': payload.get('password') or '',
         'access_code': (payload.get('access_code') or '').strip(),
+        'regenerate_access_code': bool(payload.get('regenerate_access_code')),
         'role': (payload.get('role') or '').strip(),
         'is_active': bool(payload.get('is_active', True)),
     }
 
 
 CODE_ROLES = {'Judge', 'Scorer'}
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def next_assignment_access_code(request):
+    """Preview the next sequential access code for Judge (JDG##) or Scorer (SCR##)."""
+    role_raw = (request.GET.get('role') or '').strip()
+    role_label = _normalize_assignment_role(role_raw)
+    if role_label not in CODE_ROLES:
+        return JsonResponse({'success': False, 'message': 'Role must be Judge or Scorer.'}, status=400)
+
+    exclude_id = request.GET.get('exclude')
+    exclude_user_id = None
+    if exclude_id and str(exclude_id).isdigit():
+        exclude_user_id = int(exclude_id)
+
+    code = _allocate_access_code(role_label, exclude_user_id=exclude_user_id)
+    return JsonResponse({'success': True, 'access_code': code, 'role': role_label})
 
 
 @login_required(login_url='login')
@@ -1780,11 +1851,12 @@ def create_assignment_account(request):
     # ── Judge / Scorer: name + access-code flow ──────────────────────────────
     if role_label in CODE_ROLES:
         full_name = payload['full_name']
-        access_code = payload['access_code']
         if not full_name:
             return JsonResponse({'success': False, 'message': 'Name is required.'}, status=400)
+        # Always allocate sequential role codes (JDG01 / SCR01…) server-side
+        access_code = _allocate_access_code(role_label)
         if not access_code:
-            return JsonResponse({'success': False, 'message': 'Generate an access code before creating the account.'}, status=400)
+            return JsonResponse({'success': False, 'message': 'Could not allocate an access code for this role.'}, status=500)
         try:
             auto_username = _generate_username_from_name(full_name)
             first_name, last_name = _split_full_name(full_name)
@@ -1807,7 +1879,7 @@ def create_assignment_account(request):
             return JsonResponse({
                 'success': True,
                 'message': f'{role_label} account for {full_name} created.',
-                'username': auto_username,
+                'name': full_name,
                 'access_code': access_code,
             })
         except Exception as e:
@@ -1878,9 +1950,13 @@ def update_assignment_account(request, account_id):
             first_name, last_name = _split_full_name(full_name)
             account_user.first_name = first_name
             account_user.last_name = last_name
-            if payload['access_code']:
-                account_user.set_password(payload['access_code'])
-                _save_assignment_access_code(account_user, payload['access_code'])
+            new_code = ''
+            if payload.get('regenerate_access_code'):
+                new_code = _allocate_access_code(role_label, exclude_user_id=account_user.id)
+                if not new_code:
+                    return JsonResponse({'success': False, 'message': 'Could not allocate a new access code.'}, status=500)
+                account_user.set_password(new_code)
+                _save_assignment_access_code(account_user, new_code)
             _apply_assignment_role(account_user, role_label, payload['is_active'])
             account_user.save()
             if role_label == 'Judge':
@@ -1894,8 +1970,8 @@ def update_assignment_account(request, account_id):
                 change_message=f'Updated {role_label} account (access-code flow)',
             )
             resp = {'success': True, 'message': f'Account for {full_name} updated.'}
-            if payload['access_code']:
-                resp['access_code'] = payload['access_code']
+            if new_code:
+                resp['access_code'] = new_code
             return JsonResponse(resp)
         except Exception as e:
             return JsonResponse({'success': False, 'message': str(e)}, status=500)

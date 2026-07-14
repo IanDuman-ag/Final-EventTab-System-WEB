@@ -112,6 +112,8 @@ document.addEventListener('DOMContentLoaded', function () {
   var defaultRole = document.body.dataset.defaultRole || 'Tabulator';
 
   var _generatedCode = '';
+  var _regenPending = false;
+  var nextCodeUrl = '/admin/accounts/next-access-code/';
 
   if (!openButton || !modal || !form) { return; }
 
@@ -143,18 +145,27 @@ document.addEventListener('DOMContentLoaded', function () {
     return r === 'Judge' || r === 'Scorer';
   }
 
-  function generateCode() {
-    var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    var code  = '';
-    for (var i = 0; i < 8; i++) {
-      code += chars.charAt(Math.floor(Math.random() * chars.length));
+  async function fetchNextAccessCode(roleVal) {
+    var url = nextCodeUrl + '?role=' + encodeURIComponent(roleVal);
+    if (accountId.value) {
+      url += '&exclude=' + encodeURIComponent(accountId.value);
     }
-    return code;
+    try {
+      var response = await fetch(url, {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      });
+      var data = await response.json();
+      if (data && data.success && data.access_code) {
+        return data.access_code;
+      }
+    } catch (_) { /* fall through */ }
+    // Fallback preview if the preview endpoint is unavailable
+    return roleVal === 'Scorer' ? 'SCR01' : 'JDG01';
   }
 
   function roleSubtitle(r) {
-    if (r === 'Judge')  { return 'Enter the judge\'s name and generate an access code to share with them.'; }
-    if (r === 'Scorer') { return 'Enter the scorer\'s name and generate an access code to share with them.'; }
+    if (r === 'Judge')  { return 'Enter the judge\'s official name and generate an access code (JDG01, JDG02…) to share with them.'; }
+    if (r === 'Scorer') { return 'Enter the scorer\'s official name and generate an access code (SCR01, SCR02…) to share with them.'; }
     return 'Tabulators sign in via the web portal with their username and password.';
   }
 
@@ -170,6 +181,7 @@ document.addEventListener('DOMContentLoaded', function () {
     nameInput.required     = code;
 
     _generatedCode = '';
+    _regenPending = false;
     codeDisplay.classList.add('acc-code-display--hidden');
     codeValue.textContent = '';
     resetGenerateBtn();
@@ -207,24 +219,18 @@ document.addEventListener('DOMContentLoaded', function () {
     // Require name before generating
     var fullName = nameInput.value.trim();
     if (!fullName) {
-      showToast('Please enter a name first.', 'warning');
+      showToast('Please enter the official name first.', 'warning');
       nameInput.focus();
       return;
     }
 
-    var code = generateCode();
-    _generatedCode = code;
-    codeValue.textContent = code;
-    codeDisplay.classList.remove('acc-code-display--hidden');
-
-    // ── CREATE mode: save account immediately ──────────────────────────────
+    // ── CREATE mode: save account immediately; server allocates JDG## / SCR## ─
     if (isCreating) {
       btnGenerate.disabled     = true;
       btnGenerate.textContent  = 'Creating account…';
 
       var result = await postJson(modal.dataset.endpoint, {
         full_name:   fullName,
-        access_code: code,
         role:        roleVal,
         is_active:   statusSelect.value === 'active',
       });
@@ -234,18 +240,32 @@ document.addEventListener('DOMContentLoaded', function () {
         btnGenerate.innerHTML   =
           '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 8C8 10 5.9 16.17 3.82 19.82L5.71 21l1-1.85A4.52 4.52 0 0 0 8 20c4 0 4-2 8-2s4 2 8 2v-2c-4 0-4-2-8-2-.63 0-1.17.06-1.67.14C14.43 11.22 15.06 8.07 17 8Z"/></svg> Try Again';
         _generatedCode          = '';
+        _regenPending           = false;
         codeValue.textContent   = '';
         codeDisplay.classList.add('acc-code-display--hidden');
         showToast(result.message || 'Failed to create account.', 'error');
         return;
       }
 
-      // Show success card — account is now in the database
-      showSuccessCard(fullName, roleVal, result.username, code);
+      var allocated = result.access_code || '';
+      _generatedCode = allocated;
+      codeValue.textContent = allocated;
+      codeDisplay.classList.remove('acc-code-display--hidden');
+
+      // Show success card — use the official name only (no generated username/nickname)
+      showSuccessCard(fullName, roleVal, null, allocated);
       return;
     }
 
-    // ── EDIT mode: just show new code (committed on Save) ─────────────────
+    // ── EDIT mode: preview next sequential code (committed on Save) ──────────
+    btnGenerate.disabled = true;
+    btnGenerate.textContent = 'Generating…';
+    var code = await fetchNextAccessCode(roleVal);
+    _generatedCode = code;
+    _regenPending = true;
+    codeValue.textContent = code;
+    codeDisplay.classList.remove('acc-code-display--hidden');
+    btnGenerate.disabled = false;
     btnGenerate.innerHTML =
       '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 8C8 10 5.9 16.17 3.82 19.82L5.71 21l1-1.85A4.52 4.52 0 0 0 8 20c4 0 4-2 8-2s4 2 8 2v-2c-4 0-4-2-8-2-.63 0-1.17.06-1.67.14C14.43 11.22 15.06 8.07 17 8Z"/></svg> Regenerate Code';
   });
@@ -362,10 +382,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
     if (isCodeRole(roleVal)) {
       // Edit-save for Judge/Scorer
-      payload.full_name   = nameInput.value.trim();
-      payload.access_code = _generatedCode; // blank = keep existing password
+      payload.full_name = nameInput.value.trim();
+      payload.regenerate_access_code = _regenPending;
       if (!payload.full_name) {
-        showToast('Please enter a name.', 'warning');
+        showToast('Please enter the official name.', 'warning');
         return;
       }
     } else {
@@ -407,9 +427,8 @@ document.addEventListener('DOMContentLoaded', function () {
     codeSection.classList.add('acc-code-section--hidden');
     successCard.classList.remove('acc-success-card--hidden');
 
-    var line = roleLabel + ' account for ' + fullName + ' created.';
-    if (username) { line += ' Username: ' + username; }
-    successMsg.textContent  = line;
+    // Judge/Scorer: show only the official name they entered + access code
+    successMsg.textContent = roleLabel + ' account for ' + fullName + ' created.';
     successCode.textContent = code;
 
     usernameInput.required = false;
@@ -470,6 +489,7 @@ document.addEventListener('DOMContentLoaded', function () {
       usernameInput.value = '';
       passwordInput.value = '';
       _generatedCode = '';
+      _regenPending = false;
       if (row.dataset.accessCode && row.dataset.accessCode !== '—') {
         _generatedCode = row.dataset.accessCode;
         codeValue.textContent = _generatedCode;
@@ -502,7 +522,12 @@ document.addEventListener('DOMContentLoaded', function () {
     if (nameField) nameField.hidden = !isCode;
     if (codeField) codeField.hidden = !isCode;
     if (nameEl) nameEl.textContent = row.dataset.fullName || '—';
-    if (usernameEl) usernameEl.textContent = row.dataset.username || '—';
+    // Judge/Scorer sign in with access code — hide the internal username field
+    if (usernameEl) {
+      var usernameField = usernameEl.closest('.view-account-field');
+      if (usernameField) usernameField.hidden = isCode;
+      usernameEl.textContent = row.dataset.username || '—';
+    }
     if (codeEl) codeEl.textContent = row.dataset.accessCode || '—';
     if (roleEl) roleEl.textContent = assignedRole || '—';
     if (statusEl) {

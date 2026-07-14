@@ -4,44 +4,102 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Login - EventTabs System</title>
-  <link rel="stylesheet" href="{% static 'login.css' %}?v=20260604">
+  <title>Login - EventTab</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'login.css' %}?v=20260714e">
 </head>
 <body class="login-page">
   <main class="login-shell">
-    <div class="login-brand">
-      <div class="login-brand-inner">
-        <div class="login-brand-logo">
-          <svg viewBox="0 0 40 40" fill="none">
-            <rect width="40" height="40" rx="10" fill="rgba(255,255,255,.12)"/>
-            <path d="M12 12h6v6h-6zM22 12h6v6h-6zM12 22h6v6h-6zM22 22h6v6h-6z" fill="#fff" opacity=".85"/>
-          </svg>
-        </div>
-        <h2 class="login-brand-name">EventTab</h2>
-        <p class="login-brand-tagline">Event Management &amp; Scoring System</p>
-        <div class="login-brand-features">
-          <div class="login-brand-feature">
-            <svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16Zm-1 11.41L5.59 10l1.41-1.41L9 10.59l4-4L14.41 8 9 13.41Z"/></svg>
-            <span>Real-time score tracking</span>
-          </div>
-          <div class="login-brand-feature">
-            <svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16Zm-1 11.41L5.59 10l1.41-1.41L9 10.59l4-4L14.41 8 9 13.41Z"/></svg>
-            <span>Role-based access control</span>
-          </div>
-          <div class="login-brand-feature">
-            <svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16Zm-1 11.41L5.59 10l1.41-1.41L9 10.59l4-4L14.41 8 9 13.41Z"/></svg>
-            <span>Mobile judge scoring</span>
-          </div>
-        </div>
+    <!-- LEFT: campus photo + brand -->
+    <section class="login-brand" aria-label="EventTab branding">
+      <div class="login-brand-photo">
+        <img src="{% static 'ustp-bg.png' %}" alt="USTP campus" class="login-brand-img">
+        <div class="login-brand-photo-fade" aria-hidden="true"></div>
       </div>
-    </div>
 
-    <div class="login-form-side">
-      <section class="login-card" aria-labelledby="login-title">
+      <div class="login-brand-copy">
+        <h1 class="login-brand-name">
+          <span class="login-brand-name-event">Event</span><span class="login-brand-name-tab">Tab</span>
+        </h1>
+        <p class="login-brand-tagline">Event Management &amp; Scoring System</p>
+        <span class="login-brand-rule" aria-hidden="true"></span>
+        <p class="login-brand-desc">
+          A smart and efficient platform for managing school events, scores, and participants in real-time.
+        </p>
+        <div class="login-brand-dots" aria-hidden="true"></div>
+      </div>
+
+      <div class="login-brand-wave" aria-hidden="true">
+        <svg viewBox="0 0 800 120" preserveAspectRatio="none">
+          <path class="wave-navy" d="M0 70C120 30 220 110 360 70C500 30 620 95 800 55V120H0Z"/>
+          <path class="wave-cyan" d="M0 88C140 55 250 115 390 85C540 52 660 105 800 72V120H0Z"/>
+          <path class="wave-gold" d="M0 102C160 78 280 118 420 98C570 76 690 112 800 90V120H0Z"/>
+        </svg>
+      </div>
+    </section>
+
+    <!-- RIGHT: form -->
+    <section class="login-form-side">
+      <div class="login-corner login-corner--tr" aria-hidden="true">
+        <svg viewBox="0 0 280 220" preserveAspectRatio="none">
+          <path d="M40 0H280V150C230 195 160 215 80 185C30 165 20 90 40 0Z"/>
+        </svg>
+      </div>
+      <div class="login-corner login-corner--br" aria-hidden="true">
+        <svg viewBox="0 0 280 200" preserveAspectRatio="none">
+          <path d="M240 200H0V60C50 20 120 5 190 35C245 58 260 120 240 200Z"/>
+        </svg>
+      </div>
+
+      <div class="login-pattern" aria-hidden="true">
+        <svg class="login-pattern-svg" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <pattern id="eduIcons" width="140" height="140" patternUnits="userSpaceOnUse">
+              <!-- book -->
+              <g transform="translate(18,22)" fill="none" stroke="#8fb0d8" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 4h10a4 4 0 0 1 4 4v12H6a4 4 0 0 0-4 4V4Z"/>
+                <path d="M16 4h10v16a4 4 0 0 1-4 4h-10"/>
+              </g>
+              <!-- globe -->
+              <g transform="translate(88,18)" fill="none" stroke="#8fb0d8" stroke-width="1.4">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M2 12h20M12 2c3 3 3 7 3 10s0 7-3 10c-3-3-3-7-3-10s0-7 3-10Z"/>
+              </g>
+              <!-- flask -->
+              <g transform="translate(24,78)" fill="none" stroke="#8fb0d8" stroke-width="1.4" stroke-linecap="round">
+                <path d="M9 2v8l-5 10a4 4 0 0 0 3.5 6h9a4 4 0 0 0 3.5-6L15 10V2"/>
+                <path d="M7 2h10"/>
+              </g>
+              <!-- pencil -->
+              <g transform="translate(92,82)" fill="none" stroke="#8fb0d8" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2 22 10 9 23H2v-7L14 2Z"/>
+                <path d="M12 4l8 8"/>
+              </g>
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#eduIcons)"/>
+        </svg>
+      </div>
+
+      <div class="login-card" aria-labelledby="login-title">
         <div class="login-header">
-          <span class="login-badge">Secure Login</span>
-          <h1 id="login-title">Welcome back</h1>
-          <p>Sign in to access your portal</p>
+          <div class="login-avatar" aria-hidden="true">
+            <svg viewBox="0 0 64 64" fill="none">
+              <circle cx="32" cy="32" r="32" fill="#D6E6F8"/>
+              <circle cx="32" cy="24" r="9" fill="#0B2D5C"/>
+              <path d="M14 50c2.5-10 10-15 18-15s15.5 5 18 15" fill="#0B2D5C"/>
+              <circle cx="46" cy="42" r="9" fill="#143F78"/>
+              <path d="M46 37.8a2.4 2.4 0 1 1 0 4.8 2.4 2.4 0 0 1 0-4.8Zm0 0v-1.6m0 8v-1.6m3.4-4.8 1.1-1.1m-7.9 7.9 1.1-1.1m6.8 0 1.1 1.1m-7.9-7.9 1.1 1.1m5.7 2.2h1.6m-8 0h1.6" stroke="#F5C518" stroke-width="1.4" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <h2 id="login-title">Welcome Back!</h2>
+          <div class="login-header-accent" aria-hidden="true">
+            <span class="accent-gold"></span>
+            <span class="accent-gray"></span>
+          </div>
+          <p>Sign in to access your EventTab portal</p>
         </div>
 
         {% if error %}
@@ -65,7 +123,7 @@
             <label for="username">Username</label>
             <div class="login-input-wrap">
               <svg class="login-input-icon" viewBox="0 0 20 20" fill="currentColor">
-                <path fill-rule="evenodd" d="M10 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm-3 2a3 3 0 0 0-3 3v1a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-1a3 3 0 0 0-3-3H7Z" clip-rule="evenodd"/>
+                <path fill-rule="evenodd" d="M10 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm-7 9a7 7 0 1 1 14 0H3Z" clip-rule="evenodd"/>
               </svg>
               <input type="text" id="username" name="username" placeholder="Enter your username" value="{{ username|default:'' }}" required autocomplete="username">
             </div>
@@ -78,9 +136,9 @@
                 <path fill-rule="evenodd" d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z" clip-rule="evenodd"/>
               </svg>
               <input type="password" id="password" name="password" placeholder="Enter your password" required autocomplete="current-password">
-              <button type="button" class="login-toggle-pw" aria-label="Toggle password visibility" tabindex="-1">
-                <svg class="pw-eye-open" viewBox="0 0 20 20" fill="currentColor"><path d="M10 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z"/><path fill-rule="evenodd" d="M.664 10.59a1.651 1.651 0 0 1 0-1.186A10.004 10.004 0 0 1 10 3c4.257 0 7.893 2.66 9.336 6.41.147.381.146.804 0 1.186A10.004 10.004 0 0 1 10 17c-4.257 0-7.893-2.66-9.336-6.41ZM14 10a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z" clip-rule="evenodd"/></svg>
-                <svg class="pw-eye-closed" viewBox="0 0 20 20" fill="currentColor" style="display:none"><path fill-rule="evenodd" d="M3.28 2.22a.75.75 0 0 0-1.06 1.06l14.5 14.5a.75.75 0 1 0 1.06-1.06l-1.745-1.745a10.029 10.029 0 0 0 3.3-4.38 1.651 1.651 0 0 0 0-1.185A10.004 10.004 0 0 0 9.999 3a9.956 9.956 0 0 0-4.744 1.194L3.28 2.22ZM7.752 6.69l1.092 1.092a2.5 2.5 0 0 1 3.374 3.373l1.092 1.092a4 4 0 0 0-5.558-5.558Z" clip-rule="evenodd"/><path d="M10.748 13.93l2.523 2.523A9.987 9.987 0 0 1 10 17a10.003 10.003 0 0 1-9.335-6.41 1.651 1.651 0 0 1 0-1.186 10.05 10.05 0 0 1 2.745-4.08l2.15 2.15A4 4 0 0 0 10.748 13.93Z"/></svg>
+              <button type="button" class="login-toggle-pw" aria-label="Show password" tabindex="-1">
+                <svg class="pw-eye-open" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z"/><path fill-rule="evenodd" d="M.664 10.59a1.651 1.651 0 0 1 0-1.186A10.004 10.004 0 0 1 10 3c4.257 0 7.893 2.66 9.336 6.41.147.381.146.804 0 1.186A10.004 10.004 0 0 1 10 17c-4.257 0-7.893-2.66-9.336-6.41ZM14 10a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z" clip-rule="evenodd"/></svg>
+                <svg class="pw-eye-closed" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M3.28 2.22a.75.75 0 0 0-1.06 1.06l14.5 14.5a.75.75 0 1 0 1.06-1.06l-1.745-1.745a10.029 10.029 0 0 0 3.3-4.38 1.651 1.651 0 0 0 0-1.185A10.004 10.004 0 0 0 9.999 3a9.956 9.956 0 0 0-4.744 1.194L3.28 2.22ZM7.752 6.69l1.092 1.092a2.5 2.5 0 0 1 3.374 3.373l1.092 1.092a4 4 0 0 0-5.558-5.558Z" clip-rule="evenodd"/><path d="M10.748 13.93l2.523 2.523A9.987 9.987 0 0 1 10 17a10.003 10.003 0 0 1-9.335-6.41 1.651 1.651 0 0 1 0-1.186 10.05 10.05 0 0 1 2.745-4.08l2.15 2.15A4 4 0 0 0 10.748 13.93Z"/></svg>
               </button>
             </div>
           </div>
@@ -93,14 +151,20 @@
           </div>
 
           <button class="login-button" type="submit">
-            <span>Sign In</span>
-            <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 10a.75.75 0 0 1 .75-.75h10.638L10.23 5.29a.75.75 0 1 1 1.04-1.08l5.5 5.25a.75.75 0 0 1 0 1.08l-5.5 5.25a.75.75 0 1 1-1.04-1.08l4.158-3.96H3.75A.75.75 0 0 1 3 10Z" clip-rule="evenodd"/></svg>
+            <svg class="login-btn-icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+              <path d="M10 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/>
+              <path d="M3 16.5c1.2-3.2 3.8-4.5 7-4.5s5.8 1.3 7 4.5"/>
+              <circle cx="15.2" cy="13.2" r="3.4"/>
+              <path d="M15.2 11.6v3.2M13.6 13.2h3.2" stroke="#0B2D5C" stroke-width="1.2" stroke-linecap="round"/>
+            </svg>
+            <span>Log in</span>
+            <svg class="login-btn-arrow" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+              <path fill-rule="evenodd" d="M3 10a.75.75 0 0 1 .75-.75h10.638L10.23 5.29a.75.75 0 1 1 1.04-1.08l5.5 5.25a.75.75 0 0 1 0 1.08l-5.5 5.25a.75.75 0 1 1-1.04-1.08l4.158-3.96H3.75A.75.75 0 0 1 3 10Z" clip-rule="evenodd"/>
+            </svg>
           </button>
         </form>
-
-        <p class="login-footer">Your role is detected automatically after sign-in.</p>
-      </section>
-    </div>
+      </div>
+    </section>
   </main>
 
   <script>
@@ -108,13 +172,11 @@
     var btn = document.querySelector('.login-toggle-pw');
     if (!btn) return;
     var inp = document.getElementById('password');
-    var open = btn.querySelector('.pw-eye-open');
-    var closed = btn.querySelector('.pw-eye-closed');
     btn.addEventListener('click', function () {
-      var show = inp.type === 'password';
-      inp.type = show ? 'text' : 'password';
-      open.style.display = show ? 'none' : '';
-      closed.style.display = show ? '' : 'none';
+      var showing = inp.type === 'text';
+      inp.type = showing ? 'password' : 'text';
+      btn.classList.toggle('is-visible', !showing);
+      btn.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
     });
   })();
   </script>
