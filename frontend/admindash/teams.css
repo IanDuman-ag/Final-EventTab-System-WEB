@@ -1282,3 +1282,42 @@
     width: calc(100% - 20px);
   }
 }
+
+/* Team image thumbs + form preview */
+.team-thumb {
+  width: 42px;
+  height: 42px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #dbe5f1;
+  background: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: #94a3b8;
+}
+
+.team-thumb--empty {
+  width: 62px;
+  height: 26px;
+  border-radius: 999px;
+  background: #f8fafc;
+}
+
+.team-preview-wrap {
+  margin-top: 8px;
+}
+
+.team-preview-wrap.hidden {
+  display: none;
+}
+
+.team-preview-img {
+  width: 84px;
+  height: 84px;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid #dbe5f1;
+  background: #fff;
+}

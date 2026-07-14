@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Pending Results — EventTab Tabulator</title>
-  <link rel="stylesheet" href="{% static 'tabulatordash/tab_v2.css' %}?v=20260616b">
+  <link rel="stylesheet" href="{% static 'tabulatordash/tab_v2.css' %}?v=20260715t">
   <link rel="stylesheet" href="{% static 'tabulatordash/pendingresult.css' %}?v=20260616c">
 </head>
 <body class="tab-v2">
@@ -204,10 +204,12 @@
                       <svg viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17Z"/></svg>
                       Review
                     </button>
+                    {% if not pr.review_only %}
                     <button type="button" class="pr-reject-btn" data-type="{{ pr.type }}" data-id="{{ pr.id }}">
                       <svg viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
                       Reject
                     </button>
+                    {% endif %}
                     <button type="button" class="pr-row-chevron" data-review-id="{{ pr.id }}-{{ pr.type }}" aria-label="Open review">
                       <svg viewBox="0 0 24 24"><path d="M8.59 16.59 13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41Z"/></svg>
                     </button>
@@ -289,13 +291,14 @@
       <button type="button" class="pr-modal-reject" id="prModalRejectBtn">Reject</button>
       <button type="button" class="pr-modal-approve" id="prModalApproveBtn">
         <svg viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17Z"/></svg>
-        Approve Result
+        <span id="prModalApproveLabel">Approve Result</span>
       </button>
     </footer>
   </div>
 </div>
 
 {{ review_json|json_script:"pr-review-data" }}
+<script src="{% static 'js/tabulator_toast.js' %}?v=20260715t"></script>
 <script>
 (function () {
   const reviewData = JSON.parse(document.getElementById('pr-review-data').textContent || '[]');
@@ -334,6 +337,12 @@
       remarksWrap.hidden = true;
     }
 
+    const rejectBtn = document.getElementById('prModalRejectBtn');
+    const approveLabel = document.getElementById('prModalApproveLabel');
+    const reviewOnly = !!(row.review_only || row.is_overdue);
+    if (rejectBtn) rejectBtn.hidden = reviewOnly;
+    if (approveLabel) approveLabel.textContent = reviewOnly ? 'Approve Overdue Result' : 'Approve Result';
+
     document.getElementById('prReviewModal').hidden = false;
     document.body.style.overflow = 'hidden';
   }
@@ -345,24 +354,46 @@
   }
 
   async function handleAction(type, id, action) {
-    if (!confirm(action === 'approve' ? 'Approve this result?' : 'Reject this result?')) return false;
+    const key = id + '-' + type;
+    const rowMeta = reviewMap[key];
+    if (action === 'reject' && rowMeta && (rowMeta.review_only || rowMeta.is_overdue)) {
+      TabToast.warning('Overdue results can only be reviewed — Reject is disabled.');
+      return false;
+    }
+    const ok = await TabToast.confirm(
+      action === 'approve'
+        ? 'Approve this result? It will be finalized and moved to Approved Results.'
+        : 'Reject this result? The submitter will need to correct and resubmit.',
+      {
+        title: action === 'approve' ? 'Approve result' : 'Reject result',
+        confirmLabel: action === 'approve' ? 'Approve' : 'Reject',
+        cancelLabel: 'Cancel',
+        danger: action === 'reject',
+      }
+    );
+    if (!ok) return false;
     try {
       const res = await fetch('/tabulator/result/' + type + '/' + id + '/' + action + '/', {
         method: 'POST',
         headers: { 'X-CSRFToken': getCsrf(), 'Content-Type': 'application/json' },
       });
       const data = await res.json();
-      if (!data.success) { alert(data.message || 'Action failed'); return false; }
+      if (!data.success) {
+        TabToast.error(data.message || 'Action failed');
+        return false;
+      }
       const row = document.querySelector('.pr-row[data-type="' + type + '"][data-id="' + id + '"]');
       if (row) {
         row.classList.add('pr-row--done');
         row.querySelector('.pr-actions').innerHTML =
           '<span class="pr-done-label">' + (action === 'approve' ? '✓ Approved' : '✗ Rejected') + '</span>';
       }
+      if (action === 'approve') TabToast.success(data.message || 'Result approved');
+      else TabToast.warning(data.message || 'Result rejected');
       closeModal();
       return true;
     } catch {
-      alert('Network error');
+      TabToast.error('Network error');
       return false;
     }
   }

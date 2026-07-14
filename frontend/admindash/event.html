@@ -498,6 +498,25 @@
           </div>
         </section>
 
+        <section class="ced-section" id="ced-tabulators-section">
+          <h3 class="ced-section-title">7. Assigned Tabulators <span class="ced-opt">(Optional)</span></h3>
+          <p class="ced-hint" style="margin:0 0 10px;font-size:12.5px;color:#64748b;">Tabulators assigned here see this event under My Assignments. Leave empty to allow all tabulators.</p>
+          <div class="judge-select-wrap">
+            {% if tabulator_options %}
+              {% for tab in tabulator_options %}
+              <label class="judge-checkbox-item">
+                <input type="checkbox" name="assigned_tabulators" value="{{ tab.id }}">
+                <span class="judge-avatar">{{ tab.label|slice:":2"|upper }}</span>
+                <span class="judge-name">{{ tab.label }}</span>
+                <small class="judge-username">@{{ tab.username }}</small>
+              </label>
+              {% endfor %}
+            {% else %}
+              <p class="judge-empty">No tabulator accounts found. Create them under Users → Tabulator first.</p>
+            {% endif %}
+          </div>
+        </section>
+
       </div>
 
       <!-- Footer -->
@@ -940,6 +959,25 @@
                 <p class="judge-empty">No judge accounts found.</p>
               {% endif %}
             </div>
+          </div>
+        </section>
+
+        <section class="ced-section">
+          <h3 class="ced-section-title">7. Assigned Tabulators <span class="ced-opt">(Optional)</span></h3>
+          <p class="ced-hint" style="margin:0 0 10px;font-size:12.5px;color:#64748b;">Tabulators assigned here see this event under My Assignments. Leave empty to allow all tabulators.</p>
+          <div class="judge-select-wrap">
+            {% if tabulator_options %}
+              {% for tab in tabulator_options %}
+              <label class="judge-checkbox-item">
+                <input type="checkbox" name="assigned_tabulators" value="{{ tab.id }}" class="edit-tabulator-checkbox" data-user-id="{{ tab.id }}">
+                <span class="judge-avatar">{{ tab.label|slice:":2"|upper }}</span>
+                <span class="judge-name">{{ tab.label }}</span>
+                <small class="judge-username">@{{ tab.username }}</small>
+              </label>
+              {% endfor %}
+            {% else %}
+              <p class="judge-empty">No tabulator accounts found.</p>
+            {% endif %}
           </div>
         </section>
 
@@ -1993,6 +2031,10 @@
         var assignedIds = ev.assigned_judge_ids || [];
         document.querySelectorAll('.edit-assignee-checkbox').forEach(function (cb) {
           cb.checked = assignedIds.indexOf(parseInt(cb.dataset.userId, 10)) !== -1;
+        });
+        var assignedTabIds = ev.assigned_tabulator_ids || [];
+        document.querySelectorAll('.edit-tabulator-checkbox').forEach(function (cb) {
+          cb.checked = assignedTabIds.indexOf(parseInt(cb.dataset.userId, 10)) !== -1;
         });
         if (editBuilder && editBuilder._loadValue) {
           editBuilder._loadValue(ev.scoring_criteria || '');

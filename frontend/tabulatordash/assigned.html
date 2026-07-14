@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>My Assignments — EventTab Tabulator</title>
   <link rel="stylesheet" href="{% static 'tabulatordash/tab_v2.css' %}?v=20260524a">
-  <link rel="stylesheet" href="{% static 'tabulatordash/assigned.css' %}?v=20260616a">
+  <link rel="stylesheet" href="{% static 'tabulatordash/assigned.css' %}?v=20260715a">
 </head>
 <body class="tab-v2">
 <div class="tab-shell">
@@ -66,9 +66,8 @@
       </div>
       <div class="tab-topbar-right">
         <span class="asg-breadcrumb">Home &gt; My Assignments</span>
-        <a class="tab-bell" href="{% url 'tabulator_reports' %}" aria-label="Notifications">
+        <a class="tab-bell" href="{% url 'tabulator_pending_results' %}" aria-label="Pending results">
           <svg viewBox="0 0 24 24"><path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm8-6-2-2v-5a6 6 0 1 0-12 0v5l-2 2v1h16v-1Z"/></svg>
-          <span class="tab-bell-dot"></span>
         </a>
         <div class="asg-user-wrap">
           <div class="tab-avatar-pill">{{ request.user.username|default:"TA"|slice:":2"|upper }}</div>
@@ -143,6 +142,7 @@
           <option value="not_started" {% if selected_status == 'not_started' %}selected{% endif %}>Upcoming</option>
           <option value="pending" {% if selected_status == 'pending' %}selected{% endif %}>Pending</option>
           <option value="in_progress" {% if selected_status == 'in_progress' %}selected{% endif %}>Ongoing</option>
+          <option value="approved" {% if selected_status == 'approved' %}selected{% endif %}>Approved Result</option>
           <option value="completed" {% if selected_status == 'completed' %}selected{% endif %}>Completed</option>
         </select>
         <select class="asg-filter-select" name="category" onchange="this.form.submit()">
@@ -170,7 +170,7 @@
                 <th>Event / Category</th>
                 <th>Type</th>
                 <th>Schedule</th>
-                <th>Judging Panel</th>
+                <th>Judge/Scorer</th>
                 <th>Status</th>
                 <th>Action</th>
               </tr>
@@ -201,15 +201,23 @@
                   </div>
                 </td>
                 <td>
-                  <div class="asg-panel-cell">
-                    <span class="asg-panel-avatar" style="background: {% if row.judge_count > 1 %}#7c3aed{% else %}#2563eb{% endif %};">
-                      {{ row.panel_initials.0|default:"SC" }}
-                    </span>
-                    <div>
-                      <strong>{{ row.panel_label|default:"1 Scorer" }}</strong>
-                      <small>{{ row.panel_name|default:"" }}</small>
+                  {% if row.panel_members %}
+                  <div class="asg-panel-list">
+                    {% for m in row.panel_members %}
+                    <div class="asg-panel-cell">
+                      <span class="asg-panel-avatar" style="background: {% if m.role == 'Judge' %}#16a34a{% else %}#2563eb{% endif %};">
+                        {{ m.initials }}
+                      </span>
+                      <div>
+                        <strong>{{ m.name }}</strong>
+                        <small>{{ m.role }}</small>
+                      </div>
                     </div>
+                    {% endfor %}
                   </div>
+                  {% else %}
+                  <span class="asg-panel-empty">Unassigned</span>
+                  {% endif %}
                 </td>
                 <td>
                   <span class="asg-status asg-status--{{ row.tab_status }}">{{ row.tab_status_label }}</span>

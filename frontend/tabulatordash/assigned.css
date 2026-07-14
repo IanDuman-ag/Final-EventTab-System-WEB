@@ -110,7 +110,8 @@
 .asg-schedule { display: flex; flex-direction: column; gap: 3px; }
 .asg-sched-line { font-size: 12.5px; color: #374151; display: flex; align-items: center; gap: 4px; }
 
-/* Panel */
+/* Panel / Judge-Scorer */
+.asg-panel-list { display: flex; flex-direction: column; gap: 8px; }
 .asg-panel-cell { display: flex; align-items: center; gap: 10px; }
 .asg-panel-avatar {
   width: 32px; height: 32px; border-radius: 50%;
@@ -119,6 +120,7 @@
 }
 .asg-panel-cell strong { display: block; font-size: 13px; font-weight: 600; color: #0f172a; }
 .asg-panel-cell small { display: block; font-size: 11px; color: #64748b; }
+.asg-panel-empty { font-size: 12.5px; color: #94a3b8; font-weight: 600; }
 
 /* Status */
 .asg-status {
@@ -129,6 +131,7 @@
 .asg-status--not_started { background: #dbeafe; color: #1e40af; }
 .asg-status--pending     { background: #fef3c7; color: #92400e; }
 .asg-status--in_progress { background: #dbeafe; color: #1e40af; }
+.asg-status--approved    { background: #d1fae5; color: #065f46; }
 .asg-status--completed   { background: #d1fae5; color: #065f46; }
 
 /* Action button */

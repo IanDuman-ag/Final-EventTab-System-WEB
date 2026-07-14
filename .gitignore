@@ -24,6 +24,13 @@ eventtabs
 # Static and Media files
 staticfiles/
 media/
+# Uploaded team/candidate images (keep design assets like USTP BG.png)
+assets/teams/
+assets/candidates/
+assets/registry_candidates/
+assets/department_logos/
+assets/event_images/
+assets/scoresheets/
 
 # IDE
 .vscode/

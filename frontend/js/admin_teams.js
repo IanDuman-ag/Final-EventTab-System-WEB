@@ -10,6 +10,9 @@ document.addEventListener('DOMContentLoaded', function () {
   var teamName = document.getElementById('team-name');
   var teamCode = document.getElementById('team-code');
   var teamDepartment = document.getElementById('team-department');
+  var teamImage = document.getElementById('team-image');
+  var teamImagePreview = document.getElementById('team-image-preview');
+  var teamImagePreviewWrap = document.getElementById('team-image-preview-wrap');
   var teamMembers = document.getElementById('team-members');
   var teamCoach = document.getElementById('team-coach');
   var teamStatus = document.getElementById('team-status');
@@ -71,6 +74,38 @@ document.addEventListener('DOMContentLoaded', function () {
       return data;
     } catch (_) {
       return { success: false, message: 'Network request failed.' };
+    }
+  }
+
+  async function postForm(url, formData) {
+    try {
+      var response = await fetch(url, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': getCsrfToken() },
+        body: formData,
+      });
+      var text = await response.text();
+      var data;
+      try { data = JSON.parse(text); } catch (_) {
+        return { success: false, message: 'Request failed (' + response.status + ').' };
+      }
+      if (!response.ok) {
+        return { success: false, message: data.message || 'Request failed (' + response.status + ').' };
+      }
+      return data;
+    } catch (_) {
+      return { success: false, message: 'Network request failed.' };
+    }
+  }
+
+  function setImagePreview(url) {
+    if (!teamImagePreview || !teamImagePreviewWrap) return;
+    if (url) {
+      teamImagePreview.src = url;
+      teamImagePreviewWrap.classList.remove('hidden');
+    } else {
+      teamImagePreview.removeAttribute('src');
+      teamImagePreviewWrap.classList.add('hidden');
     }
   }
 
@@ -165,6 +200,8 @@ document.addEventListener('DOMContentLoaded', function () {
     teamName.value = '';
     teamCode.value = '';
     teamDepartment.value = '';
+    if (teamImage) teamImage.value = '';
+    setImagePreview('');
     resetMemberEditor([]);
     teamCoach.value = '';
     teamStatus.value = 'active';
@@ -180,6 +217,8 @@ document.addEventListener('DOMContentLoaded', function () {
     teamName.value = row.dataset.name || '';
     teamCode.value = row.dataset.code || '';
     teamDepartment.value = row.dataset.departmentId || '';
+    if (teamImage) teamImage.value = '';
+    setImagePreview(row.dataset.imageUrl || '');
     resetMemberEditor(parseMembersRaw(row.dataset.members || ''));
     teamCoach.value = row.dataset.coach === '—' ? '' : (row.dataset.coach || '');
     teamStatus.value = row.dataset.status || 'active';
@@ -202,6 +241,18 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('view-team-coach').textContent = data.coach || '—';
     document.getElementById('view-team-count').textContent = String(data.player_count || 0);
     document.getElementById('view-team-status').textContent = data.status_label || '—';
+
+    var viewImage = document.getElementById('view-team-image');
+    var viewImageWrap = document.getElementById('view-team-image-wrap');
+    if (viewImage && viewImageWrap) {
+      if (data.image_url) {
+        viewImage.src = data.image_url;
+        viewImageWrap.classList.remove('hidden');
+      } else {
+        viewImage.removeAttribute('src');
+        viewImageWrap.classList.add('hidden');
+      }
+    }
 
     var listEl = document.getElementById('team-members-list');
     listEl.innerHTML = '';
@@ -345,25 +396,46 @@ document.addEventListener('DOMContentLoaded', function () {
     confirmDeleteBtn.addEventListener('click', confirmDeleteTeam);
   }
 
+  if (teamImage && teamImagePreview && teamImagePreviewWrap) {
+    teamImage.addEventListener('change', function () {
+      var file = teamImage.files && teamImage.files[0];
+      if (!file) {
+        setImagePreview('');
+        return;
+      }
+      var reader = new FileReader();
+      reader.onload = function () {
+        setImagePreview(String(reader.result || ''));
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
   form.addEventListener('submit', async function (e) {
     e.preventDefault();
     syncMembersHiddenField();
-    var payload = {
-      name: teamName.value.trim(),
-      code: teamCode.value.trim(),
-      department_id: teamDepartment.value || null,
-      members: memberNames,
-      coach: teamCoach.value.trim(),
-      status: teamStatus.value,
-    };
-    if (!payload.name || !payload.code || !payload.department_id) {
+    var name = teamName.value.trim();
+    var code = teamCode.value.trim();
+    var departmentId = teamDepartment.value || '';
+    if (!name || !code || !departmentId) {
       showToast('Team name, team code, and department are required.', 'warning');
       return;
     }
 
+    var formData = new FormData();
+    formData.append('name', name);
+    formData.append('code', code);
+    formData.append('department_id', departmentId);
+    formData.append('members', memberNames.join(', '));
+    formData.append('coach', teamCoach.value.trim());
+    formData.append('status', teamStatus.value);
+    if (teamImage && teamImage.files && teamImage.files[0]) {
+      formData.append('image', teamImage.files[0]);
+    }
+
     submitBtn.disabled = true;
     submitBtn.textContent = teamId.value ? 'Saving…' : 'Adding…';
-    var result = await postJson(formModal.dataset.endpoint, payload);
+    var result = await postForm(formModal.dataset.endpoint, formData);
     if (!result.success) {
       submitBtn.disabled = false;
       submitBtn.textContent = teamId.value ? 'Save Changes' : 'Add Team';

@@ -157,9 +157,10 @@ STATIC_URL = 'static/'
 STATICFILES_DIRS = [BASE_DIR / 'frontend', BASE_DIR / 'frontend' / 'superadmindash']
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-# Media files (User uploaded content)
-MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+# Media files (User uploaded content) — stored under project assets/
+# Teams → assets/teams/  |  Candidates → assets/candidates/
+MEDIA_URL = '/assets/'
+MEDIA_ROOT = BASE_DIR / 'assets'
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

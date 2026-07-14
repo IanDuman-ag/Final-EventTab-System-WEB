@@ -115,6 +115,7 @@
 }
 .ss-status--pending_review { background: #ffedd5; color: #9a3412; }
 .ss-status--encoded { background: #d1fae5; color: #065f46; }
+.ss-status--approved { background: #d1fae5; color: #065f46; }
 .ss-status--archived { background: #f1f5f9; color: #475569; }
 
 .ss-view-btn {

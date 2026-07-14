@@ -5,8 +5,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Activity Logs — EventTab Tabulator</title>
-  <link rel="stylesheet" href="{% static 'tabulatordash/tab_v2.css' %}?v=20260616c">
-  <link rel="stylesheet" href="{% static 'tabulatordash/tabactivitylogs.css' %}?v=20260616c">
+  <link rel="stylesheet" href="{% static 'tabulatordash/tab_v2.css' %}?v=20260715al">
+  <link rel="stylesheet" href="{% static 'tabulatordash/tabactivitylogs.css' %}?v=20260715al">
 </head>
 <body class="tab-v2">
 <div class="tab-shell">
@@ -36,9 +36,12 @@
     <header class="tab-topbar">
       <div class="tab-topbar-left">
         <h2>Activity Logs</h2>
-        <p>Track all activities performed by judges and scorers in the system.</p>
+        <p>Live record of Judge and Scorer account activity across the system.</p>
       </div>
       <div class="tab-topbar-right">
+        <span class="al-live-badge" id="alLiveBadge" title="Auto-refreshes every few seconds">
+          <span class="al-live-dot"></span> Live
+        </span>
         <span class="al-breadcrumb">Home &gt; Activity Logs</span>
         <a class="tab-bell" href="{% url 'tabulator_pending_results' %}" aria-label="Notifications">
           <svg viewBox="0 0 24 24"><path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm8-6-2-2v-5a6 6 0 1 0-12 0v5l-2 2v1h16v-1Z"/></svg>
@@ -103,8 +106,9 @@
       <!-- Tabs -->
       <div class="al-tabs-bar">
         <nav class="al-tabs">
-          <a class="al-tab{% if active_tab == 'judge' %} is-active{% endif %}" href="?tab=judge&amp;user={{ selected_user }}&amp;action={{ selected_action }}&amp;event={{ selected_event|urlencode }}&amp;round={{ selected_round|urlencode }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}&amp;q={{ search_query|urlencode }}">Judge Logs ({{ judge_count }})</a>
-          <a class="al-tab{% if active_tab == 'scorer' %} is-active{% endif %}" href="?tab=scorer&amp;user={{ selected_user }}&amp;action={{ selected_action }}&amp;event={{ selected_event|urlencode }}&amp;round={{ selected_round|urlencode }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}&amp;q={{ search_query|urlencode }}">Scorer Logs ({{ scorer_count }})</a>
+          <a class="al-tab{% if active_tab == 'all' %} is-active{% endif %}" href="?tab=all&amp;user={{ selected_user }}&amp;action={{ selected_action }}&amp;event={{ selected_event|urlencode }}&amp;round={{ selected_round|urlencode }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}&amp;q={{ search_query|urlencode }}">All ({{ all_count }})</a>
+          <a class="al-tab{% if active_tab == 'judge' %} is-active{% endif %}" href="?tab=judge&amp;user={{ selected_user }}&amp;action={{ selected_action }}&amp;event={{ selected_event|urlencode }}&amp;round={{ selected_round|urlencode }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}&amp;q={{ search_query|urlencode }}">Judge Logs (<span id="alJudgeCount">{{ judge_count }}</span>)</a>
+          <a class="al-tab{% if active_tab == 'scorer' %} is-active{% endif %}" href="?tab=scorer&amp;user={{ selected_user }}&amp;action={{ selected_action }}&amp;event={{ selected_event|urlencode }}&amp;round={{ selected_round|urlencode }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}&amp;q={{ search_query|urlencode }}">Scorer Logs (<span id="alScorerCount">{{ scorer_count }}</span>)</a>
         </nav>
       </div>
 
@@ -118,7 +122,7 @@
           <input type="date" name="date_to" value="{{ date_to }}" aria-label="To date">
         </div>
         <select class="al-filter-select" name="user" onchange="this.form.submit()">
-          <option value="all" {% if selected_user == 'all' %}selected{% endif %}>All {% if active_tab == 'judge' %}Judges{% else %}Scorers{% endif %}</option>
+          <option value="all" {% if selected_user == 'all' %}selected{% endif %}>All {% if active_tab == 'judge' %}Judges{% elif active_tab == 'scorer' %}Scorers{% else %}Judges &amp; Scorers{% endif %}</option>
           {% for u in log_users %}
           <option value="{{ u.id }}" {% if selected_user == u.id|stringformat:"s" %}selected{% endif %}>{{ u.get_full_name|default:u.username }}</option>
           {% endfor %}
@@ -161,16 +165,17 @@
             <thead>
               <tr>
                 <th><span class="al-th-sort">Date &amp; Time <svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5H7Z"/></svg></span></th>
-                <th>{% if active_tab == 'judge' %}Judge{% else %}Scorer{% endif %}</th>
+                <th>Judge / Scorer</th>
+                <th>Role</th>
                 <th>Action</th>
                 <th>Event</th>
                 <th>Round</th>
                 <th>Description</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody id="alLogBody">
               {% for log in log_rows %}
-              <tr>
+              <tr data-log-id="{{ log.id }}">
                 <td class="al-datetime">
                   <strong>{{ log.date }}</strong>
                   <small>{{ log.time }}</small>
@@ -183,6 +188,9 @@
                       <small>{{ log.user_role }}</small>
                     </div>
                   </div>
+                </td>
+                <td>
+                  <span class="al-role al-role--{{ log.user_role|lower }}">{{ log.user_role }}</span>
                 </td>
                 <td>
                   <span class="al-action al-action--{{ log.action_key }}">
@@ -207,7 +215,7 @@
                 <td class="al-desc">{{ log.description }}</td>
               </tr>
               {% empty %}
-              <tr><td colspan="6" class="al-empty">No activity logs match your filters.</td></tr>
+              <tr class="al-empty-row"><td colspan="7" class="al-empty">No activity logs match your filters. New Judge/Scorer actions will appear here live.</td></tr>
               {% endfor %}
             </tbody>
           </table>
@@ -256,10 +264,81 @@
 <script>
 (function () {
   const form = document.getElementById('alFilterForm');
-  if (!form) return;
-  form.querySelectorAll('input[type="date"]').forEach(function (input) {
-    input.addEventListener('change', function () { form.submit(); });
-  });
+  if (form) {
+    form.querySelectorAll('input[type="date"]').forEach(function (input) {
+      input.addEventListener('change', function () { form.submit(); });
+    });
+  }
+
+  const body = document.getElementById('alLogBody');
+  const liveBadge = document.getElementById('alLiveBadge');
+  const activeTab = '{{ active_tab|escapejs }}';
+  let latestId = '{{ latest_log_id|escapejs }}';
+  const feedUrl = '{% url "tabulator_activity_logs_feed" %}';
+
+  function escapeHtml(str) {
+    return String(str == null ? '' : str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function rowHtml(log) {
+    const roleClass = (log.user_role || '').toLowerCase();
+    return (
+      '<tr data-log-id="' + escapeHtml(log.id) + '" class="al-row-new">' +
+        '<td class="al-datetime"><strong>' + escapeHtml(log.date) + '</strong><small>' + escapeHtml(log.time) + '</small></td>' +
+        '<td><div class="al-user-cell">' +
+          '<span class="al-avatar al-avatar--' + escapeHtml(log.avatar_tone || 'blue') + '">' + escapeHtml(log.user_initials) + '</span>' +
+          '<div><strong>' + escapeHtml(log.user_name) + '</strong><small>' + escapeHtml(log.user_role) + '</small></div>' +
+        '</div></td>' +
+        '<td><span class="al-role al-role--' + escapeHtml(roleClass) + '">' + escapeHtml(log.user_role) + '</span></td>' +
+        '<td><span class="al-action al-action--' + escapeHtml(log.action_key || 'default') + '">' + escapeHtml(log.action_label) + '</span></td>' +
+        '<td>' + escapeHtml(log.event_name) + '</td>' +
+        '<td>' + escapeHtml(log.round_label) + '</td>' +
+        '<td class="al-desc">' + escapeHtml(log.description) + '</td>' +
+      '</tr>'
+    );
+  }
+
+  async function pollFeed() {
+    if (!body) return;
+    try {
+      const url = feedUrl + '?tab=' + encodeURIComponent(activeTab) + (latestId ? '&since=' + encodeURIComponent(latestId) : '');
+      const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+      const data = await res.json();
+      if (!data.success) return;
+
+      if (data.totals) {
+        const jc = document.getElementById('alJudgeCount');
+        const sc = document.getElementById('alScorerCount');
+        if (jc) jc.textContent = data.totals.judge;
+        if (sc) sc.textContent = data.totals.scorer;
+      }
+
+      if (data.rows && data.rows.length) {
+        const empty = body.querySelector('.al-empty-row');
+        if (empty) empty.remove();
+        const html = data.rows.map(rowHtml).join('');
+        body.insertAdjacentHTML('afterbegin', html);
+        // Keep table from growing forever on this page view
+        while (body.querySelectorAll('tr[data-log-id]').length > 40) {
+          const last = body.querySelector('tr[data-log-id]:last-child');
+          if (last) last.remove();
+        }
+        latestId = data.latest_id || latestId;
+        if (liveBadge) {
+          liveBadge.classList.add('is-pulse');
+          setTimeout(function () { liveBadge.classList.remove('is-pulse'); }, 900);
+        }
+      }
+    } catch (e) {
+      // silent — page remains usable offline from poll
+    }
+  }
+
+  setInterval(pollFeed, 5000);
 })();
 </script>
 </body>

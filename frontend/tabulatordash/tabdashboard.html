@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Dashboard — EventTab Tabulator</title>
-  <link rel="stylesheet" href="{% static 'tabulatordash/tab_v2.css' %}?v=20260524a">
+  <link rel="stylesheet" href="{% static 'tabulatordash/tab_v2.css' %}?v=20260715t">
   <link rel="stylesheet" href="{% static 'tabulatordash/tabdashboard.css' %}?v=20260616a">
 </head>
 <body class="tab-v2">
@@ -73,9 +73,9 @@
         <p>Welcome back, Tabulator! Here's an overview of your tabulation tasks.</p>
       </div>
       <div class="tab-topbar-right">
-        <a class="tab-bell" href="{% url 'tabulator_reports' %}" aria-label="Notifications">
+        <a class="tab-bell" href="{% url 'tabulator_pending_results' %}" aria-label="Pending results">
           <svg viewBox="0 0 24 24"><path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm8-6-2-2v-5a6 6 0 1 0-12 0v5l-2 2v1h16v-1Z"/></svg>
-          <span class="tab-bell-dot"></span>
+          {% if pending_count %}<span class="tab-bell-dot"></span>{% endif %}
         </a>
         <div class="td-user-wrap">
           <div class="tab-avatar-pill">{{ request.user.username|default:"TA"|slice:":2"|upper }}</div>
@@ -140,7 +140,7 @@
             <h3>Pending Results</h3>
             <p>Results submitted by scorers/judges awaiting your verification.</p>
           </div>
-          <a class="td-link-btn" href="{% url 'tabulator_review' %}">View All Pending →</a>
+          <a class="td-link-btn" href="{% url 'tabulator_pending_results' %}">View All Pending →</a>
         </div>
         <div class="td-pending-table-wrap">
           <table class="td-pending-table">
@@ -283,6 +283,7 @@
   </div>
 </div>
 
+<script src="{% static 'js/tabulator_toast.js' %}?v=20260715t"></script>
 <script>
 /* Tabulation dropdown */
 const tBtn = document.getElementById('tabulationToggle');
@@ -305,7 +306,12 @@ document.querySelectorAll('.td-approve-btn').forEach(btn => {
   btn.addEventListener('click', async () => {
     const type = btn.dataset.type;
     const id   = btn.dataset.id;
-    if (!confirm('Approve this result?')) return;
+    const ok = await TabToast.confirm('Approve this result? It will be finalized and moved to Approved Results.', {
+      title: 'Approve result',
+      confirmLabel: 'Approve',
+      cancelLabel: 'Cancel',
+    });
+    if (!ok) return;
     btn.disabled = true;
     btn.textContent = 'Approving…';
     try {
@@ -320,13 +326,14 @@ document.querySelectorAll('.td-approve-btn').forEach(btn => {
         row.style.pointerEvents = 'none';
         const cell = row.querySelector('.td-action-btns');
         cell.innerHTML = '<span style="color:#16a34a;font-weight:700;font-size:13px;">✓ Approved</span>';
+        TabToast.success(data.message || 'Result approved');
       } else {
-        alert(data.message || 'Failed to approve');
+        TabToast.error(data.message || 'Failed to approve');
         btn.disabled = false;
         btn.textContent = 'Approve';
       }
     } catch {
-      alert('Network error');
+      TabToast.error('Network error');
       btn.disabled = false;
       btn.textContent = 'Approve';
     }
@@ -337,7 +344,13 @@ document.querySelectorAll('.td-reject-btn').forEach(btn => {
   btn.addEventListener('click', async () => {
     const type = btn.dataset.type;
     const id   = btn.dataset.id;
-    if (!confirm('Reject this result?')) return;
+    const ok = await TabToast.confirm('Reject this result? The submitter will need to correct and resubmit.', {
+      title: 'Reject result',
+      confirmLabel: 'Reject',
+      cancelLabel: 'Cancel',
+      danger: true,
+    });
+    if (!ok) return;
     btn.disabled = true;
     btn.textContent = 'Rejecting…';
     try {
@@ -352,13 +365,14 @@ document.querySelectorAll('.td-reject-btn').forEach(btn => {
         row.style.pointerEvents = 'none';
         const cell = row.querySelector('.td-action-btns');
         cell.innerHTML = '<span style="color:#dc2626;font-weight:700;font-size:13px;">✗ Rejected</span>';
+        TabToast.warning(data.message || 'Result rejected');
       } else {
-        alert(data.message || 'Failed to reject');
+        TabToast.error(data.message || 'Failed to reject');
         btn.disabled = false;
         btn.textContent = 'Reject';
       }
     } catch {
-      alert('Network error');
+      TabToast.error('Network error');
       btn.disabled = false;
       btn.textContent = 'Reject';
     }

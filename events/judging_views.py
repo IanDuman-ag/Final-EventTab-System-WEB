@@ -118,11 +118,13 @@ class JudgingEventViewSet(viewsets.ReadOnlyModelViewSet):
                 'weighted_score': round(weighted, 2),
             })
 
+        from core.views import get_assignment_role
+        role = get_assignment_role(request.user) or 'Judge'
         JudgeActivityLog.log(
             judge=request.user,
             action=JudgeActivityLog.ACTION_SUBMIT_SCORE,
             details=(
-                f'Scored candidate #{candidate.number} {candidate.name} '
+                f'{role} scored candidate #{candidate.number} {candidate.name} '
                 f'in "{event.title}" — total: {round(total_score, 1)} '
                 f'({len(created_scores)} criteria) [VID: {verification_id}]'
             ),

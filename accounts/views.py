@@ -57,12 +57,13 @@ def login(request):
     token, _ = Token.objects.get_or_create(user=user)
 
     from core.views import get_assignment_role
-    if get_assignment_role(user) == 'Judge':
+    role = get_assignment_role(user)
+    if role in ('Judge', 'Scorer'):
         from events.models import JudgeActivityLog
         JudgeActivityLog.log(
             judge=user,
             action=JudgeActivityLog.ACTION_LOGIN,
-            details=f'Judge logged in via mobile app',
+            details=f'{role} logged in via mobile app',
             ip_address=_client_ip(request),
         )
 
@@ -73,12 +74,13 @@ def login(request):
 @permission_classes([IsAuthenticated])
 def logout(request):
     from core.views import get_assignment_role
-    if get_assignment_role(request.user) == 'Judge':
+    role = get_assignment_role(request.user)
+    if role in ('Judge', 'Scorer'):
         from events.models import JudgeActivityLog
         JudgeActivityLog.log(
             judge=request.user,
             action=JudgeActivityLog.ACTION_LOGOUT,
-            details='Judge logged out of mobile app',
+            details=f'{role} logged out of mobile app',
             ip_address=_client_ip(request),
         )
 

@@ -63,6 +63,12 @@ class Event(models.Model):
             | Q(groups__name__iexact='Scorer')
         ),
     )
+    assigned_tabulators = models.ManyToManyField(
+        User,
+        blank=True,
+        related_name='tabulating_events',
+        limit_choices_to=Q(groups__name__iexact='Tabulator'),
+    )
 
     class Meta:
         ordering = ['-created_at']
@@ -124,6 +130,7 @@ class Team(models.Model):
         blank=True,
         related_name='teams',
     )
+    image = models.ImageField(upload_to='teams/', null=True, blank=True)
     members = models.TextField(blank=True, default='')
     coach = models.CharField(max_length=200, blank=True, default='')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_ACTIVE)
@@ -155,7 +162,7 @@ class RegistryCandidate(models.Model):
         blank=True,
         related_name='registry_candidates',
     )
-    image = models.ImageField(upload_to='registry_candidates/', null=True, blank=True)
+    image = models.ImageField(upload_to='candidates/', null=True, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_ACTIVE)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
