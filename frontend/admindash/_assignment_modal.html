@@ -49,6 +49,11 @@
           <input type="text" id="assignment-name" placeholder="e.g. Juan Dela Cruz — official name for records">
           <small class="acc-field-hint">Use the person’s official full name (not a nickname). This name appears on account records.</small>
         </label>
+        <label class="acc-field--full">
+          Gmail
+          <input type="email" id="assignment-code-email" placeholder="name@gmail.com" autocomplete="email">
+          <small class="acc-field-hint">The access code will be sent to this Gmail address.</small>
+        </label>
         <div class="acc-code-row acc-field--full">
           <button type="button" id="btn-generate-code" class="generate-code-btn">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 8C8 10 5.9 16.17 3.82 19.82L5.71 21l1-1.85A4.52 4.52 0 0 0 8 20c4 0 4-2 8-2s4 2 8 2v-2c-4 0-4-2-8-2-.63 0-1.17.06-1.67.14C14.43 11.22 15.06 8.07 17 8Z"/></svg>
@@ -74,7 +79,7 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1Zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2Zm0 16H8V7h11v14Z"/></svg>
           </button>
         </div>
-        <p class="acc-success-hint">Share this code with the person so they can sign in.</p>
+        <p class="acc-success-hint">The access code was also sent to their Gmail. You can still copy it below to share manually.</p>
       </div>
 
       <div class="modal-actions">
@@ -104,6 +109,10 @@
         <div class="view-account-field">
           <span class="view-account-label">Username</span>
           <p id="view-account-username">—</p>
+        </div>
+        <div class="view-account-field" id="view-field-email">
+          <span class="view-account-label">Gmail</span>
+          <p id="view-account-email">—</p>
         </div>
         <div class="view-account-field" id="view-field-code" hidden>
           <span class="view-account-label">Access Code</span>

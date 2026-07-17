@@ -95,9 +95,11 @@ document.addEventListener('DOMContentLoaded', function () {
   var standardSection = document.getElementById('acc-standard-section');
   var usernameInput   = document.getElementById('assignment-username');
   var passwordInput   = document.getElementById('assignment-password');
+  var emailInput      = document.getElementById('assignment-email');
 
   var codeSection   = document.getElementById('acc-code-section');
   var nameInput     = document.getElementById('assignment-name');
+  var codeEmailInput = document.getElementById('assignment-code-email');
   var btnGenerate   = document.getElementById('btn-generate-code');
   var codeDisplay   = document.getElementById('acc-code-display');
   var codeValue     = document.getElementById('acc-code-value');
@@ -164,9 +166,27 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function roleSubtitle(r) {
-    if (r === 'Judge')  { return 'Enter the judge\'s official name and generate an access code (JDG01, JDG02…) to share with them.'; }
-    if (r === 'Scorer') { return 'Enter the scorer\'s official name and generate an access code (SCR01, SCR02…) to share with them.'; }
+    if (r === 'Judge')  { return 'Enter the judge\'s official name and Gmail, then generate an access code (JDG01, JDG02…) to email them.'; }
+    if (r === 'Scorer') { return 'Enter the scorer\'s official name and Gmail, then generate an access code (SCR01, SCR02…) to email them.'; }
     return 'Tabulators sign in via the web portal with their username and password.';
+  }
+
+  function isValidEmail(value) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
+  }
+
+  function getActiveEmailInput(roleVal) {
+    return isCodeRole(roleVal) ? codeEmailInput : emailInput;
+  }
+
+  function getEmailValue(roleVal) {
+    var el = getActiveEmailInput(roleVal);
+    return el ? el.value.trim() : '';
+  }
+
+  function setEmailValue(value) {
+    if (emailInput) emailInput.value = value || '';
+    if (codeEmailInput) codeEmailInput.value = value || '';
   }
 
   function applyRoleMode(r, isCreating) {
@@ -179,6 +199,8 @@ document.addEventListener('DOMContentLoaded', function () {
     usernameInput.required = !code;
     passwordInput.required = !code && isCreating;
     nameInput.required     = code;
+    if (emailInput) emailInput.required = false;
+    if (codeEmailInput) codeEmailInput.required = code;
 
     _generatedCode = '';
     _regenPending = false;
@@ -224,6 +246,14 @@ document.addEventListener('DOMContentLoaded', function () {
       return;
     }
 
+    var email = getEmailValue(roleVal);
+    if (!email || !isValidEmail(email)) {
+      showToast('Please enter a valid Gmail address.', 'warning');
+      var emailEl = getActiveEmailInput(roleVal);
+      if (emailEl) emailEl.focus();
+      return;
+    }
+
     // ── CREATE mode: save account immediately; server allocates JDG## / SCR## ─
     if (isCreating) {
       btnGenerate.disabled     = true;
@@ -231,6 +261,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
       var result = await postJson(modal.dataset.endpoint, {
         full_name:   fullName,
+        email:       email,
         role:        roleVal,
         is_active:   statusSelect.value === 'active',
       });
@@ -253,7 +284,7 @@ document.addEventListener('DOMContentLoaded', function () {
       codeDisplay.classList.remove('acc-code-display--hidden');
 
       // Show success card — use the official name only (no generated username/nickname)
-      showSuccessCard(fullName, roleVal, null, allocated);
+      showSuccessCard(fullName, roleVal, null, allocated, result.email_sent, email);
       return;
     }
 
@@ -383,9 +414,16 @@ document.addEventListener('DOMContentLoaded', function () {
     if (isCodeRole(roleVal)) {
       // Edit-save for Judge/Scorer
       payload.full_name = nameInput.value.trim();
+      payload.email = getEmailValue(roleVal);
       payload.regenerate_access_code = _regenPending;
       if (!payload.full_name) {
         showToast('Please enter the official name.', 'warning');
+        return;
+      }
+      if (!payload.email || !isValidEmail(payload.email)) {
+        showToast('Please enter a valid Gmail address.', 'warning');
+        var emailEl = getActiveEmailInput(roleVal);
+        if (emailEl) emailEl.focus();
         return;
       }
     } else {
@@ -411,7 +449,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // If edit generated a new access code, show it in the success card
     if (isCodeRole(roleVal) && result.access_code) {
-      showSuccessCard(payload.full_name, roleVal, null, result.access_code);
+      showSuccessCard(payload.full_name, roleVal, null, result.access_code, result.email_sent, payload.email);
       return;
     }
 
@@ -422,18 +460,28 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // ── Success card ───────────────────────────────────────────────────────────
 
-  function showSuccessCard(fullName, roleLabel, username, code) {
+  function showSuccessCard(fullName, roleLabel, username, code, emailSent, email) {
     standardSection.classList.add('acc-section--hidden');
     codeSection.classList.add('acc-code-section--hidden');
     successCard.classList.remove('acc-success-card--hidden');
 
-    // Judge/Scorer: show only the official name they entered + access code
-    successMsg.textContent = roleLabel + ' account for ' + fullName + ' created.';
+    var hint = successCard.querySelector('.acc-success-hint');
+    var msg = roleLabel + ' account for ' + fullName + ' created.';
+    if (emailSent && email) {
+      msg = roleLabel + ' account for ' + fullName + ' created. Access code sent to ' + email + '.';
+      if (hint) hint.textContent = 'The access code was emailed to their Gmail. You can still copy it below.';
+    } else if (email) {
+      msg = roleLabel + ' account for ' + fullName + ' created. Email was NOT sent to ' + email + ' — copy the code below and share it manually. Configure Gmail SMTP in .env to enable sending.';
+      if (hint) hint.textContent = 'Email delivery failed or SMTP is not configured. Copy the access code and send it manually.';
+    }
+    successMsg.textContent = msg;
     successCode.textContent = code;
 
     usernameInput.required = false;
     passwordInput.required = false;
     nameInput.required = false;
+    if (emailInput) emailInput.required = false;
+    if (codeEmailInput) codeEmailInput.required = false;
 
     submitButton.classList.remove('acc-btn--hidden');
     submitButton.disabled    = false;
@@ -454,6 +502,7 @@ document.addEventListener('DOMContentLoaded', function () {
     usernameInput.value      = '';
     passwordInput.value      = '';
     nameInput.value          = '';
+    setEmailValue('');
     role.value               = pageType === 'judge_scorer' ? defaultRole : 'Tabulator';
     statusSelect.value       = 'active';
     modalTitle.textContent   = 'Create Account';
@@ -483,6 +532,7 @@ document.addEventListener('DOMContentLoaded', function () {
     submitButton.disabled    = false;
     submitButton.textContent = 'Save Changes';
     configureRoleSelect();
+    setEmailValue(row.dataset.email || '');
 
     if (isCodeRole(matched)) {
       nameInput.value     = row.dataset.fullName || '';
@@ -515,12 +565,15 @@ document.addEventListener('DOMContentLoaded', function () {
     var codeField = document.getElementById('view-field-code');
     var nameEl = document.getElementById('view-account-name');
     var usernameEl = document.getElementById('view-account-username');
+    var emailEl = document.getElementById('view-account-email');
     var codeEl = document.getElementById('view-account-code');
     var roleEl = document.getElementById('view-account-role');
     var statusEl = document.getElementById('view-account-status');
 
     if (nameField) nameField.hidden = !isCode;
     if (codeField) codeField.hidden = !isCode;
+    var emailField = document.getElementById('view-field-email');
+    if (emailField) emailField.hidden = !isCode;
     if (nameEl) nameEl.textContent = row.dataset.fullName || '—';
     // Judge/Scorer sign in with access code — hide the internal username field
     if (usernameEl) {
@@ -528,6 +581,7 @@ document.addEventListener('DOMContentLoaded', function () {
       if (usernameField) usernameField.hidden = isCode;
       usernameEl.textContent = row.dataset.username || '—';
     }
+    if (emailEl) emailEl.textContent = row.dataset.email || '—';
     if (codeEl) codeEl.textContent = row.dataset.accessCode || '—';
     if (roleEl) roleEl.textContent = assignedRole || '—';
     if (statusEl) {

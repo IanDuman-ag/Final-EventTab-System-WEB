@@ -13,19 +13,14 @@ document.addEventListener('DOMContentLoaded', function () {
   var teamImage = document.getElementById('team-image');
   var teamImagePreview = document.getElementById('team-image-preview');
   var teamImagePreviewWrap = document.getElementById('team-image-preview-wrap');
-  var teamMembers = document.getElementById('team-members');
   var teamCoach = document.getElementById('team-coach');
   var teamStatus = document.getElementById('team-status');
   var submitBtn = document.getElementById('team-submit-btn');
   var modalTitle = document.getElementById('team-modal-title');
-  var membersListEl = document.getElementById('team-members-editor-list');
-  var memberInput = document.getElementById('team-member-input');
-  var addMemberBtn = document.getElementById('add-team-member-btn');
 
   if (!openBtn || !formModal || !form) return;
 
   var createUrl = openBtn.dataset.createUrl || '/admin/teams/create/';
-  var memberNames = [];
   var pendingDelete = { url: '', triggerBtn: null };
 
   function getCsrfToken() {
@@ -119,81 +114,6 @@ document.addEventListener('DOMContentLoaded', function () {
     el.setAttribute('aria-hidden', 'true');
   }
 
-  function escapeHtml(s) {
-    return String(s == null ? '' : s)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-  }
-
-  function parseMembersRaw(raw) {
-    var value = (raw || '').trim();
-    if (!value) return [];
-    if (value.startsWith('[')) {
-      try {
-        var parsed = JSON.parse(value);
-        if (Array.isArray(parsed)) {
-          return parsed.map(function (name) { return String(name).trim(); }).filter(Boolean);
-        }
-      } catch (_) {}
-    }
-    return value.split(/[\n,]+/).map(function (name) { return name.trim(); }).filter(Boolean);
-  }
-
-  function syncMembersHiddenField() {
-    if (teamMembers) {
-      teamMembers.value = memberNames.join(', ');
-    }
-  }
-
-  function renderMemberEditorList() {
-    if (!membersListEl) return;
-    membersListEl.innerHTML = '';
-    memberNames.forEach(function (name, idx) {
-      var li = document.createElement('li');
-      li.className = 'team-members-editor-item';
-      li.innerHTML =
-        '<span class="member-num">' + (idx + 1) + '</span>' +
-        '<span class="member-name">' + escapeHtml(name) + '</span>' +
-        '<button type="button" class="member-remove" aria-label="Remove ' + escapeHtml(name) + '">&times;</button>';
-      li.querySelector('.member-remove').addEventListener('click', function () {
-        memberNames.splice(idx, 1);
-        renderMemberEditorList();
-      });
-      membersListEl.appendChild(li);
-    });
-    syncMembersHiddenField();
-  }
-
-  function resetMemberEditor(names) {
-    memberNames = Array.isArray(names) ? names.slice() : [];
-    if (memberInput) memberInput.value = '';
-    renderMemberEditorList();
-  }
-
-  function addMemberFromInput() {
-    if (!memberInput) return false;
-    var name = memberInput.value.trim();
-    if (!name) {
-      showToast('Enter a player name before adding.', 'warning');
-      memberInput.focus();
-      return false;
-    }
-    var exists = memberNames.some(function (existing) {
-      return existing.toLowerCase() === name.toLowerCase();
-    });
-    if (exists) {
-      showToast('That player is already on the team.', 'warning');
-      memberInput.focus();
-      memberInput.select();
-      return false;
-    }
-    memberNames.push(name);
-    memberInput.value = '';
-    renderMemberEditorList();
-    memberInput.focus();
-    return true;
-  }
-
   function openCreateModal() {
     formModal.dataset.endpoint = createUrl;
     teamId.value = '';
@@ -202,7 +122,6 @@ document.addEventListener('DOMContentLoaded', function () {
     teamDepartment.value = '';
     if (teamImage) teamImage.value = '';
     setImagePreview('');
-    resetMemberEditor([]);
     teamCoach.value = '';
     teamStatus.value = 'active';
     modalTitle.textContent = 'Add Team';
@@ -219,7 +138,6 @@ document.addEventListener('DOMContentLoaded', function () {
     teamDepartment.value = row.dataset.departmentId || '';
     if (teamImage) teamImage.value = '';
     setImagePreview(row.dataset.imageUrl || '');
-    resetMemberEditor(parseMembersRaw(row.dataset.members || ''));
     teamCoach.value = row.dataset.coach === '—' ? '' : (row.dataset.coach || '');
     teamStatus.value = row.dataset.status || 'active';
     modalTitle.textContent = 'Edit Team';
@@ -228,18 +146,17 @@ document.addEventListener('DOMContentLoaded', function () {
     teamName.focus();
   }
 
-  async function openMembersModal(url, fallbackName) {
+  async function openViewModal(url, fallbackName) {
     var response = await fetch(url, { headers: { 'Accept': 'application/json' } });
     var data;
     try { data = await response.json(); } catch (_) {
-      showToast('Unable to load team members.', 'error');
+      showToast('Unable to load team details.', 'error');
       return;
     }
     document.getElementById('team-members-title').textContent = data.name || fallbackName || 'Team';
     document.getElementById('team-members-subtitle').textContent = data.code ? ('Code: ' + data.code) : '';
     document.getElementById('view-team-department').textContent = data.department_name || '—';
     document.getElementById('view-team-coach').textContent = data.coach || '—';
-    document.getElementById('view-team-count').textContent = String(data.player_count || 0);
     document.getElementById('view-team-status').textContent = data.status_label || '—';
 
     var viewImage = document.getElementById('view-team-image');
@@ -252,22 +169,6 @@ document.addEventListener('DOMContentLoaded', function () {
         viewImage.removeAttribute('src');
         viewImageWrap.classList.add('hidden');
       }
-    }
-
-    var listEl = document.getElementById('team-members-list');
-    listEl.innerHTML = '';
-    var members = data.members || [];
-    if (!members.length) {
-      var emptyLi = document.createElement('li');
-      emptyLi.className = 'team-members-empty-item';
-      emptyLi.textContent = 'No team members listed.';
-      listEl.appendChild(emptyLi);
-    } else {
-      members.forEach(function (name, idx) {
-        var li = document.createElement('li');
-        li.innerHTML = '<span class="member-num">' + (idx + 1) + '</span><span>' + escapeHtml(name) + '</span>';
-        listEl.appendChild(li);
-      });
     }
     openModal(membersModal);
   }
@@ -311,19 +212,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
   openBtn.addEventListener('click', openCreateModal);
 
-  if (addMemberBtn) {
-    addMemberBtn.addEventListener('click', addMemberFromInput);
-  }
-
-  if (memberInput) {
-    memberInput.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        addMemberFromInput();
-      }
-    });
-  }
-
   function getTeamRowEl(btn) {
     return btn.closest('tr') || btn.closest('.teams-grid-card');
   }
@@ -344,7 +232,7 @@ document.addEventListener('DOMContentLoaded', function () {
       btn.dataset.bound = '1';
       btn.addEventListener('click', function () {
         var row = getTeamRowEl(btn);
-        openMembersModal(btn.dataset.viewUrl, row ? row.dataset.name : '');
+        openViewModal(btn.dataset.viewUrl, row ? row.dataset.name : '');
       });
     });
 
@@ -413,7 +301,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
   form.addEventListener('submit', async function (e) {
     e.preventDefault();
-    syncMembersHiddenField();
     var name = teamName.value.trim();
     var code = teamCode.value.trim();
     var departmentId = teamDepartment.value || '';
@@ -426,7 +313,7 @@ document.addEventListener('DOMContentLoaded', function () {
     formData.append('name', name);
     formData.append('code', code);
     formData.append('department_id', departmentId);
-    formData.append('members', memberNames.join(', '));
+    formData.append('members', '');
     formData.append('coach', teamCoach.value.trim());
     formData.append('status', teamStatus.value);
     if (teamImage && teamImage.files && teamImage.files[0]) {

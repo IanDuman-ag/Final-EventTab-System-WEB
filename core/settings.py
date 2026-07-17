@@ -164,3 +164,22 @@ MEDIA_ROOT = BASE_DIR / 'assets'
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Email — Gmail SMTP when credentials are set; otherwise console (dev only)
+EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')
+EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
+EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
+EMAIL_USE_TLS = config_bool('EMAIL_USE_TLS', default=True)
+DEFAULT_FROM_EMAIL = config(
+    'DEFAULT_FROM_EMAIL',
+    default=(f'EventTab <{EMAIL_HOST_USER}>' if EMAIL_HOST_USER else 'EventTab <noreply@eventtabs.local>'),
+)
+_email_backend_override = config('EMAIL_BACKEND', default='')
+if _email_backend_override:
+    EMAIL_BACKEND = _email_backend_override
+elif EMAIL_HOST_USER and EMAIL_HOST_PASSWORD:
+    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+else:
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+

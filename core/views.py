@@ -3,7 +3,10 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.admin.models import ADDITION, CHANGE, DELETION, LogEntry
 from django.contrib.auth.models import Group
+from django.core.mail import EmailMultiAlternatives
 from django.core.paginator import Paginator
+from django.core.validators import validate_email
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.db.models import Q, Count
 from django.shortcuts import redirect, render, get_object_or_404
@@ -12,12 +15,14 @@ from django.http import HttpResponse, JsonResponse
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.contrib.contenttypes.models import ContentType
+from django.conf import settings
 import json
 import csv
 import re
 import random
 import string
 from datetime import datetime, timedelta
+import logging
 
 from events.models import (
     Event, Department, Team, RegistryCandidate,
@@ -1827,6 +1832,93 @@ def _assignment_payload(request):
 
 CODE_ROLES = {'Judge', 'Scorer'}
 
+logger = logging.getLogger(__name__)
+
+
+def _normalize_gmail(email):
+    """Validate and normalize an email address. Returns (ok, value_or_error)."""
+    value = (email or '').strip()
+    if not value:
+        return False, 'Gmail is required.'
+    try:
+        validate_email(value)
+    except ValidationError:
+        return False, 'Enter a valid Gmail address.'
+    return True, value
+
+
+def _email_smtp_configured():
+    """True when real SMTP credentials are available (not console-only)."""
+    backend = (getattr(settings, 'EMAIL_BACKEND', '') or '').lower()
+    if 'console' in backend or 'locmem' in backend or 'dummy' in backend:
+        return False
+    return bool(getattr(settings, 'EMAIL_HOST_USER', '') and getattr(settings, 'EMAIL_HOST_PASSWORD', ''))
+
+
+def _send_assignment_credentials_email(*, to_email, full_name, role_label, access_code=None, username=None, password=None):
+    """Send access credentials to the given Gmail. Returns True only on real SMTP success."""
+    if not _email_smtp_configured():
+        logger.warning(
+            'Skipping real email to %s — set EMAIL_HOST_USER and EMAIL_HOST_PASSWORD in .env for Gmail SMTP.',
+            to_email,
+        )
+        return False
+
+    display_name = (full_name or username or 'there').strip() or 'there'
+    from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', None) or settings.EMAIL_HOST_USER
+
+    if access_code:
+        subject = f'EventTab {role_label} Access Code: {access_code}'
+        text_body = (
+            f'Hello {display_name},\n\n'
+            f'Your EventTab {role_label} account has been created.\n\n'
+            f'========================================\n'
+            f'  YOUR ACCESS CODE:  {access_code}\n'
+            f'========================================\n\n'
+            f'Use this access code to sign in to the EventTab app.\n\n'
+            f'— EventTab Admin'
+        )
+        html_body = f'''<!DOCTYPE html>
+<html><body style="font-family:Arial,sans-serif;background:#f5f7fb;padding:24px;color:#0f172a;">
+  <div style="max-width:520px;margin:0 auto;background:#fff;border-radius:12px;padding:28px;border:1px solid #e2e8f0;">
+    <h2 style="margin:0 0 8px;color:#0b3a6e;">EventTab Access Code</h2>
+    <p style="margin:0 0 20px;color:#475569;">Hello {display_name},</p>
+    <p style="margin:0 0 16px;">Your EventTab <strong>{role_label}</strong> account has been created.</p>
+    <div style="background:#eff6ff;border:2px solid #2563eb;border-radius:10px;padding:18px;text-align:center;margin:20px 0;">
+      <div style="font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:#1d4ed8;font-weight:700;">Access Code</div>
+      <div style="font-size:32px;font-weight:800;letter-spacing:0.12em;color:#0b3a6e;margin-top:8px;">{access_code}</div>
+    </div>
+    <p style="margin:0;color:#475569;">Use this access code to sign in to the EventTab app.</p>
+    <p style="margin:24px 0 0;color:#94a3b8;font-size:13px;">— EventTab Admin</p>
+  </div>
+</body></html>'''
+    else:
+        subject = f'Your EventTab {role_label} Account'
+        text_body = (
+            f'Hello {display_name},\n\n'
+            f'Your EventTab {role_label} account has been created.\n\n'
+            f'Username: {username}\n'
+            f'Password: {password}\n\n'
+            f'Sign in at the EventTab web portal.\n\n'
+            f'— EventTab Admin'
+        )
+        html_body = None
+
+    try:
+        message = EmailMultiAlternatives(
+            subject=subject,
+            body=text_body,
+            from_email=from_email,
+            to=[to_email],
+        )
+        if html_body:
+            message.attach_alternative(html_body, 'text/html')
+        sent = message.send(fail_silently=False)
+        return bool(sent)
+    except Exception:
+        logger.exception('Failed to send assignment credentials email to %s', to_email)
+        return False
+
 
 @login_required(login_url='login')
 @user_passes_test(lambda user: user.is_staff, login_url='login')
@@ -1864,6 +1956,12 @@ def create_assignment_account(request):
         full_name = payload['full_name']
         if not full_name:
             return JsonResponse({'success': False, 'message': 'Name is required.'}, status=400)
+        email_ok, email_or_err = _normalize_gmail(payload['email'])
+        if not email_ok:
+            return JsonResponse({'success': False, 'message': email_or_err}, status=400)
+        email = email_or_err
+        if User.objects.filter(email__iexact=email).exists():
+            return JsonResponse({'success': False, 'message': 'Gmail is already in use.'}, status=400)
         # Always allocate sequential role codes (JDG01 / SCR01…) server-side
         access_code = _allocate_access_code(role_label)
         if not access_code:
@@ -1871,7 +1969,7 @@ def create_assignment_account(request):
         try:
             auto_username = _generate_username_from_name(full_name)
             first_name, last_name = _split_full_name(full_name)
-            user = User.objects.create_user(username=auto_username, password=access_code)
+            user = User.objects.create_user(username=auto_username, email=email, password=access_code)
             user.first_name = first_name
             user.last_name = last_name
             _apply_assignment_role(user, role_label, payload['is_active'])
@@ -1887,11 +1985,29 @@ def create_assignment_account(request):
                 action_flag=ADDITION,
                 change_message=f'Created {role_label} account (access-code flow)',
             )
+            email_sent = _send_assignment_credentials_email(
+                to_email=email,
+                full_name=full_name,
+                role_label=role_label,
+                access_code=access_code,
+            )
+            message = f'{role_label} account for {full_name} created.'
+            if email_sent:
+                message += f' Access code sent to {email}.'
+            elif not _email_smtp_configured():
+                message += (
+                    ' Account saved, but email was NOT sent — add EMAIL_HOST_USER and '
+                    'EMAIL_HOST_PASSWORD (Gmail App Password) to .env, then recreate or regenerate the code.'
+                )
+            else:
+                message += f' Account saved, but email to {email} could not be sent. Check SMTP settings.'
             return JsonResponse({
                 'success': True,
-                'message': f'{role_label} account for {full_name} created.',
+                'message': message,
                 'name': full_name,
                 'access_code': access_code,
+                'email_sent': email_sent,
+                'email_configured': _email_smtp_configured(),
             })
         except Exception as e:
             return JsonResponse({'success': False, 'message': str(e)}, status=500)
@@ -1903,7 +2019,7 @@ def create_assignment_account(request):
     if User.objects.filter(username__iexact=payload['username']).exists():
         return JsonResponse({'success': False, 'message': 'Username already exists.'}, status=400)
     if payload['email'] and User.objects.filter(email__iexact=payload['email']).exists():
-        return JsonResponse({'success': False, 'message': 'Email already exists.'}, status=400)
+        return JsonResponse({'success': False, 'message': 'Gmail is already in use.'}, status=400)
 
     try:
         if payload['full_name']:
@@ -1957,10 +2073,17 @@ def update_assignment_account(request, account_id):
         full_name = payload['full_name']
         if not full_name:
             return JsonResponse({'success': False, 'message': 'Name is required.'}, status=400)
+        email_ok, email_or_err = _normalize_gmail(payload['email'])
+        if not email_ok:
+            return JsonResponse({'success': False, 'message': email_or_err}, status=400)
+        email = email_or_err
+        if User.objects.filter(email__iexact=email).exclude(id=account_user.id).exists():
+            return JsonResponse({'success': False, 'message': 'Gmail is already in use.'}, status=400)
         try:
             first_name, last_name = _split_full_name(full_name)
             account_user.first_name = first_name
             account_user.last_name = last_name
+            account_user.email = email
             new_code = ''
             if payload.get('regenerate_access_code'):
                 new_code = _allocate_access_code(role_label, exclude_user_id=account_user.id)
@@ -1980,9 +2103,21 @@ def update_assignment_account(request, account_id):
                 action_flag=CHANGE,
                 change_message=f'Updated {role_label} account (access-code flow)',
             )
-            resp = {'success': True, 'message': f'Account for {full_name} updated.'}
+            email_sent = False
+            if new_code:
+                email_sent = _send_assignment_credentials_email(
+                    to_email=email,
+                    full_name=full_name,
+                    role_label=role_label,
+                    access_code=new_code,
+                )
+            resp = {'success': True, 'message': f'Account for {full_name} updated.', 'email_sent': email_sent}
             if new_code:
                 resp['access_code'] = new_code
+                if email_sent:
+                    resp['message'] += f' New access code sent to {email}.'
+                else:
+                    resp['message'] += f' New code saved, but email to {email} could not be sent.'
             return JsonResponse(resp)
         except Exception as e:
             return JsonResponse({'success': False, 'message': str(e)}, status=500)
@@ -1994,7 +2129,7 @@ def update_assignment_account(request, account_id):
     if User.objects.filter(username__iexact=payload['username']).exclude(id=account_user.id).exists():
         return JsonResponse({'success': False, 'message': 'Username already exists.'}, status=400)
     if payload['email'] and User.objects.filter(email__iexact=payload['email']).exclude(id=account_user.id).exists():
-        return JsonResponse({'success': False, 'message': 'Email already exists.'}, status=400)
+        return JsonResponse({'success': False, 'message': 'Gmail is already in use.'}, status=400)
 
     try:
         account_user.username = payload['username']

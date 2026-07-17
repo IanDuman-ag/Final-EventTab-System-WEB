@@ -94,6 +94,7 @@
                     <input type="checkbox" id="chk-select-all" aria-label="Select all">
                   </th>
                   <th>Name</th>
+                  <th>Gmail</th>
                   <th>Role</th>
                   <th>Access Code</th>
                   <th>Status</th>
@@ -106,6 +107,7 @@
                     data-account-id="{{ row.user.id }}"
                     data-full-name="{{ row.full_name }}"
                     data-username="{{ row.user.username }}"
+                    data-email="{{ row.user.email|default:'' }}"
                     data-role="{{ row.role }}"
                     data-status="{{ row.status_key }}"
                     data-access-code="{{ row.access_code }}"
@@ -119,6 +121,7 @@
                         <strong>{{ row.full_name }}</strong>
                       </div>
                     </td>
+                    <td data-label="Gmail">{{ row.user.email|default:"—" }}</td>
                     <td data-label="Role"><span class="role-label role-label--{{ row.role|lower }}">{{ row.role }}</span></td>
                     <td data-label="Access Code"><code class="access-code-cell">{{ row.access_code }}</code></td>
                     <td data-label="Status"><span class="status-pill {{ row.status_key }}">{{ row.status }}</span></td>
@@ -137,7 +140,7 @@
                     </td>
                   </tr>
                 {% empty %}
-                  <tr><td colspan="6" class="empty-state">No judge or scorer accounts found.</td></tr>
+                  <tr><td colspan="7" class="empty-state">No judge or scorer accounts found.</td></tr>
                 {% endfor %}
               </tbody>
             </table>
@@ -164,6 +167,6 @@
   </div>
 
   {% include 'admindash/_assignment_modal.html' %}
-  <script src="{% static 'js/assignment_accounts.js' %}?v=20260714b"></script>
+  <script src="{% static 'js/assignment_accounts.js' %}?v=20260717c"></script>
 </body>
 </html>

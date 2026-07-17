@@ -231,10 +231,6 @@
             Username
             <input type="text" id="assignment-username">
           </label>
-          <label>
-            Email
-            <input type="email" id="assignment-email">
-          </label>
           <label class="acc-field--full">
             Password <small>(required for new accounts)</small>
             <input type="password" id="assignment-password">
@@ -247,6 +243,11 @@
             Official Name
             <input type="text" id="assignment-name" placeholder="e.g. Juan Dela Cruz — official name for records">
             <small class="acc-field-hint">Use the person’s official full name (not a nickname). This name appears on account records.</small>
+          </label>
+          <label class="acc-field--full">
+            Gmail
+            <input type="email" id="assignment-code-email" placeholder="name@gmail.com" autocomplete="email">
+            <small class="acc-field-hint">The access code will be sent to this Gmail address.</small>
           </label>
           <div class="acc-code-row acc-field--full">
             <button type="button" id="btn-generate-code" class="generate-code-btn">
@@ -285,6 +286,6 @@
     </div>
   </div>
 
-  <script src="{% static 'js/assignment_accounts.js' %}?v=20260714b"></script>
+  <script src="{% static 'js/assignment_accounts.js' %}?v=20260717c"></script>
 </body>
 </html>
