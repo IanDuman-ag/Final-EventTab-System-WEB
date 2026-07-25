@@ -7,7 +7,7 @@ from django.core.mail import EmailMultiAlternatives
 from django.core.paginator import Paginator
 from django.core.validators import validate_email
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.db.models import Q, Count
 from django.shortcuts import redirect, render, get_object_or_404
 from django.utils import timezone
@@ -2708,6 +2708,368 @@ def admin_bulk_delete_events(request):
     })
 
 
+def _match_event_queryset():
+    """Include explicit match events and legacy sports events."""
+    return Event.objects.filter(
+        Q(scoring_method='match') | Q(category__iexact='Sports')
+    ).distinct()
+
+
+def _serialize_match_event(event):
+    from events.match_event_service import normalize_tournament_type
+
+    registry_ids = {
+        name: pk for pk, name in Team.objects.filter(status=Team.STATUS_ACTIVE)
+        .values_list('id', 'name')
+    }
+    matches = list(event.bracket_matches.order_by('match_number'))
+    normalized_tournament_type = normalize_tournament_type(
+        event.tournament_type or 'single_elimination'
+    )
+    return {
+        'id': event.id,
+        'name': event.name,
+        'category': event.category or 'Sports',
+        'classification': event.event_classification,
+        'classification_label': event.get_event_classification_display() or '—',
+        'division': event.division,
+        'venue': event.venue,
+        'start_date': event.event_date.isoformat() if event.event_date else '',
+        'end_date': (event.end_date or event.event_date).isoformat() if event.event_date else '',
+        'publication_status': event.publication_status,
+        'publication_label': event.get_publication_status_display(),
+        'tournament_type': normalized_tournament_type,
+        'tournament_type_label': _tournament_type_label(event.tournament_type or 'single_elimination'),
+        'include_third_place': event.include_third_place,
+        'schedule_mode': event.schedule_mode,
+        'daily_start_time': event.daily_start_time.strftime('%H:%M') if event.daily_start_time else '',
+        'daily_end_time': event.daily_end_time.strftime('%H:%M') if event.daily_end_time else '',
+        'faculty_account_id': event.faculty_account_id,
+        'faculty_name': (
+            event.faculty_account.get_full_name().strip() or event.faculty_account.username
+            if event.faculty_account else event.faculty_in_charge
+        ),
+        'auto_update_bracket': event.auto_update_bracket,
+        'allow_result_editing': event.allow_result_editing,
+        'require_faculty_confirmation': event.require_faculty_confirmation,
+        'apply_championship_points': event.apply_championship_points,
+        'points_config': event.championship_points_config or [],
+        'team_ids': [
+            team.source_team_id or registry_ids.get(team.name)
+            for team in event.bracket_teams.all()
+            if team.source_team_id or team.name in registry_ids
+        ],
+        'draw_order': event.bracket_draw_order or [
+            team.source_team_id or registry_ids.get(team.name)
+            for team in event.bracket_teams.all()
+            if team.source_team_id or team.name in registry_ids
+        ],
+        'legacy_double_elimination': normalized_tournament_type == 'double_elimination',
+        'team_names': list(event.bracket_teams.values_list('name', flat=True)),
+        'schedule_rows': [
+            {
+                'match_number': match.match_number,
+                'match_key': match.client_key or f'legacy-{match.pk}',
+                'round_name': match.round_name,
+                'team_a': match.team_a.name if match.team_a else 'TBD',
+                'team_b': (
+                    match.team_b.name if match.team_b
+                    else 'Bye' if 'bye' in (match.remarks or '').lower()
+                    else 'TBD'
+                ),
+                'date': match.match_date.isoformat() if match.match_date else '',
+                'time': match.match_time.strftime('%H:%M') if match.match_time else '',
+                'venue': match.venue,
+            }
+            for match in matches
+        ],
+    }
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def admin_event_selector(request):
+    """Events landing redirects to Match-Based; sidebar holds the type dropdown."""
+    return redirect('admin_match_events')
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def admin_match_events(request, event_id=None):
+    """List match events and process the create/edit wizard."""
+    from events.match_event_service import MatchEventValidationError, save_match_event
+    from events.models import BracketTeam
+
+    instance = None
+    if event_id is not None:
+        instance = get_object_or_404(_match_event_queryset(), pk=event_id)
+    if request.method == 'POST':
+        try:
+            event = save_match_event(request.POST, request.user, instance=instance)
+        except MatchEventValidationError as exc:
+            messages.error(request, str(exc))
+            target = f"{request.path}?edit={event_id}" if event_id else request.path
+            return redirect(target)
+        messages.success(
+            request,
+            f'Event "{event.name}" {"created" if instance is None else "updated"} as '
+            f'{event.get_publication_status_display()}.',
+        )
+        return redirect('admin_match_events')
+
+    search_query = request.GET.get('q', '').strip()
+    status_filter = request.GET.get('status', 'all').strip()
+    queryset = (
+        _match_event_queryset()
+        .select_related('faculty_account')
+        .prefetch_related('bracket_teams', 'bracket_matches__team_a', 'bracket_matches__team_b')
+        .order_by('-updated_at')
+    )
+    if search_query:
+        queryset = queryset.filter(
+            Q(name__icontains=search_query)
+            | Q(division__icontains=search_query)
+            | Q(venue__icontains=search_query)
+        )
+    if status_filter in dict(Event.PUBLICATION_CHOICES):
+        queryset = queryset.filter(publication_status=status_filter)
+
+    events = list(queryset)
+    rows = [_serialize_match_event(event) for event in events]
+    User = get_user_model()
+    from events.match_event_service import models_q_for_faculty
+    faculty_options = User.objects.filter(is_active=True).filter(
+        models_q_for_faculty()
+    ).distinct().order_by('first_name', 'last_name', 'username')
+    teams = Team.objects.filter(status=Team.STATUS_ACTIVE).select_related('department').order_by('name')
+    all_match_events = _match_event_queryset()
+    return render(request, 'admindash/matchbasedevent.html', {
+        'event_rows': rows,
+        'event_rows_json': rows,
+        'teams': teams,
+        'faculty_options': faculty_options,
+        'total_count': all_match_events.count(),
+        'draft_count': all_match_events.filter(publication_status=Event.PUBLICATION_DRAFT).count(),
+        'published_count': all_match_events.filter(publication_status=Event.PUBLICATION_PUBLISHED).count(),
+        'search_query': search_query,
+        'status_filter': status_filter,
+        'edit_event_id': request.GET.get('edit', ''),
+    })
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def admin_match_event_preview(request):
+    """Issue the authoritative randomized draw used by the final save."""
+    from events.match_event_service import (
+        MatchEventValidationError,
+        build_match_blueprint,
+        normalize_tournament_type,
+    )
+
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': 'POST request required.'}, status=405)
+    try:
+        payload = json.loads(request.body.decode('utf-8') or '{}')
+        team_ids = list(dict.fromkeys(int(value) for value in payload.get('team_ids', [])))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return JsonResponse({'success': False, 'message': 'Participating teams are invalid.'}, status=400)
+    teams = list(Team.objects.filter(
+        id__in=team_ids,
+        status=Team.STATUS_ACTIVE,
+    ).values('id', 'name'))
+    if len(teams) != len(team_ids):
+        return JsonResponse({'success': False, 'message': 'One or more selected teams are unavailable.'}, status=400)
+    tournament_type = normalize_tournament_type(payload.get('tournament_type', ''))
+    include_third_place = bool(payload.get('include_third_place'))
+    if tournament_type == 'double_elimination':
+        return JsonResponse({
+            'success': False,
+            'message': 'Double Elimination is unsupported until complete loser-bracket progression is available.',
+        }, status=400)
+    try:
+        blueprint = build_match_blueprint(
+            team_ids,
+            tournament_type,
+            include_third_place=include_third_place,
+        )
+    except MatchEventValidationError as exc:
+        return JsonResponse({'success': False, 'message': str(exc)}, status=400)
+    names = {team['id']: team['name'] for team in teams}
+    return JsonResponse({
+        'success': True,
+        'draw_order': blueprint['draw_order'],
+        'matches': [
+            {
+                **match,
+                'team_a': names.get(match['team_a_id'], 'TBD'),
+                'team_b': (
+                    names.get(match['team_b_id'])
+                    if match['team_b_id'] is not None
+                    else 'Bye' if match['team_a_id'] is not None
+                    else 'TBD'
+                ),
+            }
+            for match in blueprint['matches']
+        ],
+    })
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def admin_match_event_detail(request, event_id):
+    event = get_object_or_404(
+        _match_event_queryset().select_related('faculty_account').prefetch_related(
+            'bracket_teams', 'bracket_matches__team_a', 'bracket_matches__team_b'
+        ),
+        pk=event_id,
+    )
+    return JsonResponse(_serialize_match_event(event))
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def admin_delete_match_event(request, event_id):
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': 'POST request required.'}, status=405)
+    event = get_object_or_404(_match_event_queryset(), pk=event_id)
+    name = event.name
+    delete_mobile_for_event(event)
+    event.delete()
+    messages.success(request, f'Event "{name}" deleted.')
+    return redirect('admin_match_events')
+
+
+def _criteria_event_queryset():
+    return Event.objects.filter(scoring_method='criteria').exclude(
+        Q(category__iexact='Sports')
+    ).distinct()
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def admin_criteria_events(request, event_id=None):
+    from events.criteria_event_service import (
+        CriteriaEventValidationError,
+        models_q_for_faculty,
+        models_q_for_judges,
+        save_criteria_event,
+        serialize_criteria_event,
+    )
+
+    instance = None
+    if event_id is not None:
+        instance = get_object_or_404(_criteria_event_queryset(), pk=event_id)
+    if request.method == 'POST':
+        try:
+            event = save_criteria_event(
+                request.POST,
+                request.user,
+                files=request.FILES,
+                instance=instance,
+            )
+        except CriteriaEventValidationError as exc:
+            messages.error(request, str(exc))
+            target = f"{request.path}?edit={event_id}" if event_id else f"{request.path}?create=1"
+            return redirect(target)
+        messages.success(
+            request,
+            f'Event "{event.name}" {"created" if instance is None else "updated"} as '
+            f'{event.get_publication_status_display()}.',
+        )
+        return redirect('admin_criteria_events')
+
+    search_query = request.GET.get('q', '').strip()
+    status_filter = request.GET.get('status', 'all').strip()
+    category_filter = request.GET.get('category', 'all').strip()
+    sort = request.GET.get('sort', '-updated_at').strip()
+    allowed_sorts = {
+        'name', '-name', 'event_date', '-event_date', 'category', '-category',
+        'publication_status', '-publication_status', 'updated_at', '-updated_at',
+    }
+    if sort not in allowed_sorts:
+        sort = '-updated_at'
+
+    queryset = (
+        _criteria_event_queryset()
+        .select_related('faculty_account', 'chief_judge')
+        .prefetch_related('assigned_judges')
+        .order_by(sort)
+    )
+    if search_query:
+        queryset = queryset.filter(
+            Q(name__icontains=search_query)
+            | Q(category__icontains=search_query)
+            | Q(division__icontains=search_query)
+            | Q(venue__icontains=search_query)
+        )
+    if status_filter in dict(Event.PUBLICATION_CHOICES):
+        queryset = queryset.filter(publication_status=status_filter)
+    if category_filter and category_filter != 'all':
+        queryset = queryset.filter(category__iexact=category_filter)
+
+    paginator = Paginator(queryset, 10)
+    page_obj = paginator.get_page(request.GET.get('page') or 1)
+    rows = [serialize_criteria_event(event) for event in page_obj.object_list]
+    User = get_user_model()
+    judge_options = User.objects.filter(is_active=True).filter(models_q_for_judges()).distinct().order_by(
+        'first_name', 'last_name', 'username'
+    )
+    faculty_options = User.objects.filter(is_active=True).filter(models_q_for_faculty()).distinct().order_by(
+        'first_name', 'last_name', 'username'
+    )
+    all_events = _criteria_event_queryset()
+    return render(request, 'admindash/criteriabasedevent.html', {
+        'event_rows': rows,
+        'event_rows_json': rows,
+        'page_obj': page_obj,
+        'teams': Team.objects.filter(status=Team.STATUS_ACTIVE).select_related('department').order_by('name'),
+        'candidates': RegistryCandidate.objects.filter(
+            status=RegistryCandidate.STATUS_ACTIVE
+        ).select_related('department').order_by('number', 'name'),
+        'judge_options': judge_options,
+        'faculty_options': faculty_options,
+        'total_count': all_events.count(),
+        'draft_count': all_events.filter(publication_status=Event.PUBLICATION_DRAFT).count(),
+        'published_count': all_events.filter(publication_status=Event.PUBLICATION_PUBLISHED).count(),
+        'search_query': search_query,
+        'status_filter': status_filter,
+        'category_filter': category_filter,
+        'sort': sort,
+        'edit_event_id': request.GET.get('edit', ''),
+        'open_create': request.GET.get('create', '') == '1',
+    })
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def admin_criteria_event_detail(request, event_id):
+    from events.criteria_event_service import serialize_criteria_event
+    event = get_object_or_404(
+        _criteria_event_queryset().select_related('faculty_account', 'chief_judge').prefetch_related('assigned_judges'),
+        pk=event_id,
+    )
+    return JsonResponse(serialize_criteria_event(event))
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def admin_delete_criteria_event(request, event_id):
+    from events.criteria_event_service import can_delete_criteria_event
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': 'POST request required.'}, status=405)
+    event = get_object_or_404(_criteria_event_queryset(), pk=event_id)
+    allowed, reason = can_delete_criteria_event(event, request.user)
+    if not allowed:
+        messages.error(request, reason)
+        return redirect('admin_criteria_events')
+    name = event.name
+    delete_mobile_for_event(event)
+    event.delete()
+    messages.success(request, f'Event "{name}" deleted.')
+    return redirect('admin_criteria_events')
+
+
 # ──────────────────────────────────────────────────────────────────
 # Tab record CRUD (Portion, Candidate No., Contestant, Judges,
 # Criteria, Chairperson). All share the same simple shape:
@@ -2957,99 +3319,252 @@ def get_tabulator_activity_score_rows(limit=60):
     return rows
 
 
+def _ensure_default_scoresheet_templates(user=None):
+    from events.models import ScoresheetTemplate
+    from events.scoresheet_pdf import default_match_layout
+
+    if ScoresheetTemplate.objects.exists():
+        return
+    seeds = [
+        {
+            'name': 'Basketball Official Scoresheet',
+            'event_type': ScoresheetTemplate.EVENT_MATCH,
+            'category': 'Basketball',
+        },
+        {
+            'name': 'Volleyball Official Scoresheet',
+            'event_type': ScoresheetTemplate.EVENT_MATCH,
+            'category': 'Volleyball',
+        },
+        {
+            'name': 'Singing Competition Scoresheet',
+            'event_type': ScoresheetTemplate.EVENT_CRITERIA,
+            'category': 'Singing',
+        },
+        {
+            'name': 'Dance Competition Scoresheet',
+            'event_type': ScoresheetTemplate.EVENT_CRITERIA,
+            'category': 'Dance',
+        },
+        {
+            'name': 'Pageant Scoresheet',
+            'event_type': ScoresheetTemplate.EVENT_CRITERIA,
+            'category': 'Pageant',
+        },
+    ]
+    layout = default_match_layout()
+    for seed in seeds:
+        ScoresheetTemplate.objects.create(
+            name=seed['name'],
+            event_type=seed['event_type'],
+            category=seed['category'],
+            layout=layout,
+            created_by=user,
+        )
+
+
+def _serialize_scoresheet_template(template):
+    return {
+        'id': template.id,
+        'name': template.name,
+        'event_type': template.event_type,
+        'event_type_label': template.get_event_type_display(),
+        'category': template.category or '—',
+        'status': template.status,
+        'status_label': template.get_status_display(),
+        'paper_size': template.paper_size,
+        'orientation': template.orientation,
+        'layout': template.layout or [],
+        'updated_at': timezone.localtime(template.updated_at).strftime('%b %d, %Y') if template.updated_at else '—',
+        'updated_at_iso': template.updated_at.isoformat() if template.updated_at else '',
+    }
+
+
+def _serialize_generated_scoresheet(row):
+    by_name = '—'
+    if row.generated_by_id:
+        by_name = row.generated_by.get_full_name().strip() or row.generated_by.username
+    return {
+        'id': row.id,
+        'event_label': row.event_label or '—',
+        'item_label': row.item_label or '—',
+        'generated_by': by_name,
+        'date_generated': timezone.localtime(row.created_at).strftime('%b %d, %Y %I:%M %p').replace(' 0', ' ')
+        if row.created_at else '—',
+        'download_url': f'/admin/scoresheets/generated/{row.id}/download/',
+        'template_id': row.template_id,
+    }
+
+
 @login_required(login_url='login')
 @user_passes_test(lambda user: user.is_staff, login_url='login')
 def admin_scoresheets(request):
-    from events.models import ScoreSheet, Event, BracketMatch
-    from django.db import models
+    from events.models import ScoresheetTemplate, GeneratedScoresheet
 
-    # Auto-generate mock scoresheets for testing if none exist
-    if ScoreSheet.objects.count() == 0:
-        import datetime
-        from events.models import BracketTeam, Department
-        
-        # If there are no bracket matches, let's create a mock event, teams, and matches
-        if BracketMatch.objects.count() == 0:
-            event = Event.objects.first()
-            if not event:
-                event = Event.objects.create(
-                    name="Intramural Sports 2026",
-                    category="Sports",
-                    event_date=datetime.date.today(),
-                    venue="University Gymnasium",
-                    status="active"
-                )
-            
-            # Fetch or create departments
-            depts = list(Department.objects.all()[:4])
-            if len(depts) < 4:
-                names = ["College of Engineering", "College of Science", "College of Business", "College of Arts"]
-                codes = ["COE", "COS", "COB", "COA"]
-                for i, name in enumerate(names):
-                    if len(depts) < 4 and not Department.objects.filter(code=codes[i]).exists():
-                        d = Department.objects.create(name=name, code=codes[i])
-                        depts.append(d)
-            
-            # Create bracket teams
-            teams = []
-            for i, dept in enumerate(depts):
-                t = BracketTeam.objects.create(
-                    event=event,
-                    name=f"{dept.code} Tigers",
-                    department=dept,
-                    seed=i + 1
-                )
-                teams.append(t)
-            
-            # Generate brackets
-            from events.bracket_generator import generate_single_elimination
-            generate_single_elimination(event, teams)
-            
-        matches = BracketMatch.objects.filter(team_a__isnull=False, team_b__isnull=False)[:4]
-        for idx, match in enumerate(matches):
-            ScoreSheet.objects.create(
-                event=match.event,
-                match=match,
-                tabulator=request.user,
-                score_team_a=85.00 + (idx * 2.5),
-                score_team_b=82.00 + (idx * 1.5),
-                winner=match.team_a if idx % 2 == 0 else match.team_b,
-                judges_names="Judge Angela, Judge Brandon, Judge Carter",
-                remarks="Fair play, no penalties applied.",
-                status=ScoreSheet.STATUS_PENDING
-            )
-
-    # Get filters
-    event_id = request.GET.get('event')
-    status_filter = request.GET.get('status')
-    search_query = request.GET.get('q', '').strip()
-
-    scoresheets = ScoreSheet.objects.all().select_related(
-        'event', 'match', 'tabulator', 'winner', 'match__team_a', 'match__team_b'
-    )
-
-    if event_id:
-        scoresheets = scoresheets.filter(event_id=event_id)
-    if status_filter:
-        scoresheets = scoresheets.filter(status=status_filter)
-    if search_query:
-        scoresheets = scoresheets.filter(
-            models.Q(tabulator__username__icontains=search_query) |
-            models.Q(event__name__icontains=search_query) |
-            models.Q(match__round_name__icontains=search_query) |
-            models.Q(remarks__icontains=search_query) |
-            models.Q(judges_names__icontains=search_query)
-        )
-
-    events = Event.objects.all()
-
+    _ensure_default_scoresheet_templates(request.user)
+    templates = [_serialize_scoresheet_template(t) for t in ScoresheetTemplate.objects.all()[:50]]
+    generated = [
+        _serialize_generated_scoresheet(row)
+        for row in GeneratedScoresheet.objects.select_related('generated_by', 'template')[:50]
+    ]
     return render(request, 'admindash/scoresheet.html', {
-        'scoresheets': scoresheets,
-        'events': events,
-        'selected_event': event_id,
-        'selected_status': status_filter,
-        'search_query': search_query,
+        'templates': templates,
+        'templates_json': templates,
+        'generated': generated,
+        'generated_json': generated,
+        'events': Event.objects.order_by('name')[:200],
     })
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def admin_scoresheet_template_save(request):
+    from events.models import ScoresheetTemplate
+    from events.scoresheet_pdf import default_match_layout
+
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': 'POST required.'}, status=405)
+    try:
+        data = json.loads(request.body.decode('utf-8') or '{}')
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': 'Invalid JSON body.'}, status=400)
+
+    name = (data.get('name') or '').strip()
+    if not name:
+        return JsonResponse({'success': False, 'message': 'Template name is required.'}, status=400)
+
+    template_id = data.get('id')
+    template = None
+    if template_id:
+        template = get_object_or_404(ScoresheetTemplate, pk=template_id)
+
+    event_type = (data.get('event_type') or ScoresheetTemplate.EVENT_MATCH).strip()
+    if event_type not in dict(ScoresheetTemplate.EVENT_TYPE_CHOICES):
+        event_type = ScoresheetTemplate.EVENT_MATCH
+    orientation = (data.get('orientation') or ScoresheetTemplate.ORIENT_PORTRAIT).strip()
+    if orientation not in dict(ScoresheetTemplate.ORIENTATION_CHOICES):
+        orientation = ScoresheetTemplate.ORIENT_PORTRAIT
+    layout = data.get('layout')
+    if not isinstance(layout, list):
+        layout = default_match_layout()
+
+    creating = template is None
+    if creating:
+        template = ScoresheetTemplate(created_by=request.user)
+    template.name = name[:200]
+    template.event_type = event_type
+    template.category = (data.get('category') or '').strip()[:100]
+    template.status = (
+        ScoresheetTemplate.STATUS_ACTIVE
+        if (data.get('status') or 'active') == 'active'
+        else ScoresheetTemplate.STATUS_ARCHIVED
+    )
+    template.paper_size = (data.get('paper_size') or 'a4').strip()[:20] or 'a4'
+    template.orientation = orientation
+    template.layout = layout
+    template.save()
+    return JsonResponse({
+        'success': True,
+        'message': f'Template {"created" if creating else "updated"}.',
+        'template': _serialize_scoresheet_template(template),
+    })
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def admin_scoresheet_template_delete(request, template_id):
+    from events.models import ScoresheetTemplate
+
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': 'POST required.'}, status=405)
+    template = get_object_or_404(ScoresheetTemplate, pk=template_id)
+    name = template.name
+    template.delete()
+    return JsonResponse({'success': True, 'message': f'Template "{name}" deleted.'})
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def admin_scoresheet_generate(request):
+    from django.core.files.base import ContentFile
+    from events.models import ScoresheetTemplate, GeneratedScoresheet
+    from events.scoresheet_pdf import default_match_layout, default_sample_payload, render_scoresheet_pdf
+
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': 'POST required.'}, status=405)
+    try:
+        data = json.loads(request.body.decode('utf-8') or '{}')
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': 'Invalid JSON body.'}, status=400)
+
+    template = None
+    template_id = data.get('template_id')
+    if template_id:
+        template = ScoresheetTemplate.objects.filter(pk=template_id).first()
+
+    layout = data.get('layout')
+    if not isinstance(layout, list):
+        layout = (template.layout if template else None) or default_match_layout()
+    orientation = (data.get('orientation') or (template.orientation if template else 'portrait'))
+    payload = data.get('payload') if isinstance(data.get('payload'), dict) else {}
+    merged = {**default_sample_payload(), **payload}
+
+    pdf_bytes = render_scoresheet_pdf(layout, orientation=orientation, payload=merged)
+    event_label = (data.get('event_label') or merged.get('EventName') or 'Scoresheet').strip()[:200]
+    item_label = (data.get('item_label') or f"Game {merged.get('GameNumber', '')}".strip() or 'Sheet').strip()[:200]
+
+    event = None
+    event_id = data.get('event_id')
+    if event_id:
+        event = Event.objects.filter(pk=event_id).first()
+        if event and not data.get('event_label'):
+            event_label = event.name
+
+    row = GeneratedScoresheet(
+        template=template,
+        event=event,
+        event_label=event_label,
+        item_label=item_label,
+        generated_by=request.user,
+        payload=merged,
+    )
+    filename = f"scoresheet_{timezone.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+    row.file.save(filename, ContentFile(pdf_bytes), save=False)
+    row.save()
+    return JsonResponse({
+        'success': True,
+        'message': 'Scoresheet PDF generated.',
+        'generated': _serialize_generated_scoresheet(row),
+        'download_url': f'/admin/scoresheets/generated/{row.id}/download/',
+    })
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def admin_scoresheet_download(request, generated_id):
+    from events.models import GeneratedScoresheet
+
+    row = get_object_or_404(GeneratedScoresheet, pk=generated_id)
+    if not row.file:
+        return HttpResponse('PDF file missing.', status=404)
+    response = HttpResponse(row.file.open('rb').read(), content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="scoresheet-{row.id}.pdf"'
+    return response
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def admin_scoresheet_sample_pdf(request):
+    from events.scoresheet_pdf import default_match_layout, default_sample_payload, render_scoresheet_pdf
+
+    pdf_bytes = render_scoresheet_pdf(
+        default_match_layout(),
+        orientation='portrait',
+        payload=default_sample_payload(),
+    )
+    response = HttpResponse(pdf_bytes, content_type='application/pdf')
+    response['Content-Disposition'] = 'attachment; filename="sample-scoresheet.pdf"'
+    return response
 
 
 @login_required(login_url='login')

@@ -6,6 +6,24 @@ User = get_user_model()
 
 
 class Event(models.Model):
+    PUBLICATION_DRAFT = 'draft'
+    PUBLICATION_PUBLISHED = 'published'
+    PUBLICATION_CHOICES = [
+        (PUBLICATION_DRAFT, 'Draft'),
+        (PUBLICATION_PUBLISHED, 'Published'),
+    ]
+    CLASSIFICATION_MAJOR = 'major'
+    CLASSIFICATION_MINOR = 'minor'
+    CLASSIFICATION_CHOICES = [
+        (CLASSIFICATION_MAJOR, 'Major Event'),
+        (CLASSIFICATION_MINOR, 'Minor Event'),
+    ]
+    SCHEDULE_AUTO = 'auto'
+    SCHEDULE_MANUAL = 'manual'
+    SCHEDULE_MODE_CHOICES = [
+        (SCHEDULE_AUTO, 'Auto Generate Schedule'),
+        (SCHEDULE_MANUAL, 'Manual Scheduling'),
+    ]
     STATUS_UPCOMING   = 'upcoming'
     STATUS_ACTIVE     = 'active'
     STATUS_COMPLETED  = 'completed'
@@ -21,6 +39,7 @@ class Event(models.Model):
     division           = models.CharField(max_length=100, blank=True, default='')
     department         = models.CharField(max_length=150, blank=True, default='')
     event_date         = models.DateField()
+    end_date           = models.DateField(null=True, blank=True)
     event_time         = models.TimeField(null=True, blank=True)
     venue              = models.CharField(max_length=200)
     image              = models.ImageField(upload_to='event_images/', null=True, blank=True)
@@ -31,6 +50,100 @@ class Event(models.Model):
     tournament_type    = models.CharField(max_length=50, blank=True, default='')
     bracket_locked     = models.BooleanField(default=False)
     faculty_in_charge  = models.CharField(max_length=150, blank=True, default='')
+    faculty_account    = models.ForeignKey(
+        User,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='faculty_events',
+    )
+    event_classification = models.CharField(
+        max_length=10,
+        choices=CLASSIFICATION_CHOICES,
+        blank=True,
+        default='',
+    )
+    publication_status = models.CharField(
+        max_length=12,
+        choices=PUBLICATION_CHOICES,
+        default=PUBLICATION_PUBLISHED,
+    )
+    include_third_place = models.BooleanField(default=False)
+    seeding_method = models.CharField(max_length=20, default='random_draw')
+    bracket_draw_order = models.JSONField(default=list, blank=True)
+    schedule_mode = models.CharField(
+        max_length=10,
+        choices=SCHEDULE_MODE_CHOICES,
+        default=SCHEDULE_AUTO,
+    )
+    daily_start_time = models.TimeField(null=True, blank=True)
+    daily_end_time = models.TimeField(null=True, blank=True)
+    auto_update_bracket = models.BooleanField(default=True)
+    allow_result_editing = models.BooleanField(default=True)
+    require_faculty_confirmation = models.BooleanField(default=False)
+    apply_championship_points = models.BooleanField(default=True)
+    championship_points_config = models.JSONField(default=list, blank=True)
+    PARTICIPATION_TEAM = 'team'
+    PARTICIPATION_INDIVIDUAL = 'individual'
+    PARTICIPATION_CHOICES = [
+        (PARTICIPATION_TEAM, 'Team'),
+        (PARTICIPATION_INDIVIDUAL, 'Individual'),
+    ]
+    FORMAT_SINGLE = 'single_performance'
+    FORMAT_MULTIPLE = 'multiple_rounds'
+    FORMAT_PRELIM_FINAL = 'preliminary_final'
+    FORMAT_CHOICES = [
+        (FORMAT_SINGLE, 'Single Performance'),
+        (FORMAT_MULTIPLE, 'Multiple Rounds'),
+        (FORMAT_PRELIM_FINAL, 'Preliminary and Final Round'),
+    ]
+    CRITERIA_SCORE_WEIGHTED = 'weighted_percentage'
+    CRITERIA_SCORE_RAW = 'raw_score'
+    CRITERIA_SCORE_AVERAGE = 'average_score'
+    CRITERIA_SCORE_RANKING = 'ranking_based'
+    CRITERIA_SCORE_CHOICES = [
+        (CRITERIA_SCORE_WEIGHTED, 'Weighted Percentage'),
+        (CRITERIA_SCORE_RAW, 'Raw Score'),
+        (CRITERIA_SCORE_AVERAGE, 'Average Score'),
+        (CRITERIA_SCORE_RANKING, 'Ranking-Based Score'),
+    ]
+    participation_type = models.CharField(
+        max_length=20,
+        choices=PARTICIPATION_CHOICES,
+        default=PARTICIPATION_TEAM,
+        blank=True,
+    )
+    event_format = models.CharField(
+        max_length=40,
+        choices=FORMAT_CHOICES,
+        default=FORMAT_SINGLE,
+        blank=True,
+    )
+    criteria_score_method = models.CharField(
+        max_length=40,
+        choices=CRITERIA_SCORE_CHOICES,
+        default=CRITERIA_SCORE_WEIGHTED,
+        blank=True,
+    )
+    rules_guidelines = models.TextField(blank=True, default='')
+    rules_file = models.FileField(upload_to='event_rules/', null=True, blank=True)
+    rounds_config = models.JSONField(default=list, blank=True)
+    judging_criteria_config = models.JSONField(default=list, blank=True)
+    score_settings = models.JSONField(default=dict, blank=True)
+    deductions_enabled = models.BooleanField(default=False)
+    deductions_config = models.JSONField(default=list, blank=True)
+    result_processing_config = models.JSONField(default=dict, blank=True)
+    judge_settings = models.JSONField(default=dict, blank=True)
+    tie_break_rules = models.JSONField(default=list, blank=True)
+    participant_ids = models.JSONField(default=list, blank=True)
+    chief_judge = models.ForeignKey(
+        User,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='chief_judge_events',
+    )
+    results_finalized = models.BooleanField(default=False)
     student_in_charge  = models.CharField(max_length=150, blank=True, default='')
     mechanics          = models.TextField(blank=True, default='')
     scoring_criteria   = models.TextField(blank=True, default='')
@@ -176,6 +289,13 @@ class RegistryCandidate(models.Model):
 
 class BracketTeam(models.Model):
     event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='bracket_teams')
+    source_team = models.ForeignKey(
+        Team,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='event_snapshots',
+    )
     name = models.CharField(max_length=200)
     department = models.ForeignKey(Department, on_delete=models.SET_NULL, null=True, blank=True, related_name='bracket_teams')
     members = models.TextField(blank=True, default='')
@@ -205,6 +325,7 @@ class BracketMatch(models.Model):
     ]
 
     event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='bracket_matches')
+    client_key = models.CharField(max_length=40, blank=True, default='', db_index=True)
     match_number = models.PositiveIntegerField()
     round_name = models.CharField(max_length=100)
     team_a = models.ForeignKey(BracketTeam, on_delete=models.SET_NULL, null=True, blank=True, related_name='matches_as_a')
@@ -262,6 +383,67 @@ class ScoreSheet(models.Model):
 
     def __str__(self):
         return f"Scoresheet: {self.match.event.name} - Match {self.match.match_number} ({self.get_status_display()})"
+
+
+class ScoresheetTemplate(models.Model):
+    EVENT_MATCH = 'match'
+    EVENT_CRITERIA = 'criteria'
+    EVENT_TYPE_CHOICES = [
+        (EVENT_MATCH, 'Match-Based'),
+        (EVENT_CRITERIA, 'Criteria-Based'),
+    ]
+    STATUS_ACTIVE = 'active'
+    STATUS_ARCHIVED = 'archived'
+    STATUS_CHOICES = [
+        (STATUS_ACTIVE, 'Active'),
+        (STATUS_ARCHIVED, 'Archived'),
+    ]
+    ORIENT_PORTRAIT = 'portrait'
+    ORIENT_LANDSCAPE = 'landscape'
+    ORIENTATION_CHOICES = [
+        (ORIENT_PORTRAIT, 'Portrait'),
+        (ORIENT_LANDSCAPE, 'Landscape'),
+    ]
+
+    name = models.CharField(max_length=200)
+    event_type = models.CharField(max_length=20, choices=EVENT_TYPE_CHOICES, default=EVENT_MATCH)
+    category = models.CharField(max_length=100, blank=True, default='')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_ACTIVE)
+    paper_size = models.CharField(max_length=20, default='a4')
+    orientation = models.CharField(max_length=20, choices=ORIENTATION_CHOICES, default=ORIENT_PORTRAIT)
+    layout = models.JSONField(default=list, blank=True)
+    created_by = models.ForeignKey(
+        User, null=True, blank=True, on_delete=models.SET_NULL, related_name='scoresheet_templates'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-updated_at']
+
+    def __str__(self):
+        return self.name
+
+
+class GeneratedScoresheet(models.Model):
+    template = models.ForeignKey(
+        ScoresheetTemplate, null=True, blank=True, on_delete=models.SET_NULL, related_name='generated'
+    )
+    event = models.ForeignKey(Event, null=True, blank=True, on_delete=models.SET_NULL, related_name='generated_scoresheets')
+    event_label = models.CharField(max_length=200, blank=True, default='')
+    item_label = models.CharField(max_length=200, blank=True, default='')
+    generated_by = models.ForeignKey(
+        User, null=True, blank=True, on_delete=models.SET_NULL, related_name='generated_scoresheets'
+    )
+    payload = models.JSONField(default=dict, blank=True)
+    file = models.FileField(upload_to='scoresheets/generated/', blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.event_label or 'Scoresheet'} · {self.item_label or self.pk}"
 
 
 class EventCategory(models.Model):

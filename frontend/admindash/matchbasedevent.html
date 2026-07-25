@@ -1,0 +1,220 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Match-Based Events · EventTab</title>
+  <link rel="stylesheet" href="{% static 'admindash/matchbasedevent.css' %}?v=20260725">
+</head>
+<body class="admin-dashboard-page admin-dashboard-v2 match-events-page">
+  <div class="dashboard-shell">
+    {% include 'admindash/_sidebar.html' with active='events_match' %}
+    <div class="content-area v2-content">
+      <header class="v2-topbar match-topbar">
+        <div>
+          <a class="match-breadcrumb" href="{% url 'admin_match_events' %}">Events / <strong>Match-Based</strong></a>
+          <h2 class="v2-welcome">Tournament operations</h2>
+        </div>
+      </header>
+      <main class="v2-main match-main">
+        {% if messages %}
+        <div class="match-messages" aria-live="polite">
+          {% for message in messages %}<p class="match-message match-message--{{ message.tags }}">{{ message }}</p>{% endfor %}
+        </div>
+        {% endif %}
+
+        <section class="match-page-head">
+          <div>
+            <span class="match-kicker">MATCH CONTROL</span>
+            <h1>Match-Based Events</h1>
+            <p>Build tournament brackets, assign officials, and publish match schedules.</p>
+          </div>
+          <button class="match-primary" type="button" id="open-wizard">+ Create Event</button>
+        </section>
+
+        <section class="match-stats" aria-label="Event status overview">
+          <div><span>All events</span><strong>{{ total_count }}</strong></div>
+          <div><span>Published</span><strong>{{ published_count }}</strong></div>
+          <div><span>Drafts</span><strong>{{ draft_count }}</strong></div>
+        </section>
+
+        <section class="match-table-card">
+          <form class="match-toolbar" method="get">
+            <label class="match-search"><span class="sr-only">Search events</span><input name="q" type="search" value="{{ search_query }}" placeholder="Search event, division, or venue"></label>
+            <label><span class="sr-only">Filter status</span>
+              <select name="status">
+                <option value="all">All statuses</option>
+                <option value="published" {% if status_filter == 'published' %}selected{% endif %}>Published</option>
+                <option value="draft" {% if status_filter == 'draft' %}selected{% endif %}>Draft</option>
+              </select>
+            </label>
+            <button type="submit" class="match-secondary">Filter</button>
+          </form>
+          <div class="match-table-wrap">
+            <table class="match-table">
+              <thead><tr><th>Event Name</th><th>Category</th><th>Division</th><th>Event Type</th><th>Status</th><th>Event Date</th><th>Actions</th></tr></thead>
+              <tbody>
+                {% for event in event_rows %}
+                <tr>
+                  <td><strong>{{ event.name }}</strong><small>{{ event.venue }}</small></td>
+                  <td>{{ event.category }}</td>
+                  <td>{{ event.division|default:"—" }}</td>
+                  <td>{{ event.tournament_type_label }}</td>
+                  <td><span class="match-status match-status--{{ event.publication_status }}">{{ event.publication_label }}</span></td>
+                  <td>{{ event.start_date }}{% if event.end_date != event.start_date %}<small>to {{ event.end_date }}</small>{% endif %}</td>
+                  <td>
+                    <div class="match-actions">
+                      <button type="button" data-view="{{ event.id }}" title="View event" aria-label="View {{ event.name }}">View</button>
+                      <button type="button" data-edit="{{ event.id }}" title="Edit event" aria-label="Edit {{ event.name }}">Edit</button>
+                      <button type="button" data-delete="{{ event.id }}" data-name="{{ event.name }}" class="danger" title="Delete event" aria-label="Delete {{ event.name }}">Delete</button>
+                    </div>
+                  </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="7" class="match-empty"><strong>No match events found</strong><span>Create an event or adjust the current filters.</span></td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <dialog id="event-wizard" class="wizard" aria-labelledby="wizard-title">
+    <form method="post" id="wizard-form" action="{% url 'admin_match_events' %}" novalidate>
+      {% csrf_token %}
+      <input type="hidden" name="team_ids" id="team-ids" value="[]">
+      <input type="hidden" name="draw_order" id="draw-order" value="[]">
+      <input type="hidden" name="schedule_rows" id="schedule-rows" value="[]">
+      <input type="hidden" name="points_config" id="points-config" value="[]">
+      <input type="hidden" name="publication_status" id="publication-status" value="draft">
+      <header class="wizard-head">
+        <div><span class="wizard-kicker">TOURNAMENT BLUEPRINT</span><h2 id="wizard-title">Create match event</h2></div>
+        <button type="button" id="close-wizard" class="wizard-close" aria-label="Close wizard">×</button>
+      </header>
+      <ol class="wizard-steps" aria-label="Creation progress">
+        <li class="active" data-step-marker="1"><span>1</span><small>Basics</small></li>
+        <li data-step-marker="2"><span>2</span><small>Format</small></li>
+        <li data-step-marker="3"><span>3</span><small>Schedule</small></li>
+        <li data-step-marker="4"><span>4</span><small>Configuration</small></li>
+        <li data-step-marker="5"><span>5</span><small>Review</small></li>
+      </ol>
+      <div class="wizard-body">
+        <section class="wizard-panel active" data-step="1">
+          <div class="wizard-section-title"><span>01</span><div><h3>Basic information</h3><p>Define where this event sits in the intramural program.</p></div></div>
+          <div class="wizard-grid">
+            <label class="wide">Event Name <input name="event_name" required maxlength="200"></label>
+            <label>Category <select name="category" disabled><option>Sports</option></select></label>
+            <label>Event Classification <select name="event_classification" required><option value="">Select classification</option><option value="major">Major Event</option><option value="minor">Minor Event</option></select></label>
+            <label>Division <select name="division" required><option value="">Select division</option><option>Men</option><option>Women</option><option>Mixed</option><option>Open</option></select></label>
+            <label>Venue <input name="venue" required maxlength="200"></label>
+            <label>Start Date <input name="start_date" type="date" required></label>
+            <label>End Date <input name="end_date" type="date" required></label>
+            <label>Status <select id="status-preview"><option value="draft">Draft</option><option value="published">Published</option></select><small class="field-hint">This choice is shown in Review; the final action will state any override explicitly.</small></label>
+          </div>
+        </section>
+
+        <section class="wizard-panel" data-step="2">
+          <div class="wizard-section-title"><span>02</span><div><h3>Participation & format</h3><p>Choose competitors and generate the tournament structure.</p></div></div>
+          <fieldset class="team-picker"><legend>Participating Teams <span id="selected-team-count" class="selected-count">0 selected</span></legend>
+            <input type="search" id="team-search" placeholder="Search active teams">
+            <div class="team-options">
+              {% for team in teams %}
+              <label data-team-search="{{ team.name|lower }} {{ team.code|lower }}"><input type="checkbox" class="team-check" value="{{ team.id }}" data-name="{{ team.name }}"><span><strong>{{ team.name }}</strong><small>{{ team.code }}{% if team.department %} · {{ team.department.name }}{% endif %}</small></span></label>
+              {% empty %}<p>No active teams are available. Add teams before creating a match event.</p>{% endfor %}
+            </div>
+          </fieldset>
+          <fieldset><legend>Event Type</legend>
+            <div class="format-cards">
+              <label><input type="radio" name="tournament_type" value="single_elimination" checked><span><strong>Single Elimination</strong><small>A participant is eliminated after one loss.</small></span></label>
+              <label class="disabled" title="The current engine does not support a complete loser bracket"><input type="radio" name="tournament_type" value="double_elimination" disabled><span><strong>Double Elimination</strong><small>Unavailable until full loser-bracket progression is supported.</small></span></label>
+              <label><input type="radio" name="tournament_type" value="round_robin"><span><strong>Round Robin</strong><small>Each participant competes against every other participant.</small></span></label>
+            </div>
+            <div class="legacy-format-notice" id="legacy-format-notice" hidden role="alert">
+              <strong>Legacy Double Elimination event</strong>
+              <p>This stored event uses the retired winner-tree fallback. It will not be silently converted. Choose a supported format explicitly to regenerate it.</p>
+              <button type="button" class="match-secondary" id="change-legacy-format">Choose Single Elimination</button>
+            </div>
+            <label class="inline-check" id="third-place-wrap"><input type="checkbox" name="include_third_place"> Include Third Place Match</label>
+          </fieldset>
+          <div class="blueprint-box">
+            <div><strong>Random Draw</strong><p>The system randomly assigns participants to match slots.</p></div>
+            <button type="button" class="match-secondary" id="generate-bracket">Generate Bracket</button>
+            <div id="bracket-preview" class="bracket-preview" aria-live="polite"><p>Select teams, then generate a preview.</p></div>
+          </div>
+        </section>
+
+        <section class="wizard-panel" data-step="3">
+          <div class="wizard-section-title"><span>03</span><div><h3>Schedule setup</h3><p>Turn generated matchups into an operational timetable.</p></div></div>
+          <fieldset><legend>Schedule Generation</legend>
+            <div class="schedule-modes">
+              <label><input type="radio" name="schedule_mode" value="auto" checked> <span><strong>Auto Generate Schedule</strong><small>Place matches in hourly slots.</small></span></label>
+              <label><input type="radio" name="schedule_mode" value="manual"> <span><strong>Manual Scheduling</strong><small>Edit every date, time, and venue.</small></span></label>
+            </div>
+          </fieldset>
+          <div class="wizard-grid" id="auto-settings">
+            <label>Daily Start Time <input name="daily_start_time" type="time" value="08:00"></label>
+            <label>Daily End Time <input name="daily_end_time" type="time" value="17:00"></label>
+          </div>
+          <button type="button" class="match-secondary" id="generate-schedule">Generate Schedule</button>
+          <div id="schedule-preview" class="schedule-preview"><p>Generate the bracket first, then create its schedule.</p></div>
+        </section>
+
+        <section class="wizard-panel" data-step="4">
+          <div class="wizard-section-title"><span>04</span><div><h3>Configuration</h3><p>Assign accountability and define result controls.</p></div></div>
+          <label class="field-block">Faculty In Charge
+            <select name="faculty_account" required><option value="">Select an authorized account</option>
+              {% for user in faculty_options %}<option value="{{ user.id }}">{{ user.get_full_name|default:user.username }} · {{ user.username }}</option>{% endfor %}
+            </select>
+          </label>
+          <fieldset><legend>Result Processing</legend>
+            <div class="toggle-list">
+              <label><span><strong>Auto Update Bracket</strong><small>Advance winners when results finalize.</small></span><input type="checkbox" name="auto_update_bracket" checked></label>
+              <label><span><strong>Allow Result Editing Before Finalization</strong><small>Permit corrections during review.</small></span><input type="checkbox" name="allow_result_editing" checked></label>
+              <label><span><strong>Require Faculty Confirmation</strong><small>Add faculty approval to the result flow.</small></span><input type="checkbox" name="require_faculty_confirmation"></label>
+            </div>
+          </fieldset>
+          <fieldset id="points-fieldset"><legend>Championship Points</legend>
+            <label class="inline-check"><input type="checkbox" name="apply_championship_points" checked> Apply Championship Points Automatically</label>
+            <div class="points-editor" id="points-editor">
+              <div><input value="1st Place" aria-label="Rank label"><input type="number" min="0" value="15" aria-label="Points"></div>
+              <div><input value="2nd Place" aria-label="Rank label"><input type="number" min="0" value="10" aria-label="Points"></div>
+              <div><input value="3rd Place" aria-label="Rank label"><input type="number" min="0" value="7" aria-label="Points"></div>
+              <div><input value="4th Place" aria-label="Rank label"><input type="number" min="0" value="5" aria-label="Points"></div>
+            </div>
+          </fieldset>
+        </section>
+
+        <section class="wizard-panel" data-step="5">
+          <div class="wizard-section-title"><span>05</span><div><h3>Review blueprint</h3><p>Confirm the operational plan before saving.</p></div></div>
+          <div id="review-summary" class="review-summary"></div>
+        </section>
+      </div>
+      <footer class="wizard-footer">
+        <button type="button" class="match-secondary" id="wizard-back">Back</button>
+        <span class="wizard-error" id="wizard-error" role="alert"></span>
+        <button type="button" class="match-primary" id="wizard-next">Next</button>
+        <button type="submit" id="save-draft-action" class="match-secondary final-action" data-status="draft">Save as Draft</button>
+        <button type="submit" id="publish-action" class="match-primary final-action" data-status="published">Publish Event</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <dialog id="view-event" class="summary-dialog">
+    <header><h2>Event summary</h2><button type="button" data-close-view aria-label="Close">×</button></header>
+    <div id="view-summary"></div>
+  </dialog>
+  <dialog id="delete-event" class="confirm-dialog" aria-labelledby="delete-event-title">
+    <form method="post" id="delete-form">{% csrf_token %}<h2 id="delete-event-title">Delete match event?</h2><p>This permanently removes <strong id="delete-name"></strong>, its bracket, and schedule.</p><div><button type="button" class="match-secondary" data-cancel-delete>Cancel</button><button class="match-danger" type="submit">Delete</button></div></form>
+  </dialog>
+
+  {{ event_rows_json|json_script:"match-events-data" }}
+  <script>
+    window.MATCH_EVENT_EDIT_ID = "{{ edit_event_id|escapejs }}";
+    window.MATCH_EVENT_PREVIEW_URL = "{% url 'admin_match_event_preview' %}";
+  </script>
+  <script src="{% static 'admindash/matchbasedevent.js' %}?v=20260725"></script>
+</body>
+</html>

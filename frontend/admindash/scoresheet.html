@@ -3,437 +3,347 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Scoresheets - EventTab</title>
-  <link rel="stylesheet" href="{% static 'admindash/scoresheet.css' %}?v=20260616c">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scoresheet Generator · EventTab</title>
+  <link rel="stylesheet" href="{% static 'admindash/scoresheet.css' %}?v=20260725c">
 </head>
-<body class="admin-dashboard-page scoresheet-page admin-dashboard-v2">
+<body class="admin-dashboard-page admin-dashboard-v2 ss-page">
   <div class="dashboard-shell">
     {% include 'admindash/_sidebar.html' with active='scoresheets' %}
-
-    <!-- Content Area -->
     <div class="content-area v2-content">
-      <!-- Topbar -->
-      <header class="topbar">
-        <span class="topbar-spacer" aria-hidden="true"></span>
-        <div class="topbar-actions">
-          <button class="icon-button" type="button" aria-label="Notifications">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm8-6-2-2v-5a6 6 0 1 0-12 0v5l-2 2v1h16v-1Z"></path></svg>
-          </button>
-          <div class="profile-avatar" aria-label="{{ request.user.username }}">
-            {{ request.user.username|default:"AD"|slice:":2"|upper }}
-          </div>
+      <header class="v2-topbar ss-topbar">
+        <div>
+          <nav class="ss-breadcrumb" aria-label="Breadcrumb">
+            <a href="{% url 'admin_dashboard' %}">Home</a>
+            <span>/</span>
+            <strong>Scoresheet Generator</strong>
+          </nav>
+          <h2 class="v2-welcome">Scoresheet Generator</h2>
+          <p class="ss-lead">Design, customize and generate scoresheets for your events.</p>
+        </div>
+        <div class="ss-topbar-actions">
+          <button type="button" class="ss-btn ss-btn-secondary" id="btn-import-template">Import Template</button>
+          <button type="button" class="ss-btn ss-btn-primary" id="btn-create">+ Create Scoresheet</button>
+          <input type="file" id="import-template-file" accept=".json,application/json" hidden>
         </div>
       </header>
 
-      <!-- Main Content -->
-      <main class="main-content scoresheet-main">
-        <section class="scoresheet-header">
-          <div class="scoresheet-header-text">
-            <h2>Scoresheet Approvals</h2>
-            <p class="scoresheet-lead">Monitor, review, and approve tabulator scoring submissions. Once approved, the tournament brackets update automatically.</p>
+      <main class="v2-main ss-main">
+        <div class="ss-tabs" role="tablist">
+          <button type="button" class="ss-tab is-active" data-tab="templates" role="tab" aria-selected="true">My Scoresheet Templates</button>
+          <button type="button" class="ss-tab" data-tab="design" role="tab" aria-selected="false">Design Scoresheet</button>
+          <button type="button" class="ss-tab" data-tab="generated" role="tab" aria-selected="false">Generated Scoresheets</button>
+        </div>
+
+        <!-- TAB: Templates overview -->
+        <section class="ss-panel is-active" data-panel="templates" aria-label="Templates overview">
+          <div class="ss-overview-grid">
+            <article class="ss-card">
+              <header class="ss-card-head"><h3>My Scoresheet Templates</h3></header>
+              <div class="ss-table-wrap">
+                <table class="ss-table" id="templates-table">
+                  <thead>
+                    <tr>
+                      <th>Template Name</th>
+                      <th>Event Type</th>
+                      <th>Sports/Category</th>
+                      <th>Last Updated</th>
+                      <th>Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for t in templates %}
+                    <tr data-id="{{ t.id }}">
+                      <td><strong>{{ t.name }}</strong></td>
+                      <td>{{ t.event_type_label }}</td>
+                      <td>{{ t.category }}</td>
+                      <td>{{ t.updated_at }}</td>
+                      <td><span class="ss-badge ss-badge--{{ t.status }}">{{ t.status_label }}</span></td>
+                      <td>
+                        <div class="ss-row-actions">
+                          <button type="button" class="ss-icon-btn" data-edit-template="{{ t.id }}" title="Edit" aria-label="Edit {{ t.name }}">
+                            <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25ZM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83Z"/></svg>
+                          </button>
+                          <button type="button" class="ss-icon-btn danger" data-delete-template="{{ t.id }}" data-name="{{ t.name }}" title="Delete" aria-label="Delete {{ t.name }}">
+                            <svg viewBox="0 0 24 24"><path d="M6 7h12v2H6V7Zm2 3h8l-1 11H9L8 10Zm3-6h2l1 2H10l1-2Z"/></svg>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="6" class="ss-empty">No templates yet. Select Create Scoresheet to design one.</td></tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+              <footer class="ss-card-foot">
+                <span id="templates-count">Showing 1 to {{ templates|length }} of {{ templates|length }} templates</span>
+                <div class="ss-pager"><button type="button" disabled>‹</button><span>1</span><button type="button" disabled>›</button></div>
+              </footer>
+            </article>
+
+            <article class="ss-card">
+              <header class="ss-card-head"><h3>Generated Scoresheets</h3></header>
+              <div class="ss-table-wrap">
+                <table class="ss-table" id="generated-preview-table">
+                  <thead>
+                    <tr>
+                      <th>Event</th>
+                      <th>Game/Item</th>
+                      <th>Generated By</th>
+                      <th>Date Generated</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for g in generated|slice:":5" %}
+                    <tr>
+                      <td>{{ g.event_label }}</td>
+                      <td>{{ g.item_label }}</td>
+                      <td>{{ g.generated_by }}</td>
+                      <td>{{ g.date_generated }}</td>
+                      <td>
+                        <a class="ss-icon-btn" href="{{ g.download_url }}" title="Download" aria-label="Download">
+                          <svg viewBox="0 0 24 24"><path d="M5 20h14v-2H5v2Zm7-18v12l4-4 1.4 1.4L12 18.8l-5.4-5.4L8 12l4 4V2h0Z"/></svg>
+                        </a>
+                      </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="5" class="ss-empty">No generated scoresheets yet.</td></tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+              <footer class="ss-card-foot">
+                <button type="button" class="ss-link-btn" data-tab-jump="generated">View all generated scoresheets →</button>
+              </footer>
+            </article>
+
+            <article class="ss-card ss-sample-card">
+              <header class="ss-card-head"><h3>Sample PDF Output</h3></header>
+              <div class="ss-sample-preview" aria-hidden="true">
+                <span class="ss-pdf-tag">PDF</span>
+                <div class="ss-sample-sheet">
+                  <strong>UNIVERSITY OF EXCELLENCE<br>INTRAMURALS 2025</strong>
+                  <small>Unity · Sportsmanship · Excellence</small>
+                  <div class="ss-sample-grid">
+                    <span>TEAM A</span><span>VS</span><span>TEAM B</span>
+                  </div>
+                  <div class="ss-sample-lines"></div>
+                </div>
+              </div>
+              <a class="ss-btn ss-btn-primary ss-btn-block" href="{% url 'admin_scoresheet_sample_pdf' %}">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20h14v-2H5v2Zm7-18v12l4-4 1.4 1.4L12 18.8l-5.4-5.4L8 12l4 4V2h0Z"/></svg>
+                Download Sample PDF
+              </a>
+            </article>
           </div>
         </section>
 
-        <!-- Filters & Toolbars -->
-        <section class="scoresheet-panel" aria-label="Scoresheet management panel">
-          <div class="scoresheet-toolbar">
-            <form class="scoresheet-filters" method="get" id="filterForm">
-              <div class="filter-group">
-                <label for="eventSelect">Event</label>
-                <select name="event" id="eventSelect" onchange="this.form.submit()">
-                  <option value="">All Events</option>
-                  {% for ev in events %}
-                    <option value="{{ ev.id }}" {% if selected_event == ev.id|stringformat:"s" %}selected{% endif %}>{{ ev.name }}</option>
-                  {% endfor %}
-                </select>
+        <!-- TAB: Design -->
+        <section class="ss-panel" data-panel="design" aria-label="Design scoresheet">
+          <div class="ss-designer">
+            <aside class="ss-side-left">
+              <h4>Add Components</h4>
+              <div class="ss-palette">
+                <button type="button" draggable="true" data-component="text"><span>Tt</span> Text</button>
+                <button type="button" draggable="true" data-component="line"><span>—</span> Line</button>
+                <button type="button" draggable="true" data-component="rect"><span>□</span> Rectangle</button>
+                <button type="button" draggable="true" data-component="table"><span>▦</span> Table</button>
+                <button type="button" draggable="true" data-component="image"><span>▣</span> Image / Logo</button>
+                <button type="button" draggable="true" data-component="input"><span>[ ]</span> Input Field</button>
+                <button type="button" draggable="true" data-component="signature"><span>✍</span> Signature</button>
               </div>
-
-              <div class="filter-group">
-                <label for="statusSelect">Status</label>
-                <select name="status" id="statusSelect" onchange="this.form.submit()">
-                  <option value="">All Statuses</option>
-                  <option value="pending" {% if selected_status == "pending" %}selected{% endif %}>Pending</option>
-                  <option value="finalized" {% if selected_status == "finalized" %}selected{% endif %}>Finalized</option>
+              <h4>Template Settings</h4>
+              <label class="ss-field">Template Name
+                <input type="text" id="tpl-name" maxlength="200" placeholder="Official Scoresheet">
+              </label>
+              <label class="ss-field">Event Type
+                <select id="tpl-event-type">
+                  <option value="match">Match-Based</option>
+                  <option value="criteria">Criteria-Based</option>
                 </select>
+              </label>
+              <label class="ss-field">Sports / Category
+                <input type="text" id="tpl-category" maxlength="100" placeholder="Basketball">
+              </label>
+              <label class="ss-field">Paper Size
+                <select id="tpl-paper"><option value="a4">A4 (210 x 297 mm)</option></select>
+              </label>
+              <div class="ss-orient">
+                <button type="button" class="is-active" data-orient="portrait">Portrait</button>
+                <button type="button" data-orient="landscape">Landscape</button>
               </div>
+              <button type="button" class="ss-btn ss-btn-secondary ss-btn-block" id="btn-export-template">Export Template</button>
+              <button type="button" class="ss-btn ss-btn-secondary ss-btn-block" id="btn-save-template">Save Template</button>
+            </aside>
 
-              <div class="filter-group search-group">
-                <label for="searchQuery">Search</label>
-                <div class="search-input-wrap">
-                  <input type="search" name="q" id="searchQuery" value="{{ search_query }}" placeholder="Search tabulator, round, judges...">
-                  <button type="submit" class="btn-search">Search</button>
-                  {% if search_query or selected_event or selected_status %}
-                    <a class="scoresheet-clear" href="{% url 'admin_scoresheets' %}">Reset</a>
-                  {% endif %}
+            <div class="ss-canvas-wrap">
+              <div class="ss-ruler-x" id="ruler-x"></div>
+              <div class="ss-ruler-y" id="ruler-y"></div>
+              <div class="ss-canvas-stage" id="canvas-stage">
+                <div class="ss-canvas" id="design-canvas" tabindex="0"></div>
+              </div>
+              <div class="ss-canvas-toolbar">
+                <button type="button" id="btn-undo" title="Undo">Undo</button>
+                <button type="button" id="btn-redo" title="Redo">Redo</button>
+                <button type="button" id="btn-delete-el" title="Delete selected">Delete</button>
+                <button type="button" id="btn-zoom-out" title="Zoom out">-</button>
+                <span id="zoom-label">70%</span>
+                <button type="button" id="btn-zoom-in" title="Zoom in">+</button>
+              </div>
+            </div>
+
+            <aside class="ss-side-right">
+              <div class="ss-props-card">
+                <h4>Properties</h4>
+                <label class="ss-field">Font Family
+                  <select id="prop-font">
+                    <option value="Poppins">Poppins</option>
+                    <option value="Arial">Arial</option>
+                    <option value="Helvetica">Helvetica</option>
+                    <option value="Times New Roman">Times New Roman</option>
+                  </select>
+                </label>
+                <label class="ss-field">Font Size
+                  <select id="prop-size">
+                    <option>10</option><option>11</option><option>12</option><option selected>14</option>
+                    <option>16</option><option>18</option><option>20</option><option>24</option><option>28</option>
+                  </select>
+                </label>
+                <div class="ss-style-row">
+                  <button type="button" id="prop-bold" title="Bold">B</button>
+                  <button type="button" id="prop-italic" title="Italic"><em>I</em></button>
+                  <button type="button" id="prop-underline" title="Underline"><u>U</u></button>
+                  <button type="button" data-align="left" title="Left">≡</button>
+                  <button type="button" data-align="center" title="Center">≡</button>
+                  <button type="button" data-align="right" title="Right">≡</button>
                 </div>
+                <label class="ss-field">Color
+                  <span class="ss-color-row">
+                    <input type="color" id="prop-color" value="#000000">
+                    <input type="text" id="prop-color-hex" value="#000000" maxlength="7">
+                  </span>
+                </label>
+                <label class="ss-field">Text / Content
+                  <textarea id="prop-text" rows="4" placeholder="Enter text or {{Placeholder}}"></textarea>
+                </label>
+                <div id="prop-image-controls" class="ss-image-controls is-hidden">
+                  <label class="ss-field">Image / Logo
+                    <span class="ss-image-actions">
+                      <button type="button" class="ss-btn ss-btn-secondary" id="btn-import-image">Import Image</button>
+                      <button type="button" class="ss-btn ss-btn-secondary" id="btn-clear-image" disabled>Clear Image</button>
+                    </span>
+                    <input type="file" id="prop-image-file" accept="image/png,image/jpeg,image/jpg,image/webp,image/gif" hidden>
+                  </label>
+                  <div class="ss-image-thumb-wrap" id="prop-image-thumb-wrap" hidden>
+                    <img id="prop-image-thumb" alt="Selected logo preview">
+                  </div>
+                </div>
+                <button type="button" class="ss-btn ss-btn-danger ss-btn-block" id="btn-delete-selected" disabled>Delete Element</button>
               </div>
-            </form>
+              <div class="ss-preview-card">
+                <h4>Preview</h4>
+                <div class="ss-live-preview" id="live-preview"></div>
+                <button type="button" class="ss-btn ss-btn-secondary ss-btn-block" id="btn-preview-full">Preview Full Size</button>
+                <button type="button" class="ss-btn ss-btn-primary ss-btn-block" id="btn-generate-pdf">Generate PDF</button>
+              </div>
+            </aside>
           </div>
+        </section>
 
-          <!-- Table Content -->
-          <div class="table-wrap">
-            <table class="scoresheet-table" id="scoresheetTable">
-              <thead>
-                <tr>
-                  <th>Game #</th>
-                  <th>Event & Round</th>
-                  <th>Participants</th>
-                  <th>Scores</th>
-                  <th>Judges</th>
-                  <th>Status</th>
-                  <th>Remarks</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for sheet in scoresheets %}
+        <!-- TAB: Generated full list -->
+        <section class="ss-panel" data-panel="generated" aria-label="Generated scoresheets">
+          <article class="ss-card">
+            <header class="ss-card-head"><h3>Generated Scoresheets</h3></header>
+            <div class="ss-table-wrap">
+              <table class="ss-table" id="generated-full-table">
+                <thead>
                   <tr>
-                    <td><strong>Match {{ sheet.match.match_number }}</strong></td>
+                    <th>Event</th>
+                    <th>Game/Item</th>
+                    <th>Generated By</th>
+                    <th>Date Generated</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for g in generated %}
+                  <tr>
+                    <td>{{ g.event_label }}</td>
+                    <td>{{ g.item_label }}</td>
+                    <td>{{ g.generated_by }}</td>
+                    <td>{{ g.date_generated }}</td>
                     <td>
-                      <div class="event-round-cell">
-                        <strong>{{ sheet.event.name }}</strong>
-                        <small>{{ sheet.match.round_name }}</small>
-                      </div>
-                    </td>
-                    <td>
-                      <div class="participants-cell">
-                        <span class="team-name {% if sheet.winner == sheet.match.team_a %}winner-bold{% endif %}">{{ sheet.match.team_a.name|default:"TBD" }}</span>
-                        <span class="vs">vs</span>
-                        <span class="team-name {% if sheet.winner == sheet.match.team_b %}winner-bold{% endif %}">{{ sheet.match.team_b.name|default:"TBD" }}</span>
-                      </div>
-                    </td>
-                    <td>
-                      <div class="scores-cell">
-                        <span class="score-badge {% if sheet.winner == sheet.match.team_a %}badge-winner{% endif %}">{{ sheet.score_team_a }}</span>
-                        <span class="vs">:</span>
-                        <span class="score-badge {% if sheet.winner == sheet.match.team_b %}badge-winner{% endif %}">{{ sheet.score_team_b }}</span>
-                      </div>
-                    </td>
-                    <td>
-                      <div class="judges-list" title="{{ sheet.judges_names }}">
-                        {{ sheet.judges_names|default:"—" }}
-                      </div>
-                    </td>
-                    <td>
-                      <span class="status-badge {{ sheet.status }}">
-                        {{ sheet.get_status_display }}
-                      </span>
-                    </td>
-                    <td>
-                      <span class="remarks-text" title="{{ sheet.remarks }}">{{ sheet.remarks|default:"—"|truncatechars:40 }}</span>
-                    </td>
-                    <td>
-                      <div class="table-actions">
-                        <button class="btn-view" type="button" aria-label="View Details"
-                                data-id="{{ sheet.id }}"
-                                data-match-num="{{ sheet.match.match_number }}"
-                                data-event="{{ sheet.event.name|escapejs }}"
-                                data-round="{{ sheet.match.round_name|escapejs }}"
-                                data-teama="{{ sheet.match.team_a.name|escapejs }}"
-                                data-teamb="{{ sheet.match.team_b.name|escapejs }}"
-                                data-scorea="{{ sheet.score_team_a }}"
-                                data-scoreb="{{ sheet.score_team_b }}"
-                                data-winner-id="{{ sheet.winner.id }}"
-                                data-winner-name="{{ sheet.winner.name|escapejs }}"
-                                data-tabulator="{{ sheet.tabulator.username|escapejs }}"
-                                data-judges="{{ sheet.judges_names|escapejs }}"
-                                data-remarks="{{ sheet.remarks|escapejs }}"
-                                data-status="{{ sheet.status }}"
-                                data-ocr-url="{% if sheet.ocr_image %}{{ sheet.ocr_image.url }}{% endif %}">
-                          View
-                        </button>
-                        {% if sheet.status == 'pending' %}
-                          <button class="btn-approve" type="button" data-id="{{ sheet.id }}">Approve</button>
-                        {% else %}
-                          <button class="btn-export" type="button" onclick="exportSingleScoresheet({{ sheet.id }})">Export</button>
-                        {% endif %}
-                      </div>
+                      <a class="ss-icon-btn" href="{{ g.download_url }}" title="Download">
+                        <svg viewBox="0 0 24 24"><path d="M5 20h14v-2H5v2Zm7-18v12l4-4 1.4 1.4L12 18.8l-5.4-5.4L8 12l4 4V2h0Z"/></svg>
+                      </a>
                     </td>
                   </tr>
-                {% empty %}
-                  <tr>
-                    <td colspan="8" class="empty-state-cell">
-                      <div class="empty-state">
-                        <p class="empty-state-title">No scoresheets submitted</p>
-                        <p class="empty-state-text">Once tabulators submit scores for bracket matches, they will appear here for your review and approval.</p>
-                      </div>
-                    </td>
-                  </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
+                  {% empty %}
+                  <tr><td colspan="5" class="ss-empty">No generated scoresheets yet.</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </article>
         </section>
       </main>
     </div>
   </div>
 
-  <!-- Scoresheet Details Modal -->
-  <div class="modal-overlay" id="scoresheetModal">
-    <div class="modal-container">
-      <div class="modal-header">
-        <h3 id="modalTitle">Scoresheet Details</h3>
-        <button class="close-modal" id="closeModalBtn" type="button">&times;</button>
+  <dialog id="preview-dialog" class="ss-dialog">
+    <header>
+      <h2>Full size preview</h2>
+      <button type="button" id="close-preview" aria-label="Close">×</button>
+    </header>
+    <div class="ss-dialog-body" id="preview-dialog-body"></div>
+  </dialog>
+
+  <dialog id="generate-dialog" class="ss-dialog ss-dialog-sm">
+    <header>
+      <h2>Generate PDF</h2>
+      <button type="button" data-close-generate aria-label="Close">×</button>
+    </header>
+    <form id="generate-form" class="ss-dialog-body">
+      <label class="ss-field">Event label <input name="event_label" value="Basketball Men"></label>
+      <label class="ss-field">Game / Item <input name="item_label" value="Game 1"></label>
+      <label class="ss-field">Link to event (optional)
+        <select name="event_id">
+          <option value="">— None —</option>
+          {% for ev in events %}<option value="{{ ev.id }}">{{ ev.name }}</option>{% endfor %}
+        </select>
+      </label>
+      <div class="ss-gen-grid">
+        <label class="ss-field">Game Number <input name="GameNumber" value="12"></label>
+        <label class="ss-field">Date <input name="Date" value="May 20, 2025"></label>
+        <label class="ss-field">Venue <input name="Venue" value="Main Gym"></label>
+        <label class="ss-field">Event Name <input name="EventName" value="Basketball Men"></label>
+        <label class="ss-field">Team A <input name="TeamA" value="Engineering Tigers"></label>
+        <label class="ss-field">Team B <input name="TeamB" value="Science Hawks"></label>
+        <label class="ss-field">Score A <input name="ScoreA" value="78"></label>
+        <label class="ss-field">Score B <input name="ScoreB" value="72"></label>
+        <label class="ss-field">Winner <input name="Winner" value="Engineering Tigers"></label>
       </div>
-      <div class="modal-body">
-        <div class="modal-grid">
-          <!-- Left: Details -->
-          <div class="modal-details-col">
-            <h4 class="section-title">Match Information</h4>
-            <div class="details-list">
-              <div class="details-item">
-                <span class="details-label">Event:</span>
-                <span class="details-value" id="detailEvent"></span>
-              </div>
-              <div class="details-item">
-                <span class="details-label">Round:</span>
-                <span class="details-value" id="detailRound"></span>
-              </div>
-              <div class="details-item">
-                <span class="details-label">Tabulator:</span>
-                <span class="details-value" id="detailTabulator"></span>
-              </div>
-              <div class="details-item">
-                <span class="details-label">Judges:</span>
-                <span class="details-value" id="detailJudges"></span>
-              </div>
-            </div>
-
-            <h4 class="section-title" style="margin-top: 24px;">Official Scores</h4>
-            <div class="scores-card-preview">
-              <div class="team-score-block">
-                <strong id="detailTeamA">Team A</strong>
-                <span class="score-display" id="detailScoreA">0.0</span>
-              </div>
-              <div class="vs-divider">vs</div>
-              <div class="team-score-block">
-                <strong id="detailTeamB">Team B</strong>
-                <span class="score-display" id="detailScoreB">0.0</span>
-              </div>
-            </div>
-            
-            <div class="winner-announcement">
-              <span>Declared Winner:</span>
-              <strong id="detailWinner">Winner Team</strong>
-            </div>
-
-            <div class="remarks-box-preview" style="margin-top: 16px;">
-              <label>Tabulator Remarks</label>
-              <p id="detailRemarks">No remarks added.</p>
-            </div>
-
-            <!-- Discrepancy Form (Only if pending) -->
-            <div class="discrepancy-form-box" id="discrepancyFormBox">
-              <hr style="border: 0; border-top: 1px solid #2d3748; margin: 20px 0;">
-              <label for="discrepancyRemarks">Remarks / Discrepancy Notes</label>
-              <textarea id="discrepancyRemarks" rows="2" placeholder="Specify if there are errors in scores or missing entries..."></textarea>
-            </div>
-          </div>
-
-          <!-- Right: Scanned Scoresheet / OCR -->
-          <div class="modal-ocr-col">
-            <h4 class="section-title">Scanned Copy / Audit Image</h4>
-            <div class="ocr-image-container" id="ocrContainer">
-              <!-- Placeholder or real image -->
-              <div class="ocr-placeholder" id="ocrPlaceholder">
-                <svg viewBox="0 0 24 24" class="ocr-icon"><path d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM19 18H6c-2.21 0-4-1.79-4-4 0-2.05 1.53-3.76 3.56-3.97l1.07-.11.5-.95A5.469 5.469 0 0 1 12 6c2.62 0 4.88 1.86 5.39 4.43l.3 1.5 1.53.11c1.56.1 2.78 1.41 2.78 2.96 0 1.65-1.35 3-3 3z"></path></svg>
-                <span>No Paper Scoresheet Scanned</span>
-                <small>Digital verification only</small>
-              </div>
-              <img src="" alt="OCR Scanned scoresheet" class="ocr-real-image" id="ocrRealImage" style="display: none;">
-            </div>
-          </div>
-        </div>
+      <div class="ss-dialog-actions">
+        <button type="button" class="ss-btn ss-btn-secondary" data-close-generate>Cancel</button>
+        <button type="submit" class="ss-btn ss-btn-primary">Generate PDF</button>
       </div>
-      <div class="modal-footer">
-        <button class="btn-cancel" id="cancelModalBtn" type="button">Close</button>
-        <div class="modal-action-buttons" id="modalActionsGroup">
-          <button class="btn-discrepancy" id="modalDiscrepancyBtn" type="button">Discrepancy Found</button>
-          <button class="btn-approve-large" id="modalApproveBtn" type="button">Approve scoresheet</button>
-        </div>
-      </div>
-    </div>
-  </div>
+    </form>
+  </dialog>
 
-  <!-- CSRF Helper -->
-  {% csrf_token %}
-
+  {{ templates_json|json_script:"ss-templates-data" }}
+  {{ generated_json|json_script:"ss-generated-data" }}
   <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      const modal = document.getElementById('scoresheetModal');
-      const closeBtn = document.getElementById('closeModalBtn');
-      const cancelBtn = document.getElementById('cancelModalBtn');
-      
-      const detailEvent = document.getElementById('detailEvent');
-      const detailRound = document.getElementById('detailRound');
-      const detailTabulator = document.getElementById('detailTabulator');
-      const detailJudges = document.getElementById('detailJudges');
-      const detailTeamA = document.getElementById('detailTeamA');
-      const detailTeamB = document.getElementById('detailTeamB');
-      const detailScoreA = document.getElementById('detailScoreA');
-      const detailScoreB = document.getElementById('detailScoreB');
-      const detailWinner = document.getElementById('detailWinner');
-      const detailRemarks = document.getElementById('detailRemarks');
-      const discrepancyRemarks = document.getElementById('discrepancyRemarks');
-      const discrepancyFormBox = document.getElementById('discrepancyFormBox');
-      const ocrPlaceholder = document.getElementById('ocrPlaceholder');
-      const ocrRealImage = document.getElementById('ocrRealImage');
-      const modalActionsGroup = document.getElementById('modalActionsGroup');
-      
-      let currentScoresheetId = null;
-
-      // Toast notification helper
-      const showToast = (message, type = 'success') => {
-        const toast = document.createElement('div');
-        toast.className = `toast-message ${type}`;
-        toast.textContent = message;
-        document.body.appendChild(toast);
-        setTimeout(() => toast.remove(), 4000);
-      };
-
-      const toggleModal = (show) => {
-        modal.classList.toggle('active', show);
-        document.body.style.overflow = show ? 'hidden' : '';
-      };
-
-      // Close modal events
-      closeBtn.addEventListener('click', () => toggleModal(false));
-      cancelBtn.addEventListener('click', () => toggleModal(false));
-      modal.addEventListener('click', (e) => {
-        if (e.target === modal) toggleModal(false);
-      });
-
-      // View Button Click
-      document.querySelectorAll('.btn-view').forEach(btn => {
-        btn.addEventListener('click', function() {
-          currentScoresheetId = this.getAttribute('data-id');
-          const matchNum = this.getAttribute('data-match-num');
-          
-          document.getElementById('modalTitle').textContent = `Scoresheet: Match ${matchNum} Details`;
-          detailEvent.textContent = this.getAttribute('data-event');
-          detailRound.textContent = this.getAttribute('data-round');
-          detailTabulator.textContent = this.getAttribute('data-tabulator');
-          detailJudges.textContent = this.getAttribute('data-judges') || 'Not recorded';
-          
-          detailTeamA.textContent = this.getAttribute('data-teama') || 'Team A';
-          detailTeamB.textContent = this.getAttribute('data-teamb') || 'Team B';
-          detailScoreA.textContent = this.getAttribute('data-scorea');
-          detailScoreB.textContent = this.getAttribute('data-scoreb');
-          detailWinner.textContent = this.getAttribute('data-winner-name') || 'TBD';
-          detailRemarks.textContent = this.getAttribute('data-remarks') || 'No remarks provided.';
-          
-          const status = this.getAttribute('data-status');
-          const ocrUrl = this.getAttribute('data-ocr-url');
-
-          // Reset discrepancy remarks input
-          discrepancyRemarks.value = '';
-
-          // Show/Hide OCR Image
-          if (ocrUrl) {
-            ocrRealImage.src = ocrUrl;
-            ocrRealImage.style.display = 'block';
-            ocrPlaceholder.style.display = 'none';
-          } else {
-            ocrRealImage.style.display = 'none';
-            ocrPlaceholder.style.display = 'flex';
-          }
-
-          // Show actions & forms if pending
-          if (status === 'pending') {
-            modalActionsGroup.style.display = 'flex';
-            discrepancyFormBox.style.display = 'block';
-          } else {
-            modalActionsGroup.style.display = 'none';
-            discrepancyFormBox.style.display = 'none';
-          }
-
-          toggleModal(true);
-        });
-      });
-
-      // Approve inside Modal
-      document.getElementById('modalApproveBtn').addEventListener('click', async () => {
-        if (!currentScoresheetId) return;
-        await approveScoresheet(currentScoresheetId);
-        toggleModal(false);
-      });
-
-      // Discrepancy inside Modal
-      document.getElementById('modalDiscrepancyBtn').addEventListener('click', async () => {
-        if (!currentScoresheetId) return;
-        const notes = discrepancyRemarks.value.trim();
-        if (!notes) {
-          showToast('Please provide comments describing the discrepancy.', 'error');
-          discrepancyRemarks.focus();
-          return;
-        }
-        await markDiscrepancy(currentScoresheetId, notes);
-        toggleModal(false);
-      });
-
-      // Quick Approve Table Actions
-      document.querySelectorAll('.btn-approve').forEach(btn => {
-        btn.addEventListener('click', async function(e) {
-          e.stopPropagation();
-          const id = this.getAttribute('data-id');
-          await approveScoresheet(id);
-        });
-      });
-
-      // Async Actions
-      async function approveScoresheet(id) {
-        try {
-          const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
-          const response = await fetch(`/admin/scoresheets/${id}/approve/`, {
-            method: 'POST',
-            headers: {
-              'X-CSRFToken': csrfToken,
-              'Content-Type': 'application/json'
-            }
-          });
-          const result = await response.json();
-          if (result.success) {
-            showToast(result.message, 'success');
-            setTimeout(() => location.reload(), 1500);
-          } else {
-            showToast('Error: ' + result.message, 'error');
-          }
-        } catch (error) {
-          showToast('Failed to approve scoresheet: ' + error.message, 'error');
-        }
-      }
-
-      async function markDiscrepancy(id, remarks) {
-        try {
-          const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
-          const formData = new FormData();
-          formData.append('remarks', remarks);
-
-          const response = await fetch(`/admin/scoresheets/${id}/discrepancy/`, {
-            method: 'POST',
-            headers: {
-              'X-CSRFToken': csrfToken
-            },
-            body: formData
-          });
-          const result = await response.json();
-          if (result.success) {
-            showToast(result.message, 'success');
-            setTimeout(() => location.reload(), 1500);
-          } else {
-            showToast('Error: ' + result.message, 'error');
-          }
-        } catch (error) {
-          showToast('Failed to submit revision: ' + error.message, 'error');
-        }
-      }
-    });
-
-    // Mock Export Scoresheet as PDF
-    function exportSingleScoresheet(id) {
-      window.print();
-    }
+    window.SS_CSRF = "{{ csrf_token }}";
+    window.SS_URLS = {
+      save: "{% url 'admin_scoresheet_template_save' %}",
+      generate: "{% url 'admin_scoresheet_generate' %}",
+      sample: "{% url 'admin_scoresheet_sample_pdf' %}",
+      deleteBase: "/admin/scoresheets/templates/"
+    };
   </script>
+  <script src="{% static 'admindash/scoresheet.js' %}?v=20260725c"></script>
 </body>
 </html>

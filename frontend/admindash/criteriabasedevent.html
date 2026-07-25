@@ -1,0 +1,391 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Criteria-Based Events · EventTab</title>
+  <link rel="stylesheet" href="{% static 'admindash/criteriabasedevent.css' %}?v=20260725f">
+</head>
+<body class="admin-dashboard-page admin-dashboard-v2 criteria-page match-events-page">
+  <div class="dashboard-shell">
+    {% include 'admindash/_sidebar.html' with active='events_criteria' %}
+    <div class="content-area v2-content">
+      <header class="v2-topbar match-topbar">
+        <div>
+          <a class="match-breadcrumb" href="{% url 'admin_criteria_events' %}">Events / <strong>Criteria-Based</strong></a>
+          <h2 class="v2-welcome">Judging operations</h2>
+        </div>
+      </header>
+      <main class="v2-main match-main">
+        {% if messages %}
+        <div class="match-messages" aria-live="polite">
+          {% for message in messages %}<p class="match-message match-message--{{ message.tags }}">{{ message }}</p>{% endfor %}
+        </div>
+        {% endif %}
+
+        <section class="match-page-head">
+          <div>
+            <span class="match-kicker">CRITERIA CONTROL</span>
+            <h1>Criteria-Based Events</h1>
+            <p>Configure participants, judging criteria, score settings, and championship points.</p>
+          </div>
+          <button class="match-primary" type="button" id="open-wizard">+ Create Event</button>
+        </section>
+
+        <section class="match-stats" aria-label="Event status overview">
+          <div><span>All events</span><strong>{{ total_count }}</strong></div>
+          <div><span>Published</span><strong>{{ published_count }}</strong></div>
+          <div><span>Drafts</span><strong>{{ draft_count }}</strong></div>
+        </section>
+
+        <section class="match-table-card">
+          <form class="match-toolbar" method="get">
+            <label class="match-search"><span class="sr-only">Search events</span>
+              <input name="q" type="search" value="{{ search_query }}" placeholder="Search event, category, division, or venue">
+            </label>
+            <label><span class="sr-only">Filter status</span>
+              <select name="status">
+                <option value="all">All statuses</option>
+                <option value="published" {% if status_filter == 'published' %}selected{% endif %}>Published</option>
+                <option value="draft" {% if status_filter == 'draft' %}selected{% endif %}>Draft</option>
+              </select>
+            </label>
+            <label><span class="sr-only">Filter category</span>
+              <select name="category">
+                <option value="all">All categories</option>
+                <option value="SOCIO-CULTURAL & LITERARY ARTS COMPETITION" {% if category_filter == 'SOCIO-CULTURAL & LITERARY ARTS COMPETITION' %}selected{% endif %}>Socio-Cultural & Literary Arts</option>
+                <option value="Special Event" {% if category_filter == 'Special Event' %}selected{% endif %}>Special Event</option>
+              </select>
+            </label>
+            <label><span class="sr-only">Sort</span>
+              <select name="sort">
+                <option value="-updated_at" {% if sort == '-updated_at' %}selected{% endif %}>Newest updated</option>
+                <option value="name" {% if sort == 'name' %}selected{% endif %}>Name A–Z</option>
+                <option value="-name" {% if sort == '-name' %}selected{% endif %}>Name Z–A</option>
+                <option value="event_date" {% if sort == 'event_date' %}selected{% endif %}>Date ascending</option>
+                <option value="-event_date" {% if sort == '-event_date' %}selected{% endif %}>Date descending</option>
+              </select>
+            </label>
+            <button type="submit" class="match-secondary">Apply</button>
+          </form>
+          <div class="match-table-wrap">
+            <table class="match-table">
+              <thead>
+                <tr>
+                  <th>Event Name</th>
+                  <th>Category</th>
+                  <th>Event Classification</th>
+                  <th>Division</th>
+                  <th>Scoring Method</th>
+                  <th>Event Date</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for event in event_rows %}
+                <tr>
+                  <td><strong>{{ event.name }}</strong><small>{{ event.venue }}</small></td>
+                  <td>{{ event.category }}</td>
+                  <td>{{ event.classification_label }}</td>
+                  <td>{{ event.division }}</td>
+                  <td>{{ event.criteria_score_method_label }}</td>
+                  <td>{{ event.start_date }}{% if event.end_date != event.start_date %}<small>to {{ event.end_date }}</small>{% endif %}</td>
+                  <td><span class="match-status match-status--{{ event.publication_status }}">{{ event.publication_label }}</span></td>
+                  <td>
+                    <div class="match-actions">
+                      <button type="button" data-view="{{ event.id }}" title="View event" aria-label="View {{ event.name }}">View</button>
+                      <button type="button" data-edit="{{ event.id }}" title="Edit event" aria-label="Edit {{ event.name }}">Edit</button>
+                      <button type="button" data-delete="{{ event.id }}" data-name="{{ event.name }}" data-finalized="{{ event.results_finalized|yesno:'1,0' }}" class="danger" title="Delete event" aria-label="Delete {{ event.name }}">Delete</button>
+                    </div>
+                  </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="8" class="match-empty"><strong>No criteria events found</strong><span>Select <strong>Create Event</strong> above to add your first draft.</span></td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% if page_obj %}
+          <div class="criteria-pagination">
+            <span>Showing {{ page_obj.start_index }}–{{ page_obj.end_index }} of {{ page_obj.paginator.count }}</span>
+            <div>
+              {% if page_obj.has_previous %}
+              <a href="?q={{ search_query|urlencode }}&status={{ status_filter }}&category={{ category_filter|urlencode }}&sort={{ sort }}&page={{ page_obj.previous_page_number }}">Previous</a>
+              {% else %}<span class="disabled">Previous</span>{% endif %}
+              {% if page_obj.has_next %}
+              <a href="?q={{ search_query|urlencode }}&status={{ status_filter }}&category={{ category_filter|urlencode }}&sort={{ sort }}&page={{ page_obj.next_page_number }}">Next</a>
+              {% else %}<span class="disabled">Next</span>{% endif %}
+            </div>
+          </div>
+          {% endif %}
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <dialog id="event-wizard" class="wizard" aria-labelledby="wizard-title">
+    <form method="post" id="wizard-form" action="{% url 'admin_criteria_events' %}" novalidate>
+      {% csrf_token %}
+      <input type="hidden" name="participant_ids" id="participant-ids" value="[]">
+      <input type="hidden" name="rounds_config" id="rounds-config" value="[]">
+      <input type="hidden" name="judging_criteria_config" id="criteria-config" value="[]">
+      <input type="hidden" name="score_settings" id="score-settings" value="{}">
+      <input type="hidden" name="deductions_config" id="deductions-config" value="[]">
+      <input type="hidden" name="result_processing_config" id="result-processing-config" value="{}">
+      <input type="hidden" name="judge_settings" id="judge-settings" value="{}">
+      <input type="hidden" name="tie_break_rules" id="tie-break-rules" value="[]">
+      <input type="hidden" name="judge_ids" id="judge-ids" value="[]">
+      <input type="hidden" name="points_config" id="points-config" value="[]">
+      <input type="hidden" name="publication_status" id="publication-status" value="draft">
+      <header class="wizard-head">
+        <div><span class="wizard-kicker">JUDGING BLUEPRINT</span><h2 id="wizard-title">Create criteria event</h2></div>
+        <button type="button" id="close-wizard" class="wizard-close" aria-label="Close wizard">×</button>
+      </header>
+      <ol class="wizard-steps" aria-label="Creation progress">
+        <li class="active" data-step-marker="1"><span>1</span><small>Basics</small></li>
+        <li data-step-marker="2"><span>2</span><small>Participants</small></li>
+        <li data-step-marker="3"><span>3</span><small>Criteria</small></li>
+        <li data-step-marker="4"><span>4</span><small>Judges</small></li>
+        <li data-step-marker="5"><span>5</span><small>Review</small></li>
+      </ol>
+      <div class="wizard-body">
+        <section class="wizard-panel active" data-step="1">
+          <div class="wizard-section-title"><span>01</span><div><h3>Basic information</h3><p>Define the event identity, classification, and schedule.</p></div></div>
+          <div class="wizard-grid">
+            <label class="wide">Event Name <input name="event_name" required maxlength="200"></label>
+            <label>Category
+              <select name="category" required>
+                <option value="">Select category</option>
+                <option value="SOCIO-CULTURAL & LITERARY ARTS COMPETITION">SOCIO-CULTURAL & LITERARY ARTS COMPETITION</option>
+                <option value="Special Event">Special Event</option>
+              </select>
+            </label>
+            <label>Event Classification
+              <select name="event_classification" required id="event-classification">
+                <option value="">Select classification</option>
+                <option value="major">Major Event</option>
+                <option value="minor">Minor Event</option>
+              </select>
+            </label>
+            <label>Participation Type
+              <select name="participation_type" id="participation-type" required>
+                <option value="team">Team</option>
+                <option value="individual">Individual</option>
+              </select>
+            </label>
+            <label>Division
+              <select name="division">
+                <option value="">Open / Not specified</option>
+                <option>Men</option><option>Women</option><option>Mixed</option><option>Open</option>
+              </select>
+            </label>
+            <label>Venue <input name="venue" required maxlength="200"></label>
+            <label>Start Date <input name="start_date" type="date" required></label>
+            <label>End Date <input name="end_date" type="date" required></label>
+            <label>Status
+              <select id="status-preview"><option value="draft">Draft</option><option value="published">Published</option></select>
+              <small class="field-hint">Final Save as Draft / Publish can still override this choice.</small>
+            </label>
+          </div>
+        </section>
+
+        <section class="wizard-panel" data-step="2">
+          <div class="wizard-section-title"><span>02</span><div><h3>Participants & event format</h3><p>Select competitors and configure performance rounds.</p></div></div>
+          <fieldset class="team-picker" id="team-picker">
+            <legend><span id="participant-legend-label">Participating Teams</span> <span id="selected-participant-count" class="selected-count">0 selected</span></legend>
+            <input type="search" id="participant-search" placeholder="Search participants">
+            <div class="team-options" id="team-options">
+              {% for team in teams %}
+              <label data-kind="team" data-search="{{ team.name|lower }} {{ team.code|lower }}">
+                <input type="checkbox" class="participant-check" value="{{ team.id }}" data-name="{{ team.name }}">
+                <span><strong>{{ team.name }}</strong><small>{{ team.code }}{% if team.department %} · {{ team.department.name }}{% endif %}</small></span>
+              </label>
+              {% empty %}<p data-kind="team">No active teams available.</p>{% endfor %}
+            </div>
+            <div class="team-options criteria-hidden" id="candidate-options">
+              {% for cand in candidates %}
+              <label data-kind="individual" data-search="{{ cand.name|lower }} {{ cand.number|lower }}">
+                <input type="checkbox" class="participant-check" value="{{ cand.id }}" data-name="#{{ cand.number }} {{ cand.name }}">
+                <span><strong>#{{ cand.number }} {{ cand.name }}</strong><small>{% if cand.department %}{{ cand.department.name }}{% else %}Candidate{% endif %}</small></span>
+              </label>
+              {% empty %}<p data-kind="individual">No active candidates available.</p>{% endfor %}
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>Event Format</legend>
+            <div class="format-cards">
+              <label><input type="radio" name="event_format" value="single_performance" checked><span><strong>Single Performance</strong><small>Each participant performs once; final score uses that performance.</small></span></label>
+              <label><input type="radio" name="event_format" value="multiple_rounds"><span><strong>Multiple Rounds</strong><small>Configure round names, weights, and qualifiers totaling 100%.</small></span></label>
+              <label><input type="radio" name="event_format" value="preliminary_final"><span><strong>Preliminary and Final Round</strong><small>Set prelim/finalist counts and percentage split.</small></span></label>
+            </div>
+          </fieldset>
+          <div id="multiple-rounds-panel" class="criteria-hidden">
+            <div class="wizard-grid">
+              <label>Number of Rounds <input type="number" id="round-count" min="2" max="10" value="2"></label>
+            </div>
+            <table class="criteria-editor-table" id="rounds-table">
+              <thead><tr><th>Round Name</th><th>Weight (%)</th><th>Qualifiers to Next</th></tr></thead>
+              <tbody></tbody>
+            </table>
+            <p class="criteria-weight-meter" id="rounds-weight-meter">Round total: 0%</p>
+          </div>
+          <div id="prelim-final-panel" class="criteria-hidden wizard-grid">
+            <label>Number of Preliminary Participants <input type="number" id="prelim-participants" min="2" value="8"></label>
+            <label>Number of Finalists <input type="number" id="finalists" min="1" value="4"></label>
+            <label>Carry Preliminary Scores
+              <select id="carry-prelim"><option value="yes">Yes</option><option value="no">No</option></select>
+            </label>
+            <label>Preliminary Round Percentage <input type="number" id="prelim-percentage" min="0" max="100" value="40"></label>
+            <label>Final Round Percentage <input type="number" id="final-percentage" min="0" max="100" value="60"></label>
+            <p class="criteria-weight-meter" id="prelim-weight-meter">Prelim + Final total: 100%</p>
+          </div>
+        </section>
+
+        <section class="wizard-panel" data-step="3">
+          <div class="wizard-section-title"><span>03</span><div><h3>Criteria & scoring setup</h3><p>Build the rubric and score controls used by judges.</p></div></div>
+          <fieldset>
+            <legend>Criteria Setup</legend>
+            <div class="criteria-editor-actions">
+              <button type="button" id="add-criterion">+ Add Criterion</button>
+            </div>
+            <table class="criteria-editor-table" id="criteria-table">
+              <thead><tr><th>Criteria Name</th><th>Description</th><th>Weight (%)</th><th>Maximum Score</th><th>Actions</th></tr></thead>
+              <tbody></tbody>
+            </table>
+            <p class="criteria-weight-meter" id="criteria-weight-meter">Criteria total: 0%</p>
+          </fieldset>
+          <fieldset>
+            <legend>Scoring Method</legend>
+            <div class="format-cards">
+              <label><input type="radio" name="criteria_score_method" value="weighted_percentage" checked><span><strong>Weighted Percentage</strong><small>Score from weighted criterion values.</small></span></label>
+              <label><input type="radio" name="criteria_score_method" value="raw_score"><span><strong>Raw Score</strong><small>Sum all criterion scores.</small></span></label>
+              <label><input type="radio" name="criteria_score_method" value="average_score"><span><strong>Average Score</strong><small>Average all judges’ scores.</small></span></label>
+              <label><input type="radio" name="criteria_score_method" value="ranking_based"><span><strong>Ranking-Based Score</strong><small>Use placements instead of numeric totals.</small></span></label>
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>Score Settings</legend>
+            <div class="wizard-grid">
+              <label>Minimum Score <input type="number" id="min-score" value="0" step="0.1"></label>
+              <label>Maximum Score <input type="number" id="max-score" value="100" step="0.1"></label>
+              <label>Decimal Places
+                <select id="decimal-places"><option value="0">0</option><option value="1">1</option><option value="2" selected>2</option></select>
+              </label>
+            </div>
+            <div class="toggle-list">
+              <label><span><strong>Allow Decimal Scores</strong></span><input type="checkbox" id="allow-decimal" checked></label>
+              <label><span><strong>Show Criteria Description to Judges</strong></span><input type="checkbox" id="show-criteria-description" checked></label>
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>Deductions and Penalties</legend>
+            <label class="inline-check"><input type="checkbox" id="deductions-enabled" name="deductions_enabled"> Enable Deductions and Penalties</label>
+            <div id="deductions-panel" class="criteria-hidden">
+              <div class="criteria-editor-actions"><button type="button" id="add-deduction">+ Add Penalty</button></div>
+              <table class="criteria-editor-table" id="deductions-table">
+                <thead><tr><th>Penalty Name</th><th>Description</th><th>Type</th><th>Value</th><th>Actions</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </fieldset>
+        </section>
+
+        <section class="wizard-panel" data-step="4">
+          <div class="wizard-section-title"><span>04</span><div><h3>Judges, results & points</h3><p>Assign officials and finalize processing rules.</p></div></div>
+          <label class="field-block">Chief Judge
+            <select name="chief_judge" id="chief-judge" required>
+              <option value="">Select chief judge</option>
+              {% for user in judge_options %}<option value="{{ user.id }}">{{ user.get_full_name|default:user.username }}</option>{% endfor %}
+            </select>
+          </label>
+          <fieldset class="team-picker">
+            <legend>Judges <span id="selected-judge-count" class="selected-count">0 selected</span></legend>
+            <div class="team-options" id="judge-options">
+              {% for user in judge_options %}
+              <label>
+                <input type="checkbox" class="judge-check" value="{{ user.id }}" data-name="{{ user.get_full_name|default:user.username }}">
+                <span><strong>{{ user.get_full_name|default:user.username }}</strong><small>{{ user.username }}</small></span>
+              </label>
+              {% empty %}<p>No authorized judges available.</p>{% endfor %}
+            </div>
+          </fieldset>
+          <label class="field-block">Faculty In Charge
+            <select name="faculty_account" required>
+              <option value="">Select faculty account</option>
+              {% for user in faculty_options %}<option value="{{ user.id }}">{{ user.get_full_name|default:user.username }} · {{ user.username }}</option>{% endfor %}
+            </select>
+          </label>
+          <fieldset>
+            <legend>Result Processing</legend>
+            <div class="toggle-list" id="result-processing-list">
+              <label><span><strong>Automatically Calculate Final Scores</strong></span><input type="checkbox" data-rp="auto_calculate_final" checked></label>
+              <label><span><strong>Automatically Generate Rankings</strong></span><input type="checkbox" data-rp="auto_generate_rankings" checked></label>
+              <label><span><strong>Allow Result Editing Before Finalization</strong></span><input type="checkbox" data-rp="allow_result_editing" checked></label>
+              <label><span><strong>Require Faculty Confirmation</strong></span><input type="checkbox" data-rp="require_faculty_confirmation"></label>
+              <label><span><strong>Display Score Breakdown</strong></span><input type="checkbox" data-rp="display_score_breakdown" checked></label>
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>Judge Settings</legend>
+            <div class="toggle-list">
+              <label><span><strong>Require All Judges to Submit Scores</strong></span><input type="checkbox" data-js="require_all_judges" checked></label>
+              <label><span><strong>Allow Judges to Edit Scores Before Submission</strong></span><input type="checkbox" data-js="allow_edit_before_submit" checked></label>
+              <label><span><strong>Remove Highest and Lowest Judge Scores</strong><small>Only when three or more judges are assigned.</small></span><input type="checkbox" data-js="remove_high_low" id="remove-high-low"></label>
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>Tie-Breaking Rules</legend>
+            <div class="tie-break-list" id="tie-break-list"></div>
+          </fieldset>
+          <fieldset id="points-fieldset">
+            <legend>Championship Points</legend>
+            <label class="inline-check"><input type="checkbox" name="apply_championship_points" checked> Apply Championship Points Automatically</label>
+            <div class="criteria-editor-actions">
+              <button type="button" id="add-points-row">+ Add Rank</button>
+            </div>
+            <div class="points-editor" id="points-editor"></div>
+          </fieldset>
+        </section>
+
+        <section class="wizard-panel" data-step="5">
+          <div class="wizard-section-title"><span>05</span><div><h3>Review & publish</h3><p>Confirm the full configuration before saving.</p></div></div>
+          <div id="review-summary" class="review-summary"></div>
+        </section>
+      </div>
+      <footer class="wizard-footer">
+        <button type="button" class="match-secondary" id="wizard-back">Back</button>
+        <span class="wizard-error" id="wizard-error" role="alert"></span>
+        <button type="button" class="match-primary" id="wizard-next">Next</button>
+        <button type="submit" id="save-draft-action" class="match-secondary final-action" data-status="draft">Save as Draft</button>
+        <button type="submit" id="publish-action" class="match-primary final-action" data-status="published">Publish</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <dialog id="view-event" class="summary-dialog">
+    <header><h2>Event summary</h2><button type="button" data-close-view aria-label="Close">×</button></header>
+    <div id="view-summary" class="review-summary"></div>
+  </dialog>
+  <dialog id="delete-event" class="confirm-dialog" aria-labelledby="delete-event-title">
+    <form method="post" id="delete-form">
+      {% csrf_token %}
+      <h2 id="delete-event-title">Delete criteria event?</h2>
+      <p>This permanently removes <strong id="delete-name"></strong> and its judging setup.</p>
+      <div>
+        <button type="button" class="match-secondary" data-cancel-delete>Cancel</button>
+        <button class="match-danger" type="submit">Delete</button>
+      </div>
+    </form>
+  </dialog>
+
+  {{ event_rows_json|json_script:"criteria-events-data" }}
+  <script>
+    window.CRITERIA_EVENT_EDIT_ID = "{{ edit_event_id|escapejs }}";
+    window.CRITERIA_OPEN_CREATE = {{ open_create|yesno:"true,false" }};
+    window.CRITERIA_IS_SUPERUSER = {{ request.user.is_superuser|yesno:"true,false" }};
+  </script>
+  <script src="{% static 'admindash/criteriabasedevent.js' %}?v=20260725f"></script>
+</body>
+</html>

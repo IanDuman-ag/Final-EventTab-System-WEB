@@ -25,6 +25,7 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
+  initNavGroup('events-nav-toggle', 'events-nav-group', 'eventtab_events_nav_open');
   initNavGroup('accounts-nav-toggle', 'accounts-nav-group', 'eventtab_accounts_nav_open');
   initNavGroup('participants-nav-toggle', 'participants-nav-group', 'eventtab_participants_nav_open');
 });
