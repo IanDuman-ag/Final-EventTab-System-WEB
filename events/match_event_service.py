@@ -117,7 +117,12 @@ def _validated_faculty(data, user_model):
 
 def models_q_for_faculty():
     from django.db.models import Q
-    return Q(is_staff=True) | Q(groups__name__iexact='Faculty') | Q(groups__name__iexact='Scorer')
+    return (
+        Q(is_staff=True)
+        | Q(groups__name__iexact='Faculty')
+        | Q(groups__name__iexact='Scorer')
+        | Q(groups__name__iexact='Tabulator')
+    )
 
 
 def build_match_blueprint(team_ids, tournament_type, include_third_place=False, draw_order=None):

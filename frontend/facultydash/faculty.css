@@ -1,12 +1,12 @@
 /* ─────────────────────────────────────────────────────────────
-   EventTab Tabulator Portal — v2 shared styles
+   EventTab Faculty In-Charge Portal — shared styles
    ───────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-body.tab-v2 {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  background: #f8fafc;
-  color: #1e293b;
+body.tab-v2, body.fac-v2 {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: #edf3f8;
+  color: #08264d;
   min-height: 100vh;
 }
 

@@ -896,13 +896,13 @@ def _detect_user_role(user):
 _ROLE_REDIRECTS = {
     'super-admin': 'superadmin_dashboard',
     'admin': 'admin_dashboard',
-    'tabulator': 'tabulator_dashboard',
+    'tabulator': 'faculty_dashboard',
 }
 
 _ROLE_LABELS = {
     'super-admin': 'Super Admin',
     'admin': 'Admin',
-    'tabulator': 'Tabulator',
+    'tabulator': 'Faculty',
     'judge': 'Judge',
 }
 
@@ -1111,7 +1111,7 @@ def admin_manage_account(request):
 @user_passes_test(lambda user: user.is_staff, login_url='login')
 def admin_tabulator_accounts(request):
     ctx = get_assignment_account_context(request, account_type='tabulator')
-    return render(request, 'admindash/tabulatoraccount.html', ctx)
+    return render(request, 'admindash/facultyaccount.html', ctx)
 
 
 @login_required(login_url='login')
@@ -3787,110 +3787,10 @@ def _get_tab_event_rows(request):
 @login_required(login_url='login')
 @user_passes_test(lambda u: user_has_role(u, 'tabulator'), login_url='login')
 def tabulator_dashboard(request):
-    """Tabulator home: pending results, upcoming assignments, recent activity."""
-    from events.models import Event, ScoreSheet
-    from django.contrib.admin.models import LogEntry, ADDITION, CHANGE
-    from django.utils import timezone
+    """Legacy tabulator home — redirect to Faculty portal."""
+    return redirect('faculty_dashboard')
 
-    event_rows = _get_tab_event_rows(request)
-    total_assigned = len(event_rows)
-    pending_encode = sum(1 for r in event_rows if r['tab_status'] in ('pending', 'not_started'))
-    verified = sum(1 for r in event_rows if r['tab_status'] in ('completed', 'approved'))
-    in_progress = sum(1 for r in event_rows if r['tab_status'] == 'in_progress')
-    completed_count = verified
 
-    # Same pending source as Pending Results page (scoped to assignments)
-    all_pending, pending_stats = _build_pending_result_rows(request)
-    pending_results = []
-    for pr in all_pending[:5]:
-        pending_results.append({
-            'id': pr['id'],
-            'type': pr['type'],
-            'type_label': pr['type_label'],
-            'event_name': pr['event_name'],
-            'event_category': pr['event_category'],
-            'category_lower': pr['category_lower'],
-            'entry': pr['entry'],
-            'entry_sub': pr.get('round_label') or '',
-            'submitted_by': pr['submitted_by'],
-            'submitted_role': pr['submitted_role'],
-            'submitted_initials': pr['submitted_initials'],
-            'submitted_at': pr['submitted_at'],
-            'submitted_time': pr['submitted_time'],
-        })
-    pending_count = pending_stats.get('total_pending', len(all_pending))
-
-    # Upcoming assignments: future events in this tabulator's scope
-    today = timezone.localdate()
-    upcoming_events = _tabulator_event_qs(request.user).filter(
-        event_date__gte=today
-    ).exclude(status='completed').order_by('event_date', 'event_time')[:5]
-    upcoming_assignments = []
-    for ev in upcoming_events:
-        month = ev.event_date.strftime('%b').upper() if ev.event_date else ''
-        day = ev.event_date.strftime('%d') if ev.event_date else ''
-        time_str = ev.event_time.strftime('%I:%M %p') if ev.event_time else ''
-        row_for_ev = next((r for r in event_rows if r['id'] == ev.id), None)
-        status_label = row_for_ev['tab_status_label'] if row_for_ev else 'Upcoming'
-        upcoming_assignments.append({
-            'id': ev.id,
-            'name': ev.name,
-            'round': ev.tournament_type or ev.scoring_method or 'Finals',
-            'month': month,
-            'day': day,
-            'time': time_str,
-            'venue': ev.venue or '',
-            'status_label': status_label,
-        })
-
-    # Recent activity: tabulator approvals/rejections + own actions
-    recent_logs = LogEntry.objects.filter(
-        Q(user=request.user)
-        | Q(change_message__in=[
-            'Approved match result', 'Approved judge result',
-            'Rejected match result', 'Rejected judge result',
-        ])
-    ).select_related('user').order_by('-action_time')[:5]
-    activity_rows = []
-    action_icons = {ADDITION: 'add', CHANGE: 'edit'}
-    for log in recent_logs:
-        delta = timezone.now() - log.action_time
-        if delta.days >= 1:
-            ago = f'{delta.days}d ago'
-        elif delta.seconds >= 3600:
-            ago = f'{delta.seconds // 3600}h ago'
-        elif delta.seconds >= 60:
-            ago = f'{delta.seconds // 60}m ago'
-        else:
-            ago = 'just now'
-        activity_rows.append({
-            'message': log.change_message or log.object_repr,
-            'user': log.user.get_full_name() or log.user.username if log.user else 'System',
-            'ago': ago,
-            'time_str': log.action_time.strftime('%I:%M %p'),
-            'icon': action_icons.get(log.action_flag, 'info'),
-            'accent': {ADDITION: 'green', CHANGE: 'blue'}.get(log.action_flag, 'gray'),
-        })
-
-    scoped_events = _tabulator_event_qs(request.user)
-    current_event = scoped_events.filter(status='active').order_by('-event_date').first()
-    if not current_event:
-        current_event = scoped_events.order_by('-event_date').first()
-
-    return render(request, 'tabulatordash/tabdashboard.html', {
-        'display_name': _tabulator_display_name(request.user),
-        'total_assigned': total_assigned,
-        'pending_encode': pending_encode,
-        'verified': verified,
-        'in_progress': in_progress,
-        'completed_count': completed_count,
-        'pending_results': pending_results,
-        'pending_count': pending_count,
-        'upcoming_assignments': upcoming_assignments,
-        'event_rows': event_rows[:5],
-        'activity_rows': activity_rows,
-        'current_event': current_event,
-    })
 
 
 @login_required(login_url='login')
@@ -4235,65 +4135,9 @@ def _build_pending_result_rows(request=None):
 @login_required(login_url='login')
 @user_passes_test(lambda u: user_has_role(u, 'tabulator'), login_url='login')
 def tabulator_pending_results(request):
-    """Page listing all pending (unverified) results for the tabulator."""
-    from django.core.paginator import Paginator
+    """Legacy tabulator page — redirected to Faculty portal."""
+    return redirect('faculty_results_review')
 
-    pending_rows, stats = _build_pending_result_rows(request)
-
-    tab = request.GET.get('tab', 'all')
-    status_filter = request.GET.get('status', 'all')
-    category_filter = request.GET.get('category', 'all')
-    search = (request.GET.get('q') or '').strip().lower()
-
-    filtered = pending_rows
-    if tab == 'match':
-        filtered = [r for r in filtered if r['type'] == 'match']
-    elif tab == 'judge':
-        filtered = [r for r in filtered if r['type'] == 'judge']
-    elif tab == 'overdue':
-        filtered = [r for r in filtered if r.get('is_overdue')]
-
-    if status_filter == 'awaiting':
-        filtered = [r for r in filtered if not r.get('is_overdue')]
-    elif status_filter == 'overdue':
-        filtered = [r for r in filtered if r.get('is_overdue')]
-
-    if category_filter != 'all':
-        filtered = [r for r in filtered if r.get('category_lower') == category_filter]
-
-    if search:
-        filtered = [
-            r for r in filtered
-            if search in r['event_name'].lower()
-            or search in r['entry'].lower()
-            or search in r['submitted_by'].lower()
-            or search in (r.get('round_label') or '').lower()
-        ]
-
-    categories = sorted({r['category_lower'] for r in pending_rows})
-
-    paginator = Paginator(filtered, 10)
-    page_obj = paginator.get_page(request.GET.get('page'))
-
-    review_json = [
-        {key: val for key, val in row.items() if key != 'submitted_dt'}
-        for row in page_obj.object_list
-    ]
-
-    return render(request, 'tabulatordash/pendingresult.html', {
-        'display_name': _tabulator_display_name(request.user),
-        'pending_rows': page_obj.object_list,
-        'review_json': review_json,
-        'page_obj': page_obj,
-        'paginator': paginator,
-        'filtered_count': len(filtered),
-        'categories': categories,
-        'active_tab': tab,
-        'status_filter': status_filter,
-        'category_filter': category_filter,
-        'search_query': request.GET.get('q', ''),
-        **stats,
-    })
 
 
 def _tabulator_approved_judge_keys():
@@ -4584,262 +4428,25 @@ def _build_approved_result_rows(request=None):
 @login_required(login_url='login')
 @user_passes_test(lambda u: user_has_role(u, 'tabulator'), login_url='login')
 def tabulator_approved_results(request):
-    """Page listing all approved/verified results."""
-    from django.core.paginator import Paginator
+    """Legacy tabulator page — redirected to Faculty portal."""
+    return redirect('faculty_results_review')
 
-    approved_rows, stats = _build_approved_result_rows(request)
-
-    tab = request.GET.get('tab', 'all')
-    status_filter = request.GET.get('status', 'all')
-    category_filter = request.GET.get('category', 'all')
-    search = (request.GET.get('q') or '').strip().lower()
-
-    filtered = approved_rows
-    if tab == 'match':
-        filtered = [r for r in filtered if r['type'] == 'match']
-    elif tab == 'judge':
-        filtered = [r for r in filtered if r['type'] == 'judge']
-    elif tab == 'completed':
-        filtered = [r for r in filtered if r.get('event_completed')]
-
-    if status_filter == 'approved':
-        filtered = filtered  # all rows are approved
-    elif status_filter == 'finalized':
-        filtered = [r for r in filtered if r.get('status_label') == 'FINALIZED']
-
-    if category_filter != 'all':
-        filtered = [r for r in filtered if r.get('category_lower') == category_filter]
-
-    if search:
-        filtered = [
-            r for r in filtered
-            if search in r['event_name'].lower()
-            or search in r['entry'].lower()
-            or search in (r.get('round_label') or '').lower()
-        ]
-
-    categories = sorted({r['category_lower'] for r in approved_rows})
-
-    paginator = Paginator(filtered, 10)
-    page_obj = paginator.get_page(request.GET.get('page'))
-
-    detail_json = [
-        {key: val for key, val in row.items() if key != 'approved_dt'}
-        for row in page_obj.object_list
-    ]
-
-    user_initials = request.user.username[:2].upper() if request.user.username else 'TA'
-
-    return render(request, 'tabulatordash/approveresult.html', {
-        'display_name': _tabulator_display_name(request.user),
-        'approved_rows': page_obj.object_list,
-        'detail_json': detail_json,
-        'page_obj': page_obj,
-        'paginator': paginator,
-        'filtered_count': len(filtered),
-        'categories': categories,
-        'active_tab': tab,
-        'status_filter': status_filter,
-        'category_filter': category_filter,
-        'search_query': request.GET.get('q', ''),
-        'user_initials': user_initials,
-        **stats,
-    })
 
 
 @login_required(login_url='login')
 @user_passes_test(lambda u: user_has_role(u, 'tabulator'), login_url='login')
 def tabulator_assigned_events(request):
-    """Tabulator assigned events list."""
-    from events.models import Event
-    from django.core.paginator import Paginator
+    """Legacy tabulator page — redirected to Faculty portal."""
+    return redirect('faculty_my_events')
 
-    status_filter = request.GET.get('status', 'all').strip().lower()
-    cat_filter = request.GET.get('category', 'all').strip().lower()
-    search_q = request.GET.get('q', '').strip().lower()
-
-    event_rows = _get_tab_event_rows(request)
-
-    # Enrich rows with extra event details for the new design
-    events_by_name = {ev.name: ev for ev in Event.objects.all()}
-    for row in event_rows:
-        ev = events_by_name.get(row['title'])
-        if ev:
-            row['scoring_method'] = ev.scoring_method or ''
-            row['tournament_type'] = ev.tournament_type or ''
-            row['time_str'] = ev.event_time.strftime('%I:%M %p') if ev.event_time else ''
-            row['venue'] = ev.venue or ''
-            # Determine type label for display
-            if ev.scoring_method == 'criteria':
-                row['type_label'] = 'Criteria Based'
-                row['type_sub'] = ev.tournament_type or ev.category or ''
-            else:
-                row['type_label'] = 'Match Result'
-                row['type_sub'] = ev.tournament_type or ''
-            # Ensure Judge/Scorer names are present (also set in _get_tab_event_rows)
-            if not row.get('panel_members'):
-                members = []
-                for j in ev.assigned_judges.all():
-                    name = j.get_full_name().strip() or j.username
-                    parts = name.split()
-                    ini = ''.join(p[:1] for p in parts[:2]).upper() or j.username[:2].upper()
-                    role = get_assignment_role(j) or (
-                        'Scorer' if (ev.scoring_method or '') == 'match' else 'Judge'
-                    )
-                    members.append({'name': name, 'role': role, 'initials': ini})
-                row['panel_members'] = members
-                row['judge_count'] = len(members)
-
-    if status_filter == 'completed':
-        event_rows = [r for r in event_rows if r['tab_status'] in ('completed', 'approved')]
-    elif status_filter == 'in_progress':
-        event_rows = [r for r in event_rows if r['tab_status'] in ('in_progress', 'pending')]
-    elif status_filter != 'all':
-        event_rows = [r for r in event_rows if r['tab_status'] == status_filter]
-    if cat_filter != 'all':
-        event_rows = [r for r in event_rows if r['category'].lower() == cat_filter]
-    if search_q:
-        event_rows = [r for r in event_rows if search_q in r['title'].lower() or search_q in r['category'].lower()]
-
-    total = len(event_rows)
-    pending = sum(1 for r in event_rows if r['tab_status'] in ('pending', 'not_started'))
-    in_progress = sum(1 for r in event_rows if r['tab_status'] == 'in_progress')
-    completed = sum(1 for r in event_rows if r['tab_status'] in ('completed', 'approved'))
-    upcoming = sum(1 for r in event_rows if r['tab_status'] == 'not_started')
-    ongoing = in_progress + pending
-
-    paginator = Paginator(event_rows, 10)
-    page_obj = paginator.get_page(request.GET.get('page', 1))
-
-    all_rows = _get_tab_event_rows(request)
-    categories = sorted({r['category'] for r in all_rows if r['category']})
-
-    return render(request, 'tabulatordash/assigned.html', {
-        'display_name': _tabulator_display_name(request.user),
-        'total_assigned': total,
-        'pending': pending,
-        'upcoming': upcoming,
-        'ongoing': ongoing,
-        'in_progress': in_progress,
-        'completed': completed,
-        'event_rows': page_obj.object_list,
-        'page_obj': page_obj,
-        'total_count': total,
-        'categories': categories,
-        'selected_status': status_filter,
-        'selected_category': cat_filter,
-        'search_query': search_q,
-    })
 
 
 @login_required(login_url='login')
 @user_passes_test(lambda u: user_has_role(u, 'tabulator'), login_url='login')
 def tabulator_scoresheets(request):
-    """Tabulator score sheets — bracket match sheets and judge mobile submissions."""
-    from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+    """Legacy tabulator page — redirected to Faculty portal."""
+    return redirect('faculty_scoresheets')
 
-    rows, stats, filter_options = _build_tabulator_scoresheet_rows(request)
-
-    tab = request.GET.get('tab', 'event').strip().lower()
-    if tab not in ('event', 'submission'):
-        tab = 'event'
-
-    event_type_filter = request.GET.get('event_type', 'all').strip()
-    event_filter = request.GET.get('event', 'all').strip()
-    round_filter = request.GET.get('round', 'all').strip()
-    status_filter = request.GET.get('status', 'all').strip().lower()
-    search_q = (request.GET.get('q') or '').strip().lower()
-    selected_sheet = (request.GET.get('sheet') or '').strip()
-
-    date_from_raw = (request.GET.get('date_from') or '').strip()
-    date_to_raw = (request.GET.get('date_to') or '').strip()
-    date_from = date_to = None
-    if date_from_raw:
-        try:
-            date_from = datetime.strptime(date_from_raw, '%Y-%m-%d').date()
-        except ValueError:
-            pass
-    if date_to_raw:
-        try:
-            date_to = datetime.strptime(date_to_raw, '%Y-%m-%d').date()
-        except ValueError:
-            pass
-
-    filtered = rows
-    if event_type_filter != 'all':
-        filtered = [r for r in filtered if r.get('category_lower') == event_type_filter]
-    if event_filter != 'all':
-        filtered = [r for r in filtered if r['event_name'] == event_filter]
-    if round_filter != 'all':
-        filtered = [r for r in filtered if r.get('round_label') == round_filter]
-    if status_filter != 'all':
-        filtered = [r for r in filtered if r.get('status_key') == status_filter]
-    if date_from:
-        filtered = [r for r in filtered if r.get('submitted_dt') and r['submitted_dt'].date() >= date_from]
-    if date_to:
-        filtered = [r for r in filtered if r.get('submitted_dt') and r['submitted_dt'].date() <= date_to]
-    if search_q:
-        filtered = [
-            r for r in filtered
-            if search_q in r['entry_title'].lower()
-            or search_q in r['event_name'].lower()
-            or search_q in r.get('submitted_by_name', '').lower()
-            or search_q in r.get('type_label', '').lower()
-        ]
-
-    if tab == 'event':
-        epoch = timezone.make_aware(datetime(1970, 1, 1))
-        filtered.sort(key=lambda r: r.get('submitted_dt') or epoch, reverse=True)
-        filtered.sort(key=lambda r: r['event_name'].lower())
-    else:
-        epoch = timezone.make_aware(datetime(1970, 1, 1))
-        filtered.sort(key=lambda r: r.get('submitted_dt') or epoch, reverse=True)
-
-    paginator = Paginator(filtered, 6)
-    page_number = request.GET.get('page', 1)
-    try:
-        page_obj = paginator.page(page_number)
-    except PageNotAnInteger:
-        page_obj = paginator.page(1)
-    except EmptyPage:
-        page_obj = paginator.page(paginator.num_pages)
-
-    page_rows = page_obj.object_list
-    active_row = None
-    if selected_sheet:
-        active_row = next((r for r in filtered if r['row_key'] == selected_sheet), None)
-    if not active_row and page_rows:
-        active_row = page_rows[0]
-
-    detail_json = [
-        {k: v for k, v in row.items() if k not in ('submitted_dt',)}
-        for row in filtered
-    ]
-
-    user_initials = request.user.username[:2].upper() if request.user.username else 'TA'
-
-    return render(request, 'tabulatordash/scoresheets.html', {
-        'display_name': _tabulator_display_name(request.user),
-        'sheet_rows': page_rows,
-        'active_row': active_row,
-        'detail_json': detail_json,
-        'page_obj': page_obj,
-        'filtered_count': len(filtered),
-        'active_tab': tab,
-        'event_types': filter_options['event_types'],
-        'events': filter_options['events'],
-        'rounds': filter_options['rounds'],
-        'selected_event_type': event_type_filter,
-        'selected_event': event_filter,
-        'selected_round': round_filter,
-        'selected_status': status_filter,
-        'search_query': request.GET.get('q', ''),
-        'date_from': date_from.isoformat() if date_from else '',
-        'date_to': date_to.isoformat() if date_to else '',
-        'selected_sheet': active_row['row_key'] if active_row else '',
-        'user_initials': user_initials,
-        **stats,
-    })
 
 
 def _tabulator_scoresheet_status(raw_status, event_status=None):
@@ -5376,12 +4983,9 @@ def _build_event_reports_context(request):
 @login_required(login_url='login')
 @user_passes_test(lambda u: user_has_role(u, 'tabulator'), login_url='login')
 def tabulator_reports(request):
-    """Tabulator Event Reports page — analytics and exports for assigned events."""
-    ctx = _build_event_reports_context(request)
-    ctx['display_name'] = _tabulator_display_name(request.user)
-    ctx['user_initials'] = request.user.username[:2].upper() if request.user.username else 'TA'
-    ctx['current_event'] = ctx['selected_event']
-    return render(request, 'tabulatordash/tabreport.html', ctx)
+    """Legacy tabulator page — redirected to Faculty portal."""
+    return redirect('faculty_dashboard')
+
 
 
 # ── Tabulation sub-pages ────────────────────────────────────────
@@ -5719,165 +5323,9 @@ def _build_official_activity_rows():
 @login_required(login_url='login')
 @user_passes_test(lambda u: user_has_role(u, 'tabulator'), login_url='login')
 def tabulator_activity_logs(request):
-    """Realtime activity logs for Judge and Scorer accounts."""
-    from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
-    from events.models import JudgeActivityLog
+    """Legacy tabulator page — redirected to Faculty portal."""
+    return redirect('faculty_dashboard')
 
-    tab = request.GET.get('tab', 'all').strip().lower()
-    if tab not in ('all', 'judge', 'scorer'):
-        tab = 'all'
-
-    search_q = (request.GET.get('q') or '').strip().lower()
-    selected_user = request.GET.get('user', 'all').strip()
-    selected_action = request.GET.get('action', 'all').strip()
-    selected_event = request.GET.get('event', 'all').strip()
-    selected_round = request.GET.get('round', 'all').strip()
-    export_format = (request.GET.get('export') or '').strip().lower()
-
-    today = timezone.localdate()
-    date_from_raw = (request.GET.get('date_from') or '').strip()
-    date_to_raw = (request.GET.get('date_to') or '').strip()
-    date_from = None
-    date_to = None
-    if date_from_raw:
-        try:
-            date_from = datetime.strptime(date_from_raw, '%Y-%m-%d').date()
-        except ValueError:
-            date_from = None
-    if date_to_raw:
-        try:
-            date_to = datetime.strptime(date_to_raw, '%Y-%m-%d').date()
-        except ValueError:
-            date_to = None
-    if date_from and date_to and date_from > date_to:
-        date_from, date_to = date_to, date_from
-
-    week_start = today - timedelta(days=today.weekday())
-    all_rows = _build_official_activity_rows()
-
-    judge_count = sum(1 for r in all_rows if r['user_role'] == 'Judge')
-    scorer_count = sum(1 for r in all_rows if r['user_role'] == 'Scorer')
-
-    filtered = all_rows
-    if tab == 'judge':
-        filtered = [r for r in filtered if r['user_role'] == 'Judge']
-    elif tab == 'scorer':
-        filtered = [r for r in filtered if r['user_role'] == 'Scorer']
-
-    if selected_user != 'all' and selected_user.isdigit():
-        uid = int(selected_user)
-        filtered = [r for r in filtered if r.get('user_id') == uid]
-
-    if selected_action != 'all':
-        filtered = [
-            r for r in filtered
-            if r.get('action_code') == selected_action or r.get('action_key') == selected_action
-        ]
-
-    if selected_event != 'all':
-        filtered = [r for r in filtered if r.get('event_name') == selected_event]
-
-    if selected_round != 'all':
-        filtered = [r for r in filtered if r.get('round_label') == selected_round]
-
-    if date_from:
-        filtered = [r for r in filtered if _activity_row_local_date(r.get('sort_dt')) and _activity_row_local_date(r.get('sort_dt')) >= date_from]
-    if date_to:
-        filtered = [r for r in filtered if _activity_row_local_date(r.get('sort_dt')) and _activity_row_local_date(r.get('sort_dt')) <= date_to]
-
-    if search_q:
-        filtered = [
-            r for r in filtered
-            if search_q in (r.get('user_name') or '').lower()
-            or search_q in (r.get('event_name') or '').lower()
-            or search_q in (r.get('description') or '').lower()
-            or search_q in (r.get('action_label') or '').lower()
-        ]
-
-    if export_format == 'csv':
-        return _export_unified_activity_logs(filtered)
-
-    total_logs = len(all_rows)
-    today_logs = sum(1 for r in all_rows if _activity_row_local_date(r.get('sort_dt')) == today)
-    week_logs = sum(
-        1 for r in all_rows
-        if (_d := _activity_row_local_date(r.get('sort_dt'))) is not None and _d >= week_start
-    )
-    active_users = len({r['user_id'] for r in all_rows if r.get('user_id')})
-
-    filtered_count = len(filtered)
-    paginator = Paginator(filtered, 10)
-    page_number = request.GET.get('page', 1)
-    try:
-        page_obj = paginator.page(page_number)
-    except PageNotAnInteger:
-        page_obj = paginator.page(1)
-    except EmptyPage:
-        page_obj = paginator.page(paginator.num_pages)
-
-    log_rows = [
-        {k: v for k, v in row.items() if k != 'sort_dt'}
-        for row in page_obj.object_list
-    ]
-
-    # Filter dropdown data
-    User = get_user_model()
-    user_ids = {r['user_id'] for r in all_rows if r.get('user_id')}
-    if tab == 'judge':
-        user_ids = {r['user_id'] for r in all_rows if r['user_role'] == 'Judge' and r.get('user_id')}
-    elif tab == 'scorer':
-        user_ids = {r['user_id'] for r in all_rows if r['user_role'] == 'Scorer' and r.get('user_id')}
-    log_users = User.objects.filter(id__in=user_ids).order_by('first_name', 'username')
-    events = sorted({r['event_name'] for r in all_rows if r.get('event_name') and r['event_name'] != '—'})
-    rounds = sorted({r['round_label'] for r in all_rows if r.get('round_label') and r['round_label'] != '—'})
-
-    action_choices = list(JudgeActivityLog.ACTION_CHOICES) + [
-        ('submit', 'Submitted Scores'),
-        ('finalize', 'Finalized Scores'),
-    ]
-    # de-dupe by code
-    seen_codes = set()
-    unique_actions = []
-    for code, label in action_choices:
-        if code in seen_codes:
-            continue
-        seen_codes.add(code)
-        unique_actions.append((code, label))
-
-    week_label = f'{week_start.strftime("%b %d")} – {today.strftime("%b %d, %Y")}'
-    user_initials = request.user.username[:2].upper() if request.user.username else 'TA'
-    latest_id = all_rows[0]['id'] if all_rows else ''
-
-    return render(request, 'tabulatordash/tabactivitylogs.html', {
-        'display_name': _tabulator_display_name(request.user),
-        'log_rows': log_rows,
-        'page_obj': page_obj,
-        'filtered_count': filtered_count,
-        'total_logs': total_logs,
-        'today_logs': today_logs,
-        'week_logs': week_logs,
-        'active_users': active_users,
-        'today_label': today.strftime('%b %d, %Y'),
-        'week_label': week_label,
-        'judge_count': judge_count,
-        'scorer_count': scorer_count,
-        'all_count': total_logs,
-        'active_tab': tab,
-        'log_users': log_users,
-        'action_choices': unique_actions,
-        'events': events,
-        'rounds': rounds,
-        'selected_user': selected_user,
-        'selected_action': selected_action,
-        'selected_event': selected_event,
-        'selected_round': selected_round,
-        'search_query': request.GET.get('q', ''),
-        'date_from': date_from.isoformat() if date_from else '',
-        'date_to': date_to.isoformat() if date_to else '',
-        'user_initials': user_initials,
-        'latest_log_id': latest_id,
-        'feed_url': '/tabulator/activity-logs/feed/',
-    })
 
 
 @login_required(login_url='login')

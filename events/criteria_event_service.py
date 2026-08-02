@@ -77,7 +77,12 @@ def models_q_for_judges():
 
 
 def models_q_for_faculty():
-    return Q(is_staff=True) | Q(groups__name__iexact='Faculty') | Q(groups__name__iexact='Scorer')
+    return (
+        Q(is_staff=True)
+        | Q(groups__name__iexact='Faculty')
+        | Q(groups__name__iexact='Scorer')
+        | Q(groups__name__iexact='Tabulator')
+    )
 
 
 def _required(data, key, label):

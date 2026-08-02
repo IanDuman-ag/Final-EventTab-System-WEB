@@ -1,0 +1,44 @@
+{% load static %}
+<aside class="tab-sidebar" aria-label="Faculty navigation">
+  <div class="tab-brand">
+    <h1>EventTab</h1>
+    <span>FACULTY PORTAL</span>
+  </div>
+  <nav class="tab-nav">
+    <a class="tab-nav-link{% if active == 'dashboard' %} is-active{% endif %}" href="{% url 'faculty_dashboard' %}" {% if active == 'dashboard' %}aria-current="page"{% endif %}>
+      <svg viewBox="0 0 24 24"><path d="M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm9 0h7v7h-7v-7Z"/></svg>
+      <span>Dashboard</span>
+    </a>
+    <a class="tab-nav-link{% if active == 'my_events' %} is-active{% endif %}" href="{% url 'faculty_my_events' %}" {% if active == 'my_events' %}aria-current="page"{% endif %}>
+      <svg viewBox="0 0 24 24"><path d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2Zm0 16H5V10h14v10Z"/></svg>
+      <span>My Events</span>
+    </a>
+    <a class="tab-nav-link{% if active == 'schedules' %} is-active{% endif %}" href="{% url 'faculty_schedules' %}" {% if active == 'schedules' %}aria-current="page"{% endif %}>
+      <svg viewBox="0 0 24 24"><path d="M19 3h-1V1h-2v2H8V1H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Zm0 16H5V8h14v11Z"/></svg>
+      <span>Schedules</span>
+    </a>
+    <a class="tab-nav-link{% if active == 'scoresheets' %} is-active{% endif %}" href="{% url 'faculty_scoresheets' %}" {% if active == 'scoresheets' %}aria-current="page"{% endif %}>
+      <svg viewBox="0 0 24 24"><path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Zm0 16H5V5h14v14zM7 7h10v2H7V7zm0 4h10v2H7v-2zm0 4h7v2H7v-2z"/></svg>
+      <span>Scoresheets</span>
+    </a>
+    <a class="tab-nav-link{% if active == 'results' %} is-active{% endif %}" href="{% url 'faculty_results_review' %}" {% if active == 'results' %}aria-current="page"{% endif %}>
+      <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2Zm-2 15-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9Z"/></svg>
+      <span>Results Review</span>
+    </a>
+    <a class="tab-nav-link{% if active == 'leaderboard' %} is-active{% endif %}" href="{% url 'faculty_leaderboard' %}" {% if active == 'leaderboard' %}aria-current="page"{% endif %}>
+      <svg viewBox="0 0 24 24"><path d="M3 3v18h18V3H3Zm16 16H5V5h14v14ZM7 17h2v-7H7v7Zm4 0h2V7h-2v10Zm4 0h2v-4h-2v4Z"/></svg>
+      <span>Leaderboard</span>
+    </a>
+  </nav>
+  <div class="tab-user-card">
+    <div class="tab-user-avatar">{{ user_display|default:"FA"|slice:":2"|upper }}</div>
+    <div>
+      <strong>{{ user_display|default:"Faculty" }}</strong>
+      <small>Faculty In-Charge</small>
+    </div>
+  </div>
+  <a class="tab-logout" href="{% url 'logout' %}">
+    <svg viewBox="0 0 24 24"><path d="M10 17v-3H3v-4h7V7l5 5-5 5Zm2-14h8v18h-8v-2h6V5h-6V3Z"/></svg>
+    <span>Logout</span>
+  </a>
+</aside>

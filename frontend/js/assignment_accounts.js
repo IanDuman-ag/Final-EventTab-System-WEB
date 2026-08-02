@@ -168,7 +168,7 @@ document.addEventListener('DOMContentLoaded', function () {
   function roleSubtitle(r) {
     if (r === 'Judge')  { return 'Enter the judge\'s official name and Gmail, then generate an access code (JDG01, JDG02…) to email them.'; }
     if (r === 'Scorer') { return 'Enter the scorer\'s official name and Gmail, then generate an access code (SCR01, SCR02…) to email them.'; }
-    return 'Tabulators sign in via the web portal with their username and password.';
+    return 'Faculty sign in via the web portal with their username and password.';
   }
 
   function isValidEmail(value) {

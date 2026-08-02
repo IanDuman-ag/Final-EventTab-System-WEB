@@ -4,8 +4,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tabulator Accounts - EventTab</title>
-  <link rel="stylesheet" href="{% static 'admindash/tabulatoraccount.css' %}?v=20260616c">
+  <title>Faculty Name and Account - EventTab</title>
+  <link rel="stylesheet" href="{% static 'admindash/facultyaccount.css' %}?v=20260802a">
 </head>
 <body class="admin-dashboard-page manage-account-page admin-dashboard-v2" data-account-page="tabulator" data-default-role="Tabulator">
   <div class="dashboard-shell">
@@ -25,14 +25,14 @@
       </header>
 
       <main class="main-content">
-        <section class="account-hero" aria-label="Tabulator accounts overview">
+        <section class="account-hero" aria-label="Faculty name and account overview">
           <div class="account-title">
-            <h2>Tabulator<br>Accounts</h2>
-            <p>Manage tabulator portal access and permissions.</p>
+            <h2>Faculty Name<br>and Account</h2>
+            <p>Manage faculty portal access and permissions.</p>
           </div>
 
           <article class="users-card">
-            <span>Total Tabulators</span>
+            <span>Total Faculty</span>
             <strong>{{ total_user_count|default:"0" }}</strong>
             <small>{{ active_user_count|default:"0" }} active accounts</small>
           </article>
@@ -48,10 +48,10 @@
           </button>
         </section>
 
-        <section class="accounts-panel" aria-label="Tabulator accounts table">
+        <section class="accounts-panel" aria-label="Faculty accounts table">
           <div class="account-toolbar">
             <form class="account-filters" method="get" role="search">
-              <input type="text" name="q" value="{{ search_query }}" placeholder="Search tabulators" aria-label="Search tabulators">
+              <input type="text" name="q" value="{{ search_query }}" placeholder="Search faculty" aria-label="Search faculty">
               <select name="status" aria-label="Status">
                 <option value="all" {% if selected_status == 'all' %}selected{% endif %}>All Status</option>
                 <option value="active" {% if selected_status == 'active' %}selected{% endif %}>Active</option>
@@ -114,7 +114,7 @@
                         <strong>{{ row.user.username }}</strong>
                       </div>
                     </td>
-                    <td data-label="Role"><span class="role-label role-label--tabulator">{{ row.role }}</span></td>
+                    <td data-label="Role"><span class="role-label role-label--tabulator">{% if row.role|lower == 'tabulator' %}Faculty{% else %}{{ row.role }}{% endif %}</span></td>
                     <td data-label="Status"><span class="status-pill {{ row.status_key }}">{{ row.status }}</span></td>
                     <td data-label="Actions">
                       <div class="row-actions">
@@ -131,7 +131,7 @@
                     </td>
                   </tr>
                 {% empty %}
-                  <tr><td colspan="5" class="empty-state">No tabulator accounts found.</td></tr>
+                  <tr><td colspan="5" class="empty-state">No faculty accounts found.</td></tr>
                 {% endfor %}
               </tbody>
             </table>
@@ -158,6 +158,6 @@
   </div>
 
   {% include 'admindash/_assignment_modal.html' %}
-  <script src="{% static 'js/assignment_accounts.js' %}?v=20260717c"></script>
+  <script src="{% static 'js/assignment_accounts.js' %}?v=20260802a"></script>
 </body>
 </html>

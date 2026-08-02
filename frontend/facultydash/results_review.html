@@ -1,0 +1,54 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Results Review · Faculty · EventTab</title>
+  <link rel="stylesheet" href="{% static 'facultydash/faculty.css' %}?v=20260802a">
+  <link rel="stylesheet" href="{% static 'facultydash/pages.css' %}?v=20260802a">
+</head>
+<body class="fac-v2 tab-v2">
+<div class="tab-shell">
+  {% include 'facultydash/_sidebar.html' with active='results' %}
+  <div class="tab-main">
+    <header class="tab-topbar">
+      <div>
+        <p class="fac-kicker">Approve · Return · Publish</p>
+        <h1>Results Review</h1>
+      </div>
+    </header>
+    <main class="tab-content fac-content">
+      <section class="fac-card">
+        <div class="fac-table-wrap">
+          <table class="fac-table">
+            <thead>
+              <tr>
+                <th>Event Name</th>
+                <th>Event Type</th>
+                <th>Status</th>
+                <th>Review</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for e in event_rows %}
+              <tr>
+                <td><strong>{{ e.name }}</strong></td>
+                <td>{{ e.event_type }}</td>
+                <td><span class="fac-pill">{{ e.status }}</span></td>
+                <td>{% if e.needs_review %}Needs attention{% else %}—{% endif %}</td>
+                <td><a class="fac-btn fac-btn-sm" href="{% url 'faculty_event_manage' e.id %}?tab=results">Open Results</a></td>
+              </tr>
+              {% empty %}
+              <tr><td colspan="5" class="fac-empty">No events to review.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+</body>
+</html>

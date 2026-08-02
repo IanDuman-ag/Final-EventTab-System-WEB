@@ -1,0 +1,88 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>My Events · Faculty · EventTab</title>
+  <link rel="stylesheet" href="{% static 'facultydash/faculty.css' %}?v=20260802a">
+  <link rel="stylesheet" href="{% static 'facultydash/pages.css' %}?v=20260802a">
+</head>
+<body class="fac-v2 tab-v2">
+<div class="tab-shell">
+  {% include 'facultydash/_sidebar.html' with active='my_events' %}
+  <div class="tab-main">
+    <header class="tab-topbar">
+      <div>
+        <p class="fac-kicker">Assigned by Administrator</p>
+        <h1>My Events</h1>
+      </div>
+    </header>
+    <main class="tab-content fac-content">
+      <section class="fac-card">
+        <form class="fac-toolbar" method="get">
+          <input type="search" name="q" value="{{ search_query }}" placeholder="Search events">
+          <select name="status">
+            <option value="all" {% if status_filter == 'all' %}selected{% endif %}>All statuses</option>
+            <option value="published" {% if status_filter == 'published' %}selected{% endif %}>Published</option>
+            <option value="draft" {% if status_filter == 'draft' %}selected{% endif %}>Draft</option>
+            <option value="ready" {% if status_filter == 'ready' %}selected{% endif %}>Ready for Publication</option>
+          </select>
+          <select name="sort">
+            <option value="-updated_at" {% if sort == '-updated_at' %}selected{% endif %}>Newest updated</option>
+            <option value="name" {% if sort == 'name' %}selected{% endif %}>Name A–Z</option>
+            <option value="-name" {% if sort == '-name' %}selected{% endif %}>Name Z–A</option>
+            <option value="event_date" {% if sort == 'event_date' %}selected{% endif %}>Date ascending</option>
+            <option value="-event_date" {% if sort == '-event_date' %}selected{% endif %}>Date descending</option>
+          </select>
+          <button class="fac-btn fac-btn-sm" type="submit">Apply</button>
+        </form>
+        <div class="fac-table-wrap">
+          <table class="fac-table">
+            <thead>
+              <tr>
+                <th>Event Name</th>
+                <th>Event Type</th>
+                <th>Category</th>
+                <th>Schedule</th>
+                <th>Venue</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for e in event_rows %}
+              <tr>
+                <td><strong>{{ e.name }}</strong></td>
+                <td>{{ e.event_type }}</td>
+                <td>{{ e.category }}</td>
+                <td>{{ e.schedule }}</td>
+                <td>{{ e.venue }}</td>
+                <td><span class="fac-pill">{{ e.status }}</span></td>
+                <td><a class="fac-btn fac-btn-sm" href="{% url 'faculty_event_manage' e.id %}">Manage</a></td>
+              </tr>
+              {% empty %}
+              <tr><td colspan="7" class="fac-empty">No assigned events found.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% if page_obj %}
+        <div class="fac-pager">
+          <span>Showing {{ page_obj.start_index }}–{{ page_obj.end_index }} of {{ page_obj.paginator.count }}</span>
+          <div>
+            {% if page_obj.has_previous %}
+            <a href="?q={{ search_query|urlencode }}&status={{ status_filter }}&sort={{ sort }}&page={{ page_obj.previous_page_number }}">Previous</a>
+            {% endif %}
+            {% if page_obj.has_next %}
+            <a href="?q={{ search_query|urlencode }}&status={{ status_filter }}&sort={{ sort }}&page={{ page_obj.next_page_number }}">Next</a>
+            {% endif %}
+          </div>
+        </div>
+        {% endif %}
+      </section>
+    </main>
+  </div>
+</div>
+</body>
+</html>

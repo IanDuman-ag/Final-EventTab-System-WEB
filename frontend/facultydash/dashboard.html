@@ -1,0 +1,81 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Faculty Dashboard · EventTab</title>
+  <link rel="stylesheet" href="{% static 'facultydash/faculty.css' %}?v=20260802a">
+  <link rel="stylesheet" href="{% static 'facultydash/pages.css' %}?v=20260802a">
+</head>
+<body class="fac-v2 tab-v2">
+<div class="tab-shell">
+  {% include 'facultydash/_sidebar.html' with active='dashboard' %}
+  <div class="tab-main">
+    <header class="tab-topbar">
+      <div>
+        <p class="fac-kicker">Faculty In-Charge</p>
+        <h1>Dashboard</h1>
+      </div>
+    </header>
+    <main class="tab-content fac-content">
+      <section class="fac-stats">
+        <article><span>Assigned Events</span><strong>{{ stats.assigned_events }}</strong></article>
+        <article><span>Today's Schedule</span><strong>{{ stats.todays_schedule }}</strong></article>
+        <article><span>Pending Result Reviews</span><strong>{{ stats.pending_reviews }}</strong></article>
+        <article><span>Published Events</span><strong>{{ stats.published_events }}</strong></article>
+      </section>
+
+      <div class="fac-grid-2">
+        <section class="fac-card">
+          <header><h2>Recent Assigned Events</h2></header>
+          <div class="fac-table-wrap">
+            <table class="fac-table">
+              <thead>
+                <tr>
+                  <th>Event Name</th>
+                  <th>Event Type</th>
+                  <th>Venue</th>
+                  <th>Schedule</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for e in recent_events %}
+                <tr>
+                  <td><strong>{{ e.name }}</strong></td>
+                  <td>{{ e.event_type }}</td>
+                  <td>{{ e.venue }}</td>
+                  <td>{{ e.schedule }}</td>
+                  <td><span class="fac-pill">{{ e.status }}</span></td>
+                  <td><a class="fac-btn fac-btn-sm" href="{% url 'faculty_event_manage' e.id %}">Manage</a></td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="6" class="fac-empty">No events assigned yet.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="fac-card">
+          <header><h2>Recent Notifications</h2></header>
+          <ul class="fac-notes">
+            {% for n in notifications %}
+            <li>
+              <strong>{{ n.kind }}</strong>
+              <span>{{ n.message }}</span>
+              <small>{{ n.when }}</small>
+            </li>
+            {% empty %}
+            <li class="fac-empty">No notifications.</li>
+            {% endfor %}
+          </ul>
+        </section>
+      </div>
+    </main>
+  </div>
+</div>
+</body>
+</html>

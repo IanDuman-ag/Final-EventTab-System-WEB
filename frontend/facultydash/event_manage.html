@@ -1,0 +1,289 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ detail.name }} · Event Management · EventTab</title>
+  <link rel="stylesheet" href="{% static 'facultydash/faculty.css' %}?v=20260802a">
+  <link rel="stylesheet" href="{% static 'facultydash/pages.css' %}?v=20260802a">
+</head>
+<body class="fac-v2 tab-v2" data-event-id="{{ event.id }}" data-csrf="{{ csrf_token }}">
+<div class="tab-shell">
+  {% include 'facultydash/_sidebar.html' with active='my_events' %}
+  <div class="tab-main">
+    <header class="tab-topbar">
+      <div>
+        <p class="fac-kicker"><a href="{% url 'faculty_my_events' %}" style="color:inherit;text-decoration:none;">My Events</a> / Manage</p>
+        <h1>{{ detail.name }}</h1>
+      </div>
+      <span class="fac-pill">{{ detail.status }}</span>
+    </header>
+    <main class="tab-content fac-content">
+      <nav class="fac-tabs" aria-label="Event management tabs">
+        <a href="?tab=overview" class="{% if tab == 'overview' %}is-active{% endif %}">Overview</a>
+        <a href="?tab=schedule" class="{% if tab == 'schedule' %}is-active{% endif %}">Schedule</a>
+        <a href="?tab=scoresheets" class="{% if tab == 'scoresheets' %}is-active{% endif %}">Scoresheets</a>
+        <a href="?tab=participants" class="{% if tab == 'participants' %}is-active{% endif %}">Participants</a>
+        <a href="?tab=results" class="{% if tab == 'results' %}is-active{% endif %}">Results Review</a>
+      </nav>
+
+      {% if tab == 'overview' %}
+      <section class="fac-card">
+        <header><h2>Overview (read-only)</h2></header>
+        <div class="fac-readonly">
+          <div><span>Event Name</span><strong>{{ detail.name }}</strong></div>
+          <div><span>Category</span><strong>{{ detail.category }}</strong></div>
+          <div><span>Event Classification</span><strong>{{ detail.classification }}</strong></div>
+          <div><span>Division</span><strong>{{ detail.division }}</strong></div>
+          <div><span>Venue</span><strong>{{ detail.venue }}</strong></div>
+          <div><span>Event Date Range</span><strong>{{ detail.schedule }}</strong></div>
+          <div><span>Event Type</span><strong>{{ detail.event_type }}</strong></div>
+          <div><span>Competition Structure</span><strong>{{ detail.structure }}</strong></div>
+          <div><span>Event Status</span><strong>{{ detail.status }}</strong></div>
+          <div><span>Faculty In Charge</span><strong>{{ detail.faculty_name }}</strong></div>
+          <div style="grid-column:1/-1"><span>Assigned Judges</span><strong>{% if detail.judges %}{{ detail.judges|join:", " }}{% else %}—{% endif %}</strong></div>
+          <div style="grid-column:1/-1"><span>Assigned Participants / Teams</span><strong>{% if detail.participants %}{{ detail.participants|join:", " }}{% else %}—{% endif %}</strong></div>
+        </div>
+      </section>
+      {% endif %}
+
+      {% if tab == 'schedule' %}
+      <section class="fac-card">
+        <header>
+          <h2>Schedule</h2>
+          <div style="display:flex;gap:8px;">
+            <button type="button" class="fac-btn fac-btn-secondary fac-btn-sm" onclick="window.print()">Print Schedule</button>
+            <a class="fac-btn fac-btn-sm" href="{% url 'faculty_export_schedule' event.id %}">Export Schedule</a>
+          </div>
+        </header>
+        <div class="fac-table-wrap">
+          <table class="fac-table">
+            <thead>
+              <tr>
+                <th>Game Number / Stage</th>
+                <th>Match / Participant</th>
+                <th>Date</th>
+                <th>Time</th>
+                <th>Venue</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in schedule %}
+              <tr>
+                <td><strong>{{ row.game }}</strong><br><small>{{ row.stage }}</small></td>
+                <td>{{ row.matchup }}</td>
+                <td>{{ row.date|default:"—" }}</td>
+                <td>{{ row.time|default:"—" }}</td>
+                <td>{{ row.venue }}</td>
+                <td><span class="fac-pill">{{ row.status }}</span></td>
+              </tr>
+              {% empty %}
+              <tr><td colspan="6" class="fac-empty">No schedule items.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+      {% endif %}
+
+      {% if tab == 'scoresheets' %}
+      <section class="fac-card">
+        <header><h2>Scoresheets</h2></header>
+        <div class="fac-table-wrap">
+          <table class="fac-table">
+            <thead>
+              <tr>
+                <th>Match / Stage</th>
+                <th>Date</th>
+                <th>Venue</th>
+                <th>Participants</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in match_schedule %}
+              <tr>
+                <td><strong>{{ row.game }}</strong> · {{ row.stage }}</td>
+                <td>{{ row.date|default:"—" }}</td>
+                <td>{{ row.venue }}</td>
+                <td>{{ row.matchup }}</td>
+                <td>
+                  <a class="fac-btn fac-btn-sm" href="{% url 'faculty_scoresheet_pdf' event.id row.id %}" target="_blank">Generate / Download PDF</a>
+                  <a class="fac-btn fac-btn-secondary fac-btn-sm" href="{% url 'faculty_scoresheet_pdf' event.id row.id %}" target="_blank">Preview / Print</a>
+                </td>
+              </tr>
+              {% empty %}
+              <tr><td colspan="5" class="fac-empty">No matches available for scoresheets.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <p style="padding:12px 16px;font-size:12px;color:#5a7088;">Generated scoresheets auto-fill Event Name, Match Number, Date, Venue, and Teams.</p>
+      </section>
+      {% endif %}
+
+      {% if tab == 'participants' %}
+      <section class="fac-card">
+        <header><h2>Participants</h2></header>
+        <div class="fac-table-wrap">
+          <table class="fac-table">
+            <thead><tr><th>#</th><th>Name</th></tr></thead>
+            <tbody>
+              {% for name in detail.participants %}
+              <tr><td>{{ forloop.counter }}</td><td>{{ name }}</td></tr>
+              {% empty %}
+              <tr><td colspan="2" class="fac-empty">No participants listed.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+      {% endif %}
+
+      {% if tab == 'results' %}
+        {% if detail.event_type == 'Match-Based' %}
+        <section class="fac-card" style="margin-bottom:14px;">
+          <header><h2>Match Result Management</h2></header>
+          {% for row in match_schedule %}
+          {% if row.team_a_id %}
+          <div class="fac-form-grid" data-match-form="{{ row.id }}">
+            <div style="grid-column:1/-1;"><strong>{{ row.game }} · {{ row.stage }}</strong> — {{ row.matchup }}</div>
+            <label>Team A <input value="{{ row.team_a }}" readonly></label>
+            <label>Team B <input value="{{ row.team_b }}" readonly></label>
+            <label>Score A <input type="number" step="0.01" name="score_a" value="{{ row.score_a }}"></label>
+            <label>Score B <input type="number" step="0.01" name="score_b" value="{{ row.score_b }}"></label>
+            <label>Winner
+              <select name="winner_id">
+                <option value="">Select winner</option>
+                <option value="{{ row.team_a_id }}" {% if row.winner_id == row.team_a_id %}selected{% endif %}>{{ row.team_a }}</option>
+                <option value="{{ row.team_b_id }}" {% if row.winner_id == row.team_b_id %}selected{% endif %}>{{ row.team_b }}</option>
+              </select>
+            </label>
+            <label>Remarks <input name="remarks" placeholder="Optional remarks"></label>
+            <div class="fac-actions" style="grid-column:1/-1;padding:0;">
+              <button type="button" class="fac-btn fac-btn-secondary" data-save-draft="{{ row.id }}">Save Draft</button>
+              <button type="button" class="fac-btn fac-btn-success" data-confirm-result="{{ row.id }}">Confirm Result</button>
+            </div>
+          </div>
+          {% endif %}
+          {% empty %}
+          <p class="fac-empty">No matches to supervise.</p>
+          {% endfor %}
+        </section>
+        {% else %}
+        <section class="fac-card" style="margin-bottom:14px;">
+          <header><h2>Judge Monitoring</h2></header>
+          {% if monitoring %}
+          <div class="fac-progress">
+            <p><strong>{{ monitoring.submitted }}</strong> submitted · <strong>{{ monitoring.remaining }}</strong> remaining · {{ monitoring.total }} total</p>
+            <div class="fac-progress-bar"><i style="width:{% if monitoring.total %}{% widthratio monitoring.submitted monitoring.total 100 %}{% else %}0{% endif %}%"></i></div>
+          </div>
+          <div class="fac-table-wrap">
+            <table class="fac-table">
+              <thead><tr><th>Judge Name</th><th>Submission Status</th><th>Submitted Time</th></tr></thead>
+              <tbody>
+                {% for j in monitoring.rows %}
+                <tr>
+                  <td>{{ j.name }}</td>
+                  <td><span class="fac-pill">{{ j.status }}</span></td>
+                  <td>{{ j.submitted_at }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% if not monitoring.all_submitted %}
+          <p style="padding:12px 16px;color:#a65d08;font-size:13px;">Waiting until all required judges have submitted their scores before final processing.</p>
+          {% endif %}
+          {% else %}
+          <p class="fac-empty">No judges assigned.</p>
+          {% endif %}
+        </section>
+
+        {% if stages %}
+        <section class="fac-card" style="margin-bottom:14px;">
+          <header><h2>Multi-Stage Competition</h2></header>
+          {% for s in stages %}
+          <div class="fac-stage">
+            <strong>Stage {{ forloop.counter }} – {{ s.name }}</strong>
+            <span>Weight: {{ s.weight|default:"—" }}% · Qualifiers: {{ s.qualifiers|default:"—" }} · {{ s.rule }}</span>
+          </div>
+          {% endfor %}
+          {% if rankings %}
+          <div class="fac-actions">
+            <button type="button" class="fac-btn" id="btn-confirm-stage">Confirm Advancement (Top qualifiers)</button>
+          </div>
+          {% endif %}
+        </section>
+        {% endif %}
+
+        <section class="fac-card">
+          <header><h2>Results Review</h2></header>
+          <div class="fac-table-wrap">
+            <table class="fac-table">
+              <thead>
+                <tr>
+                  <th>Rank</th>
+                  <th>Contestant</th>
+                  <th>Final Score</th>
+                  <th>Score Breakdown</th>
+                  <th>Penalties</th>
+                  <th>Judge Comments</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for r in rankings %}
+                <tr>
+                  <td>{{ r.rank }}</td>
+                  <td>{% if r.number %}#{{ r.number }} {% endif %}{{ r.name }}</td>
+                  <td>{{ r.final_score }}</td>
+                  <td>{{ r.breakdown }}</td>
+                  <td>{{ r.penalties }}</td>
+                  <td>{% if r.comments %}{{ r.comments|join:" · " }}{% else %}—{% endif %}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="6" class="fac-empty">Rankings appear after judges submit scores.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <div class="fac-actions">
+            <button type="button" class="fac-btn fac-btn-secondary" id="btn-return">Return for Correction</button>
+            <button type="button" class="fac-btn" id="btn-approve">Approve Results</button>
+            <button type="button" class="fac-btn fac-btn-success" id="btn-publish">Publish Results</button>
+          </div>
+        </section>
+        {% endif %}
+
+        {% if detail.event_type == 'Match-Based' %}
+        <section class="fac-card" style="margin-top:14px;">
+          <header><h2>Publish Official Results</h2></header>
+          <div class="fac-actions">
+            <button type="button" class="fac-btn fac-btn-success" id="btn-publish">Confirm and Publish</button>
+          </div>
+        </section>
+        {% endif %}
+      {% endif %}
+    </main>
+  </div>
+</div>
+
+<dialog class="fac-dialog" id="publish-dialog">
+  <header>
+    <h3>Publish Results</h3>
+    <button type="button" data-close-publish aria-label="Close">×</button>
+  </header>
+  <div class="body">
+    Publishing the results will finalize the rankings, lock the scores, apply championship points, update the leaderboard, and make the results visible to all viewers.
+  </div>
+  <div class="actions">
+    <button type="button" class="fac-btn fac-btn-secondary" data-close-publish>Cancel</button>
+    <button type="button" class="fac-btn fac-btn-success" id="btn-confirm-publish">Confirm and Publish</button>
+  </div>
+</dialog>
+
+<script src="{% static 'facultydash/faculty.js' %}?v=20260802a"></script>
+</body>
+</html>

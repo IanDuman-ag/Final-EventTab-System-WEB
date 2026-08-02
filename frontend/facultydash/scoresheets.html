@@ -1,0 +1,57 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scoresheets · Faculty · EventTab</title>
+  <link rel="stylesheet" href="{% static 'facultydash/faculty.css' %}?v=20260802a">
+  <link rel="stylesheet" href="{% static 'facultydash/pages.css' %}?v=20260802a">
+</head>
+<body class="fac-v2 tab-v2">
+<div class="tab-shell">
+  {% include 'facultydash/_sidebar.html' with active='scoresheets' %}
+  <div class="tab-main">
+    <header class="tab-topbar">
+      <div>
+        <p class="fac-kicker">Scoresheet Generator</p>
+        <h1>Scoresheets</h1>
+      </div>
+    </header>
+    <main class="tab-content fac-content">
+      <section class="fac-card">
+        <header><h2>Select an assigned event</h2></header>
+        <div class="fac-table-wrap">
+          <table class="fac-table">
+            <thead>
+              <tr>
+                <th>Event Name</th>
+                <th>Event Type</th>
+                <th>Venue</th>
+                <th>Schedule</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for e in events %}
+              <tr>
+                <td><strong>{{ e.name }}</strong></td>
+                <td>{{ e.event_type }}</td>
+                <td>{{ e.venue }}</td>
+                <td>{{ e.schedule }}</td>
+                <td>
+                  <a class="fac-btn fac-btn-sm" href="{% url 'faculty_event_manage' e.id %}?tab=scoresheets">Generate Scoresheets</a>
+                </td>
+              </tr>
+              {% empty %}
+              <tr><td colspan="5" class="fac-empty">No assigned events.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+</body>
+</html>
