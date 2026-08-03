@@ -17,13 +17,149 @@ class MatchEventValidationError(ValueError):
 
 
 ALLOWED_DIVISIONS = {'Men', 'Women', 'Mixed', 'Open'}
-ALLOWED_FORMATS = {'single_elimination', 'round_robin'}
+ALLOWED_FORMATS = {'single_elimination', 'double_elimination', 'round_robin'}
 DEFAULT_POINTS = [
     {'label': '1st Place', 'points': 15},
     {'label': '2nd Place', 'points': 10},
     {'label': '3rd Place', 'points': 7},
     {'label': '4th Place', 'points': 5},
 ]
+
+
+def _opening_pairs(ordered_ids):
+    """Pad to a power-of-two bracket and return first-round (team_a, team_b) pairs."""
+    bracket_size = 1
+    while bracket_size < len(ordered_ids):
+        bracket_size *= 2
+    byes = bracket_size - len(ordered_ids)
+    opening_pairs = []
+    cursor = 0
+    for _ in range(byes):
+        opening_pairs.append((ordered_ids[cursor], None))
+        cursor += 1
+    while cursor < len(ordered_ids):
+        opening_pairs.append((ordered_ids[cursor], ordered_ids[cursor + 1]))
+        cursor += 2
+    return bracket_size, opening_pairs
+
+
+def _wb_round_name(round_index, round_count):
+    if round_index == round_count - 1:
+        return 'Winners Final'
+    if round_index == round_count - 2:
+        return 'Winners Semi Finals'
+    if round_index == round_count - 3:
+        return 'Winners Quarter Finals'
+    return f'Winners Round {round_index + 1}'
+
+
+def _lb_round_name(round_index, round_count):
+    if round_index == round_count - 1:
+        return 'Losers Final'
+    return f'Losers Round {round_index + 1}'
+
+
+def _build_double_elimination_matches(ordered_ids):
+    """
+    Build a complete double-elimination graph:
+      Winners bracket → Losers bracket → Grand Final.
+
+    Losers from each winners round drop into the losers bracket. A team is
+    eliminated only after two losses (losing in the losers bracket). The
+    winners-bracket champion and losers-bracket champion meet in the Grand Final.
+    """
+    bracket_size, opening_pairs = _opening_pairs(ordered_ids)
+    wb_round_count = bracket_size.bit_length() - 1
+    matches = []
+    number = 1
+    wb_rounds = []
+
+    for round_index in range(wb_round_count):
+        count = bracket_size // (2 ** (round_index + 1))
+        keys = [f'wb-r{round_index + 1}-m{slot + 1}' for slot in range(count)]
+        wb_rounds.append(keys)
+        round_name = _wb_round_name(round_index, wb_round_count)
+        for slot, key in enumerate(keys):
+            team_a_id, team_b_id = opening_pairs[slot] if round_index == 0 else (None, None)
+            matches.append({
+                'key': key,
+                'number': number,
+                'round': round_name,
+                'team_a_id': team_a_id,
+                'team_b_id': team_b_id,
+                'next_winner_key': None,
+                'next_loser_key': None,
+            })
+            number += 1
+
+    lb_rounds = []
+    lb_round_count = max(0, 2 * (wb_round_count - 1))
+    for lb_index in range(lb_round_count):
+        if lb_index % 2 == 0:
+            count = bracket_size // (2 ** (lb_index // 2 + 2))
+        else:
+            count = bracket_size // (2 ** ((lb_index + 1) // 2 + 1))
+        keys = [f'lb-r{lb_index + 1}-m{slot + 1}' for slot in range(count)]
+        lb_rounds.append(keys)
+        round_name = _lb_round_name(lb_index, lb_round_count)
+        for key in keys:
+            matches.append({
+                'key': key,
+                'number': number,
+                'round': round_name,
+                'team_a_id': None,
+                'team_b_id': None,
+                'next_winner_key': None,
+                'next_loser_key': None,
+            })
+            number += 1
+
+    gf_key = 'gf'
+    matches.append({
+        'key': gf_key,
+        'number': number,
+        'round': 'Grand Final',
+        'team_a_id': None,
+        'team_b_id': None,
+        'next_winner_key': None,
+        'next_loser_key': None,
+    })
+
+    match_by_key = {match['key']: match for match in matches}
+
+    # Winners advance within the winners bracket, then into the Grand Final.
+    for round_index, keys in enumerate(wb_rounds[:-1]):
+        for slot, key in enumerate(keys):
+            match_by_key[key]['next_winner_key'] = wb_rounds[round_index + 1][slot // 2]
+    match_by_key[wb_rounds[-1][0]]['next_winner_key'] = gf_key
+
+    if not lb_rounds:
+        # Two-team double elimination: rematch in the Grand Final.
+        match_by_key[wb_rounds[-1][0]]['next_loser_key'] = gf_key
+        return matches
+
+    # Losers advance within the losers bracket, then into the Grand Final.
+    for lb_index, keys in enumerate(lb_rounds[:-1]):
+        nxt = lb_rounds[lb_index + 1]
+        for slot, key in enumerate(keys):
+            if len(nxt) == len(keys):
+                match_by_key[key]['next_winner_key'] = nxt[slot]
+            else:
+                match_by_key[key]['next_winner_key'] = nxt[slot // 2]
+    match_by_key[lb_rounds[-1][0]]['next_winner_key'] = gf_key
+
+    # Drop winners-bracket losers into the losers bracket.
+    for slot, key in enumerate(wb_rounds[0]):
+        match_by_key[key]['next_loser_key'] = lb_rounds[0][slot // 2]
+    for wb_index in range(1, wb_round_count - 1):
+        drop_lb_index = 2 * wb_index - 1
+        for slot, key in enumerate(wb_rounds[wb_index]):
+            # Reverse slot order so early winners-bracket winners meet later drop-ins.
+            target_slot = len(lb_rounds[drop_lb_index]) - 1 - slot
+            match_by_key[key]['next_loser_key'] = lb_rounds[drop_lb_index][target_slot]
+    match_by_key[wb_rounds[-1][0]]['next_loser_key'] = lb_rounds[-1][0]
+
+    return matches
 
 
 def normalize_tournament_type(value):
@@ -132,7 +268,7 @@ def build_match_blueprint(team_ids, tournament_type, include_third_place=False, 
         random.SystemRandom().shuffle(ordered_ids)
     if len(ordered_ids) < 2:
         raise MatchEventValidationError('Select at least two active teams.')
-    if include_third_place and len(ordered_ids) < 4:
+    if include_third_place and tournament_type == 'single_elimination' and len(ordered_ids) < 4:
         raise MatchEventValidationError('A third place match requires at least four teams.')
 
     matches = []
@@ -152,22 +288,17 @@ def build_match_blueprint(team_ids, tournament_type, include_third_place=False, 
                 number += 1
         return {'draw_order': ordered_ids, 'matches': matches}
 
+    if tournament_type == 'double_elimination':
+        return {
+            'draw_order': ordered_ids,
+            'matches': _build_double_elimination_matches(ordered_ids),
+        }
+
     if tournament_type != 'single_elimination':
         raise MatchEventValidationError('Event Type is invalid.')
 
-    bracket_size = 1
-    while bracket_size < len(ordered_ids):
-        bracket_size *= 2
+    bracket_size, opening_pairs = _opening_pairs(ordered_ids)
     round_count = bracket_size.bit_length() - 1
-    byes = bracket_size - len(ordered_ids)
-    opening_pairs = []
-    cursor = 0
-    for _ in range(byes):
-        opening_pairs.append((ordered_ids[cursor], None))
-        cursor += 1
-    while cursor < len(ordered_ids):
-        opening_pairs.append((ordered_ids[cursor], ordered_ids[cursor + 1]))
-        cursor += 2
 
     round_keys = []
     number = 1
@@ -185,17 +316,13 @@ def build_match_blueprint(team_ids, tournament_type, include_third_place=False, 
             round_name = f'Round {round_index + 1}'
         for slot, key in enumerate(keys):
             team_a_id, team_b_id = opening_pairs[slot] if round_index == 0 else (None, None)
-            next_key = (
-                round_keys[round_index + 1][slot // 2]
-                if round_index + 1 < len(round_keys) else None
-            )
             matches.append({
                 'key': key,
                 'number': number,
                 'round': round_name,
                 'team_a_id': team_a_id,
                 'team_b_id': team_b_id,
-                'next_winner_key': next_key,
+                'next_winner_key': None,
                 'next_loser_key': None,
             })
             number += 1
@@ -273,6 +400,8 @@ def _sync_teams(event, teams):
 
 
 def _generate_matches(event, snapshots_by_source, blueprint):
+    from events.bracket_progression import _auto_complete_lone_team_match
+
     created_by_key = {}
     for row in blueprint['matches']:
         match = BracketMatch.objects.create(
@@ -308,6 +437,11 @@ def _generate_matches(event, snapshots_by_source, blueprint):
                 target.save(update_fields=['team_b'])
             update_fields += ['winner', 'status', 'remarks']
         match.save(update_fields=update_fields)
+
+    # Resolve any losers-bracket slots left with a single team after opening byes.
+    for match in created_by_key.values():
+        _auto_complete_lone_team_match(match)
+
     return list(event.bracket_matches.order_by('match_number'))
 
 
@@ -405,10 +539,6 @@ def save_match_event(data, actor, instance=None):
     tournament_type = normalize_tournament_type(
         _required(data, 'tournament_type', 'Event Type')
     )
-    if tournament_type == 'double_elimination':
-        raise MatchEventValidationError(
-            'Double Elimination is not available because the current engine does not support a complete loser bracket.'
-        )
     if tournament_type not in ALLOWED_FORMATS:
         raise MatchEventValidationError('Event Type is invalid.')
     if (

@@ -1,13 +1,13 @@
 {% load static %}
 {% comment %}
-  Shared Super Admin sidebar. Include with:
-    {% include 'superadmindash/_sidebar.html' with active='dashboard' %}
-  active values: dashboard, admins, reports, activity_logs
+  Shared Super Admin sidebar.
+  active: dashboard, users, events, leaderboard, reports, audit_logs, settings, profile
+  legacy aliases: admins -> users, activity_logs -> audit_logs
 {% endcomment %}
 <aside class="sidebar v2sa-sidebar" aria-label="Super admin navigation">
   <div class="brand">
     <h1>EventTab</h1>
-    <span>ADMIN PORTAL</span>
+    <span>SUPERADMIN PORTAL</span>
   </div>
 
   <nav class="side-nav v2sa-nav">
@@ -18,23 +18,43 @@
 
     <div class="v2sa-nav-section">MANAGE</div>
 
-    <a class="{% if active == 'admins' %}active{% endif %}" href="{% url 'superadmin_admins' %}" {% if active == 'admins' %}aria-current="page"{% endif %}>
+    <a class="{% if active == 'users' or active == 'admins' %}active{% endif %}" href="{% url 'superadmin_users' %}" {% if active == 'users' or active == 'admins' %}aria-current="page"{% endif %}>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4Zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4Z"/></svg>
-      <span>Admins</span>
+      <span>User Management</span>
+    </a>
+
+    <a class="{% if active == 'events' %}active{% endif %}" href="{% url 'superadmin_event_monitoring' %}" {% if active == 'events' %}aria-current="page"{% endif %}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2Zm0 16H5V10h14v10Z"/></svg>
+      <span>Event Monitoring</span>
+    </a>
+
+    <a class="{% if active == 'leaderboard' %}active{% endif %}" href="{% url 'superadmin_leaderboard' %}" {% if active == 'leaderboard' %}aria-current="page"{% endif %}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 3v18h18V3H3Zm16 16H5V5h14v14ZM7 17h2v-7H7v7Zm4 0h2V7h-2v10Zm4 0h2v-4h-2v4Z"/></svg>
+      <span>Leaderboard Monitoring</span>
     </a>
 
     <div class="v2sa-nav-section">REPORTS</div>
 
     <a class="{% if active == 'reports' %}active{% endif %}" href="{% url 'superadmin_reports' %}" {% if active == 'reports' %}aria-current="page"{% endif %}>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 3v18h18V3H3Zm16 16H5V5h14v14ZM7 17h2v-7H7v7Zm4 0h2V7h-2v10Zm4 0h2v-4h-2v4Z"/></svg>
-      <span>Reports</span>
+      <span>Reports &amp; Analytics</span>
     </a>
 
     <div class="v2sa-nav-section">SYSTEM</div>
 
-    <a class="{% if active == 'activity_logs' %}active{% endif %}" href="{% url 'superadmin_activity_logs' %}" {% if active == 'activity_logs' %}aria-current="page"{% endif %}>
+    <a class="{% if active == 'audit_logs' or active == 'activity_logs' %}active{% endif %}" href="{% url 'superadmin_activity_logs' %}" {% if active == 'audit_logs' or active == 'activity_logs' %}aria-current="page"{% endif %}>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M13 3a9 9 0 1 1-8.74 11.19l1.94-.49A7 7 0 1 0 13 5v4L7.5 3.5 13-2v5Zm-1 6h2v5l4 2-.9 1.79L12 15V9Z"/></svg>
-      <span>Activity Logs</span>
+      <span>Audit Logs</span>
+    </a>
+
+    <a class="{% if active == 'settings' %}active{% endif %}" href="{% url 'superadmin_settings' %}" {% if active == 'settings' %}aria-current="page"{% endif %}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96a7.1 7.1 0 0 0-1.63-.94l-.36-2.54A.48.48 0 0 0 14 2h-4a.48.48 0 0 0-.48.41l-.36 2.54c-.58.23-1.12.54-1.63.94l-2.39-.96a.49.49 0 0 0-.59.22L2.63 8.87a.49.49 0 0 0 .12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94L2.75 14.52a.49.49 0 0 0-.12.61l1.92 3.32c.13.22.39.31.59.22l2.39-.96c.5.4 1.05.72 1.63.94l.36 2.54c.05.24.24.41.48.41h4c.24 0 .44-.17.48-.41l.36-2.54c.58-.23 1.12-.54 1.63-.94l2.39.96c.22.09.46 0 .59-.22l1.92-3.32a.49.49 0 0 0-.12-.61l-2.03-1.58ZM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7Z"/></svg>
+      <span>System Settings</span>
+    </a>
+
+    <a class="{% if active == 'profile' %}active{% endif %}" href="{% url 'superadmin_profile' %}" {% if active == 'profile' %}aria-current="page"{% endif %}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12Zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8V22h19.2v-2.8c0-3.2-6.4-4.8-9.6-4.8Z"/></svg>
+      <span>Profile</span>
     </a>
   </nav>
 
@@ -44,7 +64,6 @@
       <strong>{{ request.user.get_full_name|default:request.user.username }}</strong>
       <small>{{ request.user.email|default:"superadmin@email.com" }}</small>
     </div>
-    <button class="v2sa-user-chevron" type="button" aria-label="User menu">▾</button>
   </div>
 
   <a class="v2sa-logout" href="{% url 'logout' %}">

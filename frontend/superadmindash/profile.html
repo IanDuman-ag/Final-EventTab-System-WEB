@@ -1,0 +1,61 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Profile · Superadmin · EventTab</title>
+  <link rel="stylesheet" href="{% static 'superadmin_dashboard.css' %}?v=20260803a">
+  <link rel="stylesheet" href="{% static 'admin_v2.css' %}?v=20260524a">
+  <link rel="stylesheet" href="{% static 'superadmindash/pages.css' %}?v=20260803a">
+</head>
+<body class="admin-v2-page">
+  <div class="dashboard-shell">
+    {% include 'superadmindash/_sidebar.html' with active='profile' %}
+    <div class="dashboard-area">
+      <header class="topbar">
+        <div class="topbar-context">
+          <p class="sa-kicker">ACCOUNT</p>
+          <h1 class="sa-page-title" style="margin:0">Profile</h1>
+        </div>
+      </header>
+      <main class="sa-page-main">
+        {% if messages %}
+        <ul class="sa-notes" style="background:#fff;border:1px solid #dbe5f0;margin-bottom:14px;">
+          {% for message in messages %}<li><span>{{ message }}</span></li>{% endfor %}
+        </ul>
+        {% endif %}
+
+        <div class="sa-grid-2">
+          <section class="sa-card">
+            <header><h2>Edit Profile</h2></header>
+            <form class="sa-form" method="post" action="{% url 'superadmin_profile_update' %}">
+              {% csrf_token %}
+              <label>Username<input value="{{ profile_user.username }}" disabled></label>
+              <label>First Name<input name="first_name" value="{{ profile_user.first_name }}"></label>
+              <label>Last Name<input name="last_name" value="{{ profile_user.last_name }}"></label>
+              <label>Email<input name="email" type="email" value="{{ profile_user.email }}"></label>
+              <label>Role<input value="Superadmin" disabled></label>
+              <button class="sa-btn" type="submit">Save Profile</button>
+            </form>
+          </section>
+          <section class="sa-card">
+            <header><h2>Change Password</h2></header>
+            <form class="sa-form" method="post" action="{% url 'superadmin_change_password' %}">
+              {% csrf_token %}
+              {% for field in password_form %}
+              <label>{{ field.label }}{{ field }}</label>
+              {% if field.errors %}<div class="sa-note">{{ field.errors }}</div>{% endif %}
+              {% endfor %}
+              <button class="sa-btn" type="submit">Change Password</button>
+            </form>
+            <div style="padding:0 16px 16px">
+              <a class="sa-btn sa-btn-danger" href="{% url 'logout' %}">Logout</a>
+            </div>
+          </section>
+        </div>
+      </main>
+    </div>
+  </div>
+</body>
+</html>

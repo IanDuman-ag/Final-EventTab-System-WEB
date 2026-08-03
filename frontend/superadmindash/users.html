@@ -1,0 +1,141 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>User Management · Superadmin · EventTab</title>
+  <link rel="stylesheet" href="{% static 'superadmin_dashboard.css' %}?v=20260803a">
+  <link rel="stylesheet" href="{% static 'admin_v2.css' %}?v=20260524a">
+  <link rel="stylesheet" href="{% static 'superadmindash/pages.css' %}?v=20260803a">
+</head>
+<body class="admin-v2-page">
+  <div class="dashboard-shell">
+    {% include 'superadmindash/_sidebar.html' with active='users' %}
+    <div class="v2sa-content dashboard-area">
+      <header class="topbar v2sa-topbar">
+        <div class="topbar-context">
+          <p class="sa-kicker">MANAGE</p>
+          <h1 class="sa-page-title" style="margin:0">User Management</h1>
+        </div>
+        <button class="sa-btn" type="button" id="sa-open-create">Create User</button>
+      </header>
+      <main class="sa-page-main">
+        <section class="sa-card">
+          <form class="sa-toolbar" method="get">
+            <input type="search" name="q" value="{{ search_query }}" placeholder="Search name, email, role…">
+            <select name="role">
+              <option value="all" {% if selected_role == 'all' %}selected{% endif %}>All Roles</option>
+              <option value="admin" {% if selected_role == 'admin' %}selected{% endif %}>Admin</option>
+              <option value="faculty" {% if selected_role == 'faculty' %}selected{% endif %}>Faculty In-Charge</option>
+              <option value="judge" {% if selected_role == 'judge' %}selected{% endif %}>Judge</option>
+            </select>
+            <select name="status">
+              <option value="all" {% if selected_status == 'all' %}selected{% endif %}>All Status</option>
+              <option value="active" {% if selected_status == 'active' %}selected{% endif %}>Active</option>
+              <option value="inactive" {% if selected_status == 'inactive' %}selected{% endif %}>Inactive</option>
+            </select>
+            <select name="department">
+              <option value="all">All Departments</option>
+              {% for d in departments %}
+              <option value="{{ d }}" {% if selected_department == d %}selected{% endif %}>{{ d }}</option>
+              {% endfor %}
+            </select>
+            <button class="sa-btn-sm" type="submit">Filter</button>
+          </form>
+          <div class="sa-table-wrap">
+            <table class="sa-table">
+              <thead>
+                <tr>
+                  <th>Name</th><th>Email</th><th>Role</th><th>Department</th><th>Status</th><th>Last Login</th><th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in rows %}
+                <tr data-id="{{ row.id }}">
+                  <td><strong>{{ row.name }}</strong><br><small>{{ row.username }}</small></td>
+                  <td>{{ row.email|default:"—" }}</td>
+                  <td><span class="sa-pill">{{ row.role }}</span></td>
+                  <td>{{ row.department }}</td>
+                  <td><span class="sa-pill {% if not row.is_active %}sa-pill--inactive{% else %}sa-pill--completed{% endif %}">{{ row.status }}</span></td>
+                  <td>{{ row.last_login }}</td>
+                  <td>
+                    <div class="sa-actions">
+                      <button class="sa-btn-sm sa-btn-secondary sa-view" type="button" data-id="{{ row.id }}">View</button>
+                      <button class="sa-btn-sm sa-btn-secondary sa-edit" type="button"
+                        data-id="{{ row.id }}" data-username="{{ row.username }}" data-email="{{ row.email }}"
+                        data-role="{{ row.role }}" data-department="{{ row.department }}" data-active="{{ row.is_active|yesno:'1,0' }}">Edit</button>
+                      <button class="sa-btn-sm sa-btn-secondary sa-reset" type="button" data-id="{{ row.id }}">Reset PW</button>
+                      {% if row.is_active %}
+                      <button class="sa-btn-sm sa-btn-secondary sa-toggle" type="button" data-id="{{ row.id }}" data-active="0">Deactivate</button>
+                      {% else %}
+                      <button class="sa-btn-sm sa-btn-secondary sa-toggle" type="button" data-id="{{ row.id }}" data-active="1">Activate</button>
+                      {% endif %}
+                      {% if row.can_delete %}
+                      <button class="sa-btn-sm sa-btn-danger sa-delete" type="button" data-id="{{ row.id }}">Delete</button>
+                      {% endif %}
+                    </div>
+                  </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="7" class="sa-empty">No users found.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% if page_obj.has_other_pages %}
+          <div style="padding:12px 16px;display:flex;gap:8px;align-items:center;">
+            {% if page_obj.has_previous %}<a class="sa-btn-sm sa-btn-secondary" href="?page={{ page_obj.previous_page_number }}&q={{ search_query }}&role={{ selected_role }}&status={{ selected_status }}&department={{ selected_department }}">Prev</a>{% endif %}
+            <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }} · {{ total_count }} users</span>
+            {% if page_obj.has_next %}<a class="sa-btn-sm sa-btn-secondary" href="?page={{ page_obj.next_page_number }}&q={{ search_query }}&role={{ selected_role }}&status={{ selected_status }}&department={{ selected_department }}">Next</a>{% endif %}
+          </div>
+          {% endif %}
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div class="sa-modal-backdrop" id="sa-user-modal">
+    <div class="sa-modal">
+      <h3 id="sa-modal-title">Create User</h3>
+      <form id="sa-user-form" class="sa-form" style="padding:0;max-width:none">
+        <input type="hidden" id="sa-user-id" value="">
+        <label>Username<input id="sa-username" required></label>
+        <label>Email<input id="sa-email" type="email"></label>
+        <label>Role
+          <select id="sa-role">
+            <option value="Admin">Admin</option>
+            <option value="Faculty In-Charge">Faculty In-Charge</option>
+            <option value="Judge">Judge</option>
+          </select>
+        </label>
+        <label>Department
+          <select id="sa-department">
+            <option value="">—</option>
+            {% for d in departments %}<option value="{{ d }}">{{ d }}</option>{% endfor %}
+          </select>
+        </label>
+        <label id="sa-password-wrap">Password<input id="sa-password" type="text"></label>
+        <label class="row"><input id="sa-active" type="checkbox" checked> Active</label>
+        <div class="sa-modal-actions">
+          <button type="button" class="sa-btn sa-btn-secondary" id="sa-modal-cancel">Cancel</button>
+          <button type="submit" class="sa-btn">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    window.SA_USER_URLS = {
+      create: "{% url 'superadmin_user_create' %}",
+      update: "/super-admin/users/__ID__/update/",
+      detail: "/super-admin/users/__ID__/",
+      reset: "/super-admin/users/__ID__/reset-password/",
+      setActive: "/super-admin/users/__ID__/set-active/",
+      delete: "/super-admin/users/__ID__/delete/",
+      csrf: "{{ csrf_token }}"
+    };
+  </script>
+  <script src="{% static 'js/superadmin_users.js' %}?v=20260803a"></script>
+</body>
+</html>

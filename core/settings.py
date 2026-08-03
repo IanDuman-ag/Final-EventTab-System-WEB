@@ -165,6 +165,9 @@ MEDIA_ROOT = BASE_DIR / 'assets'
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Superadmin: restore remains opt-in for safety
+SUPERADMIN_ALLOW_RESTORE = config_bool('SUPERADMIN_ALLOW_RESTORE', default=False)
+
 # Email — Gmail SMTP when credentials are set; otherwise console (dev only)
 EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')
 EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)

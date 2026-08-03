@@ -1,0 +1,84 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Event Monitoring · Superadmin · EventTab</title>
+  <link rel="stylesheet" href="{% static 'superadmin_dashboard.css' %}?v=20260803a">
+  <link rel="stylesheet" href="{% static 'admin_v2.css' %}?v=20260524a">
+  <link rel="stylesheet" href="{% static 'superadmindash/pages.css' %}?v=20260803a">
+</head>
+<body class="admin-v2-page">
+  <div class="dashboard-shell">
+    {% include 'superadmindash/_sidebar.html' with active='events' %}
+    <div class="dashboard-area">
+      <header class="topbar">
+        <div class="topbar-context">
+          <p class="sa-kicker">MONITOR</p>
+          <h1 class="sa-page-title" style="margin:0">Event Monitoring</h1>
+        </div>
+      </header>
+      <main class="sa-page-main">
+        <p class="sa-note">View-only. Superadmin cannot edit event configurations or publish results.</p>
+        <section class="sa-card">
+          <form class="sa-toolbar" method="get">
+            <input type="search" name="q" value="{{ search_query }}" placeholder="Search events…">
+            <select name="type">
+              <option value="all" {% if selected_type == 'all' %}selected{% endif %}>All Types</option>
+              <option value="match" {% if selected_type == 'match' %}selected{% endif %}>Match-Based</option>
+              <option value="criteria" {% if selected_type == 'criteria' %}selected{% endif %}>Criteria-Based</option>
+            </select>
+            <select name="status">
+              <option value="all" {% if selected_status == 'all' %}selected{% endif %}>All Status</option>
+              <option value="draft" {% if selected_status == 'draft' %}selected{% endif %}>Draft</option>
+              <option value="published" {% if selected_status == 'published' %}selected{% endif %}>Published</option>
+              <option value="ongoing" {% if selected_status == 'ongoing' %}selected{% endif %}>Ongoing</option>
+              <option value="waiting_review" {% if selected_status == 'waiting_review' %}selected{% endif %}>Waiting for Review</option>
+              <option value="completed" {% if selected_status == 'completed' %}selected{% endif %}>Completed</option>
+            </select>
+            <button class="sa-btn-sm" type="submit">Filter</button>
+          </form>
+          <div class="sa-table-wrap">
+            <table class="sa-table">
+              <thead>
+                <tr>
+                  <th>Event Name</th><th>Event Type</th><th>Category</th><th>Classification</th>
+                  <th>Assigned Admin</th><th>Assigned Faculty</th><th>Status</th><th>Event Date</th><th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in rows %}
+                <tr>
+                  <td><strong>{{ row.name }}</strong></td>
+                  <td>{{ row.event_type }}</td>
+                  <td>{{ row.category }}</td>
+                  <td>{{ row.classification }}</td>
+                  <td>{{ row.admin }}</td>
+                  <td>{{ row.faculty }}</td>
+                  <td><span class="sa-pill sa-pill--{{ row.status_key }}">{{ row.status }}</span></td>
+                  <td>{{ row.event_date }}</td>
+                  <td>
+                    <a class="sa-btn-sm" href="{% url 'superadmin_event_detail' row.id %}">View Event</a>
+                    <a class="sa-btn-sm sa-btn-secondary" href="{% url 'superadmin_event_detail' row.id %}">Monitor Progress</a>
+                  </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="9" class="sa-empty">No events found.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% if page_obj.has_other_pages %}
+          <div style="padding:12px 16px;display:flex;gap:8px;">
+            {% if page_obj.has_previous %}<a class="sa-btn-sm sa-btn-secondary" href="?page={{ page_obj.previous_page_number }}&q={{ search_query }}&type={{ selected_type }}&status={{ selected_status }}">Prev</a>{% endif %}
+            <span>Page {{ page_obj.number }} / {{ page_obj.paginator.num_pages }} · {{ total_count }} events</span>
+            {% if page_obj.has_next %}<a class="sa-btn-sm sa-btn-secondary" href="?page={{ page_obj.next_page_number }}&q={{ search_query }}&type={{ selected_type }}&status={{ selected_status }}">Next</a>{% endif %}
+          </div>
+          {% endif %}
+        </section>
+      </main>
+    </div>
+  </div>
+</body>
+</html>

@@ -108,14 +108,55 @@ class MatchEventWorkflowTests(TestCase):
         self.assertRedirects(response, reverse('admin_match_events'))
         self.assertFalse(Event.objects.filter(pk=event.id).exists())
 
-    def test_double_elimination_is_explicitly_rejected(self):
+    def test_double_elimination_creates_winners_losers_and_grand_final(self):
+        team_d = Team.objects.create(
+            name='Silver Wolves',
+            code='SW',
+            department=self.team_a.department,
+        )
+        team_ids = [self.team_a.id, self.team_b.id, self.team_c.id, team_d.id]
         response = self.client.post(
             reverse('admin_match_events'),
-            self.payload(tournament_type='double_elimination'),
-            follow=True,
+            self.payload(
+                tournament_type='double_elimination',
+                team_ids=json.dumps(team_ids),
+                draw_order=json.dumps(team_ids),
+            ),
         )
-        self.assertContains(response, 'does not support a complete loser bracket')
-        self.assertFalse(Event.objects.filter(name='Basketball Championship').exists())
+        self.assertRedirects(response, reverse('admin_match_events'))
+        event = Event.objects.get(name='Basketball Championship')
+        self.assertEqual(event.tournament_type, 'double_elimination')
+        matches = list(event.bracket_matches.order_by('match_number'))
+        rounds = {match.round_name for match in matches}
+        self.assertIn('Winners Semi Finals', rounds)
+        self.assertIn('Winners Final', rounds)
+        self.assertIn('Losers Round 1', rounds)
+        self.assertIn('Losers Final', rounds)
+        self.assertIn('Grand Final', rounds)
+        self.assertEqual(len(matches), 6)
+        winners_semi = [match for match in matches if match.round_name == 'Winners Semi Finals']
+        self.assertTrue(all(match.next_match_loser_id for match in winners_semi))
+        grand_final = event.bracket_matches.get(client_key='gf')
+        self.assertIsNone(grand_final.next_match_winner_id)
+
+    def test_double_elimination_preview_is_available(self):
+        response = self.client.post(
+            reverse('admin_match_event_preview'),
+            data=json.dumps({
+                'team_ids': [self.team_a.id, self.team_b.id, self.team_c.id],
+                'tournament_type': 'double_elimination',
+                'include_third_place': False,
+            }),
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload['success'])
+        rounds = {match['round'] for match in payload['matches']}
+        self.assertIn('Winners Final', rounds)
+        self.assertIn('Losers Final', rounds)
+        self.assertIn('Grand Final', rounds)
+        self.assertTrue(any(match['next_loser_key'] for match in payload['matches']))
 
     def test_edit_does_not_delete_completed_match_result(self):
         self.client.post(reverse('admin_match_events'), self.payload())
@@ -234,14 +275,21 @@ class MatchEventWorkflowTests(TestCase):
         self.assertTrue(row['legacy_double_elimination'])
         self.assertEqual(row['tournament_type'], 'double_elimination')
 
+        team_ids = [self.team_a.id, self.team_b.id]
         response = self.client.post(
             reverse('admin_edit_match_event', args=[event.id]),
             self.payload(
                 event_name='Legacy Double',
                 tournament_type='double_elimination',
+                team_ids=json.dumps(team_ids),
+                draw_order=json.dumps(team_ids),
             ),
-            follow=True,
         )
-        self.assertContains(response, 'current engine does not support a complete loser bracket')
+        self.assertRedirects(response, reverse('admin_match_events'))
         event.refresh_from_db()
-        self.assertEqual(event.tournament_type, 'Double Elimination')
+        self.assertEqual(event.tournament_type, 'double_elimination')
+        rounds = set(event.bracket_matches.values_list('round_name', flat=True))
+        self.assertIn('Grand Final', rounds)
+        self.assertTrue(
+            event.bracket_matches.filter(next_match_loser__isnull=False).exists()
+        )

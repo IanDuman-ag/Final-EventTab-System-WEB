@@ -1,0 +1,60 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Leaderboard Monitoring · Superadmin · EventTab</title>
+  <link rel="stylesheet" href="{% static 'superadmin_dashboard.css' %}?v=20260803a">
+  <link rel="stylesheet" href="{% static 'admin_v2.css' %}?v=20260524a">
+  <link rel="stylesheet" href="{% static 'superadmindash/pages.css' %}?v=20260803a">
+</head>
+<body class="admin-v2-page">
+  <div class="dashboard-shell">
+    {% include 'superadmindash/_sidebar.html' with active='leaderboard' %}
+    <div class="dashboard-area">
+      <header class="topbar">
+        <div class="topbar-context">
+          <p class="sa-kicker">MONITOR</p>
+          <h1 class="sa-page-title" style="margin:0">Leaderboard Monitoring</h1>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <a class="sa-btn sa-btn-secondary" href="{% url 'superadmin_leaderboard_export' %}?format=csv">Export CSV</a>
+          <a class="sa-btn" href="{% url 'superadmin_leaderboard_export' %}?format=xlsx">Export Excel</a>
+        </div>
+      </header>
+      <main class="sa-page-main">
+        <p class="sa-note">View only. Points cannot be edited. Standings are derived from championship points on match-based events.</p>
+        <section class="sa-card">
+          <div class="sa-table-wrap">
+            <table class="sa-table">
+              <thead>
+                <tr>
+                  <th>Rank</th>
+                  <th>Department</th>
+                  <th>Total Championship Points</th>
+                  <th>Major Event Points</th>
+                  <th>Minor Event Points</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in rows %}
+                <tr>
+                  <td><strong>#{{ row.rank }}</strong></td>
+                  <td>{{ row.department }}</td>
+                  <td>{{ row.total_points }}</td>
+                  <td>{{ row.major_points }}</td>
+                  <td>{{ row.minor_points }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5" class="sa-empty">No championship points recorded yet.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+</body>
+</html>

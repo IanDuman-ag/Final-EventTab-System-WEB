@@ -129,13 +129,13 @@
           <fieldset><legend>Event Type</legend>
             <div class="format-cards">
               <label><input type="radio" name="tournament_type" value="single_elimination" checked><span><strong>Single Elimination</strong><small>A participant is eliminated after one loss.</small></span></label>
-              <label class="disabled" title="The current engine does not support a complete loser bracket"><input type="radio" name="tournament_type" value="double_elimination" disabled><span><strong>Double Elimination</strong><small>Unavailable until full loser-bracket progression is supported.</small></span></label>
+              <label><input type="radio" name="tournament_type" value="double_elimination"><span><strong>Double Elimination</strong><small>A participant is eliminated after two losses via Winners and Losers brackets.</small></span></label>
               <label><input type="radio" name="tournament_type" value="round_robin"><span><strong>Round Robin</strong><small>Each participant competes against every other participant.</small></span></label>
             </div>
             <div class="legacy-format-notice" id="legacy-format-notice" hidden role="alert">
               <strong>Legacy Double Elimination event</strong>
-              <p>This stored event uses the retired winner-tree fallback. It will not be silently converted. Choose a supported format explicitly to regenerate it.</p>
-              <button type="button" class="match-secondary" id="change-legacy-format">Choose Single Elimination</button>
+              <p>This stored event uses the retired winners-only fallback. Regenerate with Double Elimination (or choose another format) to build a full Winners/Losers bracket.</p>
+              <button type="button" class="match-secondary" id="change-legacy-format">Regenerate as Double Elimination</button>
             </div>
             <label class="inline-check" id="third-place-wrap"><input type="checkbox" name="include_third_place"> Include Third Place Match</label>
           </fieldset>

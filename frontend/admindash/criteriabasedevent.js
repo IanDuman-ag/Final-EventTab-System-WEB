@@ -10,6 +10,7 @@
   var criteria = [];
   var deductions = [];
   var points = [];
+  var stages = [];
   var events = [];
 
   try {
@@ -18,12 +19,27 @@
     events = [];
   }
 
+  var STAGE_NAME_HINTS = [
+    'Production Number',
+    'Talent Competition',
+    'Swimwear Competition',
+    'Evening Gown',
+    'Speech Round',
+    'Question and Answer',
+    'Final Interview',
+  ];
+
+  var QUALIFICATION_METHODS = [
+    { value: 'top_ranking', label: 'Top Ranking' },
+    { value: 'minimum_score', label: 'Minimum Score' },
+    { value: 'manual_selection', label: 'Manual Selection by Faculty' },
+  ];
+
   var TIE_METHODS = [
-    { method: 'highest_selected_criterion', label: 'Highest Score in Selected Criterion' },
+    { method: 'highest_selected_criterion', label: 'Highest Score in Priority Criterion' },
     { method: 'highest_chief_judge', label: 'Highest Chief Judge Score' },
     { method: 'lowest_deduction', label: 'Lowest Deduction' },
-    { method: 'majority_decision', label: 'Majority Decision' },
-    { method: 'manual_decision', label: 'Manual Decision' },
+    { method: 'manual_decision', label: 'Manual Faculty Decision' },
   ];
 
   function showError(msg) {
@@ -85,55 +101,251 @@
 
   function syncFormatPanels() {
     var fmt = eventFormat();
-    $('#multiple-rounds-panel').classList.toggle('criteria-hidden', fmt !== 'multiple_rounds');
-    $('#prelim-final-panel').classList.toggle('criteria-hidden', fmt !== 'preliminary_final');
-    if (fmt === 'multiple_rounds') renderRoundsTable();
-    updatePrelimMeter();
-  }
-
-  function renderRoundsTable() {
-    var count = Math.max(2, Math.min(10, Number($('#round-count').value) || 2));
-    $('#round-count').value = count;
-    var tbody = $('#rounds-table tbody');
-    var existing = $$('#rounds-table tbody tr');
-    tbody.innerHTML = '';
-    for (var i = 0; i < count; i++) {
-      var prev = existing[i];
-      var name = prev ? prev.querySelector('[data-round-name]').value : ('Round ' + (i + 1));
-      var weight = prev ? prev.querySelector('[data-round-weight]').value : String(Math.floor(100 / count));
-      var qualifiers = prev ? prev.querySelector('[data-round-qualifiers]').value : '4';
-      var tr = document.createElement('tr');
-      tr.innerHTML =
-        '<td><input data-round-name value="' + escapeAttr(name) + '"></td>' +
-        '<td><input type="number" min="0" max="100" step="0.1" data-round-weight value="' + escapeAttr(weight) + '"></td>' +
-        '<td>' + (i < count - 1
-          ? '<input type="number" min="0" data-round-qualifiers value="' + escapeAttr(qualifiers) + '">'
-          : '<span>—</span><input type="hidden" data-round-qualifiers value="0">') +
-        '</td>';
-      tbody.appendChild(tr);
+    $('#multiple-stage-panel').classList.toggle('criteria-hidden', fmt !== 'multiple_stage');
+    if (fmt === 'multiple_stage') {
+      if (!stages.length) stages = defaultStages(Number($('#stage-count').value) || 2);
+      $('#stage-count').value = String(stages.length);
+      renderStagesTable();
     }
-    $$('#rounds-table [data-round-weight]').forEach(function (input) {
-      input.addEventListener('input', updateRoundsMeter);
+  }
+
+  function defaultStages(count) {
+    count = Math.max(2, Math.min(20, Number(count) || 2));
+    var weight = Math.floor(100 / count);
+    var rows = [];
+    for (var i = 0; i < count; i++) {
+      var isFinal = i === count - 1;
+      rows.push({
+        id: uid('s'),
+        name: STAGE_NAME_HINTS[i] || ('Stage ' + (i + 1) + ' Portion'),
+        weight: isFinal ? (100 - weight * (count - 1)) : weight,
+        qualification_method: isFinal ? null : 'top_ranking',
+        qualifiers: isFinal ? null : Math.max(1, count - i),
+        minimum_score: null,
+        carry_previous_scores: i > 0,
+        require_faculty_confirmation: !isFinal,
+        is_final: isFinal,
+      });
+    }
+    return rows;
+  }
+
+  function syncStagesFromDom() {
+    var rows = $$('#stages-table tbody tr');
+    if (!rows.length) return;
+    stages = rows.map(function (tr, index) {
+      var isFinal = index === rows.length - 1;
+      var methodEl = $('[data-stage-method]', tr);
+      var qualEl = $('[data-stage-qualifiers]', tr);
+      var minEl = $('[data-stage-min-score]', tr);
+      var carryEl = $('[data-stage-carry]', tr);
+      var confirmEl = $('[data-stage-confirm]', tr);
+      return {
+        id: tr.dataset.id || uid('s'),
+        name: ($('[data-stage-name]', tr).value || '').trim(),
+        weight: Number($('[data-stage-weight]', tr).value) || 0,
+        qualification_method: isFinal ? null : ((methodEl && methodEl.value) || 'top_ranking'),
+        qualifiers: isFinal ? null : (Number(qualEl && qualEl.value) || 0),
+        minimum_score: (!isFinal && methodEl && methodEl.value === 'minimum_score')
+          ? (Number(minEl && minEl.value) || 0)
+          : null,
+        carry_previous_scores: index === 0 ? false : !!(carryEl && carryEl.value === 'yes'),
+        require_faculty_confirmation: isFinal ? false : !!(confirmEl && confirmEl.checked),
+        is_final: isFinal,
+      };
     });
-    updateRoundsMeter();
+    updateStagesMeter();
+    renderStageFlow();
   }
 
-  function updateRoundsMeter() {
-    var total = $$('#rounds-table [data-round-weight]').reduce(function (sum, input) {
-      return sum + (Number(input.value) || 0);
-    }, 0);
-    var meter = $('#rounds-weight-meter');
-    meter.textContent = 'Round total: ' + round2(total) + '%';
+  function updateStagesMeter() {
+    var total = stages.reduce(function (sum, row) { return sum + (Number(row.weight) || 0); }, 0);
+    var meter = $('#stages-weight-meter');
+    if (!meter) return;
+    meter.textContent = 'Stage total: ' + round2(total) + '%';
     meter.classList.toggle('is-ok', Math.abs(total - 100) < 0.01);
     meter.classList.toggle('is-bad', Math.abs(total - 100) >= 0.01);
   }
 
-  function updatePrelimMeter() {
-    var total = (Number($('#prelim-percentage').value) || 0) + (Number($('#final-percentage').value) || 0);
-    var meter = $('#prelim-weight-meter');
-    meter.textContent = 'Prelim + Final total: ' + round2(total) + '%';
-    meter.classList.toggle('is-ok', Math.abs(total - 100) < 0.01);
-    meter.classList.toggle('is-bad', Math.abs(total - 100) >= 0.01);
+  function renderStageFlow() {
+    var flow = $('#stage-flow');
+    if (!flow) return;
+    if (!stages.length) {
+      flow.innerHTML = '';
+      return;
+    }
+    flow.innerHTML = stages.map(function (stage, index) {
+      var chip =
+        '<span class="stage-flow-chip' + (stage.is_final ? ' is-final' : '') + '">' +
+        '<em>Stage ' + (index + 1) + '</em>' +
+        '<strong>' + escapeHtml(stage.name || 'Untitled') + '</strong>' +
+        '<span>' + escapeHtml(String(stage.weight || 0)) + '%</span>' +
+        '</span>';
+      return chip + (index < stages.length - 1 ? '<span class="stage-flow-arrow">→</span>' : '');
+    }).join('');
+  }
+
+  function methodOptionsHtml(selected) {
+    return QUALIFICATION_METHODS.map(function (method) {
+      return '<option value="' + method.value + '"' +
+        (selected === method.value ? ' selected' : '') + '>' +
+        method.label + '</option>';
+    }).join('');
+  }
+
+  function renderStagesTable() {
+    var tbody = $('#stages-table tbody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    stages.forEach(function (stage, index) {
+      var isFinal = index === stages.length - 1;
+      stage.is_final = isFinal;
+      if (isFinal) {
+        stage.qualification_method = null;
+        stage.qualifiers = null;
+        stage.require_faculty_confirmation = false;
+      }
+      var tr = document.createElement('tr');
+      tr.dataset.id = stage.id;
+      var methodCell = isFinal
+        ? '<span class="stage-final-label">Final Stage · No Further Qualification</span>'
+        : '<select data-stage-method>' + methodOptionsHtml(stage.qualification_method || 'top_ranking') + '</select>' +
+          ((stage.qualification_method || 'top_ranking') === 'minimum_score'
+            ? '<input type="number" min="0" step="0.1" data-stage-min-score placeholder="Min score" value="' +
+              escapeAttr(stage.minimum_score != null ? stage.minimum_score : '') + '">'
+            : '<input type="hidden" data-stage-min-score value="">');
+      var qualifiersCell = isFinal
+        ? '<span class="stage-final-label">—</span>'
+        : '<input type="number" min="1" data-stage-qualifiers value="' +
+          escapeAttr(stage.qualifiers != null ? stage.qualifiers : 1) + '">';
+      var carryCell = index === 0
+        ? '<span class="stage-final-label">N/A</span>'
+        : '<select data-stage-carry>' +
+          '<option value="yes"' + (stage.carry_previous_scores ? ' selected' : '') + '>Yes</option>' +
+          '<option value="no"' + (!stage.carry_previous_scores ? ' selected' : '') + '>No</option>' +
+          '</select>';
+      var confirmCell = isFinal
+        ? '<span class="stage-final-label">Final review on publish</span>'
+        : '<label class="inline-check"><input type="checkbox" data-stage-confirm' +
+          (stage.require_faculty_confirmation ? ' checked' : '') + '> Required</label>';
+      tr.innerHTML =
+        '<td>' + (index + 1) + '</td>' +
+        '<td><input data-stage-name list="stage-name-suggestions" placeholder="e.g. Talent Competition" value="' +
+          escapeAttr(stage.name) + '"></td>' +
+        '<td><input type="number" min="0" max="100" step="0.1" data-stage-weight value="' +
+          escapeAttr(stage.weight) + '"></td>' +
+        '<td>' + methodCell + '</td>' +
+        '<td>' + qualifiersCell + '</td>' +
+        '<td>' + carryCell + '</td>' +
+        '<td>' + confirmCell + '</td>' +
+        '<td><div class="criteria-editor-actions">' +
+        '<button type="button" data-stage-up' + (index === 0 ? ' disabled' : '') + '>Up</button>' +
+        '<button type="button" data-stage-down' + (index === stages.length - 1 ? ' disabled' : '') + '>Down</button>' +
+        '<button type="button" data-stage-del' + (stages.length <= 2 ? ' disabled' : '') + '>Delete</button>' +
+        '</div></td>';
+      tbody.appendChild(tr);
+    });
+
+    if (!$('#stage-name-suggestions')) {
+      var datalist = document.createElement('datalist');
+      datalist.id = 'stage-name-suggestions';
+      datalist.innerHTML = STAGE_NAME_HINTS.map(function (name) {
+        return '<option value="' + escapeAttr(name) + '"></option>';
+      }).join('');
+      form.appendChild(datalist);
+    }
+
+    bindStageRowEvents();
+    updateStagesMeter();
+    renderStageFlow();
+  }
+
+  function bindStageRowEvents() {
+    $$('#stages-table tbody tr').forEach(function (tr) {
+      $$('input,select', tr).forEach(function (input) {
+        input.addEventListener('input', function () {
+          if (input.hasAttribute('data-stage-method')) {
+            syncStagesFromDom();
+            renderStagesTable();
+            return;
+          }
+          syncStagesFromDom();
+        });
+        input.addEventListener('change', function () {
+          if (input.hasAttribute('data-stage-method')) {
+            syncStagesFromDom();
+            renderStagesTable();
+            return;
+          }
+          syncStagesFromDom();
+        });
+      });
+      var up = $('[data-stage-up]', tr);
+      var down = $('[data-stage-down]', tr);
+      var del = $('[data-stage-del]', tr);
+      if (up) up.addEventListener('click', function () { moveStage(tr.dataset.id, -1); });
+      if (down) down.addEventListener('click', function () { moveStage(tr.dataset.id, 1); });
+      if (del) del.addEventListener('click', function () {
+        if (stages.length <= 2) return;
+        syncStagesFromDom();
+        stages = stages.filter(function (row) { return row.id !== tr.dataset.id; });
+        $('#stage-count').value = String(stages.length);
+        renderStagesTable();
+      });
+    });
+  }
+
+  function moveStage(id, delta) {
+    syncStagesFromDom();
+    var index = stages.findIndex(function (row) { return row.id === id; });
+    var next = index + delta;
+    if (index < 0 || next < 0 || next >= stages.length) return;
+    var copy = stages.slice();
+    var tmp = copy[index];
+    copy[index] = copy[next];
+    copy[next] = tmp;
+    stages = copy;
+    renderStagesTable();
+  }
+
+  function resizeStages(count) {
+    syncStagesFromDom();
+    count = Math.max(2, Math.min(20, Number(count) || 2));
+    if (count === stages.length) {
+      renderStagesTable();
+      return;
+    }
+    if (count > stages.length) {
+      while (stages.length < count) {
+        stages.push({
+          id: uid('s'),
+          name: STAGE_NAME_HINTS[stages.length] || ('Stage ' + (stages.length + 1) + ' Portion'),
+          weight: 0,
+          qualification_method: 'top_ranking',
+          qualifiers: 3,
+          minimum_score: null,
+          carry_previous_scores: true,
+          require_faculty_confirmation: true,
+          is_final: false,
+        });
+      }
+    } else {
+      stages = stages.slice(0, count);
+    }
+    stages.forEach(function (stage, index) {
+      stage.is_final = index === stages.length - 1;
+      if (stage.is_final) {
+        stage.qualification_method = null;
+        stage.qualifiers = null;
+        stage.require_faculty_confirmation = false;
+      } else if (!stage.qualification_method) {
+        stage.qualification_method = 'top_ranking';
+        stage.qualifiers = stage.qualifiers || 3;
+        stage.require_faculty_confirmation = true;
+      }
+    });
+    $('#stage-count').value = String(stages.length);
+    renderStagesTable();
   }
 
   function round2(n) { return Math.round(n * 100) / 100; }
@@ -384,22 +596,24 @@
   function collectRounds() {
     var fmt = eventFormat();
     if (fmt === 'single_performance') return [];
-    if (fmt === 'multiple_rounds') {
-      return $$('#rounds-table tbody tr').map(function (tr) {
-        return {
-          name: $('[data-round-name]', tr).value.trim(),
-          weight: Number($('[data-round-weight]', tr).value) || 0,
-          qualifiers: Number($('[data-round-qualifiers]', tr).value) || 0,
-        };
-      });
-    }
-    return {
-      prelim_participants: Number($('#prelim-participants').value) || 0,
-      finalists: Number($('#finalists').value) || 0,
-      carry_prelim_scores: $('#carry-prelim').value === 'yes',
-      prelim_percentage: Number($('#prelim-percentage').value) || 0,
-      final_percentage: Number($('#final-percentage').value) || 0,
-    };
+    syncStagesFromDom();
+    return stages.map(function (stage, index) {
+      var isFinal = index === stages.length - 1;
+      return {
+        stage_number: index + 1,
+        name: stage.name,
+        weight: Number(stage.weight) || 0,
+        qualification_method: isFinal ? null : (stage.qualification_method || 'top_ranking'),
+        qualifiers: isFinal ? null : (Number(stage.qualifiers) || 0),
+        minimum_score: (!isFinal && stage.qualification_method === 'minimum_score')
+          ? (Number(stage.minimum_score) || 0)
+          : null,
+        carry_previous_scores: index === 0 ? false : !!stage.carry_previous_scores,
+        require_faculty_confirmation: isFinal ? false : !!stage.require_faculty_confirmation,
+        is_final: isFinal,
+        status: index === 0 ? 'open' : 'locked',
+      };
+    });
   }
 
   function collectScoreSettings() {
@@ -417,6 +631,9 @@
     $$('[data-rp]').forEach(function (input) {
       out[input.dataset.rp] = input.checked;
     });
+    if (eventFormat() === 'multiple_stage') {
+      out.stage_tiebreak_method = $('#stage-tiebreak-method').value || 'highest_selected_criterion';
+    }
     return out;
   }
 
@@ -475,20 +692,35 @@
     if (current === 2) {
       if (collectParticipants().length < 1) return 'Select at least one participant or team.';
       var fmt = eventFormat();
-      if (fmt === 'multiple_rounds') {
-        updateRoundsMeter();
-        var total = $$('#rounds-table [data-round-weight]').reduce(function (sum, input) {
-          return sum + (Number(input.value) || 0);
-        }, 0);
-        if (Math.abs(total - 100) >= 0.01) return 'Total round percentage must equal 100%.';
-      }
-      if (fmt === 'preliminary_final') {
-        updatePrelimMeter();
-        var p = Number($('#prelim-participants').value) || 0;
-        var f = Number($('#finalists').value) || 0;
-        var pct = (Number($('#prelim-percentage').value) || 0) + (Number($('#final-percentage').value) || 0);
-        if (p < 2 || f < 1 || f >= p) return 'Preliminary participants must be greater than finalists.';
-        if (Math.abs(pct - 100) >= 0.01) return 'Preliminary and final percentages must total 100%.';
+      if (fmt === 'multiple_stage') {
+        syncStagesFromDom();
+        if (stages.length < 2) return 'Multiple Stage Competition requires at least two stages.';
+        var names = {};
+        var participantCount = collectParticipants().length;
+        for (var i = 0; i < stages.length; i++) {
+          var stage = stages[i];
+          var nameKey = (stage.name || '').trim().toLowerCase();
+          if (!nameKey) return 'Each stage needs a unique custom name.';
+          if (/^round\s*\d+$/i.test(stage.name.trim())) {
+            return 'Use a descriptive stage name instead of generic Round labels.';
+          }
+          if (names[nameKey]) return 'Each stage name must be unique.';
+          names[nameKey] = true;
+          if ((Number(stage.weight) || 0) <= 0) return 'Every stage weight must be greater than zero.';
+          if (!stage.is_final) {
+            if (!stage.qualification_method) return 'Select a qualification method for every non-final stage.';
+            var quals = Number(stage.qualifiers) || 0;
+            if (quals < 1) return 'Each qualification stage needs at least one qualifier.';
+            if (quals > participantCount) {
+              return 'Number of qualifiers cannot exceed the number of selected contestants.';
+            }
+            if (stage.qualification_method === 'minimum_score' && (Number(stage.minimum_score) || 0) < 0) {
+              return 'Minimum score must be zero or greater.';
+            }
+          }
+        }
+        var total = stages.reduce(function (sum, row) { return sum + (Number(row.weight) || 0); }, 0);
+        if (Math.abs(total - 100) >= 0.01) return 'Total stage weight must equal 100%.';
       }
     }
     if (current === 3) {
@@ -538,14 +770,21 @@
     };
     var formatLabels = {
       single_performance: 'Single Performance',
-      multiple_rounds: 'Multiple Rounds',
-      preliminary_final: 'Preliminary and Final Round',
+      multiple_stage: 'Multiple Stage Competition',
+      multiple_rounds: 'Multiple Stage Competition',
+      preliminary_final: 'Multiple Stage Competition',
     };
     var panel = participationType() === 'team' ? '#team-options' : '#candidate-options';
     var names = $$(panel + ' .participant-check:checked').map(function (box) { return box.dataset.name; });
     var judgeNames = $$('.judge-check:checked').map(function (box) { return box.dataset.name; });
     var chief = $('#chief-judge');
     var faculty = form.faculty_account;
+    var stageSummary = 'Single performance';
+    if (fmt === 'multiple_stage') {
+      stageSummary = collectRounds().map(function (stage) {
+        return stage.name + ' (' + stage.weight + '%)';
+      }).join(' → ');
+    }
     var rows = [
       ['Event Name', form.event_name.value],
       ['Category', form.category.value],
@@ -556,7 +795,8 @@
       ['Event Date Range', form.start_date.value + ' to ' + form.end_date.value],
       ['Participants', names.join(', ') || '—'],
       ['Event Format', formatLabels[fmt] || fmt],
-      ['Round Configuration', fmt === 'single_performance' ? 'Single performance' : JSON.stringify(collectRounds())],
+      ['Competition Structure', stageSummary],
+      ['Stage Tie-Break', fmt === 'multiple_stage' ? ($('#stage-tiebreak-method').selectedOptions[0].text || '—') : '—'],
       ['Judging Criteria', criteria.map(function (row) { return row.name + ' (' + row.weight + '%)'; }).join(' · ') || '—'],
       ['Scoring Method', methodLabels[method] || method],
       ['Score Settings', 'Min ' + $('#min-score').value + ' / Max ' + $('#max-score').value + ' · Decimals ' + $('#decimal-places').value],
@@ -582,14 +822,70 @@
     criteria = defaultCriteria();
     deductions = [];
     points = defaultPoints('major');
+    stages = defaultStages(2);
+    $('#stage-count').value = '2';
+    $('#stage-tiebreak-method').value = 'highest_selected_criterion';
     renderCriteria();
     renderDeductions();
     renderPoints();
-    renderRoundsTable();
+    renderStagesTable();
     syncParticipantPanels();
     syncFormatPanels();
     updateJudgeCount();
     setStep(1);
+  }
+
+  function normalizeLoadedFormat(value) {
+    if (value === 'multiple_rounds' || value === 'preliminary_final') return 'multiple_stage';
+    return value || 'single_performance';
+  }
+
+  function stagesFromLegacyConfig(event) {
+    var config = event.rounds_config || [];
+    if (event.event_format === 'preliminary_final') {
+      var cfg = Array.isArray(config) ? (config[0] || {}) : (config || {});
+      return [
+        {
+          id: uid('s'),
+          name: 'Preliminary Round',
+          weight: Number(cfg.prelim_percentage) || 40,
+          qualification_method: 'top_ranking',
+          qualifiers: Number(cfg.finalists) || 4,
+          minimum_score: null,
+          carry_previous_scores: false,
+          require_faculty_confirmation: true,
+          is_final: false,
+        },
+        {
+          id: uid('s'),
+          name: 'Final Round',
+          weight: Number(cfg.final_percentage) || 60,
+          qualification_method: null,
+          qualifiers: null,
+          minimum_score: null,
+          carry_previous_scores: !!cfg.carry_prelim_scores,
+          require_faculty_confirmation: false,
+          is_final: true,
+        },
+      ];
+    }
+    if (Array.isArray(config) && config.length) {
+      return config.map(function (row, index) {
+        var isFinal = index === config.length - 1 || !!row.is_final;
+        return {
+          id: uid('s'),
+          name: row.name || STAGE_NAME_HINTS[index] || ('Stage ' + (index + 1) + ' Portion'),
+          weight: Number(row.weight) || 0,
+          qualification_method: isFinal ? null : (row.qualification_method || 'top_ranking'),
+          qualifiers: isFinal ? null : (row.qualifiers != null ? row.qualifiers : 3),
+          minimum_score: row.minimum_score != null ? row.minimum_score : null,
+          carry_previous_scores: index === 0 ? false : (row.carry_previous_scores !== false),
+          require_faculty_confirmation: isFinal ? false : (row.require_faculty_confirmation !== false),
+          is_final: isFinal,
+        };
+      });
+    }
+    return defaultStages(2);
   }
 
   function fillEditor(event) {
@@ -604,8 +900,9 @@
     form.start_date.value = event.start_date || '';
     form.end_date.value = event.end_date || '';
     $('#status-preview').value = event.publication_status || 'draft';
+    var loadedFormat = normalizeLoadedFormat(event.event_format);
     $$('input[name="event_format"]').forEach(function (input) {
-      input.checked = input.value === event.event_format;
+      input.checked = input.value === loadedFormat;
     });
     $$('input[name="criteria_score_method"]').forEach(function (input) {
       input.checked = input.value === event.criteria_score_method;
@@ -616,26 +913,10 @@
       box.checked = ids.indexOf(box.value) !== -1;
     });
     updateParticipantCount();
-    if (event.event_format === 'multiple_rounds' && Array.isArray(event.rounds_config)) {
-      $('#round-count').value = String(Math.max(2, event.rounds_config.length));
-      renderRoundsTable();
-      $$('#rounds-table tbody tr').forEach(function (tr, index) {
-        var row = event.rounds_config[index];
-        if (!row) return;
-        $('[data-round-name]', tr).value = row.name || '';
-        $('[data-round-weight]', tr).value = row.weight;
-        $('[data-round-qualifiers]', tr).value = row.qualifiers || 0;
-      });
-      updateRoundsMeter();
-    }
-    if (event.event_format === 'preliminary_final') {
-      var cfg = Array.isArray(event.rounds_config) ? (event.rounds_config[0] || {}) : (event.rounds_config || {});
-      $('#prelim-participants').value = cfg.prelim_participants || 8;
-      $('#finalists').value = cfg.finalists || 4;
-      $('#carry-prelim').value = cfg.carry_prelim_scores ? 'yes' : 'no';
-      $('#prelim-percentage').value = cfg.prelim_percentage || 40;
-      $('#final-percentage').value = cfg.final_percentage || 60;
-    }
+    stages = stagesFromLegacyConfig(event);
+    $('#stage-count').value = String(Math.max(2, stages.length));
+    var stageTie = ((event.result_processing_config || {}).stage_tiebreak_method) || 'highest_selected_criterion';
+    $('#stage-tiebreak-method').value = stageTie;
     syncFormatPanels();
     criteria = (event.judging_criteria_config || []).map(function (row) {
       return {
@@ -713,7 +994,9 @@
       ['Event Date Range', event.start_date + ' to ' + event.end_date],
       ['Participants', (event.participant_names || []).join(', ') || '—'],
       ['Event Format', event.event_format_label],
-      ['Round Configuration', JSON.stringify(event.rounds_config || [])],
+      ['Competition Structure', (event.rounds_config || []).map(function (row) {
+        return (row.name || 'Stage') + ' (' + (row.weight != null ? row.weight : '—') + '%)';
+      }).join(' → ') || 'Single performance'],
       ['Judging Criteria', (event.judging_criteria_config || []).map(function (row) {
         return row.name + ' (' + row.weight + '%)';
       }).join(' · ') || '—'],
@@ -776,9 +1059,12 @@
   $$('input[name="event_format"]').forEach(function (input) {
     input.addEventListener('change', syncFormatPanels);
   });
-  $('#round-count').addEventListener('change', renderRoundsTable);
-  $('#prelim-percentage').addEventListener('input', updatePrelimMeter);
-  $('#final-percentage').addEventListener('input', updatePrelimMeter);
+  $('#stage-count').addEventListener('change', function () {
+    resizeStages($('#stage-count').value);
+  });
+  $('#add-stage').addEventListener('click', function () {
+    resizeStages((stages.length || 2) + 1);
+  });
   $('#participant-search').addEventListener('input', function () {
     var q = $('#participant-search').value.trim().toLowerCase();
     var panel = participationType() === 'team' ? '#team-options' : '#candidate-options';

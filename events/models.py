@@ -90,10 +90,12 @@ class Event(models.Model):
         (PARTICIPATION_INDIVIDUAL, 'Individual'),
     ]
     FORMAT_SINGLE = 'single_performance'
-    FORMAT_MULTIPLE = 'multiple_rounds'
-    FORMAT_PRELIM_FINAL = 'preliminary_final'
+    FORMAT_MULTIPLE_STAGE = 'multiple_stage'
+    FORMAT_MULTIPLE = 'multiple_rounds'  # legacy alias
+    FORMAT_PRELIM_FINAL = 'preliminary_final'  # legacy alias
     FORMAT_CHOICES = [
         (FORMAT_SINGLE, 'Single Performance'),
+        (FORMAT_MULTIPLE_STAGE, 'Multiple Stage Competition'),
         (FORMAT_MULTIPLE, 'Multiple Rounds'),
         (FORMAT_PRELIM_FINAL, 'Preliminary and Final Round'),
     ]
@@ -623,7 +625,7 @@ class JudgeActivityLog(models.Model):
 
     @classmethod
     def log(cls, judge, action, details='', event=None, candidate=None, ip_address=None):
-        return cls.objects.create(
+        row = cls.objects.create(
             judge=judge,
             action=action,
             details=details,
@@ -631,6 +633,34 @@ class JudgeActivityLog(models.Model):
             candidate=candidate,
             ip_address=ip_address,
         )
+        try:
+            from .audit_service import record_audit
+            action_map = {
+                cls.ACTION_LOGIN: 'Logged In',
+                cls.ACTION_LOGOUT: 'Logged Out',
+                cls.ACTION_SUBMIT_SCORE: 'Submitted Final Score',
+                cls.ACTION_EDIT_SCORE: 'Edited Draft Score',
+                cls.ACTION_VIEW_EVENT: 'Opened Assigned Event',
+                cls.ACTION_VIEW_SCORES: 'Opened Assigned Event',
+            }
+            event_name = ''
+            if event is not None:
+                event_name = getattr(event, 'name', '') or str(event)
+            contestant = ''
+            if candidate is not None:
+                contestant = getattr(candidate, 'name', '') or str(candidate)
+            record_audit(
+                user=judge,
+                action=action_map.get(action, action),
+                description=details or action_map.get(action, action),
+                module='Criteria-Based Event' if action not in (cls.ACTION_LOGIN, cls.ACTION_LOGOUT) else 'Authentication',
+                event_name=event_name,
+                contestant=contestant,
+                ip_address=ip_address,
+            )
+        except Exception:
+            pass
+        return row
 
 
 class AssignmentAccountProfile(models.Model):
@@ -644,3 +674,121 @@ class AssignmentAccountProfile(models.Model):
 
     def __str__(self):
         return f'Profile for {self.user.username}'
+
+
+class SystemSettings(models.Model):
+    """Singleton system-wide configuration for Superadmin."""
+    school_name = models.CharField(max_length=200, blank=True, default='EventTab')
+    school_logo = models.ImageField(upload_to='system/', null=True, blank=True)
+    academic_year = models.CharField(max_length=40, blank=True, default='')
+    intramurals_name = models.CharField(max_length=200, blank=True, default='')
+    password_min_length = models.PositiveSmallIntegerField(default=8)
+    password_require_uppercase = models.BooleanField(default=False)
+    password_require_number = models.BooleanField(default=False)
+    password_require_symbol = models.BooleanField(default=False)
+    password_expiry_days = models.PositiveIntegerField(default=0)
+    session_timeout_minutes = models.PositiveIntegerField(default=60)
+    max_login_attempts = models.PositiveSmallIntegerField(default=5)
+    lockout_duration_minutes = models.PositiveIntegerField(default=15)
+    email_notifications = models.BooleanField(default=True)
+    mobile_notifications = models.BooleanField(default=True)
+    system_notifications = models.BooleanField(default=True)
+    notification_config = models.JSONField(default=dict, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        User,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='system_settings_updates',
+    )
+
+    class Meta:
+        verbose_name = 'System settings'
+        verbose_name_plural = 'System settings'
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        pass
+
+    @classmethod
+    def load(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    def __str__(self):
+        return self.school_name or 'System Settings'
+
+
+class AuditLog(models.Model):
+    """Immutable system audit trail for Superadmin monitoring (read-only in UI)."""
+    STATUS_SUCCESS = 'success'
+    STATUS_FAILED = 'failed'
+    STATUS_CHOICES = [
+        (STATUS_SUCCESS, 'Success'),
+        (STATUS_FAILED, 'Failed'),
+    ]
+
+    user = models.ForeignKey(
+        User,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='audit_logs',
+    )
+    user_name = models.CharField(max_length=150, blank=True, default='')
+    user_role = models.CharField(max_length=64, blank=True, default='')
+    module = models.CharField(max_length=80, blank=True, default='System')
+    action = models.CharField(max_length=120)
+    description = models.TextField(blank=True, default='')
+    event_name = models.CharField(max_length=200, blank=True, default='')
+    contestant = models.CharField(max_length=200, blank=True, default='')
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    device = models.CharField(max_length=120, blank=True, default='')
+    browser = models.CharField(max_length=120, blank=True, default='')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_SUCCESS)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Audit log'
+        verbose_name_plural = 'Audit logs'
+
+    def __str__(self):
+        return f'{self.created_at:%Y-%m-%d %H:%M} · {self.user_name} · {self.action}'
+
+    def delete(self, *args, **kwargs):
+        # Soft-protect: do not allow hard deletes from normal ORM callers in app code.
+        # Admin shell can still force via QuerySet._raw_delete if ever needed.
+        raise PermissionError('Audit logs are read-only and cannot be deleted.')
+
+
+class AdminReportHistory(models.Model):
+    """Saved administrator report generation history (metadata + optional file)."""
+    name = models.CharField(max_length=200)
+    category = models.CharField(max_length=80, blank=True, default='')
+    report_type = models.CharField(max_length=80)
+    export_format = models.CharField(max_length=20, blank=True, default='')
+    filters = models.JSONField(default=dict, blank=True)
+    preview = models.JSONField(default=dict, blank=True)
+    file = models.FileField(upload_to='admin_reports/', null=True, blank=True)
+    generated_by = models.ForeignKey(
+        User,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='admin_reports',
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Admin report history'
+        verbose_name_plural = 'Admin report history'
+
+    def __str__(self):
+        return f'{self.name} ({self.created_at:%Y-%m-%d %H:%M})'

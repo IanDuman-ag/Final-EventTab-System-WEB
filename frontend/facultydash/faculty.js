@@ -122,17 +122,19 @@
         return Number(el.value);
       });
       if (!ids.length) {
-        // Confirm top rows from rankings table if no checkboxes
-        ids = Array.prototype.slice.call(document.querySelectorAll('.fac-table tbody tr')).slice(0, 5).map(function (_, i) {
-          return i + 1;
-        });
+        alert('Select at least one qualifier before confirming.');
+        return;
       }
+      var activeStage = 0;
+      var openStage = document.querySelector('.fac-stage[data-stage-status="open"], .fac-stage[data-stage-status="waiting_confirmation"], .fac-stage[data-stage-status="ongoing"]');
+      if (openStage) activeStage = Number(openStage.getAttribute('data-stage-index') || 0);
       try {
         var data = await postJson('/faculty/events/' + eventId + '/stages/confirm/', {
-          stage_index: 0,
+          stage_index: activeStage,
           qualifier_ids: ids,
         });
-        alert(data.message || 'Stage confirmed.');
+        alert(data.message || 'Qualifiers confirmed. The next stage is now open.');
+        window.location.reload();
       } catch (err) {
         alert(err.message);
       }

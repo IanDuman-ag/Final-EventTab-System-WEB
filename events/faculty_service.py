@@ -207,16 +207,24 @@ def schedule_rows(event):
                     'status_key': 'configured',
                 })
             elif isinstance(round_cfg, dict):
+                status = str(round_cfg.get('status') or 'configured').replace('_', ' ').title()
                 rows.append({
                     'id': f'round-{idx}',
-                    'game': f'Round {idx + 1}',
-                    'stage': round_cfg.get('name') or f'Round {idx + 1}',
-                    'matchup': f"Weight {round_cfg.get('weight', '—')}%",
+                    'game': f'Stage {round_cfg.get("stage_number") or (idx + 1)}',
+                    'stage': round_cfg.get('name') or f'Stage {idx + 1}',
+                    'matchup': (
+                        f"Weight {round_cfg.get('weight', '—')}%"
+                        + (
+                            ' · Final'
+                            if round_cfg.get('is_final')
+                            else f" · Advance {round_cfg.get('qualifiers', '—')}"
+                        )
+                    ),
                     'date': event.event_date.isoformat() if event.event_date else '',
                     'time': '',
                     'venue': event.venue or '—',
-                    'status': 'Configured',
-                    'status_key': 'configured',
+                    'status': status,
+                    'status_key': str(round_cfg.get('status') or 'configured'),
                 })
     return rows
 
@@ -385,41 +393,98 @@ def compute_criteria_rankings(event):
             'penalties': deductions,
         })
     rankings.sort(key=lambda r: (-r['final_score'], r['name']))
-    # Tie-break: stable order already; apply simple chief-judge preference if configured
+    active_stage = None
+    stages = [row for row in (event.rounds_config or []) if isinstance(row, dict)]
+    if (event.event_format or '') in {'multiple_stage', 'multiple_rounds'} and stages:
+        result_cfg = event.result_processing_config or {}
+        active_idx = int(result_cfg.get('active_stage_index') or 0)
+        if 0 <= active_idx < len(stages):
+            active_stage = stages[active_idx]
+    dept_by_id = {c.id: (c.department or '') for c in candidates}
     for idx, row in enumerate(rankings, start=1):
         row['rank'] = idx
+        row['department'] = dept_by_id.get(row['candidate_id'], '') or '—'
+        if active_stage and not active_stage.get('is_final'):
+            quals = int(active_stage.get('qualifiers') or 0)
+            method = (active_stage.get('qualification_method') or 'top_ranking').lower()
+            if method == 'top_ranking' and quals:
+                row['qualification_status'] = 'Qualified' if idx <= quals else 'Eliminated'
+            elif method == 'minimum_score':
+                minimum = float(active_stage.get('minimum_score') or 0)
+                row['qualification_status'] = (
+                    'Qualified' if row['final_score'] >= minimum else 'Eliminated'
+                )
+            else:
+                row['qualification_status'] = 'Pending Manual Selection'
+        else:
+            row['qualification_status'] = 'Finalist'
     return rankings
 
 
 def stage_panels(event):
     panels = []
-    for idx, cfg in enumerate(event.rounds_config or []):
+    cfg_list = event.rounds_config or []
+    result_cfg = event.result_processing_config or {}
+    confirmed = result_cfg.get('confirmed_stages') or {}
+    for idx, cfg in enumerate(cfg_list):
         if not isinstance(cfg, dict):
             continue
         if cfg.get('mode') == 'preliminary_final':
             panels.append({
-                'index': idx,
+                'index': 0,
                 'name': 'Preliminary Round',
                 'weight': cfg.get('prelim_percentage'),
                 'qualifiers': cfg.get('finalists'),
                 'rule': f"Advance Top {cfg.get('finalists', '—')}",
+                'status': 'open',
+                'status_label': 'Open',
+                'qualification_method': 'top_ranking',
+                'carry_previous_scores': False,
+                'require_faculty_confirmation': True,
+                'is_final': False,
+                'confirmed': '0' in confirmed,
             })
             panels.append({
-                'index': idx,
+                'index': 1,
                 'name': 'Final Round',
                 'weight': cfg.get('final_percentage'),
                 'qualifiers': None,
-                'rule': 'Final Ranking',
+                'rule': 'Final Ranking · No Further Qualification',
+                'status': 'locked' if '0' not in confirmed else 'open',
+                'status_label': 'Locked' if '0' not in confirmed else 'Open',
+                'qualification_method': None,
+                'carry_previous_scores': bool(cfg.get('carry_prelim_scores')),
+                'require_faculty_confirmation': False,
+                'is_final': True,
+                'confirmed': False,
             })
-        else:
-            qualifiers = cfg.get('qualifiers')
-            panels.append({
-                'index': idx,
-                'name': cfg.get('name') or f'Stage {idx + 1}',
-                'weight': cfg.get('weight'),
-                'qualifiers': qualifiers,
-                'rule': f'Advance Top {qualifiers}' if qualifiers else 'Final Ranking',
-            })
+            continue
+
+        is_final = bool(cfg.get('is_final')) or idx == len(cfg_list) - 1
+        qualifiers = cfg.get('qualifiers')
+        method = cfg.get('qualification_method') or ('top_ranking' if not is_final else None)
+        status = str(cfg.get('status') or ('open' if idx == 0 else 'locked'))
+        if str(idx) in confirmed and not is_final:
+            status = 'completed'
+        rule = 'Final Ranking · No Further Qualification' if is_final else (
+            f"Advance Top {qualifiers}" if method == 'top_ranking'
+            else ('Manual Faculty Selection' if method == 'manual_selection'
+                  else f"Minimum Score {cfg.get('minimum_score', '—')}")
+        )
+        panels.append({
+            'index': idx,
+            'name': cfg.get('name') or f'Stage {idx + 1}',
+            'weight': cfg.get('weight'),
+            'qualifiers': qualifiers,
+            'rule': rule,
+            'status': status,
+            'status_label': status.replace('_', ' ').title(),
+            'qualification_method': method,
+            'carry_previous_scores': bool(cfg.get('carry_previous_scores')),
+            'require_faculty_confirmation': bool(cfg.get('require_faculty_confirmation')),
+            'is_final': is_final,
+            'confirmed': str(idx) in confirmed,
+        })
     return panels
 
 
@@ -479,6 +544,17 @@ def save_match_result(event, match, user, *, score_a, score_b, winner_id, remark
             action_flag=CHANGE,
             change_message=f'Faculty confirmed match {match.match_number} result.',
         )
+        try:
+            from .audit_service import record_audit
+            record_audit(
+                user=user,
+                action='Confirmed Match Result',
+                description=f'Confirmed match {match.match_number} for "{event.name}".',
+                module='Results',
+                event_name=event.name,
+            )
+        except Exception:
+            pass
     return sheet
 
 
@@ -518,6 +594,17 @@ def return_for_correction(event, user, judge_ids=None):
         action_flag=CHANGE,
         change_message='Faculty returned results for correction.',
     )
+    try:
+        from .audit_service import record_audit
+        record_audit(
+            user=user,
+            action='Returned Result for Correction',
+            description=f'Returned scores for correction on "{event.name}".',
+            module='Results',
+            event_name=event.name,
+        )
+    except Exception:
+        pass
 
 
 @transaction.atomic
@@ -531,6 +618,17 @@ def approve_results(event, user):
         action_flag=CHANGE,
         change_message='Faculty approved results. Ready for publication.',
     )
+    try:
+        from .audit_service import record_audit
+        record_audit(
+            user=user,
+            action='Approved Results',
+            description=f'Approved results for "{event.name}".',
+            module='Results',
+            event_name=event.name,
+        )
+    except Exception:
+        pass
 
 
 @transaction.atomic
@@ -562,28 +660,104 @@ def publish_results(event, user):
         action_flag=CHANGE,
         change_message='Faculty published official results.',
     )
+    try:
+        from .audit_service import record_audit
+        record_audit(
+            user=user,
+            action='Published Official Results',
+            description=f'Published official results for "{event.name}".',
+            module='Results',
+            event_name=event.name,
+        )
+        record_audit(
+            user=user,
+            action='Modified Championship Points',
+            description=f'Championship points / leaderboard updated after publishing "{event.name}".',
+            module='Championship',
+            event_name=event.name,
+        )
+    except Exception:
+        pass
 
 
 @transaction.atomic
 def confirm_stage_advancement(event, user, stage_index, qualifier_ids):
+    """Confirm qualifiers for a stage and unlock the next stage when required."""
+    stage_index = int(stage_index)
+    stages = list(event.rounds_config or [])
+    if stage_index < 0 or stage_index >= len(stages):
+        raise FacultyServiceError('Stage index is invalid.')
+    stage = stages[stage_index]
+    if not isinstance(stage, dict):
+        raise FacultyServiceError('Stage configuration is invalid.')
+    if stage.get('is_final') or stage_index == len(stages) - 1:
+        raise FacultyServiceError('The final stage does not generate another qualification list.')
+
+    expected = int(stage.get('qualifiers') or 0)
+    cleaned_ids = []
+    for value in qualifier_ids or []:
+        try:
+            cleaned_ids.append(int(value))
+        except (TypeError, ValueError) as exc:
+            raise FacultyServiceError('Qualifier selection is invalid.') from exc
+    cleaned_ids = list(dict.fromkeys(cleaned_ids))
+    method = (stage.get('qualification_method') or 'top_ranking').lower()
+    if method != 'manual_selection' and expected and len(cleaned_ids) != expected:
+        raise FacultyServiceError(f'Select exactly {expected} qualifiers for this stage.')
+    if method == 'manual_selection' and expected and len(cleaned_ids) > expected:
+        raise FacultyServiceError(f'Manual selection cannot exceed {expected} qualifiers.')
+    if not cleaned_ids:
+        raise FacultyServiceError('Select at least one qualifier.')
+
     cfg = dict(event.result_processing_config or {})
-    stages = dict(cfg.get('confirmed_stages') or {})
-    stages[str(stage_index)] = {
-        'qualifier_ids': list(qualifier_ids),
+    confirmed = dict(cfg.get('confirmed_stages') or {})
+    confirmed[str(stage_index)] = {
+        'qualifier_ids': cleaned_ids,
         'confirmed_at': timezone.now().isoformat(),
         'confirmed_by': user.id,
     }
-    cfg['confirmed_stages'] = stages
+    qualified_map = dict(cfg.get('qualified_participant_ids') or {})
+    qualified_map[str(stage_index + 1)] = cleaned_ids
+    cfg['confirmed_stages'] = confirmed
+    cfg['qualified_participant_ids'] = qualified_map
+    cfg['active_stage_index'] = stage_index + 1
+
+    # Update stage statuses in rounds_config.
+    stage['status'] = 'completed'
+    stages[stage_index] = stage
+    if stage_index + 1 < len(stages) and isinstance(stages[stage_index + 1], dict):
+        stages[stage_index + 1]['status'] = 'open'
+    event.rounds_config = stages
     event.result_processing_config = cfg
-    event.save(update_fields=['result_processing_config', 'updated_at'])
+    event.save(update_fields=['rounds_config', 'result_processing_config', 'updated_at'])
+
     LogEntry.objects.create(
         user=user,
         content_type=ContentType.objects.get_for_model(Event),
         object_id=str(event.pk),
         object_repr=event.name,
         action_flag=CHANGE,
-        change_message=f'Faculty confirmed stage {stage_index} advancement.',
+        change_message=f'Faculty confirmed stage {stage_index + 1} advancement.',
     )
+    try:
+        from .audit_service import record_audit
+        record_audit(
+            user=user,
+            action='Confirmed Stage Qualifiers',
+            description=(
+                f'Confirmed {len(cleaned_ids)} qualifier(s) for stage '
+                f'"{stage.get("name", stage_index + 1)}" in "{event.name}".'
+            ),
+            module='Results',
+            event_name=event.name,
+        )
+    except Exception:
+        pass
+    return {
+        'stage_index': stage_index,
+        'next_stage_index': stage_index + 1,
+        'qualifier_ids': cleaned_ids,
+    }
 
 
 def leaderboard_rows():

@@ -100,7 +100,7 @@
 
   function renderBracket() {
     $('#bracket-preview').innerHTML = matchPreview.map(match =>
-      `<span><strong>M${match.number}</strong> · ${escapeHtml(match.team_a)} vs ${escapeHtml(match.team_b)} <small>${escapeHtml(match.round)}</small></span>`
+      `<span><strong>Game ${match.number}</strong> · ${escapeHtml(match.team_a)} vs ${escapeHtml(match.team_b)} <small>${escapeHtml(match.round)}</small></span>`
     ).join('');
   }
 
@@ -186,7 +186,7 @@
     const editable = mode === 'manual';
     $('#schedule-preview').innerHTML = `<table><thead><tr><th>Match</th><th>Matchup</th><th>Date</th><th>Time</th><th>Venue</th></tr></thead><tbody>${
       rows.map(row => `<tr data-match-key="${escapeHtml(row.match.key)}" data-date="${row.date}" data-time="${row.time}" data-venue="${escapeHtml(row.venue)}">
-        <td>M${row.number}</td><td>${escapeHtml(row.match.team_a)} vs ${escapeHtml(row.match.team_b)}</td>
+        <td>Game ${row.number}</td><td>${escapeHtml(row.match.team_a)} vs ${escapeHtml(row.match.team_b)}</td>
         <td>${editable ? `<input data-date type="date" value="${row.date}" min="${startDate}" max="${endDate}">` : row.date}</td>
         <td>${editable ? `<input data-time type="time" value="${row.time}">` : row.time}</td>
         <td>${editable ? `<input data-venue value="${escapeHtml(row.venue)}">` : escapeHtml(row.venue)}</td>
@@ -289,6 +289,7 @@
     $('#legacy-format-notice').hidden = !legacyFormatPending;
     $('#generate-bracket').disabled = legacyFormatPending;
     form.elements.include_third_place.checked = event.include_third_place;
+    $('#third-place-wrap').hidden = event.tournament_type !== 'single_elimination';
     form.elements.schedule_mode.value = event.schedule_mode;
     form.elements.daily_start_time.value = event.daily_start_time || '08:00';
     form.elements.daily_end_time.value = event.daily_end_time || '17:00';
@@ -320,7 +321,7 @@
     if (event.schedule_rows.length && !requiresRegeneration) {
       const editable = event.schedule_mode === 'manual';
       $('#schedule-preview').innerHTML = `<table><thead><tr><th>Match</th><th>Matchup</th><th>Date</th><th>Time</th><th>Venue</th></tr></thead><tbody>${
-        event.schedule_rows.map(row => `<tr data-match-key="${escapeHtml(row.match_key)}" data-date="${row.date}" data-time="${row.time}" data-venue="${escapeHtml(row.venue)}"><td>M${row.match_number}</td><td>${escapeHtml(row.team_a)} vs ${escapeHtml(row.team_b)}</td><td>${editable ? `<input data-date type="date" value="${row.date}">` : row.date}</td><td>${editable ? `<input data-time type="time" value="${row.time}">` : row.time}</td><td>${editable ? `<input data-venue value="${escapeHtml(row.venue)}">` : escapeHtml(row.venue)}</td></tr>`).join('')
+        event.schedule_rows.map(row => `<tr data-match-key="${escapeHtml(row.match_key)}" data-date="${row.date}" data-time="${row.time}" data-venue="${escapeHtml(row.venue)}"><td>Game ${row.match_number}</td><td>${escapeHtml(row.team_a)} vs ${escapeHtml(row.team_b)}</td><td>${editable ? `<input data-date type="date" value="${row.date}">` : row.date}</td><td>${editable ? `<input data-time type="time" value="${row.time}">` : row.time}</td><td>${editable ? `<input data-venue value="${escapeHtml(row.venue)}">` : escapeHtml(row.venue)}</td></tr>`).join('')
       }</tbody></table>`;
     }
     updateSelectedTeamCount();
@@ -356,6 +357,9 @@
     invalidateBlueprint('Team selection changed. Generate a new authoritative preview.');
   }));
   $$('[name="tournament_type"]').forEach(input => input.addEventListener('change', () => {
+    legacyFormatPending = false;
+    $('#legacy-format-notice').hidden = true;
+    $('#generate-bracket').disabled = false;
     $('#third-place-wrap').hidden = form.elements.tournament_type.value !== 'single_elimination';
     invalidateBlueprint('Format changed. Generate a new authoritative preview.');
   }));
@@ -375,9 +379,9 @@
     legacyFormatPending = false;
     $('#legacy-format-notice').hidden = true;
     $('#generate-bracket').disabled = false;
-    $('[name="tournament_type"][value="single_elimination"]').checked = true;
-    $('#third-place-wrap').hidden = false;
-    invalidateBlueprint('Format change selected. Generate a new authoritative preview.');
+    $('[name="tournament_type"][value="double_elimination"]').checked = true;
+    $('#third-place-wrap').hidden = true;
+    invalidateBlueprint('Double Elimination selected. Generate a new authoritative preview.');
   });
   $$('.final-action').forEach(button => button.addEventListener('click', () => {
     $('#publication-status').value = button.dataset.status;

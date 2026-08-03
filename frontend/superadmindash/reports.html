@@ -82,13 +82,12 @@
             <div class="form-row">
               <label>
                 <span>Select Event</span>
-                <select name="event" required>
+                <select name="event">
+                  <option value="">— System-wide (no event) —</option>
                   {% if events %}
                     {% for event in events %}
                       <option value="{{ event }}">{{ event }}</option>
                     {% endfor %}
-                  {% else %}
-                    <option value="" disabled selected>No events available — create events first</option>
                   {% endif %}
                 </select>
               </label>
@@ -96,8 +95,14 @@
               <label>
                 <span>Report Type</span>
                 <select name="report_type" required>
-                  <option value="summary">Summary Report</option>
-                  <option value="detailed">Detailed Performance</option>
+                  <option value="summary">Event Summary Report</option>
+                  <option value="detailed">Match Results Report</option>
+                  <option value="criteria">Criteria-Based Results Report</option>
+                  <option value="championship">Championship Points Report</option>
+                  <option value="department_rankings">Department Rankings</option>
+                  <option value="user_activity">User Activity Report</option>
+                  <option value="judge_performance">Judge Performance Report</option>
+                  <option value="faculty_activity">Faculty Activity Report</option>
                   <option value="audit">Audit Trail</option>
                 </select>
               </label>

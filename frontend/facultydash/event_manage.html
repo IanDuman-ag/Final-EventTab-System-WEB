@@ -206,14 +206,54 @@
         <section class="fac-card" style="margin-bottom:14px;">
           <header><h2>Multi-Stage Competition</h2></header>
           {% for s in stages %}
-          <div class="fac-stage">
+          <div class="fac-stage" data-stage-index="{{ s.index }}" data-stage-status="{{ s.status }}">
             <strong>Stage {{ forloop.counter }} – {{ s.name }}</strong>
-            <span>Weight: {{ s.weight|default:"—" }}% · Qualifiers: {{ s.qualifiers|default:"—" }} · {{ s.rule }}</span>
+            <span>
+              Weight: {{ s.weight|default:"—" }}%
+              · Status: {{ s.status_label }}
+              {% if s.is_final %}
+              · Final Stage · No Further Qualification
+              {% else %}
+              · {{ s.rule }}
+              · Faculty confirmation: {% if s.require_faculty_confirmation %}Required{% else %}Optional{% endif %}
+              {% endif %}
+              {% if s.carry_previous_scores %} · Carries previous stage scores{% endif %}
+            </span>
           </div>
           {% endfor %}
           {% if rankings %}
+          <div class="fac-table-wrap" style="margin-top:10px;">
+            <table class="fac-table" id="qualification-preview">
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>Rank</th>
+                  <th>Contestant</th>
+                  <th>Department</th>
+                  <th>Total Stage Score</th>
+                  <th>Qualification Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for r in rankings %}
+                <tr>
+                  <td>
+                    {% if r.qualification_status == 'Qualified' or r.qualification_status == 'Pending Manual Selection' %}
+                    <input type="checkbox" data-qualifier-id value="{{ r.candidate_id }}" {% if r.qualification_status == 'Qualified' %}checked{% endif %}>
+                    {% endif %}
+                  </td>
+                  <td>{{ r.rank }}</td>
+                  <td>{% if r.number %}#{{ r.number }} {% endif %}{{ r.name }}</td>
+                  <td>{{ r.department }}</td>
+                  <td>{{ r.final_score }}</td>
+                  <td><span class="fac-pill">{{ r.qualification_status }}</span></td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
           <div class="fac-actions">
-            <button type="button" class="fac-btn" id="btn-confirm-stage">Confirm Advancement (Top qualifiers)</button>
+            <button type="button" class="fac-btn" id="btn-confirm-stage" data-active-stage="{{ stages.0.index }}">Confirm Qualifiers</button>
           </div>
           {% endif %}
         </section>
@@ -284,6 +324,6 @@
   </div>
 </dialog>
 
-<script src="{% static 'facultydash/faculty.js' %}?v=20260802a"></script>
+<script src="{% static 'facultydash/faculty.js' %}?v=20260803a"></script>
 </body>
 </html>

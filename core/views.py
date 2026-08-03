@@ -931,6 +931,18 @@ def login_view(request):
         login(request, user)
         request.session['login_role'] = role
 
+        try:
+            from events.audit_service import record_audit
+            record_audit(
+                user=user,
+                action='Logged In',
+                description=f'{user.get_full_name() or user.username} logged in as {_ROLE_LABELS.get(role, role)}.',
+                module='Authentication',
+                request=request,
+            )
+        except Exception:
+            pass
+
         redirect_name = _ROLE_REDIRECTS.get(role)
         if redirect_name:
             return redirect(redirect_name)
@@ -1124,184 +1136,142 @@ def admin_judge_scorer_accounts(request):
 @login_required(login_url='login')
 @user_passes_test(lambda user: user.is_staff, login_url='login')
 def admin_generate_report(request):
-    """Generate Report page — admin-level, uses existing report generator."""
-    from datetime import timedelta as _td
+    """Generate Reports — preview, export, and history for administrators."""
     from django.contrib.admin.models import LogEntry, CHANGE
     from django.contrib.contenttypes.models import ContentType
+    from events.admin_report_service import (
+        REPORT_CATALOG,
+        build_report_preview,
+        export_report_csv,
+        export_report_excel,
+        export_report_pdf,
+        filter_context,
+        history_rows,
+        save_report_history,
+    )
+    from events.models import AdminReportHistory
+    from events.audit_service import record_audit
 
-    all_events = list(Event.objects.all().order_by('-event_date'))
-    today = timezone.localdate()
-    status_counts = get_event_status_counts(all_events, today)
+    ctx_filters = filter_context()
+    preview = None
+    selected = {
+        'category': request.GET.get('category') or request.POST.get('category') or 'events',
+        'report_type': request.GET.get('report_type') or request.POST.get('report_type') or 'event_summary',
+        'date_from': request.GET.get('date_from') or request.POST.get('date_from') or '',
+        'date_to': request.GET.get('date_to') or request.POST.get('date_to') or '',
+        'event_id': request.GET.get('event_id') or request.POST.get('event_id') or 'all',
+        'event_type': request.GET.get('event_type') or request.POST.get('event_type') or 'all',
+        'category_filter': request.GET.get('category_filter') or request.POST.get('category_filter') or 'all',
+        'classification': request.GET.get('classification') or request.POST.get('classification') or 'all',
+        'department': request.GET.get('department') or request.POST.get('department') or 'all',
+        'faculty_id': request.GET.get('faculty_id') or request.POST.get('faculty_id') or 'all',
+        'judge_id': request.GET.get('judge_id') or request.POST.get('judge_id') or 'all',
+        'status': request.GET.get('status') or request.POST.get('status') or 'all',
+        'export_format': request.POST.get('export_format') or 'pdf',
+    }
 
-    # Summary metrics for the preview panel
-    total_events = len(all_events)
-    total_participants = sum(int(ev.max_participants or 0) for ev in all_events)
-    total_teams = sum(int(ev.num_teams or 0) for ev in all_events)
-    total_matches = BracketMatch.objects.count()
-    completed_events = status_counts['completed']
-    completion_rate = int(round(completed_events / total_events * 100)) if total_events else 0
-
-    # Category breakdown
-    cat_data = {}
-    for ev in all_events:
-        cat = (ev.category or 'Other').strip() or 'Other'
-        if cat not in cat_data:
-            cat_data[cat] = {'count': 0, 'participants': 0}
-        cat_data[cat]['count'] += 1
-        cat_data[cat]['participants'] += int(ev.max_participants or 0)
-    top_categories = sorted(
-        [{'name': k, 'count': v['count'], 'participants': v['participants']} for k, v in cat_data.items()],
-        key=lambda x: x['participants'], reverse=True
-    )[:5]
-    total_part_for_pct = total_participants or 1
-    for c in top_categories:
-        c['pct'] = int(round(c['participants'] / total_part_for_pct * 100))
-
-    # Event summary table (top 5)
-    event_summary = []
-    for ev in all_events[:5]:
-        sm = get_event_status_meta(ev, today)
-        event_summary.append({
-            'name': ev.name,
-            'category': ev.category,
-            'status': sm['status'],
-            'status_label': sm['status_label'],
-            'participants': ev.max_participants or 0,
-            'teams': ev.num_teams or 0,
-            'matches': BracketMatch.objects.filter(event=ev).count(),
-        })
-
-    # Weekly events chart (last 8 weeks)
-    chart_labels = []
-    chart_events = []
-    for i in range(7, -1, -1):
-        week_end = today - _td(days=i * 7)
-        week_start = week_end - _td(days=6)
-        evs_in_week = [e for e in all_events if e.event_date and week_start <= e.event_date <= week_end]
-        chart_labels.append(week_end.strftime('%b %d'))
-        chart_events.append(len(evs_in_week))
-
-    # Departments and categories for filter dropdowns
-    departments = list(Department.objects.values_list('name', flat=True).order_by('name'))
-    category_names = sorted({ev.category for ev in all_events if ev.category})
-    division_names = sorted({ev.division for ev in all_events if ev.division})
-
-    # Handle POST — generate & export
-    if request.method == 'POST':
-        report_type = request.POST.get('report_type', 'event_summary').strip()
-        export_format = request.POST.get('export_format', 'pdf').strip().lower()
-        event_filter = request.POST.get('event_filter', '').strip()
-        dept_filter = request.POST.get('dept_filter', '').strip()
-        cat_filter = request.POST.get('cat_filter', '').strip()
-        status_filter = request.POST.get('status_filter', '').strip()
-        round_filter = request.POST.get('round_filter', '').strip()
-        div_filter = request.POST.get('div_filter', '').strip()
-        start_date_str = request.POST.get('start_date', '').strip()
-        end_date_str = request.POST.get('end_date', '').strip()
-        included_metrics = request.POST.getlist('metrics')
-
-        # Metadata + filters passed through to the report generators.
-        # Note: the UI status filter is event-level (upcoming/ongoing/...), which
-        # does not map to match/scoresheet status, so it is not forwarded to the
-        # per-match queries to avoid filtering everything out.
-        report_info = {
-            'generated_by': request.user.get_full_name() or request.user.username,
-            'round_filter': round_filter or None,
-            'status_filter': None,
-            'category_filter': cat_filter or None,
-            'division_filter': div_filter or None,
-            'remarks': request.POST.get('remarks', '').strip() or None,
+    def _filters_from_selected():
+        return {
+            'date_from': selected['date_from'],
+            'date_to': selected['date_to'],
+            'event_id': '' if selected['event_id'] == 'all' else selected['event_id'],
+            'event_type': selected['event_type'],
+            'category': selected['category_filter'],
+            'classification': selected['classification'],
+            'department': selected['department'],
+            'faculty_id': selected['faculty_id'],
+            'judge_id': selected['judge_id'],
+            'status': selected['status'],
         }
 
-        # Log the export action
-        event_ct = ContentType.objects.get_for_model(Event)
-        LogEntry.objects.create(
-            user=request.user,
-            content_type_id=event_ct.id,
-            object_id='0',
-            object_repr=f'{report_type.replace("_", " ").title()} Report'[:200],
-            action_flag=CHANGE,
-            change_message=f'Generated {export_format.upper()} report.',
-        )
+    if request.method == 'POST':
+        action = (request.POST.get('action') or 'preview').strip().lower()
+        history_id = request.POST.get('history_id', '').strip()
 
-        # Delegate to existing report generator
-        from datetime import datetime as _dt
-        start_date = None
-        end_date = None
-        if start_date_str:
-            try:
-                start_date = _dt.strptime(start_date_str, '%Y-%m-%d').date()
-            except ValueError:
-                pass
-        if end_date_str:
-            try:
-                end_date = _dt.strptime(end_date_str, '%Y-%m-%d').date()
-            except ValueError:
-                pass
-
-        event_name = event_filter or (all_events[0].name if all_events else '')
-        dept_name = dept_filter or 'all'
-
-        try:
-            if export_format in ('xlsx', 'excel'):
-                from core.reports_generator import generate_excel_report
-                stream = generate_excel_report(event_name, dept_name, start_date, end_date, included_metrics, report_info)
-                fname = f'EventTab_{report_type}_{today.strftime("%Y%m%d")}.xlsx'
-                resp = HttpResponse(
-                    stream.read(),
-                    content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                )
-                resp['Content-Disposition'] = f'attachment; filename="{fname}"'
-                return resp
-            elif export_format == 'csv':
-                import csv as _csv
-                import io
-                output = io.StringIO()
-                writer = _csv.writer(output)
-                writer.writerow(['Event Name', 'Category', 'Status', 'Participants', 'Teams', 'Date'])
-                for ev in all_events:
-                    sm = get_event_status_meta(ev, today)
-                    writer.writerow([ev.name, ev.category, sm['status_label'],
-                                     ev.max_participants or 0, ev.num_teams or 0,
-                                     ev.event_date.strftime('%Y-%m-%d') if ev.event_date else ''])
-                fname = f'EventTab_{report_type}_{today.strftime("%Y%m%d")}.csv'
-                resp = HttpResponse(output.getvalue(), content_type='text/csv')
-                resp['Content-Disposition'] = f'attachment; filename="{fname}"'
-                return resp
-            else:
-                from core.reports_generator import generate_pdf_report
-                stream = generate_pdf_report(event_name, dept_name, start_date, end_date, included_metrics, report_info)
-                fname = f'EventTab_{report_type}_{today.strftime("%Y%m%d")}.pdf'
-                resp = HttpResponse(stream.read(), content_type='application/pdf')
-                resp['Content-Disposition'] = f'attachment; filename="{fname}"'
-                return resp
-        except Exception as e:
-            messages.error(request, f'Report generation failed: {e}')
+        if action == 'delete_history' and history_id.isdigit():
+            AdminReportHistory.objects.filter(pk=int(history_id)).delete()
+            messages.success(request, 'Report history entry deleted.')
             return redirect('admin_generate_report')
 
+        if action == 'download_history' and history_id.isdigit():
+            hist = AdminReportHistory.objects.filter(pk=int(history_id)).first()
+            if hist and hist.file:
+                resp = HttpResponse(hist.file.read(), content_type='application/octet-stream')
+                resp['Content-Disposition'] = f'attachment; filename="{hist.name[:40]}.{hist.export_format or "bin"}"'
+                return resp
+            messages.error(request, 'Report file not found. Generate the report again.')
+            return redirect('admin_generate_report')
+
+        filters = _filters_from_selected()
+        preview = build_report_preview(selected['report_type'], filters)
+
+        if action in ('export', 'download_pdf', 'download_excel', 'download_csv'):
+            export_format = selected['export_format']
+            if action == 'download_pdf':
+                export_format = 'pdf'
+            elif action == 'download_excel':
+                export_format = 'excel'
+            elif action == 'download_csv':
+                export_format = 'csv'
+
+            try:
+                if export_format in ('excel', 'xlsx'):
+                    content = export_report_excel(preview)
+                    fname = f"EventTab_{selected['report_type']}_{timezone.localdate().strftime('%Y%m%d')}.xlsx"
+                    ctype = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                elif export_format == 'csv':
+                    content = export_report_csv(preview).encode('utf-8')
+                    fname = f"EventTab_{selected['report_type']}_{timezone.localdate().strftime('%Y%m%d')}.csv"
+                    ctype = 'text/csv'
+                else:
+                    content = export_report_pdf(preview)
+                    fname = f"EventTab_{selected['report_type']}_{timezone.localdate().strftime('%Y%m%d')}.pdf"
+                    ctype = 'application/pdf'
+
+                save_report_history(
+                    user=request.user,
+                    preview=preview,
+                    export_format='xlsx' if export_format in ('excel', 'xlsx') else export_format,
+                    file_content=content if isinstance(content, (bytes, bytearray)) else content.encode('utf-8'),
+                )
+                LogEntry.objects.create(
+                    user=request.user,
+                    content_type_id=ContentType.objects.get_for_model(Event).id,
+                    object_id='0',
+                    object_repr=preview.get('title', 'Report')[:200],
+                    action_flag=CHANGE,
+                    change_message=f'Generated {export_format.upper()} report.',
+                )
+                try:
+                    record_audit(
+                        user=request.user,
+                        action='Generated Reports',
+                        description=f"Generated {preview.get('title')} ({export_format.upper()}).",
+                        module='Reports',
+                        request=request,
+                    )
+                except Exception:
+                    pass
+
+                resp = HttpResponse(content, content_type=ctype)
+                resp['Content-Disposition'] = f'attachment; filename="{fname}"'
+                return resp
+            except Exception as exc:
+                messages.error(request, f'Report export failed: {exc}')
+                return redirect('admin_generate_report')
+
+        # preview action — fall through to render with preview
+
     return render(request, 'admindash/generatereport.html', {
-        'all_events': all_events,
-        'total_events': total_events,
-        'total_participants': total_participants,
-        'total_teams': total_teams,
-        'total_matches': total_matches,
-        'completed_events': completed_events,
-        'completion_rate': completion_rate,
-        'status_counts': status_counts,
-        'top_categories': top_categories,
-        'event_summary': event_summary,
-        'chart_labels_json': json.dumps(chart_labels),
-        'chart_events_json': json.dumps(chart_events),
-        'status_counts_json': json.dumps({
-            'ongoing': status_counts['ongoing'],
-            'upcoming': status_counts['upcoming'],
-            'completed': status_counts['completed'],
-            'cancelled': status_counts['inactive'],
-        }),
-        'departments': departments,
-        'category_names': category_names,
-        'division_names': division_names,
-        'date_range_label': today.replace(day=1).strftime('%b 1') + ' – ' + today.strftime('%b %d, %Y'),
+        'catalog': REPORT_CATALOG,
+        'selected': selected,
+        'preview': preview,
+        'history': history_rows(25),
+        'filter_events': ctx_filters['events'],
+        'departments': ctx_filters['departments'],
+        'categories': ctx_filters['categories'],
+        'faculty_users': ctx_filters['faculty_users'],
+        'judge_users': ctx_filters['judge_users'],
     })
 
 
@@ -2726,6 +2696,18 @@ def _serialize_match_event(event):
     normalized_tournament_type = normalize_tournament_type(
         event.tournament_type or 'single_elimination'
     )
+    has_losers_bracket = any(
+        'loser' in (match.round_name or '').lower() for match in matches
+    )
+    has_grand_final = any(
+        'grand' in (match.round_name or '').lower() for match in matches
+    )
+    has_loser_links = any(match.next_match_loser_id for match in matches)
+    legacy_double_elimination = (
+        normalized_tournament_type == 'double_elimination'
+        and matches
+        and not (has_losers_bracket and has_grand_final and has_loser_links)
+    )
     return {
         'id': event.id,
         'name': event.name,
@@ -2764,7 +2746,7 @@ def _serialize_match_event(event):
             for team in event.bracket_teams.all()
             if team.source_team_id or team.name in registry_ids
         ],
-        'legacy_double_elimination': normalized_tournament_type == 'double_elimination',
+        'legacy_double_elimination': legacy_double_elimination,
         'team_names': list(event.bracket_teams.values_list('name', flat=True)),
         'schedule_rows': [
             {
@@ -2882,11 +2864,6 @@ def admin_match_event_preview(request):
         return JsonResponse({'success': False, 'message': 'One or more selected teams are unavailable.'}, status=400)
     tournament_type = normalize_tournament_type(payload.get('tournament_type', ''))
     include_third_place = bool(payload.get('include_third_place'))
-    if tournament_type == 'double_elimination':
-        return JsonResponse({
-            'success': False,
-            'message': 'Double Elimination is unsupported until complete loser-bracket progression is available.',
-        }, status=400)
     try:
         blueprint = build_match_blueprint(
             team_ids,
@@ -5657,53 +5634,8 @@ def _activity_row_local_date(sort_dt):
 @login_required
 @user_passes_test(lambda user: user.is_superuser, login_url='login')
 def superadmin_dashboard(request):
-    User = get_user_model()
-    admins = User.objects.filter(is_staff=True).count()
-    departments = Group.objects.count()
-    total_events = LogEntry.objects.count()
-    total_users = User.objects.count()
-    users = User.objects.order_by('id')[:5]
-    admin_users, admin_rows = get_admin_rows()
-    active_admins = sum(1 for row in admin_rows if row['status'] == 'Active')
-    deactivated_admins = max(admins - active_admins, 0)
-
-    activity_alerts = []
-    recent_logs = LogEntry.objects.select_related('user').order_by('-action_time')[:3]
-    action_titles = {
-        ADDITION: 'New Activity',
-        CHANGE: 'Role Reassignment',
-        DELETION: 'Security Update',
-    }
-
-    for index, entry in enumerate(recent_logs):
-        delta = timezone.now() - entry.action_time
-        if delta.days:
-            activity_time = f'{delta.days}d ago'
-        else:
-            minutes = delta.seconds // 60
-            activity_time = f'{minutes}m ago' if minutes else 'Just now'
-
-        activity_alerts.append({
-            'title': action_titles.get(entry.action_flag, 'System Update'),
-            'time': activity_time,
-            'message': entry.change_message or f'{entry.object_repr} was updated by {entry.user.username}.',
-            'accent': ['green', 'blue', 'yellow'][index % 3],
-        })
-
-    return render(request, 'superadmin_dashboard.html', {
-        'admins': admins,
-        'departments': departments,
-        'total_events': total_events,
-        'notification_count': len(activity_alerts),
-        'total_users': total_users,
-        'users': users,
-        'admin_rows': admin_rows,
-        'activity_alerts': activity_alerts,
-        'admin_count': admin_users.count(),
-        'department_count': departments,
-        'active_admins': active_admins,
-        'deactivated_admins': deactivated_admins,
-    })
+    """Legacy template removed — use core.superadmin_views.superadmin_dashboard."""
+    return redirect('superadmin_dashboard')
 
 
 @login_required
@@ -5899,82 +5831,9 @@ def delete_admin(request, admin_id):
 @login_required
 @user_passes_test(lambda user: user.is_superuser, login_url='login')
 def superadmin_admins(request):
-    _, all_admin_rows = get_admin_rows()
-    departments = Group.objects.exclude(name__in=['Admin', 'Tabulator', 'Judge', 'Judges', 'Viewers']).order_by('name')
-    department_names = sorted({row['department'] for row in all_admin_rows})
+    """Legacy admin.html removed — User Management lives at superadmin_users."""
+    return redirect('superadmin_users')
 
-    q = request.GET.get('q', '').strip()
-    selected_department = request.GET.get('department', '').strip()
-    selected_role = request.GET.get('role', '').strip()
-    selected_status = request.GET.get('status', '').strip()
-    sort = request.GET.get('sort', 'username').strip()
-    direction = request.GET.get('dir', 'asc').strip().lower()
-    page_number = request.GET.get('page', 1)
-
-    filtered_rows = all_admin_rows
-    if q:
-        q_lower = q.lower()
-        filtered_rows = [
-            row for row in filtered_rows
-            if q_lower in row['user'].username.lower()
-            or q_lower in (row['user'].email or '').lower()
-            or q_lower in row['department'].lower()
-        ]
-
-    if selected_department:
-        filtered_rows = [row for row in filtered_rows if row['department'] == selected_department]
-
-    if selected_role:
-        filtered_rows = [row for row in filtered_rows if row['role'] == selected_role]
-
-    if selected_status:
-        filtered_rows = [row for row in filtered_rows if row['status'] == selected_status]
-
-    reverse_sort = direction == 'desc'
-    sortable_fields = {
-        'username': lambda row: row['user'].username.lower(),
-        'department': lambda row: row['department'].lower(),
-        'role': lambda row: row['role'].lower(),
-        'status': lambda row: row['status'].lower(),
-        'last_login': lambda row: (
-            row['user'].last_login is None,
-            row['user'].last_login or timezone.now(),
-        ),
-    }
-    if sort not in sortable_fields:
-        sort = 'username'
-    filtered_rows = sorted(filtered_rows, key=sortable_fields[sort], reverse=reverse_sort)
-
-    paginator = Paginator(filtered_rows, 10)
-    page_obj = paginator.get_page(page_number)
-    start_index = page_obj.start_index() if paginator.count else 0
-    end_index = page_obj.end_index() if paginator.count else 0
-
-    base_params = {
-        'q': q,
-        'department': selected_department,
-        'role': selected_role,
-        'status': selected_status,
-    }
-
-    return render(request, 'admin.html', {
-        'admin_rows': page_obj.object_list,
-        'admin_count': len(filtered_rows),
-        'total_admin_count': len(all_admin_rows),
-        'department_count': departments.count(),
-        'departments': departments,
-        'department_names': department_names,
-        'selected_department': selected_department,
-        'selected_role': selected_role,
-        'selected_status': selected_status,
-        'search_query': q,
-        'sort': sort,
-        'dir': direction,
-        'page_obj': page_obj,
-        'start_index': start_index,
-        'end_index': end_index,
-        'base_params': base_params,
-    })
 
 
 @login_required
@@ -6058,6 +5917,59 @@ def generate_superadmin_report(request):
             pass
 
     included_metrics = request.POST.getlist('metrics')
+
+    system_wide_types = {
+        'championship', 'department_rankings', 'user_activity',
+        'judge_performance', 'faculty_activity',
+    }
+
+    if report_type in system_wide_types:
+        from events.superadmin_service import championship_standings, export_leaderboard_csv, recent_activities
+        from openpyxl import Workbook
+        import io as _io
+
+        LogEntry.objects.create(
+            user=request.user,
+            content_type_id=ContentType.objects.get_for_model(Event).id,
+            object_id='0',
+            object_repr=f'{report_type.replace("_", " ").title()} Report'[:200],
+            action_flag=CHANGE,
+            change_message=f'Generated {export_format.upper()} report.',
+        )
+
+        if report_type in ('championship', 'department_rankings'):
+            rows = championship_standings()
+            if export_format == 'excel':
+                wb = Workbook()
+                ws = wb.active
+                ws.title = 'Standings'
+                ws.append(['Rank', 'Department', 'Total', 'Major', 'Minor'])
+                for r in rows:
+                    ws.append([r['rank'], r['department'], r['total_points'], r['major_points'], r['minor_points']])
+                buf = _io.BytesIO()
+                wb.save(buf)
+                response = HttpResponse(
+                    buf.getvalue(),
+                    content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                )
+                response['Content-Disposition'] = f'attachment; filename="{report_type}_{datetime.now().strftime("%Y%m%d")}.xlsx"'
+                return response
+            content = export_leaderboard_csv(rows)
+            response = HttpResponse(content, content_type='text/csv')
+            response['Content-Disposition'] = f'attachment; filename="{report_type}_{datetime.now().strftime("%Y%m%d")}.csv"'
+            return response
+
+        # Activity-style reports as CSV
+        activities = recent_activities(200)
+        buf = _io.StringIO()
+        import csv as _csv
+        writer = _csv.writer(buf)
+        writer.writerow(['Time', 'User', 'Role', 'Title', 'Message', 'Module'])
+        for a in activities:
+            writer.writerow([a.get('time'), a.get('user'), a.get('role'), a.get('title'), a.get('message'), a.get('module')])
+        response = HttpResponse(buf.getvalue(), content_type='text/csv')
+        response['Content-Disposition'] = f'attachment; filename="{report_type}_{datetime.now().strftime("%Y%m%d")}.csv"'
+        return response
 
     if not event_name or event_name == 'No events available':
         messages.error(request, 'Please select a valid event before generating a report.')
@@ -6321,6 +6233,18 @@ def superadmin_activity_logs(request):
 
 
 def logout_view(request):
+    try:
+        if request.user.is_authenticated:
+            from events.audit_service import record_audit
+            record_audit(
+                user=request.user,
+                action='Logged Out',
+                description=f'{request.user.get_full_name() or request.user.username} logged out.',
+                module='Authentication',
+                request=request,
+            )
+    except Exception:
+        pass
     logout(request)
     return redirect('login')
 

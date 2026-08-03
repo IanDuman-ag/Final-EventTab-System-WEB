@@ -1,0 +1,113 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ event.name }} · Event Monitoring · EventTab</title>
+  <link rel="stylesheet" href="{% static 'superadmin_dashboard.css' %}?v=20260803a">
+  <link rel="stylesheet" href="{% static 'admin_v2.css' %}?v=20260524a">
+  <link rel="stylesheet" href="{% static 'superadmindash/pages.css' %}?v=20260803a">
+</head>
+<body class="admin-v2-page">
+  <div class="dashboard-shell">
+    {% include 'superadmindash/_sidebar.html' with active='events' %}
+    <div class="dashboard-area">
+      <header class="topbar">
+        <div class="topbar-context">
+          <p class="sa-kicker">EVENT MONITORING</p>
+          <h1 class="sa-page-title" style="margin:0">{{ event.name }}</h1>
+        </div>
+        <a class="sa-btn sa-btn-secondary" href="{% url 'superadmin_event_monitoring' %}">Back</a>
+      </header>
+      <main class="sa-page-main">
+        <p class="sa-note">Status: <span class="sa-pill sa-pill--{{ status_key }}">{{ status_label }}</span> · Read-only monitoring</p>
+
+        <section class="sa-card" style="margin-bottom:14px">
+          <header><h2>Event Information</h2></header>
+          <div class="sa-readonly">
+            <div><span>Event Name</span><strong>{{ detail.name }}</strong></div>
+            <div><span>Category</span><strong>{{ detail.category|default:"—" }}</strong></div>
+            <div><span>Event Type</span><strong>{{ detail.event_type }}</strong></div>
+            <div><span>Classification</span><strong>{{ detail.classification|default:row.classification }}</strong></div>
+            <div><span>Venue</span><strong>{{ detail.venue|default:"—" }}</strong></div>
+            <div><span>Schedule</span><strong>{{ detail.schedule|default:row.event_date }}</strong></div>
+            <div><span>Assigned Faculty</span><strong>{{ row.faculty }}</strong></div>
+            <div><span>Assigned Admin</span><strong>{{ row.admin }}</strong></div>
+            <div><span>Publication</span><strong>{{ event.get_publication_status_display }}</strong></div>
+            <div><span>Results Finalized</span><strong>{{ event.results_finalized|yesno:"Yes,No" }}</strong></div>
+          </div>
+        </section>
+
+        <div class="sa-grid-2">
+          <section class="sa-card">
+            <header><h2>Progress</h2></header>
+            <div class="sa-progress">
+              <div class="sa-progress-row">
+                <label>Schedule / Match Progress — {{ progress.matches_completed }}/{{ progress.matches_total }}</label>
+                <div class="sa-progress-bar"><i style="width:{{ progress.schedule_pct }}%"></i></div>
+              </div>
+              <div class="sa-progress-row">
+                <label>Judge Submissions — {{ progress.judges_submitted }}/{{ progress.judges_total }}</label>
+                <div class="sa-progress-bar"><i style="width:{% if progress.judges_total %}{% widthratio progress.judges_submitted progress.judges_total 100 %}{% else %}0{% endif %}%"></i></div>
+              </div>
+              <div class="sa-progress-row">
+                <label>Result Status</label>
+                <div class="sa-progress-bar"><i style="width:{{ progress.results_pct }}%"></i></div>
+              </div>
+              <div class="sa-progress-row">
+                <label>Publication Status</label>
+                <div class="sa-progress-bar"><i style="width:{{ progress.publication_pct }}%"></i></div>
+              </div>
+            </div>
+          </section>
+          <section class="sa-card">
+            <header><h2>Judge Submission Progress</h2></header>
+            <div class="sa-table-wrap">
+              <table class="sa-table" style="min-width:0">
+                <thead><tr><th>Judge</th><th>Status</th><th>Submitted</th></tr></thead>
+                <tbody>
+                  {% for j in judges %}
+                  <tr>
+                    <td>{{ j.name }}</td>
+                    <td>{{ j.status }}</td>
+                    <td>{{ j.submitted_at|default:"—" }}</td>
+                  </tr>
+                  {% empty %}
+                  <tr><td colspan="3" class="sa-empty">No judges assigned or not a criteria event.</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+
+        <section class="sa-card" style="margin-top:14px">
+          <header><h2>Schedule Progress</h2></header>
+          <div class="sa-table-wrap">
+            <table class="sa-table">
+              <thead>
+                <tr><th>Game / Stage</th><th>Match</th><th>Date</th><th>Time</th><th>Venue</th><th>Status</th></tr>
+              </thead>
+              <tbody>
+                {% for s in schedule %}
+                <tr>
+                  <td>{{ s.game }} / {{ s.stage }}</td>
+                  <td>{{ s.matchup }}</td>
+                  <td>{{ s.date }}</td>
+                  <td>{{ s.time }}</td>
+                  <td>{{ s.venue }}</td>
+                  <td>{{ s.status }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="6" class="sa-empty">No schedule rows.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+</body>
+</html>

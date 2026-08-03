@@ -19,13 +19,15 @@ CHAMPION_BONUS = 5
 def _is_finals_match(match):
     """The championship is the terminal match (no onward winner match) whose round
     name is the final — explicitly excluding 'semi final' / 'quarter final', which
-    also contain the substring 'final'."""
+    also contain the substring 'final'. Prefer Grand Final when present."""
     if match.next_match_winner_id is not None:
         return False
     name = (match.round_name or '').lower()
     if 'semi' in name or 'quarter' in name:
         return False
-    return 'final' in name or 'championship' in name or 'grand' in name
+    if 'grand' in name:
+        return True
+    return 'final' in name or 'championship' in name
 
 
 def link_bracket_advancement(event):
@@ -35,6 +37,9 @@ def link_bracket_advancement(event):
     infer them from round order: match i in round R feeds match i//2 in round R+1.
 
     Rounds are ordered by their first match_number. Safe to call repeatedly.
+    Skips events that already have an authored advancement graph (including
+    double-elimination winners/losers links) so inferred SE wiring cannot
+    overwrite them.
     """
     from events.models import BracketMatch
 
@@ -42,6 +47,9 @@ def link_bracket_advancement(event):
         BracketMatch.objects.filter(event=event).order_by('match_number')
     )
     if not matches:
+        return
+
+    if any(m.next_match_winner_id or m.next_match_loser_id for m in matches):
         return
 
     # Group matches into rounds, preserving encounter order.
@@ -96,6 +104,76 @@ def recompute_points(event):
     return champion_id
 
 
+def _place_team(match, team):
+    """Seat a team into the first open slot of a match. Returns True if placed."""
+    if team is None:
+        return False
+    if match.team_a_id == team.id or match.team_b_id == team.id:
+        return False
+    if match.team_a_id is None:
+        match.team_a = team
+        match.save(update_fields=['team_a'])
+        return True
+    if match.team_b_id is None:
+        match.team_b = team
+        match.save(update_fields=['team_b'])
+        return True
+    return False
+
+
+def _advance_winner(match):
+    if match.winner_id and match.next_match_winner_id:
+        _place_team(match.next_match_winner, match.winner)
+
+
+def _advance_loser(match):
+    if match.loser_id and match.next_match_loser_id:
+        _place_team(match.next_match_loser, match.loser)
+
+
+def _auto_complete_lone_team_match(match, depth=0):
+    """
+    If a match has exactly one seated team and every feeder match is already
+    completed (so no opponent can still arrive — typical after a winners-bracket
+    bye), auto-advance that team.
+    """
+    from events.models import BracketMatch
+
+    if depth > 16 or match is None:
+        return
+    match.refresh_from_db()
+    if match.status == BracketMatch.STATUS_COMPLETED:
+        return
+    seated = [team for team in (match.team_a, match.team_b) if team is not None]
+    if len(seated) != 1:
+        return
+
+    feeders = list(
+        BracketMatch.objects.filter(event=match.event).filter(
+            models_q_feeds(match)
+        )
+    )
+    if not feeders:
+        return
+    if not all(feeder.status == BracketMatch.STATUS_COMPLETED for feeder in feeders):
+        return
+
+    lone = seated[0]
+    match.winner = lone
+    match.loser = None
+    match.status = BracketMatch.STATUS_COMPLETED
+    match.remarks = 'Auto-advance (Bye)'
+    match.save(update_fields=['winner', 'loser', 'status', 'remarks'])
+    _advance_winner(match)
+    if match.next_match_winner_id:
+        _auto_complete_lone_team_match(match.next_match_winner, depth=depth + 1)
+
+
+def models_q_feeds(match):
+    from django.db.models import Q
+    return Q(next_match_winner=match) | Q(next_match_loser=match)
+
+
 def apply_scoresheet_to_bracket(scoresheet):
     """
     Sync an approved/finalized scoresheet onto its bracket match, advance the
@@ -128,25 +206,16 @@ def apply_scoresheet_to_bracket(scoresheet):
     match.status = BracketMatch.STATUS_COMPLETED
     match.save()
 
-    # 2. Advance the winner.
-    if match.winner_id and match.next_match_winner_id:
-        nxt = match.next_match_winner
-        if nxt.team_a_id != match.winner_id and nxt.team_b_id != match.winner_id:
-            if nxt.team_a_id is None:
-                nxt.team_a = match.winner
-            elif nxt.team_b_id is None:
-                nxt.team_b = match.winner
-            nxt.save()
+    # 2. Advance the winner and loser through the authored bracket graph.
+    _advance_winner(match)
+    _advance_loser(match)
 
-    # 3. Advance the loser (double elimination / consolation).
-    if match.loser_id and match.next_match_loser_id:
-        nxt_l = match.next_match_loser
-        if nxt_l.team_a_id != match.loser_id and nxt_l.team_b_id != match.loser_id:
-            if nxt_l.team_a_id is None:
-                nxt_l.team_a = match.loser
-            elif nxt_l.team_b_id is None:
-                nxt_l.team_b = match.loser
-            nxt_l.save()
+    # 3. Resolve losers-bracket byes created when a winners-bracket bye leaves
+    #    only one team dropping into a losers match.
+    if match.next_match_loser_id:
+        _auto_complete_lone_team_match(match.next_match_loser)
+    if match.next_match_winner_id:
+        _auto_complete_lone_team_match(match.next_match_winner)
 
     # 4. Recompute the event leaderboard standings.
     champion_id = recompute_points(match.event)

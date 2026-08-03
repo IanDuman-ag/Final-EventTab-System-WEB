@@ -134,11 +134,58 @@ def generate_single_elimination(event, teams, round_name_prefix="Round"):
 
 def generate_double_elimination(event, teams):
     """
-    Generates a basic double elimination bracket.
+    Generate a full double-elimination bracket (winners, losers, grand final).
+
+    Uses the same canonical graph as the match-event wizard so progression
+    links (`next_match_winner` / `next_match_loser`) are always complete.
     """
-    # For now, fallback to single elimination + basic loser tracking.
-    # A true generic double elimination is extremely complex. We'll start with basic winner tree.
-    return generate_single_elimination(event, teams, round_name_prefix="Winner Bracket R")
+    from events.match_event_service import _build_double_elimination_matches
+
+    if not teams:
+        return []
+
+    # Local ids stand in for source team ids; snapshots map 1:1 onto BracketTeam rows.
+    ordered_ids = [team.id for team in teams]
+    snapshots_by_id = {team.id: team for team in teams}
+    rows = _build_double_elimination_matches(ordered_ids)
+    created_by_key = {}
+    for row in rows:
+        match = BracketMatch.objects.create(
+            event=event,
+            client_key=row['key'],
+            match_number=row['number'],
+            round_name=row['round'],
+            team_a=snapshots_by_id.get(row['team_a_id']) if row['team_a_id'] else None,
+            team_b=snapshots_by_id.get(row['team_b_id']) if row['team_b_id'] else None,
+            status=BracketMatch.STATUS_PENDING,
+        )
+        created_by_key[row['key']] = match
+
+    for row in rows:
+        match = created_by_key[row['key']]
+        match.next_match_winner = created_by_key.get(row['next_winner_key'])
+        match.next_match_loser = created_by_key.get(row['next_loser_key'])
+        update_fields = ['next_match_winner', 'next_match_loser']
+        if (
+            row['team_a_id'] is not None
+            and row['team_b_id'] is None
+            and match.team_a
+            and match.next_match_winner
+        ):
+            match.winner = match.team_a
+            match.status = BracketMatch.STATUS_COMPLETED
+            match.remarks = 'Auto-advance (Bye)'
+            target = match.next_match_winner
+            if target.team_a is None:
+                target.team_a = match.team_a
+                target.save(update_fields=['team_a'])
+            elif target.team_b is None:
+                target.team_b = match.team_a
+                target.save(update_fields=['team_b'])
+            update_fields += ['winner', 'status', 'remarks']
+        match.save(update_fields=update_fields)
+
+    return list(event.bracket_matches.order_by('match_number'))
 
 def generate_round_robin(event, teams):
     """

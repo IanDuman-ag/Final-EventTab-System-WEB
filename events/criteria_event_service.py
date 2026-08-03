@@ -25,12 +25,25 @@ ALLOWED_CATEGORIES = {
 ALLOWED_CLASSIFICATIONS = {'major', 'minor'}
 ALLOWED_DIVISIONS = {'Men', 'Women', 'Mixed', 'Open', ''}
 ALLOWED_PARTICIPATION = {'team', 'individual'}
-ALLOWED_FORMATS = {'single_performance', 'multiple_rounds', 'preliminary_final'}
+ALLOWED_FORMATS = {'single_performance', 'multiple_stage'}
+LEGACY_FORMATS = {'multiple_rounds', 'preliminary_final'}
 ALLOWED_SCORE_METHODS = {
     'weighted_percentage',
     'raw_score',
     'average_score',
     'ranking_based',
+}
+ALLOWED_QUALIFICATION_METHODS = {
+    'top_ranking',
+    'minimum_score',
+    'manual_selection',
+}
+STAGE_STATUSES = {
+    'locked',
+    'open',
+    'ongoing',
+    'waiting_confirmation',
+    'completed',
 }
 DEFAULT_POINTS_MAJOR = [
     {'label': '1st Place', 'points': 15},
@@ -57,6 +70,7 @@ DEFAULT_RESULT_PROCESSING = {
     'allow_result_editing': True,
     'require_faculty_confirmation': False,
     'display_score_breakdown': True,
+    'stage_tiebreak_method': 'highest_selected_criterion',
 }
 DEFAULT_JUDGE_SETTINGS = {
     'require_all_judges': True,
@@ -67,7 +81,7 @@ TIE_BREAK_OPTIONS = {
     'highest_selected_criterion',
     'highest_chief_judge',
     'lowest_deduction',
-    'majority_decision',
+    'majority_decision',  # legacy
     'manual_decision',
 }
 
@@ -188,63 +202,105 @@ def _validated_criteria(data):
     return cleaned
 
 
-def _validated_rounds(event_format, data):
+def _validated_rounds(event_format, data, participant_count=0):
     if event_format == 'single_performance':
-        return [{'name': 'Performance', 'weight': 100, 'qualifiers': None}]
-    if event_format == 'multiple_rounds':
-        rows = _json_list(data.get('rounds_config'), 'Round configuration')
-        if len(rows) < 2:
-            raise CriteriaEventValidationError('Multiple Rounds require at least two rounds.')
-        cleaned = []
-        weights = []
-        for index, row in enumerate(rows):
-            name = str(row.get('name', '')).strip() or f'Round {index + 1}'
+        return [{
+            'stage_number': 1,
+            'name': 'Performance',
+            'weight': 100,
+            'qualification_method': None,
+            'qualifiers': None,
+            'minimum_score': None,
+            'carry_previous_scores': False,
+            'require_faculty_confirmation': False,
+            'is_final': True,
+            'status': 'open',
+        }]
+
+    if event_format in LEGACY_FORMATS:
+        event_format = 'multiple_stage'
+
+    if event_format != 'multiple_stage':
+        raise CriteriaEventValidationError('Select a valid event format.')
+
+    rows = _json_list(data.get('rounds_config'), 'Competition stage configuration')
+    if len(rows) < 2:
+        raise CriteriaEventValidationError('Multiple Stage Competition requires at least two stages.')
+
+    cleaned = []
+    weights = []
+    names = set()
+    for index, row in enumerate(rows):
+        is_final = index == len(rows) - 1 or bool(row.get('is_final'))
+        name = str(row.get('name', '')).strip()
+        if not name:
+            raise CriteriaEventValidationError('Each stage needs a custom name.')
+        if name.lower().startswith('round ') and name[6:].strip().isdigit():
+            raise CriteriaEventValidationError(
+                'Use a descriptive stage name instead of generic Round labels.'
+            )
+        key = name.lower()
+        if key in names:
+            raise CriteriaEventValidationError('Each stage name must be unique.')
+        names.add(key)
+        try:
+            weight = float(row.get('weight'))
+        except (TypeError, ValueError) as exc:
+            raise CriteriaEventValidationError('Each stage needs a numeric weight.') from exc
+        if weight <= 0:
+            raise CriteriaEventValidationError('Stage weights must be greater than zero.')
+
+        qualification_method = None
+        qualifiers = None
+        minimum_score = None
+        require_confirmation = False
+        if not is_final:
+            qualification_method = str(row.get('qualification_method') or 'top_ranking').strip().lower()
+            if qualification_method not in ALLOWED_QUALIFICATION_METHODS:
+                raise CriteriaEventValidationError(
+                    'Qualification method must be Top Ranking, Minimum Score, or Manual Selection.'
+                )
             try:
-                weight = float(row.get('weight'))
                 qualifiers = int(row.get('qualifiers') or 0)
             except (TypeError, ValueError) as exc:
-                raise CriteriaEventValidationError('Each round needs a percentage weight and qualifier count.') from exc
-            if weight <= 0:
-                raise CriteriaEventValidationError('Round percentage weights must be greater than zero.')
-            cleaned.append({
-                'name': name[:80],
-                'weight': weight,
-                'qualifiers': qualifiers if index < len(rows) - 1 else None,
-            })
-            weights.append(weight)
-        _percent_total(weights, 'Total round percentage')
-        return cleaned
-    # preliminary_final
-    raw_rounds = data.get('rounds_config')
-    cfg = {}
-    if isinstance(raw_rounds, str) and raw_rounds.strip().startswith('{'):
-        cfg = _json_dict(raw_rounds, 'Preliminary/final configuration')
-    elif isinstance(raw_rounds, str) and raw_rounds.strip().startswith('['):
-        rows = _json_list(raw_rounds, 'Preliminary/final configuration')
-        cfg = rows[0] if rows and isinstance(rows[0], dict) else {}
-    elif isinstance(raw_rounds, dict):
-        cfg = raw_rounds
-    try:
-        prelim_participants = int(cfg.get('prelim_participants') or data.get('prelim_participants') or 0)
-        finalists = int(cfg.get('finalists') or data.get('finalists') or 0)
-        prelim_pct = float(cfg.get('prelim_percentage') or data.get('prelim_percentage') or 0)
-        final_pct = float(cfg.get('final_percentage') or data.get('final_percentage') or 0)
-    except (TypeError, ValueError) as exc:
-        raise CriteriaEventValidationError('Preliminary/final settings must be numeric.') from exc
-    carry = _boolish(cfg, 'carry_prelim_scores', _boolish(data, 'carry_prelim_scores'))
-    if prelim_participants < 2 or finalists < 1 or finalists >= prelim_participants:
-        raise CriteriaEventValidationError(
-            'Preliminary participants must be greater than finalists, and both must be valid.'
-        )
-    _percent_total([prelim_pct, final_pct], 'Preliminary and final percentages')
-    return [{
-        'mode': 'preliminary_final',
-        'prelim_participants': prelim_participants,
-        'finalists': finalists,
-        'carry_prelim_scores': carry,
-        'prelim_percentage': prelim_pct,
-        'final_percentage': final_pct,
-    }]
+                raise CriteriaEventValidationError('Each qualification stage needs a qualifier count.') from exc
+            if qualifiers < 1:
+                raise CriteriaEventValidationError('Each qualification stage needs at least one qualifier.')
+            if participant_count and qualifiers > participant_count:
+                raise CriteriaEventValidationError(
+                    'Number of qualifiers cannot exceed the number of contestants.'
+                )
+            if qualification_method == 'minimum_score':
+                try:
+                    minimum_score = float(row.get('minimum_score') or 0)
+                except (TypeError, ValueError) as exc:
+                    raise CriteriaEventValidationError('Minimum score must be numeric.') from exc
+                if minimum_score < 0:
+                    raise CriteriaEventValidationError('Minimum score cannot be negative.')
+            require_confirmation = bool(row.get('require_faculty_confirmation', True))
+
+        carry = False if index == 0 else bool(row.get('carry_previous_scores', True))
+        status = 'open' if index == 0 else 'locked'
+        existing_status = str(row.get('status') or '').strip().lower()
+        if existing_status in STAGE_STATUSES and index == 0:
+            status = existing_status if existing_status != 'locked' else 'open'
+
+        cleaned.append({
+            'stage_number': index + 1,
+            'name': name[:80],
+            'weight': weight,
+            'qualification_method': qualification_method,
+            'qualifiers': qualifiers,
+            'minimum_score': minimum_score,
+            'carry_previous_scores': carry,
+            'require_faculty_confirmation': require_confirmation,
+            'is_final': is_final,
+            'status': status,
+        })
+        weights.append(weight)
+
+    _percent_total(weights, 'Total stage weight')
+    return cleaned
 
 
 def _validated_participants(participation_type, data):
@@ -424,6 +480,8 @@ def save_criteria_event(data, user, files=None, instance=None):
     if publication not in dict(Event.PUBLICATION_CHOICES):
         raise CriteriaEventValidationError('Status must be Draft or Published.')
     event_format = _required(data, 'event_format', 'Event Format')
+    if event_format in LEGACY_FORMATS:
+        event_format = 'multiple_stage'
     if event_format not in ALLOWED_FORMATS:
         raise CriteriaEventValidationError('Select a valid event format.')
     score_method = _required(data, 'criteria_score_method', 'Scoring Method')
@@ -431,12 +489,24 @@ def save_criteria_event(data, user, files=None, instance=None):
         raise CriteriaEventValidationError('Select a valid scoring method.')
 
     participant_ids, participants = _validated_participants(participation_type, data)
-    rounds_config = _validated_rounds(event_format, data)
+    rounds_config = _validated_rounds(event_format, data, participant_count=len(participant_ids))
     criteria = _validated_criteria(data)
     score_settings = _validated_score_settings(data)
     deductions_enabled, deductions = _validated_deductions(data)
     chief, judges, faculty = _validated_users(data, User)
     result_processing = {**DEFAULT_RESULT_PROCESSING, **_json_dict(data.get('result_processing_config'), 'Result processing')}
+    stage_tiebreak = str(result_processing.get('stage_tiebreak_method') or 'highest_selected_criterion').strip()
+    if stage_tiebreak not in TIE_BREAK_OPTIONS:
+        raise CriteriaEventValidationError('Select a valid stage tie-breaking method.')
+    result_processing['stage_tiebreak_method'] = stage_tiebreak
+    if event_format == 'multiple_stage':
+        # Multi-stage events always need faculty confirmation gates where configured.
+        result_processing['multi_stage'] = True
+        result_processing['active_stage_index'] = 0
+        result_processing.setdefault('confirmed_stages', {})
+        result_processing.setdefault('qualified_participant_ids', {
+            '0': list(participant_ids),
+        })
     judge_settings = {**DEFAULT_JUDGE_SETTINGS, **_json_dict(data.get('judge_settings'), 'Judge settings')}
     if judge_settings.get('remove_high_low') and len(judges) < 3:
         raise CriteriaEventValidationError(
@@ -537,8 +607,17 @@ def serialize_criteria_event(event):
         'end_date': (event.end_date or event.event_date).isoformat() if event.event_date else '',
         'publication_status': event.publication_status,
         'publication_label': event.get_publication_status_display(),
-        'event_format': event.event_format,
-        'event_format_label': event.get_event_format_display() or '—',
+        'event_format': (
+            'multiple_stage' if event.event_format in {'multiple_rounds', 'preliminary_final'}
+            else (event.event_format or 'single_performance')
+        ),
+        'event_format_label': (
+            'Multiple Stage Competition'
+            if (event.event_format or '') in {
+                'multiple_stage', 'multiple_rounds', 'preliminary_final',
+            }
+            else (event.get_event_format_display() or '—')
+        ),
         'criteria_score_method': event.criteria_score_method,
         'criteria_score_method_label': event.get_criteria_score_method_display() or '—',
         'rounds_config': event.rounds_config or [],
