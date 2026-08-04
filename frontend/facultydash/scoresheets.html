@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Scoresheets · Faculty · EventTab</title>
   <link rel="stylesheet" href="{% static 'facultydash/faculty.css' %}?v=20260802a">
-  <link rel="stylesheet" href="{% static 'facultydash/pages.css' %}?v=20260802a">
+  <link rel="stylesheet" href="{% static 'facultydash/pages.css' %}?v=20260804b">
 </head>
 <body class="fac-v2 tab-v2">
 <div class="tab-shell">
@@ -14,44 +14,109 @@
   <div class="tab-main">
     <header class="tab-topbar">
       <div>
-        <p class="fac-kicker">Scoresheet Generator</p>
+        <p class="fac-kicker">Scoresheet Generation</p>
         <h1>Scoresheets</h1>
+        <p class="fac-lead">Generate printable scoresheets for your assigned events. Templates are managed by the Administrator.</p>
       </div>
     </header>
     <main class="tab-content fac-content">
       <section class="fac-card">
-        <header><h2>Select an assigned event</h2></header>
+        <header><h2>Scoresheet List</h2></header>
+        <form class="fac-toolbar" method="get">
+          <input type="search" name="q" value="{{ filters.q }}" placeholder="Search event or venue…">
+          <select name="event_id">
+            <option value="">All events</option>
+            {% for e in events %}
+            <option value="{{ e.id }}" {% if filters.event_id == e.id|stringformat:"s" %}selected{% endif %}>{{ e.name }}</option>
+            {% endfor %}
+          </select>
+          <select name="event_type">
+            <option value="">All types</option>
+            <option value="match" {% if filters.event_type == 'match' %}selected{% endif %}>Match-Based</option>
+            <option value="criteria" {% if filters.event_type == 'criteria' %}selected{% endif %}>Criteria-Based</option>
+          </select>
+          <button type="submit" class="fac-btn fac-btn-sm">Apply</button>
+        </form>
         <div class="fac-table-wrap">
-          <table class="fac-table">
+          <table class="fac-table" id="scoresheet-rows">
             <thead>
               <tr>
                 <th>Event Name</th>
                 <th>Event Type</th>
-                <th>Venue</th>
+                <th>Match or Stage</th>
                 <th>Schedule</th>
+                <th>Venue</th>
+                <th>Status</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {% for e in events %}
-              <tr>
-                <td><strong>{{ e.name }}</strong></td>
-                <td>{{ e.event_type }}</td>
-                <td>{{ e.venue }}</td>
-                <td>{{ e.schedule }}</td>
+              {% for row in rows %}
+              <tr
+                data-event-id="{{ row.event_id }}"
+                data-item-key="{{ row.item_key }}"
+                data-template="{{ row.template_name }}"
+              >
+                <td><strong>{{ row.event_name }}</strong></td>
+                <td>{{ row.event_type }}</td>
+                <td>{{ row.match_or_stage }}</td>
+                <td>{{ row.schedule }}</td>
+                <td>{{ row.venue }}</td>
+                <td>{{ row.status }}</td>
                 <td>
-                  <a class="fac-btn fac-btn-sm" href="{% url 'faculty_event_manage' e.id %}?tab=scoresheets">Generate Scoresheets</a>
+                  <div class="fac-row-actions">
+                    <button type="button" class="fac-link" data-action="generate">Generate</button>
+                    <button type="button" class="fac-link" data-action="preview">Preview</button>
+                    <a class="fac-link" href="{% url 'faculty_scoresheet_item_pdf' row.event_id row.item_key %}?download=1" data-action="download">Download PDF</a>
+                    <button type="button" class="fac-link" data-action="print">Print</button>
+                  </div>
                 </td>
               </tr>
               {% empty %}
-              <tr><td colspan="5" class="fac-empty">No assigned events.</td></tr>
+              <tr><td colspan="7" class="fac-empty">No scoresheet items for your assigned events.</td></tr>
               {% endfor %}
             </tbody>
           </table>
         </div>
+        {% if page_obj.paginator.num_pages > 1 %}
+        <footer class="fac-pager">
+          <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+          <div>
+            {% if page_obj.has_previous %}
+            <a class="fac-btn fac-btn-sm" href="?page={{ page_obj.previous_page_number }}&q={{ filters.q|urlencode }}&event_type={{ filters.event_type }}&event_id={{ filters.event_id }}">‹ Prev</a>
+            {% endif %}
+            {% if page_obj.has_next %}
+            <a class="fac-btn fac-btn-sm" href="?page={{ page_obj.next_page_number }}&q={{ filters.q|urlencode }}&event_type={{ filters.event_type }}&event_id={{ filters.event_id }}">Next ›</a>
+            {% endif %}
+          </div>
+        </footer>
+        {% endif %}
       </section>
     </main>
   </div>
 </div>
+
+<dialog id="ss-preview-dialog" class="fac-dialog">
+  <header>
+    <div>
+      <h2>Scoresheet Preview</h2>
+      <p class="fac-banner" id="ss-template-banner">Using template: —</p>
+    </div>
+    <button type="button" id="ss-close-preview" aria-label="Close">×</button>
+  </header>
+  <div class="fac-dialog-body">
+    <iframe id="ss-preview-frame" title="Scoresheet preview"></iframe>
+  </div>
+  <footer class="fac-dialog-actions">
+    <a class="fac-btn" id="ss-download-btn" href="#" download>Download PDF</a>
+    <button type="button" class="fac-btn" id="ss-print-btn">Print</button>
+    <button type="button" class="fac-btn fac-btn-primary" id="ss-done-btn">Close</button>
+  </footer>
+</dialog>
+
+<script>
+  window.FAC_SS_CSRF = "{{ csrf_token }}";
+</script>
+<script src="{% static 'facultydash/scoresheets.js' %}?v=20260804b"></script>
 </body>
 </html>

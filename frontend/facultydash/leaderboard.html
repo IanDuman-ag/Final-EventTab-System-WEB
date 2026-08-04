@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Leaderboard · Faculty · EventTab</title>
   <link rel="stylesheet" href="{% static 'facultydash/faculty.css' %}?v=20260802a">
-  <link rel="stylesheet" href="{% static 'facultydash/pages.css' %}?v=20260802a">
+  <link rel="stylesheet" href="{% static 'facultydash/pages.css' %}?v=20260805a">
   <meta http-equiv="refresh" content="120">
 </head>
 <body class="fac-v2 tab-v2">
@@ -17,10 +17,12 @@
       <div>
         <p class="fac-kicker">View only · auto-refreshes</p>
         <h1>Overall Championship Leaderboard</h1>
+        <p class="fac-lead">Overall department standings plus winners for each game category.</p>
       </div>
     </header>
     <main class="tab-content fac-content">
       <section class="fac-card">
+        <header><h2>Overall Standings</h2></header>
         <div class="fac-table-wrap">
           <table class="fac-table">
             <thead>
@@ -44,6 +46,76 @@
           </table>
         </div>
       </section>
+
+      <section class="fac-card">
+        <header>
+          <h2>Category Champions</h2>
+          <p class="fac-card-note">Winner (1st place) for each game based on championship points.</p>
+        </header>
+        <div class="fac-table-wrap">
+          <table class="fac-table">
+            <thead>
+              <tr>
+                <th>Category</th>
+                <th>Game</th>
+                <th>Classification</th>
+                <th>Winner</th>
+                <th>Points</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in category_winners %}
+              <tr>
+                <td>{{ row.category }}</td>
+                <td><strong>{{ row.game }}</strong></td>
+                <td>{{ row.classification }}</td>
+                <td><span class="fac-winner">{{ row.winner }}</span></td>
+                <td>{{ row.points }}</td>
+              </tr>
+              {% empty %}
+              <tr><td colspan="5" class="fac-empty">No category winners yet.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {% for game in games %}
+      <section class="fac-card">
+        <header>
+          <h2>{{ game.game }}</h2>
+          <p class="fac-card-note">
+            Category: <strong>{{ game.category }}</strong>
+            · Classification: {{ game.classification }}
+            · Champion: <span class="fac-winner">{{ game.winner }}</span>
+          </p>
+        </header>
+        <div class="fac-table-wrap">
+          <table class="fac-table">
+            <thead>
+              <tr>
+                <th>Rank</th>
+                <th>Department</th>
+                <th>Championship Points</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in game.rows %}
+              <tr class="{% if row.is_winner %}fac-row-winner{% endif %}">
+                <td><strong>{{ row.rank }}</strong></td>
+                <td>
+                  {{ row.department }}
+                  {% if row.is_winner %}<span class="fac-winner-tag">Winner</span>{% endif %}
+                </td>
+                <td>{{ row.points }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+      {% empty %}
+      {% endfor %}
     </main>
   </div>
 </div>

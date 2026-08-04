@@ -25,7 +25,7 @@ from .models import (
     ScoreSheet,
     Team,
 )
-from .scoresheet_pdf import default_sample_payload, render_scoresheet_pdf
+from .scoresheet_pdf import render_scoresheet_pdf
 
 
 class FacultyServiceError(ValueError):
@@ -49,9 +49,78 @@ def is_faculty_user(user):
     ).exists()
 
 
+def _faculty_identity_keys(user) -> set[str]:
+    """Usernames / display names used to match legacy text assignments."""
+    keys = set()
+    if not user:
+        return keys
+    username = (user.username or '').strip().lower()
+    if username:
+        keys.add(username)
+    full = (user.get_full_name() or '').strip().lower()
+    if full:
+        keys.add(full)
+    return keys
+
+
+def _link_legacy_faculty_assignments(user):
+    """
+    Repair events that only stored faculty_in_charge text (no FK).
+    Matches username or full name, case-insensitive.
+    """
+    if not user or not getattr(user, 'pk', None):
+        return
+    keys = _faculty_identity_keys(user)
+    if not keys:
+        return
+    name_q = Q()
+    for key in keys:
+        name_q |= Q(faculty_in_charge__iexact=key)
+    Event.objects.filter(faculty_account__isnull=True).filter(name_q).update(faculty_account_id=user.pk)
+
+
+def resolve_faculty_user_from_text(text):
+    """Resolve a faculty_in_charge display string to a Faculty/Tabulator user."""
+    value = (text or '').strip()
+    if not value:
+        return None
+    User = get_user_model()
+    qs = User.objects.filter(is_active=True).filter(
+        Q(groups__name__iexact='Tabulator') | Q(groups__name__iexact='Faculty')
+    ).distinct()
+    by_username = qs.filter(username__iexact=value).first()
+    if by_username:
+        return by_username
+    # Match full name loosely
+    for user in qs.filter(Q(first_name__icontains=value) | Q(last_name__icontains=value))[:20]:
+        full = (user.get_full_name() or '').strip()
+        if full.lower() == value.lower():
+            return user
+    return None
+
+
 def faculty_event_qs(user):
+    """
+    Events where the logged-in user is Faculty In-Charge (FK) or an assigned tabulator.
+    Also includes legacy rows that only stored the faculty username/name in faculty_in_charge.
+    Does not filter by publication/status — assigned drafts and published events both appear.
+    """
+    if not user or not getattr(user, 'is_authenticated', False):
+        return Event.objects.none()
+
+    _link_legacy_faculty_assignments(user)
+
+    q = Q(faculty_account=user) | Q(assigned_tabulators=user)
+    keys = _faculty_identity_keys(user)
+    if keys:
+        legacy = Q(faculty_account__isnull=True)
+        name_q = Q()
+        for key in keys:
+            name_q |= Q(faculty_in_charge__iexact=key)
+        q |= legacy & name_q
+
     return (
-        Event.objects.filter(Q(faculty_account=user) | Q(assigned_tabulators=user))
+        Event.objects.filter(q)
         .distinct()
         .select_related('faculty_account', 'chief_judge', 'judging_event')
         .prefetch_related('assigned_judges', 'assigned_tabulators')
@@ -59,11 +128,24 @@ def faculty_event_qs(user):
 
 
 def faculty_can_access(user, event):
-    if not event or not is_faculty_user(user):
+    if not event or not user or not user.is_authenticated:
+        return False
+    if not is_faculty_user(user) and not user.is_staff:
         return False
     if event.faculty_account_id == user.id:
         return True
-    return event.assigned_tabulators.filter(id=user.id).exists()
+    if event.assigned_tabulators.filter(id=user.id).exists():
+        return True
+    # Legacy text-only assignment
+    text = (event.faculty_in_charge or '').strip().lower()
+    if text and text in _faculty_identity_keys(user):
+        if event.faculty_account_id is None:
+            Event.objects.filter(pk=event.pk, faculty_account__isnull=True).update(
+                faculty_account_id=user.id
+            )
+            event.faculty_account_id = user.id
+        return True
+    return False
 
 
 def event_type_label(event):
@@ -304,7 +386,7 @@ def judge_monitoring(event):
         status = 'Pending'
         submitted_at = None
         if judging:
-            scores = JudgeScore.objects.filter(event=judging, judge=judge)
+            scores = JudgeScore.objects.filter(candidate__event=judging, judge=judge)
             if scores.filter(is_locked=True).exists():
                 status = 'Submitted'
                 submitted += 1
@@ -337,7 +419,7 @@ def compute_criteria_rankings(event):
     weight_by_id = {c.id: float(c.weight_percent or 0) or 1.0 for c in criteria}
     max_by_id = {c.id: float(c.max_score or 100) for c in criteria}
     candidates = list(judging.candidates.all())
-    scores = JudgeScore.objects.filter(event=judging, is_locked=True).select_related('candidate', 'criterion', 'judge')
+    scores = JudgeScore.objects.filter(candidate__event=judging, is_locked=True).select_related('candidate', 'criterion', 'judge')
     # candidate -> judge -> criterion -> score
     by_cand = defaultdict(lambda: defaultdict(dict))
     for s in scores:
@@ -580,7 +662,7 @@ def return_for_correction(event, user, judge_ids=None):
     judging = event.judging_event
     if not judging:
         raise FacultyServiceError('No judging event linked.')
-    qs = JudgeScore.objects.filter(event=judging)
+    qs = JudgeScore.objects.filter(candidate__event=judging)
     if judge_ids:
         qs = qs.filter(judge_id__in=judge_ids)
     qs.update(is_locked=False)
@@ -635,7 +717,7 @@ def approve_results(event, user):
 def publish_results(event, user):
     judging = event.judging_event
     if judging:
-        JudgeScore.objects.filter(event=judging).update(is_locked=True)
+        JudgeScore.objects.filter(candidate__event=judging).update(is_locked=True)
     event.results_finalized = True
     event.publication_status = Event.PUBLICATION_PUBLISHED
     if event.status != Event.STATUS_COMPLETED:
@@ -778,21 +860,361 @@ def leaderboard_rows():
     return rows
 
 
-def generate_match_scoresheet_pdf(event, match):
+def leaderboard_by_game():
+    """
+    Per-game (event) department standings so Faculty can see who won each category/game.
+    Groups BracketTeam points by event; includes event category for context.
+    """
+    from .models import Department
+
+    by_event = defaultdict(lambda: defaultdict(int))
+    event_meta = {}
+    for team in BracketTeam.objects.select_related('department', 'event').filter(points__gt=0):
+        if not team.department_id or not team.event_id:
+            continue
+        by_event[team.event_id][team.department_id] += int(team.points or 0)
+        if team.event_id not in event_meta:
+            event_meta[team.event_id] = team.event
+
+    all_dept_ids = {dept_id for bucket in by_event.values() for dept_id in bucket}
+    depts = {d.id: d for d in Department.objects.filter(id__in=all_dept_ids)}
+
+    games = []
+    for event_id, dept_pts in by_event.items():
+        event = event_meta.get(event_id)
+        if not event:
+            continue
+        rows = []
+        for dept_id, pts in dept_pts.items():
+            dept = depts.get(dept_id)
+            rows.append({
+                'department': dept.name if dept else '—',
+                'points': pts,
+            })
+        rows.sort(key=lambda r: (-r['points'], r['department']))
+        for idx, row in enumerate(rows, start=1):
+            row['rank'] = idx
+            row['is_winner'] = idx == 1
+        winner = rows[0] if rows else None
+        classification = ''
+        if event.event_classification:
+            try:
+                classification = event.get_event_classification_display()
+            except Exception:
+                classification = event.event_classification
+        games.append({
+            'event_id': event.id,
+            'game': event.name,
+            'category': (event.category or 'Uncategorized').strip() or 'Uncategorized',
+            'classification': classification or '—',
+            'winner': winner['department'] if winner else '—',
+            'winner_points': winner['points'] if winner else 0,
+            'rows': rows,
+        })
+
+    games.sort(key=lambda g: (g['category'].lower(), g['game'].lower()))
+    return games
+
+
+def leaderboard_category_winners(games=None):
+    """Compact champion list: one winner row per game, grouped for display."""
+    games = games if games is not None else leaderboard_by_game()
+    return [
+        {
+            'category': g['category'],
+            'game': g['game'],
+            'classification': g['classification'],
+            'winner': g['winner'],
+            'points': g['winner_points'],
+        }
+        for g in games
+        if g.get('winner') and g['winner'] != '—'
+    ]
+
+
+def template_event_type(event) -> str:
+    method = (event.scoring_method or '').lower()
+    if method == 'criteria' or (event.judging_criteria_config or event.rounds_config):
+        if method != 'match':
+            return 'criteria'
+    if method == 'match' or event.bracket_matches.exists():
+        return 'match'
+    if event.judging_criteria_config or event.event_format:
+        return 'criteria'
+    return 'match'
+
+
+def resolve_template_for_event(event):
+    from .models import ScoresheetTemplate
+    from .scoresheet_pdf import pack_template_layout
+
+    assigned = getattr(event, 'scoresheet_template', None)
+    if assigned is not None and assigned.status == ScoresheetTemplate.STATUS_ACTIVE:
+        return assigned
+
+    etype = template_event_type(event)
+    qs = ScoresheetTemplate.objects.filter(
+        status=ScoresheetTemplate.STATUS_ACTIVE,
+        event_type=etype,
+    )
+    category = (event.category or '').strip()
+    if category:
+        matched = qs.filter(category__iexact=category).order_by('-updated_at').first()
+        if matched:
+            return matched
+    blank = qs.filter(category='').order_by('-updated_at').first()
+    if blank:
+        return blank
+    return qs.order_by('-updated_at').first()
+
+
+def parse_item_key(item_key: str):
+    key = (item_key or '').strip()
+    if key.startswith('match-'):
+        return 'match', int(key.split('-', 1)[1])
+    if key.startswith('stage-'):
+        return 'stage', int(key.split('-', 1)[1])
+    if key.startswith('round-'):
+        return 'stage', int(key.split('-', 1)[1])
+    if key.startswith('prelim-') or key.startswith('final-'):
+        return 'legacy_stage', key
+    if key == 'event':
+        return 'event', None
+    raise FacultyServiceError('Invalid scoresheet item.')
+
+
+def scoresheet_payload_for(event, item_kind, item_ref):
+    """Build payload with event info filled and score/signature fields blank."""
+    faculty_name = ''
+    if event.faculty_account_id:
+        faculty_name = event.faculty_account.get_full_name().strip() or event.faculty_account.username
+    else:
+        faculty_name = event.faculty_in_charge or ''
+
+    classification = ''
+    if event.event_classification:
+        try:
+            classification = event.get_event_classification_display()
+        except Exception:
+            classification = event.event_classification
+
+    tournament_format = ''
+    if event.tournament_type:
+        labels = {
+            'single_elimination': 'Single Elimination',
+            'double_elimination': 'Double Elimination',
+            'round_robin': 'Round Robin',
+        }
+        tournament_format = labels.get(event.tournament_type, event.tournament_type.replace('_', ' ').title())
+
     payload = {
-        **default_sample_payload(),
-        'EventName': event.name,
-        'GameNumber': str(match.match_number),
-        'Date': match.match_date.strftime('%b %d, %Y') if match.match_date else '',
-        'Venue': match.venue or event.venue or '',
-        'TeamA': match.team_a.name if match.team_a else 'TBD',
-        'TeamB': match.team_b.name if match.team_b else 'TBD',
-        'ScoreA': match.score_a or '',
-        'ScoreB': match.score_b or '',
-        'Winner': match.winner.name if match.winner else '',
+        'EventName': event.name or '',
+        'Classification': classification,
+        'Division': event.division or '',
+        'TournamentFormat': tournament_format,
+        'Category': event.category or '',
+        'Venue': event.venue or '',
+        'Date': event.event_date.strftime('%b %d, %Y') if event.event_date else '',
+        'Time': event.event_time.strftime('%I:%M %p') if event.event_time else '',
+        'PlayingArea': '',
+        'FacultyInCharge': faculty_name,
+        'GameNumber': '',
+        'Round': '',
+        'TeamA': '',
+        'TeamB': '',
+        'ScoreA': '',
+        'ScoreB': '',
+        'Winner': '',
+        'StageName': '',
+        'Contestant': '',
+        'ContestantNumber': '',
+        'Department': '',
+        'CriteriaWeight': '',
+        'MaximumScore': '',
+        'JudgeScore': '',
+        'TotalScore': '',
+        'Remarks': '',
     }
-    from .scoresheet_pdf import default_match_layout
-    return render_scoresheet_pdf(default_match_layout(), payload=payload)
+
+    if item_kind == 'match':
+        match = item_ref
+        payload.update({
+            'GameNumber': str(match.match_number),
+            'Round': match.round_name or '',
+            'Date': match.match_date.strftime('%b %d, %Y') if match.match_date else payload['Date'],
+            'Time': match.match_time.strftime('%I:%M %p') if match.match_time else payload['Time'],
+            'Venue': match.venue or event.venue or '',
+            'TeamA': match.team_a.name if match.team_a else 'TBD',
+            'TeamB': match.team_b.name if match.team_b else 'TBD',
+            # Scores/winner left blank for paper recording
+            'ScoreA': '',
+            'ScoreB': '',
+            'Winner': '',
+        })
+    elif item_kind in {'stage', 'legacy_stage', 'event'}:
+        stage_name = 'Competition'
+        if item_kind == 'stage' and isinstance(item_ref, dict):
+            stage_name = item_ref.get('name') or f"Stage {item_ref.get('stage_number') or ''}"
+            weight = item_ref.get('weight')
+            if weight is not None and weight != '':
+                payload['CriteriaWeight'] = f'{weight}%'
+        elif item_kind == 'legacy_stage':
+            stage_name = 'Preliminary Round' if str(item_ref).startswith('prelim') else 'Final Round'
+        payload['StageName'] = stage_name
+        # Populate criteria meta from event config when available
+        criteria = event.judging_criteria_config or []
+        if isinstance(criteria, list) and criteria:
+            max_scores = []
+            weights = []
+            for c in criteria:
+                if not isinstance(c, dict):
+                    continue
+                if c.get('max_score') not in (None, ''):
+                    max_scores.append(str(c.get('max_score')))
+                if c.get('weight') not in (None, '') or c.get('weight_percent') not in (None, ''):
+                    weights.append(str(c.get('weight') or c.get('weight_percent')))
+            if max_scores:
+                payload['MaximumScore'] = ', '.join(max_scores[:6])
+            if weights and not payload['CriteriaWeight']:
+                payload['CriteriaWeight'] = ', '.join(f'{w}%' for w in weights[:6])
+
+    return payload
+
+
+def resolve_scoresheet_item(event, item_key: str):
+    kind, ref = parse_item_key(item_key)
+    if kind == 'match':
+        match = BracketMatch.objects.select_related('team_a', 'team_b', 'winner').filter(
+            pk=ref, event=event
+        ).first()
+        if not match:
+            raise FacultyServiceError('Match not found.')
+        label = f'Game {match.match_number}'
+        if match.round_name:
+            label = f'{label} · {match.round_name}'
+        return kind, match, label
+    if kind == 'stage':
+        rounds = event.rounds_config or []
+        if ref < 0 or ref >= len(rounds) or not isinstance(rounds[ref], dict):
+            raise FacultyServiceError('Stage not found.')
+        cfg = rounds[ref]
+        label = cfg.get('name') or f'Stage {ref + 1}'
+        return kind, cfg, label
+    if kind == 'legacy_stage':
+        label = 'Preliminary Round' if str(ref).startswith('prelim') else 'Final Round'
+        return kind, ref, label
+    return 'event', None, 'Event Scoresheet'
+
+
+def build_scoresheet_pdf(event, item_key: str, *, blank_unresolved: bool = True) -> tuple[bytes, object, str, dict]:
+    from .scoresheet_pdf import pack_template_layout
+
+    kind, item_ref, item_label = resolve_scoresheet_item(event, item_key)
+    template = resolve_template_for_event(event)
+    etype = template.event_type if template else template_event_type(event)
+    layout = template.layout if template else pack_template_layout({}, etype)
+    orientation = template.orientation if template else 'portrait'
+    paper_size = template.paper_size if template else 'a4'
+    payload = scoresheet_payload_for(event, kind, item_ref)
+    pdf = render_scoresheet_pdf(
+        layout,
+        orientation=orientation,
+        paper_size=paper_size,
+        payload=payload,
+        event_type=etype,
+        blank_unresolved=blank_unresolved,
+    )
+    return pdf, template, item_label, payload
+
+
+def record_generated_scoresheet(event, template, item_label, payload, user, pdf_bytes):
+    from django.core.files.base import ContentFile
+    from .models import GeneratedScoresheet
+
+    row = GeneratedScoresheet(
+        template=template,
+        event=event,
+        event_label=event.name,
+        item_label=item_label,
+        generated_by=user,
+        payload=payload,
+    )
+    filename = f"scoresheet_{event.id}_{timezone.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+    row.file.save(filename, ContentFile(pdf_bytes), save=False)
+    row.save()
+    return row
+
+
+def scoresheet_rows_for_user(user, *, q='', event_type='', status='', event_id=None):
+    events = faculty_event_qs(user).select_related('faculty_account', 'scoresheet_template').order_by('name')
+    if event_id:
+        events = events.filter(pk=event_id)
+    if q:
+        events = events.filter(Q(name__icontains=q) | Q(venue__icontains=q) | Q(category__icontains=q))
+
+    rows = []
+    for event in events:
+        etype = template_event_type(event)
+        if event_type == 'match' and etype != 'match':
+            continue
+        if event_type == 'criteria' and etype != 'criteria':
+            continue
+        type_label = 'Match-Based' if etype == 'match' else 'Criteria-Based'
+        template = resolve_template_for_event(event)
+        sched = schedule_rows(event)
+        if not sched:
+            sched = [{
+                'id': 'event',
+                'game': 'Scoresheet',
+                'stage': 'Event',
+                'date': event.event_date.isoformat() if event.event_date else '',
+                'time': event.event_time.strftime('%I:%M %p') if event.event_time else '',
+                'venue': event.venue or '—',
+                'status': event.get_status_display() if hasattr(event, 'get_status_display') else '—',
+                'status_key': event.status or '',
+            }]
+        for s in sched:
+            sid = s.get('id')
+            if isinstance(sid, int):
+                item_key = f'match-{sid}'
+                match_or_stage = s.get('game') or f'Game {sid}'
+                if s.get('stage') and s.get('stage') != '—':
+                    match_or_stage = f"{match_or_stage} · {s['stage']}"
+            else:
+                sid_str = str(sid)
+                if sid_str.startswith('round-'):
+                    item_key = f"stage-{sid_str.split('-', 1)[1]}"
+                elif sid_str in {'event'}:
+                    item_key = 'event'
+                else:
+                    item_key = sid_str
+                match_or_stage = s.get('stage') or s.get('game') or 'Stage'
+            schedule_bits = ' '.join(x for x in [s.get('date') or '', s.get('time') or ''] if x).strip() or '—'
+            status_label = s.get('status') or '—'
+            status_key = (s.get('status_key') or '').lower()
+            if status and status not in status_key and status.lower() not in status_label.lower():
+                continue
+            rows.append({
+                'event_id': event.id,
+                'event_name': event.name,
+                'event_type': type_label,
+                'event_type_key': etype,
+                'match_or_stage': match_or_stage,
+                'schedule': schedule_bits,
+                'venue': s.get('venue') or event.venue or '—',
+                'status': status_label,
+                'status_key': status_key,
+                'item_key': item_key,
+                'template_name': template.name if template else 'Default layout',
+                'template_id': template.id if template else None,
+            })
+    return rows
+
+
+def generate_match_scoresheet_pdf(event, match):
+    """Backward-compatible shim used by legacy faculty match PDF route."""
+    pdf, _template, _label, _payload = build_scoresheet_pdf(event, f'match-{match.id}')
+    return pdf
 
 
 def _notify_judges(event, judge_ids=None):

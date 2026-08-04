@@ -1986,9 +1986,18 @@ def create_assignment_account(request):
     if not payload['username'] or not payload['password']:
         return JsonResponse({'success': False, 'message': 'Username and password are required.'}, status=400)
 
+    email_ok, email_or_err = _normalize_gmail(payload['email'])
+    if not email_ok:
+        return JsonResponse({
+            'success': False,
+            'message': email_or_err if email_or_err != 'Gmail is required.'
+            else 'Gmail is required so faculty can be notified when assigned to an event.',
+        }, status=400)
+    email = email_or_err
+
     if User.objects.filter(username__iexact=payload['username']).exists():
         return JsonResponse({'success': False, 'message': 'Username already exists.'}, status=400)
-    if payload['email'] and User.objects.filter(email__iexact=payload['email']).exists():
+    if User.objects.filter(email__iexact=email).exists():
         return JsonResponse({'success': False, 'message': 'Gmail is already in use.'}, status=400)
 
     try:
@@ -1998,7 +2007,7 @@ def create_assignment_account(request):
             first_name, last_name = payload['username'], ''
         user = User.objects.create_user(
             username=payload['username'],
-            email=payload['email'] or '',
+            email=email,
             password=payload['password'],
             first_name=first_name,
             last_name=last_name,
@@ -2016,7 +2025,13 @@ def create_assignment_account(request):
             action_flag=ADDITION,
             change_message=f'Created {role_label} account',
         )
-        return JsonResponse({'success': True, 'message': f'{role_label} account for {payload["username"]} created.'})
+        return JsonResponse({
+            'success': True,
+            'message': (
+                f'{role_label} account for {payload["username"]} created. '
+                f'Assignment notifications will be sent to {email}.'
+            ),
+        })
     except Exception as e:
         return JsonResponse({'success': False, 'message': str(e)}, status=500)
 
@@ -2096,14 +2111,23 @@ def update_assignment_account(request, account_id):
     if not payload['username']:
         return JsonResponse({'success': False, 'message': 'Username is required.'}, status=400)
 
+    email_ok, email_or_err = _normalize_gmail(payload['email'])
+    if not email_ok:
+        return JsonResponse({
+            'success': False,
+            'message': email_or_err if email_or_err != 'Gmail is required.'
+            else 'Gmail is required so faculty can be notified when assigned to an event.',
+        }, status=400)
+    email = email_or_err
+
     if User.objects.filter(username__iexact=payload['username']).exclude(id=account_user.id).exists():
         return JsonResponse({'success': False, 'message': 'Username already exists.'}, status=400)
-    if payload['email'] and User.objects.filter(email__iexact=payload['email']).exclude(id=account_user.id).exists():
+    if User.objects.filter(email__iexact=email).exclude(id=account_user.id).exists():
         return JsonResponse({'success': False, 'message': 'Gmail is already in use.'}, status=400)
 
     try:
         account_user.username = payload['username']
-        account_user.email = payload['email'] or ''
+        account_user.email = email
         if payload['full_name']:
             first_name, last_name = _split_full_name(payload['full_name'])
             account_user.first_name = first_name
@@ -2123,7 +2147,10 @@ def update_assignment_account(request, account_id):
             action_flag=CHANGE,
             change_message=f'Updated {role_label} account',
         )
-        return JsonResponse({'success': True, 'message': f'Account for {payload["username"]} updated.'})
+        return JsonResponse({
+            'success': True,
+            'message': f'Account for {payload["username"]} updated. Notifications go to {email}.',
+        })
     except Exception as e:
         return JsonResponse({'success': False, 'message': str(e)}, status=500)
 
@@ -2687,6 +2714,7 @@ def _match_event_queryset():
 
 def _serialize_match_event(event):
     from events.match_event_service import normalize_tournament_type
+    from events.faculty_service import resolve_faculty_user_from_text
 
     registry_ids = {
         name: pk for pk, name in Team.objects.filter(status=Team.STATUS_ACTIVE)
@@ -2708,6 +2736,19 @@ def _serialize_match_event(event):
         and matches
         and not (has_losers_bracket and has_grand_final and has_loser_links)
     )
+    faculty_id = event.faculty_account_id
+    faculty_name = (
+        event.faculty_account.get_full_name().strip() or event.faculty_account.username
+        if event.faculty_account else (event.faculty_in_charge or '')
+    )
+    if not faculty_id and event.faculty_in_charge:
+        resolved = resolve_faculty_user_from_text(event.faculty_in_charge)
+        if resolved:
+            faculty_id = resolved.id
+            faculty_name = resolved.get_full_name().strip() or resolved.username
+            Event.objects.filter(pk=event.pk, faculty_account__isnull=True).update(
+                faculty_account_id=resolved.id
+            )
     return {
         'id': event.id,
         'name': event.name,
@@ -2726,12 +2767,9 @@ def _serialize_match_event(event):
         'schedule_mode': event.schedule_mode,
         'daily_start_time': event.daily_start_time.strftime('%H:%M') if event.daily_start_time else '',
         'daily_end_time': event.daily_end_time.strftime('%H:%M') if event.daily_end_time else '',
-        'faculty_account_id': event.faculty_account_id,
-        'faculty_name': (
-            event.faculty_account.get_full_name().strip() or event.faculty_account.username
-            if event.faculty_account else event.faculty_in_charge
-        ),
-        'auto_update_bracket': event.auto_update_bracket,
+        'faculty_account_id': faculty_id,
+        'faculty_name': faculty_name,
+        'scoresheet_template_id': event.scoresheet_template_id,
         'allow_result_editing': event.allow_result_editing,
         'require_faculty_confirmation': event.require_faculty_confirmation,
         'apply_championship_points': event.apply_championship_points,
@@ -2823,6 +2861,11 @@ def admin_match_events(request, event_id=None):
     faculty_options = User.objects.filter(is_active=True).filter(
         models_q_for_faculty()
     ).distinct().order_by('first_name', 'last_name', 'username')
+    from events.models import ScoresheetTemplate
+    match_templates = ScoresheetTemplate.objects.filter(
+        event_type=ScoresheetTemplate.EVENT_MATCH,
+        status=ScoresheetTemplate.STATUS_ACTIVE,
+    ).order_by('name')
     teams = Team.objects.filter(status=Team.STATUS_ACTIVE).select_related('department').order_by('name')
     all_match_events = _match_event_queryset()
     return render(request, 'admindash/matchbasedevent.html', {
@@ -2830,6 +2873,7 @@ def admin_match_events(request, event_id=None):
         'event_rows_json': rows,
         'teams': teams,
         'faculty_options': faculty_options,
+        'scoresheet_templates': match_templates,
         'total_count': all_match_events.count(),
         'draft_count': all_match_events.filter(publication_status=Event.PUBLICATION_DRAFT).count(),
         'published_count': all_match_events.filter(publication_status=Event.PUBLICATION_PUBLISHED).count(),
@@ -2864,11 +2908,20 @@ def admin_match_event_preview(request):
         return JsonResponse({'success': False, 'message': 'One or more selected teams are unavailable.'}, status=400)
     tournament_type = normalize_tournament_type(payload.get('tournament_type', ''))
     include_third_place = bool(payload.get('include_third_place'))
+    draw_order = payload.get('draw_order')
+    if draw_order is not None:
+        try:
+            draw_order = [int(value) for value in draw_order]
+        except (TypeError, ValueError):
+            return JsonResponse({'success': False, 'message': 'Bracket draw is invalid.'}, status=400)
+        if set(draw_order) != set(team_ids) or len(draw_order) != len(team_ids):
+            return JsonResponse({'success': False, 'message': 'Bracket draw must include every selected team.'}, status=400)
     try:
         blueprint = build_match_blueprint(
             team_ids,
             tournament_type,
             include_third_place=include_third_place,
+            draw_order=draw_order,
         )
     except MatchEventValidationError as exc:
         return JsonResponse({'success': False, 'message': str(exc)}, status=400)
@@ -2995,6 +3048,11 @@ def admin_criteria_events(request, event_id=None):
     faculty_options = User.objects.filter(is_active=True).filter(models_q_for_faculty()).distinct().order_by(
         'first_name', 'last_name', 'username'
     )
+    from events.models import ScoresheetTemplate
+    criteria_templates = ScoresheetTemplate.objects.filter(
+        event_type=ScoresheetTemplate.EVENT_CRITERIA,
+        status=ScoresheetTemplate.STATUS_ACTIVE,
+    ).order_by('name')
     all_events = _criteria_event_queryset()
     return render(request, 'admindash/criteriabasedevent.html', {
         'event_rows': rows,
@@ -3006,6 +3064,7 @@ def admin_criteria_events(request, event_id=None):
         ).select_related('department').order_by('number', 'name'),
         'judge_options': judge_options,
         'faculty_options': faculty_options,
+        'scoresheet_templates': criteria_templates,
         'total_count': all_events.count(),
         'draft_count': all_events.filter(publication_status=Event.PUBLICATION_DRAFT).count(),
         'published_count': all_events.filter(publication_status=Event.PUBLICATION_PUBLISHED).count(),
@@ -3298,7 +3357,7 @@ def get_tabulator_activity_score_rows(limit=60):
 
 def _ensure_default_scoresheet_templates(user=None):
     from events.models import ScoresheetTemplate
-    from events.scoresheet_pdf import default_match_layout
+    from events.scoresheet_pdf import pack_template_layout
 
     if ScoresheetTemplate.objects.exists():
         return
@@ -3307,89 +3366,150 @@ def _ensure_default_scoresheet_templates(user=None):
             'name': 'Basketball Official Scoresheet',
             'event_type': ScoresheetTemplate.EVENT_MATCH,
             'category': 'Basketball',
+            'description': 'Official match scoresheet for basketball games.',
         },
         {
             'name': 'Volleyball Official Scoresheet',
             'event_type': ScoresheetTemplate.EVENT_MATCH,
             'category': 'Volleyball',
+            'description': 'Official match scoresheet for volleyball games.',
         },
         {
             'name': 'Singing Competition Scoresheet',
             'event_type': ScoresheetTemplate.EVENT_CRITERIA,
             'category': 'Singing',
+            'description': 'Judging scoresheet for singing competitions.',
         },
         {
             'name': 'Dance Competition Scoresheet',
             'event_type': ScoresheetTemplate.EVENT_CRITERIA,
             'category': 'Dance',
+            'description': 'Judging scoresheet for dance competitions.',
         },
         {
             'name': 'Pageant Scoresheet',
             'event_type': ScoresheetTemplate.EVENT_CRITERIA,
             'category': 'Pageant',
+            'description': 'Judging scoresheet for pageant events.',
         },
     ]
-    layout = default_match_layout()
     for seed in seeds:
         ScoresheetTemplate.objects.create(
             name=seed['name'],
             event_type=seed['event_type'],
             category=seed['category'],
-            layout=layout,
+            description=seed.get('description', ''),
+            layout=pack_template_layout({}, seed['event_type']),
             created_by=user,
         )
 
 
 def _serialize_scoresheet_template(template):
+    from events.scoresheet_pdf import extract_fields, extract_order, resolve_elements
+
+    layout = template.layout or []
+    fields = extract_fields(layout, template.event_type)
+    order = extract_order(layout, template.event_type)
     return {
         'id': template.id,
         'name': template.name,
         'event_type': template.event_type,
         'event_type_label': template.get_event_type_display(),
         'category': template.category or '—',
+        'description': template.description or '',
         'status': template.status,
         'status_label': template.get_status_display(),
         'paper_size': template.paper_size,
         'orientation': template.orientation,
-        'layout': template.layout or [],
+        'fields': fields,
+        'order': order,
+        'layout': layout,
+        'elements': resolve_elements(layout, template.event_type, template.orientation),
+        'assigned_event_count': template.assigned_events.count() if hasattr(template, 'assigned_events') else 0,
         'updated_at': timezone.localtime(template.updated_at).strftime('%b %d, %Y') if template.updated_at else '—',
         'updated_at_iso': template.updated_at.isoformat() if template.updated_at else '',
-    }
-
-
-def _serialize_generated_scoresheet(row):
-    by_name = '—'
-    if row.generated_by_id:
-        by_name = row.generated_by.get_full_name().strip() or row.generated_by.username
-    return {
-        'id': row.id,
-        'event_label': row.event_label or '—',
-        'item_label': row.item_label or '—',
-        'generated_by': by_name,
-        'date_generated': timezone.localtime(row.created_at).strftime('%b %d, %Y %I:%M %p').replace(' 0', ' ')
-        if row.created_at else '—',
-        'download_url': f'/admin/scoresheets/generated/{row.id}/download/',
-        'template_id': row.template_id,
     }
 
 
 @login_required(login_url='login')
 @user_passes_test(lambda user: user.is_staff, login_url='login')
 def admin_scoresheets(request):
-    from events.models import ScoresheetTemplate, GeneratedScoresheet
+    from django.core.paginator import Paginator
+    from django.db.models import Q
+    from events.models import ScoresheetTemplate
+    from events.scoresheet_pdf import (
+        CRITERIA_FIELD_DEFS,
+        MATCH_FIELD_DEFS,
+        default_fields_for,
+        default_order_for,
+    )
 
     _ensure_default_scoresheet_templates(request.user)
-    templates = [_serialize_scoresheet_template(t) for t in ScoresheetTemplate.objects.all()[:50]]
-    generated = [
-        _serialize_generated_scoresheet(row)
-        for row in GeneratedScoresheet.objects.select_related('generated_by', 'template')[:50]
-    ]
+
+    qs = ScoresheetTemplate.objects.all()
+    q = (request.GET.get('q') or '').strip()
+    event_type = (request.GET.get('event_type') or '').strip()
+    status = (request.GET.get('status') or '').strip()
+    category = (request.GET.get('category') or '').strip()
+    sort = (request.GET.get('sort') or '-updated_at').strip()
+
+    if q:
+        qs = qs.filter(Q(name__icontains=q) | Q(category__icontains=q) | Q(description__icontains=q))
+    if event_type in dict(ScoresheetTemplate.EVENT_TYPE_CHOICES):
+        qs = qs.filter(event_type=event_type)
+    if status in dict(ScoresheetTemplate.STATUS_CHOICES):
+        qs = qs.filter(status=status)
+    if category:
+        qs = qs.filter(category__icontains=category)
+
+    sort_map = {
+        'name': 'name',
+        '-name': '-name',
+        'event_type': 'event_type',
+        '-event_type': '-event_type',
+        'category': 'category',
+        '-category': '-category',
+        'updated_at': 'updated_at',
+        '-updated_at': '-updated_at',
+        'status': 'status',
+        '-status': '-status',
+    }
+    qs = qs.order_by(sort_map.get(sort, '-updated_at'))
+
+    paginator = Paginator(qs, 10)
+    page_obj = paginator.get_page(request.GET.get('page') or 1)
+    templates = [_serialize_scoresheet_template(t) for t in page_obj.object_list]
+    categories = list(
+        ScoresheetTemplate.objects.exclude(category='')
+        .values_list('category', flat=True)
+        .distinct()
+        .order_by('category')[:50]
+    )
+
     return render(request, 'admindash/scoresheet.html', {
         'templates': templates,
         'templates_json': templates,
-        'generated': generated,
-        'generated_json': generated,
-        'events': Event.objects.order_by('name')[:200],
+        'page_obj': page_obj,
+        'paginator': {
+            'q': q,
+            'event_type': event_type,
+            'status': status,
+            'category': category,
+            'sort': sort,
+        },
+        'categories': categories,
+        'match_fields': MATCH_FIELD_DEFS,
+        'criteria_fields': CRITERIA_FIELD_DEFS,
+        'field_defs_json': {
+            'match': MATCH_FIELD_DEFS,
+            'criteria': CRITERIA_FIELD_DEFS,
+        },
+        'default_order_json': {
+            'match': default_order_for('match'),
+            'criteria': default_order_for('criteria'),
+        },
+        'default_match_fields': default_fields_for('match'),
+        'default_criteria_fields': default_fields_for('criteria'),
     })
 
 
@@ -3397,7 +3517,7 @@ def admin_scoresheets(request):
 @user_passes_test(lambda user: user.is_staff, login_url='login')
 def admin_scoresheet_template_save(request):
     from events.models import ScoresheetTemplate
-    from events.scoresheet_pdf import default_match_layout
+    from events.scoresheet_pdf import pack_template_layout
 
     if request.method != 'POST':
         return JsonResponse({'success': False, 'message': 'POST required.'}, status=405)
@@ -3421,9 +3541,10 @@ def admin_scoresheet_template_save(request):
     orientation = (data.get('orientation') or ScoresheetTemplate.ORIENT_PORTRAIT).strip()
     if orientation not in dict(ScoresheetTemplate.ORIENTATION_CHOICES):
         orientation = ScoresheetTemplate.ORIENT_PORTRAIT
-    layout = data.get('layout')
-    if not isinstance(layout, list):
-        layout = default_match_layout()
+
+    fields = data.get('fields') if isinstance(data.get('fields'), dict) else {}
+    order = data.get('order') if isinstance(data.get('order'), list) else None
+    layout = pack_template_layout(fields, event_type, order, orientation)
 
     creating = template is None
     if creating:
@@ -3431,6 +3552,7 @@ def admin_scoresheet_template_save(request):
     template.name = name[:200]
     template.event_type = event_type
     template.category = (data.get('category') or '').strip()[:100]
+    template.description = (data.get('description') or '').strip()
     template.status = (
         ScoresheetTemplate.STATUS_ACTIVE
         if (data.get('status') or 'active') == 'active'
@@ -3456,16 +3578,52 @@ def admin_scoresheet_template_delete(request, template_id):
         return JsonResponse({'success': False, 'message': 'POST required.'}, status=405)
     template = get_object_or_404(ScoresheetTemplate, pk=template_id)
     name = template.name
+    assigned = template.assigned_events.count()
     template.delete()
-    return JsonResponse({'success': True, 'message': f'Template "{name}" deleted.'})
+    msg = f'Template "{name}" deleted.'
+    if assigned:
+        msg += f' {assigned} event(s) will use auto-matched templates.'
+    return JsonResponse({'success': True, 'message': msg})
 
 
 @login_required(login_url='login')
 @user_passes_test(lambda user: user.is_staff, login_url='login')
-def admin_scoresheet_generate(request):
-    from django.core.files.base import ContentFile
-    from events.models import ScoresheetTemplate, GeneratedScoresheet
-    from events.scoresheet_pdf import default_match_layout, default_sample_payload, render_scoresheet_pdf
+def admin_scoresheet_template_duplicate(request, template_id):
+    from events.models import ScoresheetTemplate
+
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': 'POST required.'}, status=405)
+    source = get_object_or_404(ScoresheetTemplate, pk=template_id)
+    base = source.name
+    if base.endswith(' (Copy)'):
+        base = base[:-7]
+    copy_name = f'{base} (Copy)'
+    n = 2
+    while ScoresheetTemplate.objects.filter(name=copy_name).exists():
+        copy_name = f'{base} (Copy {n})'
+        n += 1
+    copy = ScoresheetTemplate.objects.create(
+        name=copy_name[:200],
+        event_type=source.event_type,
+        category=source.category,
+        description=source.description,
+        status=source.status,
+        paper_size=source.paper_size,
+        orientation=source.orientation,
+        layout=source.layout,
+        created_by=request.user,
+    )
+    return JsonResponse({
+        'success': True,
+        'message': f'Template duplicated as "{copy.name}".',
+        'template': _serialize_scoresheet_template(copy),
+    })
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def admin_scoresheet_preview(request):
+    from events.scoresheet_pdf import pack_template_layout
 
     if request.method != 'POST':
         return JsonResponse({'success': False, 'message': 'POST required.'}, status=405)
@@ -3474,70 +3632,53 @@ def admin_scoresheet_generate(request):
     except json.JSONDecodeError:
         return JsonResponse({'success': False, 'message': 'Invalid JSON body.'}, status=400)
 
-    template = None
-    template_id = data.get('template_id')
-    if template_id:
-        template = ScoresheetTemplate.objects.filter(pk=template_id).first()
-
-    layout = data.get('layout')
-    if not isinstance(layout, list):
-        layout = (template.layout if template else None) or default_match_layout()
-    orientation = (data.get('orientation') or (template.orientation if template else 'portrait'))
-    payload = data.get('payload') if isinstance(data.get('payload'), dict) else {}
-    merged = {**default_sample_payload(), **payload}
-
-    pdf_bytes = render_scoresheet_pdf(layout, orientation=orientation, payload=merged)
-    event_label = (data.get('event_label') or merged.get('EventName') or 'Scoresheet').strip()[:200]
-    item_label = (data.get('item_label') or f"Game {merged.get('GameNumber', '')}".strip() or 'Sheet').strip()[:200]
-
-    event = None
-    event_id = data.get('event_id')
-    if event_id:
-        event = Event.objects.filter(pk=event_id).first()
-        if event and not data.get('event_label'):
-            event_label = event.name
-
-    row = GeneratedScoresheet(
-        template=template,
-        event=event,
-        event_label=event_label,
-        item_label=item_label,
-        generated_by=request.user,
-        payload=merged,
-    )
-    filename = f"scoresheet_{timezone.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-    row.file.save(filename, ContentFile(pdf_bytes), save=False)
-    row.save()
+    event_type = (data.get('event_type') or 'match').strip() or 'match'
+    orientation = (data.get('orientation') or 'portrait').strip() or 'portrait'
+    fields = data.get('fields') if isinstance(data.get('fields'), dict) else {}
+    order = data.get('order') if isinstance(data.get('order'), list) else None
+    packed = pack_template_layout(fields, event_type, order, orientation)
     return JsonResponse({
         'success': True,
-        'message': 'Scoresheet PDF generated.',
-        'generated': _serialize_generated_scoresheet(row),
-        'download_url': f'/admin/scoresheets/generated/{row.id}/download/',
+        'elements': packed['elements'],
+        'fields': packed['fields'],
+        'order': packed['order'],
     })
 
 
 @login_required(login_url='login')
 @user_passes_test(lambda user: user.is_staff, login_url='login')
-def admin_scoresheet_download(request, generated_id):
-    from events.models import GeneratedScoresheet
-
-    row = get_object_or_404(GeneratedScoresheet, pk=generated_id)
-    if not row.file:
-        return HttpResponse('PDF file missing.', status=404)
-    response = HttpResponse(row.file.open('rb').read(), content_type='application/pdf')
-    response['Content-Disposition'] = f'attachment; filename="scoresheet-{row.id}.pdf"'
-    return response
-
-
-@login_required(login_url='login')
-@user_passes_test(lambda user: user.is_staff, login_url='login')
 def admin_scoresheet_sample_pdf(request):
-    from events.scoresheet_pdf import default_match_layout, default_sample_payload, render_scoresheet_pdf
+    from events.scoresheet_pdf import (
+        default_sample_payload,
+        pack_template_layout,
+        render_scoresheet_pdf,
+    )
+
+    event_type = 'match'
+    orientation = 'portrait'
+    paper_size = 'a4'
+    layout = None
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body.decode('utf-8') or '{}')
+        except json.JSONDecodeError:
+            data = {}
+        event_type = (data.get('event_type') or 'match').strip() or 'match'
+        orientation = (data.get('orientation') or 'portrait').strip() or 'portrait'
+        paper_size = (data.get('paper_size') or 'a4').strip() or 'a4'
+        fields = data.get('fields') if isinstance(data.get('fields'), dict) else {}
+        order = data.get('order') if isinstance(data.get('order'), list) else None
+        layout = pack_template_layout(fields, event_type, order, orientation)
+    if layout is None:
+        layout = pack_template_layout({}, event_type, None, orientation)
 
     pdf_bytes = render_scoresheet_pdf(
-        default_match_layout(),
-        orientation='portrait',
+        layout,
+        orientation=orientation,
+        paper_size=paper_size,
         payload=default_sample_payload(),
+        event_type=event_type,
+        blank_unresolved=False,
     )
     response = HttpResponse(pdf_bytes, content_type='application/pdf')
     response['Content-Disposition'] = 'attachment; filename="sample-scoresheet.pdf"'

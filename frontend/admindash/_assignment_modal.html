@@ -35,11 +35,16 @@
       <div id="acc-standard-section" class="form-grid">
         <label class="acc-field--full">
           Username
-          <input type="text" id="assignment-username">
+          <input type="text" id="assignment-username" autocomplete="username">
+        </label>
+        <label class="acc-field--full">
+          Gmail
+          <input type="email" id="assignment-email" placeholder="name@gmail.com" autocomplete="email">
+          <small class="acc-field-hint">Used to notify this faculty member when they are assigned to an event.</small>
         </label>
         <label class="acc-field--full">
           Password <small>(required for new accounts)</small>
-          <input type="password" id="assignment-password">
+          <input type="password" id="assignment-password" autocomplete="new-password">
         </label>
       </div>
 

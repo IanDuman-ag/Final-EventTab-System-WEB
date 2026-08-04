@@ -940,6 +940,7 @@
     renderDeductions();
     $('#chief-judge').value = event.chief_judge_id || '';
     form.faculty_account.value = event.faculty_account_id || '';
+    if (form.scoresheet_template) form.scoresheet_template.value = event.scoresheet_template_id || '';
     var judgeIds = (event.judge_ids || []).map(String);
     $$('.judge-check').forEach(function (box) {
       box.checked = judgeIds.indexOf(box.value) !== -1;

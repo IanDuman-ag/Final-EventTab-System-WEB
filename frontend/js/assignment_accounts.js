@@ -168,7 +168,7 @@ document.addEventListener('DOMContentLoaded', function () {
   function roleSubtitle(r) {
     if (r === 'Judge')  { return 'Enter the judge\'s official name and Gmail, then generate an access code (JDG01, JDG02…) to email them.'; }
     if (r === 'Scorer') { return 'Enter the scorer\'s official name and Gmail, then generate an access code (SCR01, SCR02…) to email them.'; }
-    return 'Faculty sign in via the web portal with their username and password.';
+    return 'Faculty sign in with username and password. Add their Gmail so they are notified when assigned to an event.';
   }
 
   function isValidEmail(value) {
@@ -199,7 +199,7 @@ document.addEventListener('DOMContentLoaded', function () {
     usernameInput.required = !code;
     passwordInput.required = !code && isCreating;
     nameInput.required     = code;
-    if (emailInput) emailInput.required = false;
+    if (emailInput) emailInput.required = !code;
     if (codeEmailInput) codeEmailInput.required = code;
 
     _generatedCode = '';
@@ -430,8 +430,14 @@ document.addEventListener('DOMContentLoaded', function () {
       payload.full_name = usernameInput.value.trim();
       payload.username  = usernameInput.value.trim();
       payload.password  = passwordInput.value;
+      payload.email     = getEmailValue(roleVal);
       if (!payload.username || (!editing && !payload.password)) {
         showToast('Username and password are required.', 'warning');
+        return;
+      }
+      if (!payload.email || !isValidEmail(payload.email)) {
+        showToast('Please enter a valid Gmail address for assignment notifications.', 'warning');
+        if (emailInput) emailInput.focus();
         return;
       }
     }
@@ -573,7 +579,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (nameField) nameField.hidden = !isCode;
     if (codeField) codeField.hidden = !isCode;
     var emailField = document.getElementById('view-field-email');
-    if (emailField) emailField.hidden = !isCode;
+    if (emailField) emailField.hidden = false;
     if (nameEl) nameEl.textContent = row.dataset.fullName || '—';
     // Judge/Scorer sign in with access code — hide the internal username field
     if (usernameEl) {

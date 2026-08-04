@@ -252,12 +252,11 @@ def _validated_faculty(data, user_model):
 
 
 def models_q_for_faculty():
+    """Active Faculty portal accounts only (Tabulator / Faculty groups)."""
     from django.db.models import Q
     return (
-        Q(is_staff=True)
+        Q(groups__name__iexact='Tabulator')
         | Q(groups__name__iexact='Faculty')
-        | Q(groups__name__iexact='Scorer')
-        | Q(groups__name__iexact='Tabulator')
     )
 
 
@@ -493,7 +492,12 @@ def _manual_schedule(event, matches, data):
 
 
 def _notify_faculty(event, actor, created):
+    """Log the assignment and email the faculty Gmail when they are assigned."""
+    from django.conf import settings
+
     faculty = event.faculty_account
+    if not faculty:
+        return
     action = ADDITION if created else CHANGE
     LogEntry.objects.create(
         user=actor,
@@ -503,17 +507,38 @@ def _notify_faculty(event, actor, created):
         action_flag=action,
         change_message=f'Assigned {faculty.get_full_name() or faculty.username} as Faculty In Charge.',
     )
-    if faculty.email:
-        transaction.on_commit(lambda: send_mail(
-            subject=f'EventTab assignment: {event.name}',
-            message=(
-                f'You have been assigned as Faculty In Charge for {event.name}, '
-                f'scheduled from {event.event_date:%B %d, %Y} to {event.end_date:%B %d, %Y}.'
-            ),
-            from_email=None,
-            recipient_list=[faculty.email],
-            fail_silently=True,
-        ))
+    email = (faculty.email or '').strip()
+    if not email:
+        return
+
+    display_name = faculty.get_full_name().strip() or faculty.username
+    start = event.event_date.strftime('%B %d, %Y') if event.event_date else 'TBD'
+    end = (event.end_date or event.event_date)
+    end_label = end.strftime('%B %d, %Y') if end else start
+    subject = f'EventTab assignment: {event.name}'
+    message = (
+        f'Hello {display_name},\n\n'
+        f'You have been assigned as Faculty In Charge for "{event.name}".\n\n'
+        f'Schedule: {start} to {end_label}\n'
+        f'Venue: {event.venue or "—"}\n\n'
+        f'Sign in to the Faculty portal to manage this event.\n\n'
+        f'— EventTab Admin'
+    )
+    from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', None) or None
+
+    def _send():
+        try:
+            send_mail(
+                subject=subject,
+                message=message,
+                from_email=from_email,
+                recipient_list=[email],
+                fail_silently=True,
+            )
+        except Exception:
+            pass
+
+    transaction.on_commit(_send)
 
 
 @transaction.atomic
@@ -599,13 +624,33 @@ def save_match_event(data, actor, instance=None):
     event.daily_end_time = _parse_time(data.get('daily_end_time'), 'Daily End Time')
     event.faculty_account = faculty
     event.faculty_in_charge = faculty.get_full_name().strip() or faculty.username
-    event.auto_update_bracket = data.get('auto_update_bracket') == 'on'
-    event.allow_result_editing = data.get('allow_result_editing') == 'on'
-    event.require_faculty_confirmation = data.get('require_faculty_confirmation') == 'on'
+    # Standard tournament behaviors — always on; not admin-configurable.
+    event.auto_update_bracket = True
+    event.allow_result_editing = True
+    event.require_faculty_confirmation = True
     event.apply_championship_points = data.get('apply_championship_points') == 'on'
     event.championship_points_config = points
     event.num_teams = len(teams)
+    # Optional explicit scoresheet template assignment
+    raw_tpl = (data.get('scoresheet_template') or '').strip()
+    if raw_tpl:
+        from .models import ScoresheetTemplate
+        tpl = ScoresheetTemplate.objects.filter(
+            pk=raw_tpl,
+            event_type=ScoresheetTemplate.EVENT_MATCH,
+            status=ScoresheetTemplate.STATUS_ACTIVE,
+        ).first()
+        event.scoresheet_template = tpl
+    else:
+        event.scoresheet_template = None
     event.save()
+    # Ensure FK persisted even if a prior partial update left text-only assignment.
+    if event.faculty_account_id != faculty.id:
+        Event.objects.filter(pk=event.pk).update(
+            faculty_account_id=faculty.id,
+            faculty_in_charge=faculty.get_full_name().strip() or faculty.username,
+        )
+        event.faculty_account = faculty
 
     snapshots_by_source, preserve_matches = _sync_teams(event, teams)
     blueprint = build_match_blueprint(

@@ -91,11 +91,10 @@ def models_q_for_judges():
 
 
 def models_q_for_faculty():
+    """Active Faculty portal accounts only (Tabulator / Faculty groups)."""
     return (
-        Q(is_staff=True)
+        Q(groups__name__iexact='Tabulator')
         | Q(groups__name__iexact='Faculty')
-        | Q(groups__name__iexact='Scorer')
-        | Q(groups__name__iexact='Tabulator')
     )
 
 
@@ -429,13 +428,11 @@ def _validated_tie_breaks(data, criteria):
 
 
 def _notify_assignees(event, recipients):
+    """Email assigned faculty/judges using their stored Gmail addresses."""
     from django.conf import settings
-    backend = (getattr(settings, 'EMAIL_BACKEND', '') or '').lower()
-    if 'console' in backend or 'locmem' in backend or 'dummy' in backend:
-        return
-    if not getattr(settings, 'EMAIL_HOST_USER', '') or not getattr(settings, 'EMAIL_HOST_PASSWORD', ''):
-        return
+
     subject = f'Assigned to EventTab event: {event.name}'
+    from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', None) or None
     for user in recipients:
         email = (user.email or '').strip()
         if not email:
@@ -446,10 +443,11 @@ def _notify_assignees(event, recipients):
             f'Category: {event.category}\n'
             f'Dates: {event.event_date} to {event.end_date or event.event_date}\n'
             f'Venue: {event.venue}\n\n'
+            f'Sign in to EventTab to review your assignment.\n\n'
             f'— EventTab Admin'
         )
         try:
-            send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [email], fail_silently=True)
+            send_mail(subject, body, from_email, [email], fail_silently=True)
         except Exception:
             continue
 
@@ -545,6 +543,17 @@ def save_criteria_event(data, user, files=None, instance=None):
     event.chief_judge = chief
     event.faculty_account = faculty
     event.faculty_in_charge = faculty.get_full_name().strip() or faculty.username
+    raw_tpl = (data.get('scoresheet_template') or '').strip()
+    if raw_tpl:
+        from .models import ScoresheetTemplate
+        tpl = ScoresheetTemplate.objects.filter(
+            pk=raw_tpl,
+            event_type=ScoresheetTemplate.EVENT_CRITERIA,
+            status=ScoresheetTemplate.STATUS_ACTIVE,
+        ).first()
+        event.scoresheet_template = tpl
+    else:
+        event.scoresheet_template = None
     event.apply_championship_points = _boolish(data, 'apply_championship_points', True)
     event.championship_points_config = points
     event.allow_result_editing = bool(result_processing.get('allow_result_editing', True))
@@ -640,6 +649,7 @@ def serialize_criteria_event(event):
             event.faculty_account.get_full_name().strip() or event.faculty_account.username
             if event.faculty_account else event.faculty_in_charge or '—'
         ),
+        'scoresheet_template_id': event.scoresheet_template_id,
         'judge_ids': judge_ids,
         'judge_names': [judge_map.get(i, str(i)) for i in judge_ids],
         'apply_championship_points': event.apply_championship_points,

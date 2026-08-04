@@ -359,6 +359,14 @@
               {% for user in faculty_options %}<option value="{{ user.id }}">{{ user.get_full_name|default:user.username }} · {{ user.username }}</option>{% endfor %}
             </select>
           </label>
+          <label class="field-block">Scoresheet Template
+            <select name="scoresheet_template">
+              <option value="">Auto-match by event type / category</option>
+              {% for tpl in scoresheet_templates %}
+              <option value="{{ tpl.id }}">{{ tpl.name }}{% if tpl.category %} · {{ tpl.category }}{% endif %}</option>
+              {% endfor %}
+            </select>
+          </label>
           <fieldset>
             <legend>Result Processing</legend>
             <div class="toggle-list" id="result-processing-list">

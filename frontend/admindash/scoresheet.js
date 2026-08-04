@@ -1,796 +1,566 @@
-(function () {
-  'use strict';
-
-  var $ = function (sel, root) { return (root || document).querySelector(sel); };
-  var $$ = function (sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); };
-
-  var csrf = window.SS_CSRF || '';
-  var urls = window.SS_URLS || {};
-  var templates = [];
-  try { templates = JSON.parse($('#ss-templates-data').textContent || '[]'); } catch (_) { templates = []; }
-
-  var state = {
-    templateId: null,
-    orientation: 'portrait',
-    zoom: 0.7,
-    elements: [],
-    selectedId: null,
-    undo: [],
-    redo: [],
-    dragComp: null,
+(() => {
+  const csrf = window.SS_CSRF || '';
+  const urls = window.SS_URLS || {};
+  const SAMPLE = {
+    GameNumber: '12', Round: 'Semifinal', Date: 'May 20, 2025', Time: '2:00 PM',
+    Venue: 'Main Gym', PlayingArea: 'Court 1', EventName: 'Basketball Men',
+    Classification: 'Intramurals', Division: 'Men', TournamentFormat: 'Single Elimination',
+    TeamA: 'Engineering Tigers', TeamB: 'Science Hawks', StageName: 'Preliminary Round',
+    Contestant: 'Alex Rivera', ContestantNumber: '07', Department: 'College of Engineering',
+    CriteriaWeight: '100%', MaximumScore: '100', FacultyInCharge: 'Prof. Santos',
   };
 
-  var DEFAULT_LAYOUT = [
-    { id: 'logo', type: 'rect', x: 40, y: 36, w: 70, h: 70, props: { fill: '#ffffff', stroke: '#0b2c5c', strokeWidth: 2, radius: 35 } },
-    { id: 'logo_text', type: 'text', x: 48, y: 58, w: 54, h: 30, props: { text: 'LOGO', fontSize: 11, fontWeight: 'bold', align: 'center', color: '#0b2c5c' } },
-    { id: 'title', type: 'text', x: 130, y: 40, w: 420, h: 36, props: { text: 'UNIVERSITY OF EXCELLENCE\nINTRAMURALS 2025', fontSize: 16, fontWeight: 'bold', align: 'center', color: '#0b2c5c' } },
-    { id: 'motto', type: 'text', x: 130, y: 82, w: 420, h: 20, props: { text: 'Unity. Sportsmanship. Excellence.', fontSize: 10, align: 'center', color: '#5a6f86' } },
-    { id: 'meta_box', type: 'rect', x: 560, y: 36, w: 194, h: 78, props: { fill: '#f5f8fc', stroke: '#c5d3e4', strokeWidth: 1 } },
-    { id: 'meta_text', type: 'text', x: 572, y: 46, w: 170, h: 60, props: { text: 'GAME NO. {{GameNumber}}\nDATE: {{Date}}\nVENUE: {{Venue}}', fontSize: 10, align: 'left', color: '#1d3554' } },
-    { id: 'event_label', type: 'text', x: 40, y: 130, w: 714, h: 24, props: { text: 'EVENT: {{EventName}}', fontSize: 13, fontWeight: 'bold', align: 'left', color: '#0b2c5c' } },
-    { id: 'team_a_box', type: 'rect', x: 40, y: 170, w: 300, h: 90, props: { fill: '#ffffff', stroke: '#0b2c5c', strokeWidth: 1.5 } },
-    { id: 'team_a_label', type: 'text', x: 50, y: 182, w: 280, h: 66, props: { text: 'TEAM A\n{{TeamA}}', fontSize: 14, fontWeight: 'bold', align: 'center', color: '#0b2c5c' } },
-    { id: 'vs', type: 'text', x: 360, y: 200, w: 74, h: 30, props: { text: 'VS', fontSize: 18, fontWeight: 'bold', align: 'center', color: '#155bd7' } },
-    { id: 'team_b_box', type: 'rect', x: 454, y: 170, w: 300, h: 90, props: { fill: '#ffffff', stroke: '#0b2c5c', strokeWidth: 1.5 } },
-    { id: 'team_b_label', type: 'text', x: 464, y: 182, w: 280, h: 66, props: { text: 'TEAM B\n{{TeamB}}', fontSize: 14, fontWeight: 'bold', align: 'center', color: '#0b2c5c' } },
-    { id: 'score_a_box', type: 'rect', x: 40, y: 290, w: 220, h: 80, props: { fill: '#f8fbff', stroke: '#9fb4cc', strokeWidth: 1 } },
-    { id: 'score_a', type: 'text', x: 50, y: 300, w: 200, h: 60, props: { text: 'SCORE\n{{ScoreA}}', fontSize: 14, fontWeight: 'bold', align: 'center', color: '#0b2c5c' } },
-    { id: 'winner_box', type: 'rect', x: 280, y: 290, w: 234, h: 80, props: { fill: '#ffffff', stroke: '#155bd7', strokeWidth: 1.5 } },
-    { id: 'winner', type: 'text', x: 290, y: 300, w: 214, h: 60, props: { text: 'WINNER\n{{Winner}}', fontSize: 13, fontWeight: 'bold', align: 'center', color: '#155bd7' } },
-    { id: 'score_b_box', type: 'rect', x: 534, y: 290, w: 220, h: 80, props: { fill: '#f8fbff', stroke: '#9fb4cc', strokeWidth: 1 } },
-    { id: 'score_b', type: 'text', x: 544, y: 300, w: 200, h: 60, props: { text: 'SCORE\n{{ScoreB}}', fontSize: 14, fontWeight: 'bold', align: 'center', color: '#0b2c5c' } },
-    { id: 'remarks_title', type: 'text', x: 40, y: 400, w: 200, h: 22, props: { text: 'REMARKS', fontSize: 12, fontWeight: 'bold', color: '#0b2c5c' } },
-    { id: 'remark_1', type: 'line', x: 40, y: 440, w: 714, h: 2, props: { stroke: '#9fb4cc', strokeWidth: 1 } },
-    { id: 'remark_2', type: 'line', x: 40, y: 470, w: 714, h: 2, props: { stroke: '#9fb4cc', strokeWidth: 1 } },
-    { id: 'remark_3', type: 'line', x: 40, y: 500, w: 714, h: 2, props: { stroke: '#9fb4cc', strokeWidth: 1 } },
-    { id: 'sig_prep', type: 'signature', x: 40, y: 560, w: 220, h: 90, props: { label: 'PREPARED BY:\n(Scorer)' } },
-    { id: 'sig_check', type: 'signature', x: 287, y: 560, w: 220, h: 90, props: { label: 'CHECKED BY:\n(Referee)' } },
-    { id: 'sig_appr', type: 'signature', x: 534, y: 560, w: 220, h: 90, props: { label: 'APPROVED BY:\n(Event Coordinator)' } },
-  ];
+  let templates = [];
+  let fieldDefs = { match: [], criteria: [] };
+  let defaultOrder = { match: [], criteria: [] };
+  try { templates = JSON.parse(document.getElementById('ss-templates-data')?.textContent || '[]'); } catch (_) {}
+  try { fieldDefs = JSON.parse(document.getElementById('ss-field-defs')?.textContent || '{}'); } catch (_) {}
+  try { defaultOrder = JSON.parse(document.getElementById('ss-default-order')?.textContent || '{}'); } catch (_) {}
 
-  function uid(prefix) {
-    return (prefix || 'el') + Math.random().toString(36).slice(2, 9);
-  }
+  const listPanel = document.querySelector('[data-panel="list"]');
+  const wizardPanel = document.querySelector('[data-panel="wizard"]');
+  const fieldList = document.getElementById('field-list');
+  const viewDialog = document.getElementById('view-dialog');
+  let step = 1;
+  let viewingId = null;
+  let currentOrder = [];
+  let currentFields = {};
+  let previewTimer = null;
+  let dragKey = null;
 
-  function clone(obj) {
-    return JSON.parse(JSON.stringify(obj));
-  }
-
-  function pushHistory() {
-    state.undo.push(clone(state.elements));
-    if (state.undo.length > 40) state.undo.shift();
-    state.redo = [];
-  }
-
-  function switchTab(name) {
-    $$('.ss-tab').forEach(function (tab) {
-      var on = tab.dataset.tab === name;
-      tab.classList.toggle('is-active', on);
-      tab.setAttribute('aria-selected', on ? 'true' : 'false');
-    });
-    $$('.ss-panel').forEach(function (panel) {
-      panel.classList.toggle('is-active', panel.dataset.panel === name);
-    });
-    if (name === 'design') {
-      renderCanvas();
-      renderPreview();
-    }
-  }
-
-  function canvasEl() { return $('#design-canvas'); }
-
-  function selected() {
-    return state.elements.find(function (el) { return el.id === state.selectedId; }) || null;
-  }
-
-  function applyZoom() {
-    var canvas = canvasEl();
-    canvas.style.transform = 'scale(' + state.zoom + ')';
-    $('#zoom-label').textContent = Math.round(state.zoom * 100) + '%';
-    var stage = $('#canvas-stage');
-    var w = state.orientation === 'landscape' ? 1123 : 794;
-    var h = state.orientation === 'landscape' ? 794 : 1123;
-    canvas.style.width = w + 'px';
-    canvas.style.height = h + 'px';
-    canvas.classList.toggle('is-landscape', state.orientation === 'landscape');
-    stage.style.minHeight = Math.max(320, h * state.zoom + 40) + 'px';
-  }
-
-  function elementDefaults(type) {
-    var base = { id: uid(type), type: type, x: 80, y: 80, w: 180, h: 40, props: {} };
-    if (type === 'text') {
-      base.props = { text: 'Text label', fontSize: 14, fontWeight: 'normal', align: 'left', color: '#000000', fontFamily: 'Poppins' };
-    } else if (type === 'line') {
-      base.h = 2; base.w = 240; base.props = { stroke: '#9fb4cc', strokeWidth: 1 };
-    } else if (type === 'rect') {
-      base.w = 200; base.h = 80; base.props = { fill: '#ffffff', stroke: '#0b2c5c', strokeWidth: 1 };
-    } else if (type === 'table') {
-      base.w = 320; base.h = 140; base.props = { rows: 4, cols: 3, stroke: '#9fb4cc' };
-    } else if (type === 'image') {
-      base.w = 90; base.h = 90; base.props = { label: 'LOGO', fill: '#ffffff', stroke: '#0b2c5c' };
-    } else if (type === 'input') {
-      base.props = { text: '{{Field}}', fontSize: 12, align: 'left', color: '#1d3554', fill: '#ffffff', stroke: '#c5d3e4' };
-    } else if (type === 'signature') {
-      base.w = 200; base.h = 80; base.props = { label: 'Signature\n(Name / Role)' };
-    }
-    return base;
-  }
-
-  function styleFor(el) {
-    var p = el.props || {};
-    var style = {
-      left: el.x + 'px',
-      top: el.y + 'px',
-      width: el.w + 'px',
-      height: el.h + 'px',
-    };
-    if (el.type === 'text' || el.type === 'input') {
-      style.fontSize = (p.fontSize || 12) + 'px';
-      style.fontWeight = p.fontWeight || 'normal';
-      style.fontStyle = p.italic ? 'italic' : 'normal';
-      style.textDecoration = p.underline ? 'underline' : 'none';
-      style.textAlign = p.align || 'left';
-      style.color = p.color || '#000';
-      style.fontFamily = p.fontFamily || 'Poppins, Arial, sans-serif';
-      if (el.type === 'input') {
-        style.border = '1px solid ' + (p.stroke || '#c5d3e4');
-        style.background = p.fill || '#fff';
-      }
-    }
-    if (el.type === 'rect' || el.type === 'image') {
-      style.background = p.fill || '#fff';
-      style.border = (p.strokeWidth || 1) + 'px solid ' + (p.stroke || '#0b2c5c');
-      if (p.radius) style.borderRadius = p.radius + 'px';
-    }
-    if (el.type === 'line') {
-      style.background = p.stroke || '#9fb4cc';
-      style.height = Math.max(1, p.strokeWidth || 1) + 'px';
-    }
-    if (el.type === 'signature') {
-      style.fontSize = '11px';
-      style.fontWeight = '700';
-      style.color = p.color || '#0b2c5c';
-      style.textAlign = 'center';
-    }
-    return style;
-  }
-
-  function contentFor(el) {
-    var p = el.props || {};
-    if (el.type === 'text' || el.type === 'input') return p.text || '';
-    if (el.type === 'signature') return p.label || 'Signature';
-    if (el.type === 'image') return p.src ? '' : (p.label || 'IMAGE / LOGO');
-    return '';
-  }
-
-  function fillElementNode(node, el) {
-    node.innerHTML = '';
-    var p = el.props || {};
-    if (el.type === 'image' && p.src) {
-      var img = document.createElement('img');
-      img.src = p.src;
-      img.alt = p.label || 'Logo';
-      node.appendChild(img);
-    } else {
-      node.appendChild(document.createTextNode(contentFor(el)));
-    }
-  }
-
-  function deleteSelected() {
-    if (!state.selectedId) return;
-    pushHistory();
-    state.elements = state.elements.filter(function (el) { return el.id !== state.selectedId; });
-    state.selectedId = null;
-    syncPropsPanel();
-    renderCanvas();
-    renderPreview();
-  }
-
-  function renderCanvas() {
-    var canvas = canvasEl();
-    canvas.innerHTML = '';
-    applyZoom();
-    state.elements.forEach(function (el) {
-      var node = document.createElement('div');
-      node.className = 'ss-el ss-el-' + el.type + (el.id === state.selectedId ? ' is-selected' : '');
-      node.dataset.id = el.id;
-      var style = styleFor(el);
-      Object.keys(style).forEach(function (key) { node.style[key] = style[key]; });
-      fillElementNode(node, el);
-      if (el.id === state.selectedId && el.type !== 'line') {
-        var handle = document.createElement('span');
-        handle.className = 'ss-handle';
-        node.appendChild(handle);
-        bindResize(handle, el);
-      }
-      bindMove(node, el);
-      node.addEventListener('mousedown', function (e) {
-        if (e.target.classList.contains('ss-handle')) return;
-        state.selectedId = el.id;
-        syncPropsPanel();
-        renderCanvas();
-        renderPreview();
-      });
-      canvas.appendChild(node);
-    });
-  }
-
-  function bindMove(node, el) {
-    node.addEventListener('mousedown', function (e) {
-      if (e.target.classList.contains('ss-handle')) return;
-      e.preventDefault();
-      var startX = e.clientX;
-      var startY = e.clientY;
-      var origX = el.x;
-      var origY = el.y;
-      var moved = false;
-      function onMove(ev) {
-        var dx = (ev.clientX - startX) / state.zoom;
-        var dy = (ev.clientY - startY) / state.zoom;
-        if (!moved && (Math.abs(dx) > 1 || Math.abs(dy) > 1)) {
-          pushHistory();
-          moved = true;
-        }
-        el.x = Math.max(0, Math.round(origX + dx));
-        el.y = Math.max(0, Math.round(origY + dy));
-        node.style.left = el.x + 'px';
-        node.style.top = el.y + 'px';
-      }
-      function onUp() {
-        document.removeEventListener('mousemove', onMove);
-        document.removeEventListener('mouseup', onUp);
-        if (moved) renderPreview();
-      }
-      document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', onUp);
-    });
-  }
-
-  function bindResize(handle, el) {
-    handle.addEventListener('mousedown', function (e) {
-      e.preventDefault();
-      e.stopPropagation();
-      pushHistory();
-      var startX = e.clientX;
-      var startY = e.clientY;
-      var origW = el.w;
-      var origH = el.h;
-      function onMove(ev) {
-        el.w = Math.max(20, Math.round(origW + (ev.clientX - startX) / state.zoom));
-        el.h = Math.max(el.type === 'line' ? 1 : 16, Math.round(origH + (ev.clientY - startY) / state.zoom));
-        renderCanvas();
-      }
-      function onUp() {
-        document.removeEventListener('mousemove', onMove);
-        document.removeEventListener('mouseup', onUp);
-        renderPreview();
-      }
-      document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', onUp);
-    });
-  }
-
-  function syncPropsPanel() {
-    var el = selected();
-    var deleteBtn = $('#btn-delete-selected');
-    var imageControls = $('#prop-image-controls');
-    var thumbWrap = $('#prop-image-thumb-wrap');
-    var thumb = $('#prop-image-thumb');
-    var clearBtn = $('#btn-clear-image');
-    if (deleteBtn) deleteBtn.disabled = !el;
+  function toast(message, isError) {
+    let el = document.querySelector('.ss-toast');
     if (!el) {
-      if (imageControls) imageControls.classList.add('is-hidden');
-      if (thumbWrap) thumbWrap.hidden = true;
-      return;
+      el = document.createElement('div');
+      el.className = 'ss-toast';
+      document.body.appendChild(el);
     }
-    var p = el.props || {};
-    $('#prop-font').value = p.fontFamily || 'Poppins';
-    $('#prop-size').value = String(p.fontSize || 14);
-    $('#prop-bold').classList.toggle('is-active', p.fontWeight === 'bold');
-    $('#prop-italic').classList.toggle('is-active', !!p.italic);
-    $('#prop-underline').classList.toggle('is-active', !!p.underline);
-    $$('.ss-style-row [data-align]').forEach(function (btn) {
-      btn.classList.toggle('is-active', (p.align || 'left') === btn.dataset.align);
-    });
-    var color = p.color || '#000000';
-    $('#prop-color').value = color;
-    $('#prop-color-hex').value = color;
-    $('#prop-text').value = p.text || p.label || '';
-    if (imageControls) {
-      imageControls.classList.toggle('is-hidden', el.type !== 'image');
-    }
-    if (el.type === 'image') {
-      if (p.src) {
-        thumb.src = p.src;
-        thumbWrap.hidden = false;
-        clearBtn.disabled = false;
-      } else {
-        thumb.removeAttribute('src');
-        thumbWrap.hidden = true;
-        clearBtn.disabled = true;
-      }
-    }
+    el.textContent = message;
+    el.classList.toggle('is-error', !!isError);
+    el.classList.add('is-on');
+    clearTimeout(el._t);
+    el._t = setTimeout(() => el.classList.remove('is-on'), 2800);
   }
 
-  function updateSelectedFromProps() {
-    var el = selected();
-    if (!el) return;
-    el.props = el.props || {};
-    el.props.fontFamily = $('#prop-font').value;
-    el.props.fontSize = Number($('#prop-size').value) || 14;
-    el.props.fontWeight = $('#prop-bold').classList.contains('is-active') ? 'bold' : 'normal';
-    el.props.italic = $('#prop-italic').classList.contains('is-active');
-    el.props.underline = $('#prop-underline').classList.contains('is-active');
-    var alignBtn = $('.ss-style-row [data-align].is-active');
-    el.props.align = alignBtn ? alignBtn.dataset.align : 'left';
-    el.props.color = $('#prop-color-hex').value || '#000000';
-    var text = $('#prop-text').value;
-    if (el.type === 'signature' || el.type === 'image') el.props.label = text;
-    else el.props.text = text;
-    renderCanvas();
-    renderPreview();
-  }
-
-  function renderPreview() {
-    var host = $('#live-preview');
-    host.innerHTML = '';
-    var page = document.createElement('div');
-    page.className = 'ss-preview-page';
-    var w = state.orientation === 'landscape' ? 1123 : 794;
-    var h = state.orientation === 'landscape' ? 794 : 1123;
-    page.style.width = w + 'px';
-    page.style.height = h + 'px';
-    var scale = Math.min(host.clientWidth / w, 220 / h) || 0.25;
-    page.style.transform = 'scale(' + scale + ')';
-    host.style.height = Math.max(180, h * scale) + 'px';
-    state.elements.forEach(function (el) {
-      var node = document.createElement('div');
-      node.className = 'ss-el ss-el-' + el.type;
-      var style = styleFor(el);
-      Object.keys(style).forEach(function (key) { node.style[key] = style[key]; });
-      fillElementNode(node, el);
-      page.appendChild(node);
-    });
-    host.appendChild(page);
-  }
-
-  function loadTemplate(tpl) {
-    state.templateId = tpl.id;
-    state.orientation = tpl.orientation || 'portrait';
-    state.elements = clone(tpl.layout && tpl.layout.length ? tpl.layout : DEFAULT_LAYOUT);
-    state.selectedId = null;
-    state.undo = [];
-    state.redo = [];
-    $('#tpl-name').value = tpl.name || '';
-    $('#tpl-event-type').value = tpl.event_type || 'match';
-    $('#tpl-category').value = tpl.category === '—' ? '' : (tpl.category || '');
-    $$('.ss-orient button').forEach(function (btn) {
-      btn.classList.toggle('is-active', btn.dataset.orient === state.orientation);
-    });
-    switchTab('design');
-  }
-
-  function newTemplate() {
-    state.templateId = null;
-    state.orientation = 'portrait';
-    state.elements = clone(DEFAULT_LAYOUT);
-    state.selectedId = null;
-    state.undo = [];
-    state.redo = [];
-    $('#tpl-name').value = 'New Scoresheet Template';
-    $('#tpl-event-type').value = 'match';
-    $('#tpl-category').value = '';
-    $$('.ss-orient button').forEach(function (btn) {
-      btn.classList.toggle('is-active', btn.dataset.orient === 'portrait');
-    });
-    switchTab('design');
-  }
-
-  function buildExportPayload() {
-    return {
-      name: ($('#tpl-name').value || 'Imported Scoresheet').trim(),
-      event_type: $('#tpl-event-type').value || 'match',
-      category: ($('#tpl-category').value || '').trim(),
-      paper_size: $('#tpl-paper').value || 'a4',
-      orientation: state.orientation || 'portrait',
-      layout: state.elements || [],
-      version: 1,
-    };
-  }
-
-  function applyImportedTemplate(data) {
-    if (!data || typeof data !== 'object') {
-      throw new Error('Invalid template file.');
-    }
-    var layout = data.layout;
-    if (!Array.isArray(layout) || !layout.length) {
-      throw new Error('Template file must include a non-empty layout array.');
-    }
-    state.templateId = null;
-    state.orientation = data.orientation === 'landscape' ? 'landscape' : 'portrait';
-    state.elements = clone(layout);
-    state.selectedId = null;
-    state.undo = [];
-    state.redo = [];
-    $('#tpl-name').value = (data.name || 'Imported Scoresheet').toString().slice(0, 200);
-    $('#tpl-event-type').value = data.event_type === 'criteria' ? 'criteria' : 'match';
-    $('#tpl-category').value = (data.category || '').toString().slice(0, 100);
-    if (data.paper_size) $('#tpl-paper').value = data.paper_size;
-    $$('.ss-orient button').forEach(function (btn) {
-      btn.classList.toggle('is-active', btn.dataset.orient === state.orientation);
-    });
-    switchTab('design');
-    syncPropsPanel();
-    renderCanvas();
-    renderPreview();
-  }
-
-  function exportTemplateFile() {
-    var payload = buildExportPayload();
-    if (!payload.layout.length) {
-      alert('Add at least one component before exporting.');
-      return;
-    }
-    var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    var safeName = (payload.name || 'scoresheet-template').replace(/[^\w\-]+/g, '_').slice(0, 60);
-    a.href = url;
-    a.download = safeName + '.json';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  }
-
-  function importTemplateFile(file) {
-    if (!file) return;
-    var reader = new FileReader();
-    reader.onload = function () {
-      try {
-        var data = JSON.parse(String(reader.result || '{}'));
-        applyImportedTemplate(data);
-        alert('Template imported. Review the design, then Save Template to keep it.');
-      } catch (err) {
-        alert(err.message || 'Could not import template JSON.');
-      }
-    };
-    reader.onerror = function () {
-      alert('Failed to read the template file.');
-    };
-    reader.readAsText(file);
-  }
-
-  function getCookie(name) {
-    var match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
-    return match ? decodeURIComponent(match[2]) : '';
-  }
-
-  async function apiPost(url, body) {
-    var token = csrf || getCookie('csrftoken');
-    var res = await fetch(url, {
-      method: 'POST',
+  async function api(url, options = {}) {
+    const res = await fetch(url, {
+      ...options,
       headers: {
         'Content-Type': 'application/json',
-        'X-CSRFToken': token,
+        'X-CSRFToken': csrf,
+        ...(options.headers || {}),
       },
-      body: JSON.stringify(body),
-      credentials: 'same-origin',
     });
-    var data = await res.json().catch(function () { return {}; });
-    if (!res.ok || data.success === false) {
-      throw new Error(data.message || 'Request failed.');
-    }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.success === false) throw new Error(data.message || `Request failed (${res.status})`);
     return data;
   }
 
-  async function saveTemplate() {
-    var name = $('#tpl-name').value.trim();
-    if (!name) {
-      alert('Template name is required.');
-      return;
-    }
-    try {
-      var data = await apiPost(urls.save, {
-        id: state.templateId,
-        name: name,
-        event_type: $('#tpl-event-type').value,
-        category: $('#tpl-category').value.trim(),
-        paper_size: $('#tpl-paper').value,
-        orientation: state.orientation,
-        layout: state.elements,
-        status: 'active',
+  function eventType() {
+    return document.querySelector('input[name="event_type"]:checked')?.value || 'match';
+  }
+
+  function defsFor(type) {
+    return fieldDefs[type] || [];
+  }
+
+  function defaultFields(type) {
+    const out = {};
+    defsFor(type).forEach((d) => { out[d.key] = true; });
+    return out;
+  }
+
+  function escapeHtml(s) {
+    return String(s ?? '')
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function escapeAttr(s) { return escapeHtml(s).replace(/'/g, '&#39;'); }
+
+  function findTemplate(id) {
+    return templates.find((t) => String(t.id) === String(id));
+  }
+
+  function showList() {
+    listPanel.hidden = false;
+    listPanel.classList.add('is-active');
+    wizardPanel.hidden = true;
+    wizardPanel.classList.remove('is-active');
+  }
+
+  function showWizard(title) {
+    listPanel.hidden = true;
+    listPanel.classList.remove('is-active');
+    wizardPanel.hidden = false;
+    wizardPanel.classList.add('is-active');
+    document.getElementById('wizard-title').textContent = title || 'Create Template';
+    goStep(1);
+  }
+
+  function goStep(n) {
+    step = n;
+    document.querySelectorAll('.ss-step').forEach((el) => {
+      el.hidden = Number(el.dataset.step) !== n;
+    });
+    document.querySelectorAll('[data-step-indicator]').forEach((el) => {
+      const s = Number(el.dataset.stepIndicator);
+      el.classList.toggle('is-active', s === n);
+      el.classList.toggle('is-done', s < n);
+    });
+    if (n >= 2) schedulePreview();
+  }
+
+  function readOrderFromDom() {
+    return [...fieldList.querySelectorAll('.ss-field-row')].map((row) => row.dataset.key);
+  }
+
+  function readFieldsFromDom() {
+    const out = {};
+    fieldList.querySelectorAll('.ss-field-row').forEach((row) => {
+      out[row.dataset.key] = row.querySelector('input[type="checkbox"]').checked;
+    });
+    return out;
+  }
+
+  function renderFieldList() {
+    const type = eventType();
+    const defs = defsFor(type);
+    const labelMap = Object.fromEntries(defs.map((d) => [d.key, d.label]));
+    const order = currentOrder.length ? currentOrder : (defaultOrder[type] || defs.map((d) => d.key));
+    const fields = { ...defaultFields(type), ...currentFields };
+    fieldList.innerHTML = '';
+    order.forEach((key) => {
+      if (!labelMap[key]) return;
+      const on = !!fields[key];
+      const li = document.createElement('li');
+      li.className = `ss-field-row${on ? ' is-on' : ''}`;
+      li.dataset.key = key;
+      li.draggable = true;
+      li.innerHTML = `
+        <span class="ss-drag" title="Drag to reorder" aria-hidden="true">⠿</span>
+        <label class="ss-check-inline">
+          <input type="checkbox" ${on ? 'checked' : ''}>
+          <span>${escapeHtml(labelMap[key])}</span>
+        </label>
+        <span class="ss-reorder">
+          <button type="button" class="ss-icon-move" data-move="-1" title="Move up">↑</button>
+          <button type="button" class="ss-icon-move" data-move="1" title="Move down">↓</button>
+        </span>`;
+      li.querySelector('input').addEventListener('change', (e) => {
+        li.classList.toggle('is-on', e.target.checked);
+        currentFields = readFieldsFromDom();
+        schedulePreview();
       });
-      state.templateId = data.template.id;
-      var idx = templates.findIndex(function (t) { return t.id === data.template.id; });
-      if (idx >= 0) templates[idx] = data.template;
-      else templates.unshift(data.template);
-      refreshTemplatesTable();
-      alert(data.message || 'Template saved.');
-    } catch (err) {
-      alert(err.message || 'Save failed.');
-    }
-  }
-
-  function refreshTemplatesTable() {
-    var tbody = $('#templates-table tbody');
-    if (!templates.length) {
-      tbody.innerHTML = '<tr><td colspan="6" class="ss-empty">No templates yet.</td></tr>';
-      return;
-    }
-    tbody.innerHTML = templates.map(function (t) {
-      return '<tr data-id="' + t.id + '">' +
-        '<td><strong>' + escapeHtml(t.name) + '</strong></td>' +
-        '<td>' + escapeHtml(t.event_type_label) + '</td>' +
-        '<td>' + escapeHtml(t.category) + '</td>' +
-        '<td>' + escapeHtml(t.updated_at) + '</td>' +
-        '<td><span class="ss-badge ss-badge--' + escapeHtml(t.status) + '">' + escapeHtml(t.status_label) + '</span></td>' +
-        '<td><div class="ss-row-actions">' +
-        '<button type="button" class="ss-icon-btn" data-edit-template="' + t.id + '" title="Edit"><svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25ZM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83Z"/></svg></button>' +
-        '<button type="button" class="ss-icon-btn danger" data-delete-template="' + t.id + '" data-name="' + escapeAttr(t.name) + '" title="Delete"><svg viewBox="0 0 24 24"><path d="M6 7h12v2H6V7Zm2 3h8l-1 11H9L8 10Zm3-6h2l1 2H10l1-2Z"/></svg></button>' +
-        '</div></td></tr>';
-    }).join('');
-    bindTableActions();
-    $('#templates-count').textContent = 'Showing 1 to ' + templates.length + ' of ' + templates.length + ' templates';
-  }
-
-  function escapeHtml(value) {
-    return String(value == null ? '' : value)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  }
-
-  function escapeAttr(value) {
-    return escapeHtml(value).replace(/"/g, '&quot;');
-  }
-
-  function bindTableActions() {
-    $$('[data-edit-template]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var tpl = templates.find(function (t) { return String(t.id) === String(btn.dataset.editTemplate); });
-        if (tpl) loadTemplate(tpl);
+      li.querySelectorAll('[data-move]').forEach((btn) => {
+        btn.addEventListener('click', () => moveRow(key, Number(btn.dataset.move)));
       });
-    });
-    $$('[data-delete-template]').forEach(function (btn) {
-      btn.addEventListener('click', async function () {
-        if (!confirm('Delete template "' + (btn.dataset.name || '') + '"?')) return;
-        try {
-          await apiPost(urls.deleteBase + btn.dataset.deleteTemplate + '/delete/', {});
-          templates = templates.filter(function (t) { return String(t.id) !== String(btn.dataset.deleteTemplate); });
-          refreshTemplatesTable();
-        } catch (err) {
-          alert(err.message || 'Delete failed.');
-        }
+      li.addEventListener('dragstart', () => { dragKey = key; li.classList.add('is-dragging'); });
+      li.addEventListener('dragend', () => { dragKey = null; li.classList.remove('is-dragging'); syncOrder(); });
+      li.addEventListener('dragover', (e) => { e.preventDefault(); li.classList.add('is-drop'); });
+      li.addEventListener('dragleave', () => li.classList.remove('is-drop'));
+      li.addEventListener('drop', (e) => {
+        e.preventDefault();
+        li.classList.remove('is-drop');
+        if (!dragKey || dragKey === key) return;
+        const orderNow = readOrderFromDom();
+        const from = orderNow.indexOf(dragKey);
+        const to = orderNow.indexOf(key);
+        if (from < 0 || to < 0) return;
+        orderNow.splice(from, 1);
+        orderNow.splice(to, 0, dragKey);
+        currentOrder = orderNow;
+        currentFields = readFieldsFromDom();
+        renderFieldList();
+        schedulePreview();
       });
+      fieldList.appendChild(li);
     });
+    currentOrder = readOrderFromDom();
+    currentFields = readFieldsFromDom();
   }
 
-  // Tabs
-  $$('.ss-tab').forEach(function (tab) {
-    tab.addEventListener('click', function () { switchTab(tab.dataset.tab); });
-  });
-  $$('[data-tab-jump]').forEach(function (btn) {
-    btn.addEventListener('click', function () { switchTab(btn.dataset.tabJump); });
-  });
-  $('#btn-create').addEventListener('click', newTemplate);
-  $('#btn-import-template').addEventListener('click', function () {
-    $('#import-template-file').click();
-  });
-  $('#import-template-file').addEventListener('change', function () {
-    var file = this.files && this.files[0];
-    this.value = '';
-    importTemplateFile(file);
-  });
-  $('#btn-export-template').addEventListener('click', exportTemplateFile);
+  function moveRow(key, delta) {
+    const orderNow = readOrderFromDom();
+    const idx = orderNow.indexOf(key);
+    const next = idx + delta;
+    if (idx < 0 || next < 0 || next >= orderNow.length) return;
+    [orderNow[idx], orderNow[next]] = [orderNow[next], orderNow[idx]];
+    currentOrder = orderNow;
+    currentFields = readFieldsFromDom();
+    renderFieldList();
+    schedulePreview();
+  }
 
-  // Palette drag / click add
-  $$('.ss-palette [data-component]').forEach(function (btn) {
-    btn.addEventListener('dragstart', function (e) {
-      state.dragComp = btn.dataset.component;
-      e.dataTransfer.setData('text/plain', btn.dataset.component);
-    });
-    btn.addEventListener('click', function () {
-      pushHistory();
-      var el = elementDefaults(btn.dataset.component);
-      state.elements.push(el);
-      state.selectedId = el.id;
-      renderCanvas();
-      syncPropsPanel();
-      renderPreview();
-    });
-  });
-  canvasEl().addEventListener('dragover', function (e) { e.preventDefault(); });
-  canvasEl().addEventListener('drop', function (e) {
-    e.preventDefault();
-    var type = e.dataTransfer.getData('text/plain') || state.dragComp;
-    if (!type) return;
-    pushHistory();
-    var rect = canvasEl().getBoundingClientRect();
-    var el = elementDefaults(type);
-    el.x = Math.max(0, Math.round((e.clientX - rect.left) / state.zoom - el.w / 2));
-    el.y = Math.max(0, Math.round((e.clientY - rect.top) / state.zoom - el.h / 2));
-    state.elements.push(el);
-    state.selectedId = el.id;
-    renderCanvas();
-    syncPropsPanel();
-    renderPreview();
-  });
+  function syncOrder() {
+    currentOrder = readOrderFromDom();
+    currentFields = readFieldsFromDom();
+    schedulePreview();
+  }
 
-  // Orientation
-  $$('.ss-orient button').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      state.orientation = btn.dataset.orient;
-      $$('.ss-orient button').forEach(function (b) {
-        b.classList.toggle('is-active', b === btn);
-      });
-      applyZoom();
-      renderPreview();
-    });
-  });
-
-  // Toolbar
-  $('#btn-undo').addEventListener('click', function () {
-    if (!state.undo.length) return;
-    state.redo.push(clone(state.elements));
-    state.elements = state.undo.pop();
-    state.selectedId = null;
-    renderCanvas();
-    renderPreview();
-  });
-  $('#btn-redo').addEventListener('click', function () {
-    if (!state.redo.length) return;
-    state.undo.push(clone(state.elements));
-    state.elements = state.redo.pop();
-    state.selectedId = null;
-    renderCanvas();
-    renderPreview();
-  });
-  $('#btn-delete-el').addEventListener('click', deleteSelected);
-  $('#btn-delete-selected').addEventListener('click', deleteSelected);
-  $('#btn-import-image').addEventListener('click', function () {
-    if (!selected() || selected().type !== 'image') {
-      alert('Select an Image / Logo component first.');
-      return;
+  function collectPayload() {
+    if (step >= 2) {
+      currentOrder = readOrderFromDom();
+      currentFields = readFieldsFromDom();
     }
-    $('#prop-image-file').click();
-  });
-  $('#prop-image-file').addEventListener('change', function () {
-    var el = selected();
-    var file = this.files && this.files[0];
-    this.value = '';
-    if (!el || el.type !== 'image' || !file) return;
-    if (file.size > 2 * 1024 * 1024) {
-      alert('Please choose an image under 2 MB.');
-      return;
-    }
-    var reader = new FileReader();
-    reader.onload = function () {
-      pushHistory();
-      el.props = el.props || {};
-      el.props.src = String(reader.result || '');
-      if (!el.props.label) el.props.label = 'Logo';
-      syncPropsPanel();
-      renderCanvas();
-      renderPreview();
+    return {
+      id: document.getElementById('tpl-id').value || null,
+      name: document.getElementById('tpl-name').value.trim(),
+      event_type: eventType(),
+      category: document.getElementById('tpl-category').value.trim(),
+      description: document.getElementById('tpl-description').value.trim(),
+      paper_size: document.getElementById('tpl-paper').value,
+      orientation: document.getElementById('tpl-orientation').value,
+      status: document.getElementById('tpl-status').value,
+      fields: currentFields,
+      order: currentOrder,
     };
-    reader.readAsDataURL(file);
-  });
-  $('#btn-clear-image').addEventListener('click', function () {
-    var el = selected();
-    if (!el || el.type !== 'image' || !el.props || !el.props.src) return;
-    pushHistory();
-    delete el.props.src;
-    syncPropsPanel();
-    renderCanvas();
-    renderPreview();
-  });
-  $('#btn-zoom-in').addEventListener('click', function () {
-    state.zoom = Math.min(1.4, Math.round((state.zoom + 0.1) * 10) / 10);
-    applyZoom();
-  });
-  $('#btn-zoom-out').addEventListener('click', function () {
-    state.zoom = Math.max(0.4, Math.round((state.zoom - 0.1) * 10) / 10);
-    applyZoom();
-  });
+  }
 
-  // Properties
-  ['change', 'input'].forEach(function (evt) {
-    $('#prop-font').addEventListener(evt, updateSelectedFromProps);
-    $('#prop-size').addEventListener(evt, updateSelectedFromProps);
-    $('#prop-text').addEventListener(evt, updateSelectedFromProps);
-    $('#prop-color').addEventListener(evt, function () {
-      $('#prop-color-hex').value = $('#prop-color').value;
-      updateSelectedFromProps();
+  function substitute(text, payload) {
+    return String(text || '').replace(/\{\{\s*([A-Za-z0-9_]+)\s*\}\}/g, (_, key) => {
+      const v = payload[key];
+      return v == null || v === '' ? `{{${key}}}` : String(v);
     });
-    $('#prop-color-hex').addEventListener(evt, function () {
-      if (/^#[0-9a-fA-F]{6}$/.test($('#prop-color-hex').value)) {
-        $('#prop-color').value = $('#prop-color-hex').value;
-        updateSelectedFromProps();
+  }
+
+  function paintPreview(container, elements, orientation) {
+    if (!container) return;
+    container.innerHTML = '';
+    container.classList.toggle('is-landscape', orientation === 'landscape');
+    (elements || []).forEach((el) => {
+      const node = document.createElement('div');
+      node.className = 'ss-pv-el';
+      node.style.left = `${el.x || 0}px`;
+      node.style.top = `${el.y || 0}px`;
+      node.style.width = `${el.w || 100}px`;
+      node.style.height = `${el.h || 24}px`;
+      const props = el.props || {};
+      const t = (el.type || 'text').toLowerCase();
+      if (t === 'rect' || t === 'rectangle') {
+        node.classList.add('ss-pv-rect');
+        node.style.background = props.fill || '#fff';
+        node.style.borderColor = props.stroke || '#0b2c5c';
+        node.style.borderWidth = `${props.strokeWidth || 1}px`;
+      } else if (t === 'line') {
+        node.classList.add('ss-pv-line');
+        node.style.borderTopColor = props.stroke || '#9fb4cc';
+        node.style.borderTopWidth = `${props.strokeWidth || 1}px`;
+      } else if (t === 'table') {
+        const rows = Number(props.rows || 4);
+        const cols = Number(props.cols || 3);
+        node.classList.add('ss-pv-table');
+        node.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+        node.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+        for (let i = 0; i < rows * cols; i += 1) node.appendChild(document.createElement('span'));
+      } else if (t === 'signature') {
+        node.classList.add('ss-pv-sig');
+        node.textContent = substitute(props.label || 'Signature', SAMPLE);
+      } else {
+        node.classList.add('ss-pv-text');
+        node.dataset.align = props.align || 'left';
+        node.style.color = props.color || '#0b2c5c';
+        node.style.fontSize = `${props.fontSize || 12}px`;
+        node.style.fontWeight = props.fontWeight === 'bold' ? '700' : '500';
+        node.style.alignItems = 'center';
+        node.style.padding = '2px 4px';
+        node.textContent = substitute(props.text || '', SAMPLE);
       }
+      container.appendChild(node);
     });
-  });
-  $('#prop-bold').addEventListener('click', function () {
-    this.classList.toggle('is-active');
-    updateSelectedFromProps();
-  });
-  $('#prop-italic').addEventListener('click', function () {
-    this.classList.toggle('is-active');
-    updateSelectedFromProps();
-  });
-  $('#prop-underline').addEventListener('click', function () {
-    this.classList.toggle('is-active');
-    updateSelectedFromProps();
-  });
-  $$('.ss-style-row [data-align]').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      $$('.ss-style-row [data-align]').forEach(function (b) { b.classList.remove('is-active'); });
-      btn.classList.add('is-active');
-      updateSelectedFromProps();
-    });
-  });
+  }
 
-  $('#btn-save-template').addEventListener('click', saveTemplate);
+  function scalePreview(container) {
+    const frame = container?.closest('.ss-preview-frame');
+    if (!frame || !container) return;
+    const avail = frame.clientWidth - 32;
+    const pageW = container.classList.contains('is-landscape') ? 1123 : 794;
+    const scale = Math.min(1, avail / pageW);
+    container.style.transform = `scale(${scale})`;
+    container.style.marginBottom = `${container.offsetHeight * (scale - 1)}px`;
+  }
 
-  $('#btn-preview-full').addEventListener('click', function () {
-    var body = $('#preview-dialog-body');
-    body.innerHTML = '';
-    var page = document.createElement('div');
-    page.className = 'ss-canvas';
-    if (state.orientation === 'landscape') page.classList.add('is-landscape');
-    page.style.transform = 'none';
-    page.style.margin = '0 auto';
-    state.elements.forEach(function (el) {
-      var node = document.createElement('div');
-      node.className = 'ss-el ss-el-' + el.type;
-      var style = styleFor(el);
-      Object.keys(style).forEach(function (key) { node.style[key] = style[key]; });
-      fillElementNode(node, el);
-      page.appendChild(node);
+  async function fetchPreviewElements() {
+    const payload = collectPayload();
+    const data = await api(urls.preview, {
+      method: 'POST',
+      body: JSON.stringify({
+        event_type: payload.event_type,
+        orientation: payload.orientation,
+        fields: payload.fields,
+        order: payload.order,
+      }),
     });
-    body.appendChild(page);
-    $('#preview-dialog').showModal();
-  });
-  $('#close-preview').addEventListener('click', function () { $('#preview-dialog').close(); });
+    return data.elements || [];
+  }
 
-  $('#btn-generate-pdf').addEventListener('click', function () {
-    $('#generate-dialog').showModal();
-  });
-  $$('[data-close-generate]').forEach(function (btn) {
-    btn.addEventListener('click', function () { $('#generate-dialog').close(); });
-  });
-  $('#generate-form').addEventListener('submit', async function (e) {
-    e.preventDefault();
-    var form = e.target;
-    var payload = {};
-    ['GameNumber', 'Date', 'Venue', 'EventName', 'TeamA', 'TeamB', 'ScoreA', 'ScoreB', 'Winner'].forEach(function (key) {
-      payload[key] = form[key].value;
+  function schedulePreview() {
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(async () => {
+      try {
+        const elements = await fetchPreviewElements();
+        const orientation = document.getElementById('tpl-orientation')?.value || 'portrait';
+        const targets = [
+          document.getElementById('live-preview-step2'),
+          document.getElementById('live-preview-step3'),
+        ];
+        targets.forEach((el) => {
+          if (!el || el.closest('.ss-step')?.hidden) return;
+          paintPreview(el, elements, orientation);
+          scalePreview(el);
+        });
+      } catch (err) {
+        /* preview is best-effort while editing */
+      }
+    }, 220);
+  }
+
+  function loadTemplateIntoForm(tpl) {
+    document.getElementById('tpl-id').value = tpl?.id || '';
+    document.getElementById('tpl-name').value = tpl?.name || '';
+    document.getElementById('tpl-category').value = (tpl?.category === '—' ? '' : (tpl?.category || ''));
+    document.getElementById('tpl-description').value = tpl?.description || '';
+    document.getElementById('tpl-paper').value = tpl?.paper_size || 'a4';
+    document.getElementById('tpl-orientation').value = tpl?.orientation || 'portrait';
+    document.getElementById('tpl-status').value = tpl?.status || 'active';
+    const type = tpl?.event_type || 'match';
+    document.querySelectorAll('input[name="event_type"]').forEach((r) => { r.checked = r.value === type; });
+    document.getElementById('builder-title').textContent =
+      type === 'criteria' ? 'Criteria-Based Template' : 'Match-Based Template';
+    currentFields = { ...defaultFields(type), ...(tpl?.fields || {}) };
+    currentOrder = (tpl?.order && tpl.order.length) ? tpl.order : (defaultOrder[type] || []);
+    renderFieldList();
+    showWizard(tpl?.id ? 'Edit Template' : 'Create Template');
+  }
+
+  function openViewDialog(tpl) {
+    viewingId = tpl.id;
+    document.getElementById('view-dialog-title').textContent = tpl.name;
+    document.getElementById('view-meta').innerHTML = `
+      <dt>Event Type</dt><dd>${escapeHtml(tpl.event_type_label)}</dd>
+      <dt>Category</dt><dd>${escapeHtml(tpl.category || '—')}</dd>
+      <dt>Description</dt><dd>${escapeHtml(tpl.description || '—')}</dd>
+      <dt>Paper</dt><dd>${escapeHtml((tpl.paper_size || 'a4').toUpperCase())} · ${escapeHtml(tpl.orientation || 'portrait')}</dd>
+      <dt>Status</dt><dd>${escapeHtml(tpl.status_label || tpl.status)}</dd>
+      <dt>Last Updated</dt><dd>${escapeHtml(tpl.updated_at || '—')}</dd>`;
+    paintPreview(document.getElementById('view-preview'), tpl.elements || [], tpl.orientation || 'portrait');
+    viewDialog?.showModal();
+  }
+
+  async function downloadSamplePdf() {
+    const payload = collectPayload();
+    const res = await fetch(urls.sample, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+      body: JSON.stringify({
+        event_type: payload.event_type,
+        orientation: payload.orientation,
+        paper_size: payload.paper_size,
+        fields: payload.fields,
+        order: payload.order,
+      }),
     });
+    if (!res.ok) throw new Error('Failed to download sample PDF');
+    const blob = await res.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'sample-scoresheet.pdf';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  async function printSample() {
     try {
-      var data = await apiPost(urls.generate, {
-        template_id: state.templateId,
-        layout: state.elements,
-        orientation: state.orientation,
-        event_label: form.event_label.value,
-        item_label: form.item_label.value,
-        event_id: form.event_id.value || null,
-        payload: payload,
+      const elements = await fetchPreviewElements();
+      const orientation = document.getElementById('tpl-orientation')?.value || 'portrait';
+      const win = window.open('', '_blank');
+      if (!win) { toast('Allow pop-ups to print the sample.', true); return; }
+      const w = orientation === 'landscape' ? 1123 : 794;
+      const h = orientation === 'landscape' ? 794 : 1123;
+      win.document.write(`<!DOCTYPE html><html><head><title>Sample Scoresheet</title>
+        <style>body{margin:0;font-family:Arial,Helvetica,sans-serif;color:#0b2c5c}
+        .page{position:relative;width:${w}px;min-height:${h}px;margin:0 auto}
+        .el{position:absolute;box-sizing:border-box;overflow:hidden;white-space:pre-wrap;line-height:1.25}
+        @media print{body{margin:0}}</style></head><body><div class="page" id="p"></div></body></html>`);
+      win.document.close();
+      const page = win.document.getElementById('p');
+      elements.forEach((el) => {
+        const node = win.document.createElement('div');
+        node.className = 'el';
+        node.style.left = `${el.x || 0}px`;
+        node.style.top = `${el.y || 0}px`;
+        node.style.width = `${el.w || 100}px`;
+        node.style.height = `${el.h || 24}px`;
+        const props = el.props || {};
+        const t = (el.type || 'text').toLowerCase();
+        if (t === 'rect' || t === 'rectangle') {
+          node.style.background = props.fill || '#fff';
+          node.style.border = `${props.strokeWidth || 1}px solid ${props.stroke || '#0b2c5c'}`;
+        } else if (t === 'line') {
+          node.style.borderTop = `${props.strokeWidth || 1}px solid ${props.stroke || '#9fb4cc'}`;
+          node.style.height = '0';
+        } else if (t === 'table') {
+          const rows = Number(props.rows || 4);
+          const cols = Number(props.cols || 3);
+          node.style.display = 'grid';
+          node.style.gridTemplateColumns = `repeat(${cols},1fr)`;
+          node.style.gridTemplateRows = `repeat(${rows},1fr)`;
+          node.style.border = '1px solid #9fb4cc';
+          for (let i = 0; i < rows * cols; i += 1) {
+            const cell = win.document.createElement('span');
+            cell.style.border = '1px solid #d5e0ec';
+            node.appendChild(cell);
+          }
+        } else if (t === 'signature') {
+          node.style.border = '1px dashed #9fb4cc';
+          node.style.display = 'flex';
+          node.style.alignItems = 'flex-end';
+          node.style.justifyContent = 'center';
+          node.style.padding = '8px';
+          node.style.textAlign = 'center';
+          node.style.fontSize = '11px';
+          node.style.fontWeight = '700';
+          node.textContent = substitute(props.label || 'Signature', SAMPLE);
+        } else {
+          node.style.color = props.color || '#0b2c5c';
+          node.style.fontSize = `${props.fontSize || 12}px`;
+          node.style.fontWeight = props.fontWeight === 'bold' ? '700' : '500';
+          node.style.textAlign = props.align || 'left';
+          node.style.padding = '2px 4px';
+          node.textContent = substitute(props.text || '', SAMPLE);
+        }
+        page.appendChild(node);
       });
-      $('#generate-dialog').close();
-      if (data.download_url) window.location.href = data.download_url;
-      else alert(data.message || 'Generated.');
-      setTimeout(function () { window.location.reload(); }, 400);
+      setTimeout(() => { win.focus(); win.print(); }, 250);
     } catch (err) {
-      alert(err.message || 'Generate failed.');
+      toast(err.message || 'Print failed.', true);
+    }
+  }
+
+  // Events
+  document.getElementById('btn-create-template')?.addEventListener('click', () => {
+    loadTemplateIntoForm({
+      event_type: 'match', paper_size: 'a4', orientation: 'portrait', status: 'active',
+      fields: defaultFields('match'), order: defaultOrder.match || [],
+    });
+  });
+
+  document.getElementById('btn-cancel-wizard')?.addEventListener('click', showList);
+  document.querySelectorAll('[data-cancel-step]').forEach((btn) => btn.addEventListener('click', showList));
+
+  document.getElementById('btn-step1-next')?.addEventListener('click', () => {
+    const name = document.getElementById('tpl-name').value.trim();
+    if (!name) {
+      toast('Template name is required.', true);
+      document.getElementById('tpl-name')?.focus();
+      return;
+    }
+    const type = eventType();
+    document.getElementById('builder-title').textContent =
+      type === 'criteria' ? 'Criteria-Based Template' : 'Match-Based Template';
+    if (!currentOrder.length) currentOrder = defaultOrder[type] || [];
+    if (!Object.keys(currentFields).length) currentFields = defaultFields(type);
+    renderFieldList();
+    goStep(2);
+  });
+
+  document.getElementById('btn-step2-back')?.addEventListener('click', () => goStep(1));
+  document.getElementById('btn-step2-next')?.addEventListener('click', () => {
+    syncOrder();
+    goStep(3);
+  });
+  document.getElementById('btn-step3-back')?.addEventListener('click', () => goStep(2));
+
+  document.querySelectorAll('input[name="event_type"]').forEach((r) => {
+    r.addEventListener('change', () => {
+      const type = eventType();
+      currentFields = defaultFields(type);
+      currentOrder = defaultOrder[type] || [];
+      document.getElementById('builder-title').textContent =
+        type === 'criteria' ? 'Criteria-Based Template' : 'Match-Based Template';
+      if (step >= 2) renderFieldList();
+      schedulePreview();
+    });
+  });
+
+  document.getElementById('tpl-orientation')?.addEventListener('change', schedulePreview);
+  document.getElementById('btn-select-all-fields')?.addEventListener('click', () => {
+    currentFields = defaultFields(eventType());
+    renderFieldList();
+    schedulePreview();
+  });
+  document.getElementById('btn-clear-fields')?.addEventListener('click', () => {
+    const cleared = defaultFields(eventType());
+    Object.keys(cleared).forEach((k) => { cleared[k] = false; });
+    currentFields = cleared;
+    renderFieldList();
+    schedulePreview();
+  });
+
+  document.getElementById('btn-save-template')?.addEventListener('click', async () => {
+    const payload = collectPayload();
+    if (!payload.name) { toast('Template name is required.', true); return; }
+    try {
+      const data = await api(urls.save, { method: 'POST', body: JSON.stringify(payload) });
+      toast(data.message || 'Template saved.');
+      window.location.href = window.location.pathname;
+    } catch (err) {
+      toast(err.message || 'Save failed.', true);
     }
   });
 
-  // Init
-  bindTableActions();
-  state.elements = clone(DEFAULT_LAYOUT);
-  applyZoom();
-  renderCanvas();
-  renderPreview();
-  syncPropsPanel();
-  window.addEventListener('resize', function () {
-    if ($('.ss-panel[data-panel="design"]').classList.contains('is-active')) renderPreview();
+  document.getElementById('btn-download-sample')?.addEventListener('click', async () => {
+    try { await downloadSamplePdf(); } catch (err) { toast(err.message || 'Download failed.', true); }
+  });
+  document.getElementById('btn-print-sample')?.addEventListener('click', printSample);
+
+  document.getElementById('templates-tbody')?.addEventListener('click', async (e) => {
+    const viewBtn = e.target.closest('[data-view-template]');
+    const editBtn = e.target.closest('[data-edit-template]');
+    const dupBtn = e.target.closest('[data-duplicate-template]');
+    const delBtn = e.target.closest('[data-delete-template]');
+    if (viewBtn) {
+      const tpl = findTemplate(viewBtn.getAttribute('data-view-template'));
+      if (tpl) openViewDialog(tpl);
+      return;
+    }
+    if (editBtn) {
+      const tpl = findTemplate(editBtn.getAttribute('data-edit-template'));
+      if (tpl) loadTemplateIntoForm(tpl);
+      return;
+    }
+    if (dupBtn) {
+      const id = dupBtn.getAttribute('data-duplicate-template');
+      try {
+        const data = await api(`${urls.duplicateBase}${id}/duplicate/`, { method: 'POST', body: '{}' });
+        toast(data.message || 'Template duplicated.');
+        window.location.reload();
+      } catch (err) { toast(err.message || 'Duplicate failed.', true); }
+      return;
+    }
+    if (delBtn) {
+      const id = delBtn.getAttribute('data-delete-template');
+      const name = delBtn.getAttribute('data-name') || 'this template';
+      const assigned = Number(delBtn.getAttribute('data-assigned') || 0);
+      let msg = `Delete "${name}"? This cannot be undone.`;
+      if (assigned) msg += `\n\n${assigned} event(s) currently assigned will fall back to auto-matched templates.`;
+      if (!window.confirm(msg)) return;
+      try {
+        const data = await api(`${urls.deleteBase}${id}/delete/`, { method: 'POST', body: '{}' });
+        toast(data.message || 'Template deleted.');
+        window.location.reload();
+      } catch (err) { toast(err.message || 'Delete failed.', true); }
+    }
+  });
+
+  document.getElementById('close-view')?.addEventListener('click', () => viewDialog?.close());
+  document.querySelector('[data-close-view]')?.addEventListener('click', () => viewDialog?.close());
+  document.getElementById('view-edit-btn')?.addEventListener('click', () => {
+    const tpl = findTemplate(viewingId);
+    viewDialog?.close();
+    if (tpl) loadTemplateIntoForm(tpl);
+  });
+
+  window.addEventListener('resize', () => {
+    document.querySelectorAll('.ss-preview-page').forEach(scalePreview);
   });
 })();

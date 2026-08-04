@@ -237,7 +237,7 @@ def build_report_preview(report_type: str, filters: dict | None = None) -> dict:
             judging = ev.judging_event
             # Aggregate locked scores by candidate
             totals = {}
-            for s in JudgeScore.objects.filter(event=judging, is_locked=True).select_related('candidate'):
+            for s in JudgeScore.objects.filter(candidate__event=judging, is_locked=True).select_related('candidate'):
                 cid = s.candidate_id
                 if cid not in totals:
                     totals[cid] = {'name': s.candidate.name, 'dept': getattr(s.candidate, 'department', '') or '—', 'score': 0.0}

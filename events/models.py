@@ -57,6 +57,13 @@ class Event(models.Model):
         on_delete=models.SET_NULL,
         related_name='faculty_events',
     )
+    scoresheet_template = models.ForeignKey(
+        'ScoresheetTemplate',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='assigned_events',
+    )
     event_classification = models.CharField(
         max_length=10,
         choices=CLASSIFICATION_CHOICES,
@@ -410,6 +417,7 @@ class ScoresheetTemplate(models.Model):
     name = models.CharField(max_length=200)
     event_type = models.CharField(max_length=20, choices=EVENT_TYPE_CHOICES, default=EVENT_MATCH)
     category = models.CharField(max_length=100, blank=True, default='')
+    description = models.TextField(blank=True, default='')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_ACTIVE)
     paper_size = models.CharField(max_length=20, default='a4')
     orientation = models.CharField(max_length=20, choices=ORIENTATION_CHOICES, default=ORIENT_PORTRAIT)

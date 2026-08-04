@@ -90,7 +90,10 @@
 
       {% if tab == 'scoresheets' %}
       <section class="fac-card">
-        <header><h2>Scoresheets</h2></header>
+        <header>
+          <h2>Scoresheets</h2>
+          <a class="fac-btn fac-btn-sm" href="{% url 'faculty_scoresheets' %}?event_id={{ event.id }}">Open full Scoresheets list</a>
+        </header>
         <div class="fac-table-wrap">
           <table class="fac-table">
             <thead>
@@ -110,8 +113,8 @@
                 <td>{{ row.venue }}</td>
                 <td>{{ row.matchup }}</td>
                 <td>
-                  <a class="fac-btn fac-btn-sm" href="{% url 'faculty_scoresheet_pdf' event.id row.id %}" target="_blank">Generate / Download PDF</a>
-                  <a class="fac-btn fac-btn-secondary fac-btn-sm" href="{% url 'faculty_scoresheet_pdf' event.id row.id %}" target="_blank">Preview / Print</a>
+                  <a class="fac-btn fac-btn-sm" href="/faculty/scoresheets/{{ event.id }}/match-{{ row.id }}/pdf/?download=1" target="_blank">Download PDF</a>
+                  <a class="fac-btn fac-btn-secondary fac-btn-sm" href="/faculty/scoresheets/{{ event.id }}/match-{{ row.id }}/pdf/" target="_blank">Preview / Print</a>
                 </td>
               </tr>
               {% empty %}
@@ -120,7 +123,7 @@
             </tbody>
           </table>
         </div>
-        <p style="padding:12px 16px;font-size:12px;color:#5a7088;">Generated scoresheets auto-fill Event Name, Match Number, Date, Venue, and Teams.</p>
+        <p style="padding:12px 16px;font-size:12px;color:#5a7088;">Scoresheets use Administrator templates and auto-fill event details. Score and signature fields stay blank for paper use.</p>
       </section>
       {% endif %}
 

@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Match-Based Events · EventTab</title>
-  <link rel="stylesheet" href="{% static 'admindash/matchbasedevent.css' %}?v=20260725">
+  <link rel="stylesheet" href="{% static 'admindash/matchbasedevent.css' %}?v=20260804b">
 </head>
 <body class="admin-dashboard-page admin-dashboard-v2 match-events-page">
   <div class="dashboard-shell">
@@ -137,7 +137,6 @@
               <p>This stored event uses the retired winners-only fallback. Regenerate with Double Elimination (or choose another format) to build a full Winners/Losers bracket.</p>
               <button type="button" class="match-secondary" id="change-legacy-format">Regenerate as Double Elimination</button>
             </div>
-            <label class="inline-check" id="third-place-wrap"><input type="checkbox" name="include_third_place"> Include Third Place Match</label>
           </fieldset>
           <div class="blueprint-box">
             <div><strong>Random Draw</strong><p>The system randomly assigns participants to match slots.</p></div>
@@ -163,28 +162,59 @@
         </section>
 
         <section class="wizard-panel" data-step="4">
-          <div class="wizard-section-title"><span>04</span><div><h3>Configuration</h3><p>Assign accountability and define result controls.</p></div></div>
+          <div class="wizard-section-title"><span>04</span><div><h3>Configuration</h3><p>Assign Faculty In Charge and optional ranking rewards. Everything else runs automatically.</p></div></div>
+
           <label class="field-block">Faculty In Charge
-            <select name="faculty_account" required><option value="">Select an authorized account</option>
-              {% for user in faculty_options %}<option value="{{ user.id }}">{{ user.get_full_name|default:user.username }} · {{ user.username }}</option>{% endfor %}
+            <select name="faculty_account" required>
+              <option value="">Select a faculty account</option>
+              {% for user in faculty_options %}
+              <option value="{{ user.id }}">{{ user.get_full_name|default:user.username }} · {{ user.username }}</option>
+              {% empty %}
+              <option value="" disabled>No faculty accounts available — create one under Users → Faculty</option>
+              {% endfor %}
             </select>
           </label>
-          <fieldset><legend>Result Processing</legend>
-            <div class="toggle-list">
-              <label><span><strong>Auto Update Bracket</strong><small>Advance winners when results finalize.</small></span><input type="checkbox" name="auto_update_bracket" checked></label>
-              <label><span><strong>Allow Result Editing Before Finalization</strong><small>Permit corrections during review.</small></span><input type="checkbox" name="allow_result_editing" checked></label>
-              <label><span><strong>Require Faculty Confirmation</strong><small>Add faculty approval to the result flow.</small></span><input type="checkbox" name="require_faculty_confirmation"></label>
+
+          <label class="field-block">Scoresheet Template
+            <select name="scoresheet_template">
+              <option value="">Auto-match by event type / category</option>
+              {% for tpl in scoresheet_templates %}
+              <option value="{{ tpl.id }}">{{ tpl.name }}{% if tpl.category %} · {{ tpl.category }}{% endif %}</option>
+              {% endfor %}
+            </select>
+          </label>
+
+          <label class="inline-check" id="third-place-wrap">
+            <input type="checkbox" name="include_third_place" id="include-third-place">
+            Enable Third Place Match
+          </label>
+          <p class="config-hint" id="third-place-hint">Schedules a consolation match between semifinal losers. Available for Single Elimination with at least four teams.</p>
+
+          <fieldset id="points-fieldset">
+            <legend>Championship Points</legend>
+            <label class="inline-check">
+              <input type="checkbox" name="apply_championship_points" checked>
+              Apply Championship Points
+            </label>
+            <div class="criteria-editor-actions points-editor-actions">
+              <button type="button" id="add-points-row" class="match-secondary">+ Add Place</button>
             </div>
+            <div class="points-editor" id="points-editor" aria-live="polite"></div>
+            <p class="points-editor-hint">Adjust ranks and point values for this event’s classification. Add or remove places as needed.</p>
           </fieldset>
-          <fieldset id="points-fieldset"><legend>Championship Points</legend>
-            <label class="inline-check"><input type="checkbox" name="apply_championship_points" checked> Apply Championship Points Automatically</label>
-            <div class="points-editor" id="points-editor">
-              <div><input value="1st Place" aria-label="Rank label"><input type="number" min="0" value="15" aria-label="Points"></div>
-              <div><input value="2nd Place" aria-label="Rank label"><input type="number" min="0" value="10" aria-label="Points"></div>
-              <div><input value="3rd Place" aria-label="Rank label"><input type="number" min="0" value="7" aria-label="Points"></div>
-              <div><input value="4th Place" aria-label="Rank label"><input type="number" min="0" value="5" aria-label="Points"></div>
-            </div>
-          </fieldset>
+
+          <aside class="auto-workflow-panel" aria-label="Automatic system workflow">
+            <h4>Automatic System Workflow</h4>
+            <ul>
+              <li>Tournament brackets are automatically updated after the Faculty confirms the match result.</li>
+              <li>Winners automatically advance to the next round; losers are eliminated per the selected format.</li>
+              <li>The next match schedule is automatically generated and updated.</li>
+              <li>Final rankings, Champion, and Runner-Up are automatically computed when the tournament ends.</li>
+              <li>Championship points are automatically applied after official results are published.</li>
+              <li>The Overall Leaderboard and department standings are automatically updated.</li>
+              <li>Official results become visible to viewers immediately after publication and are locked.</li>
+            </ul>
+          </aside>
         </section>
 
         <section class="wizard-panel" data-step="5">
@@ -215,6 +245,6 @@
     window.MATCH_EVENT_EDIT_ID = "{{ edit_event_id|escapejs }}";
     window.MATCH_EVENT_PREVIEW_URL = "{% url 'admin_match_event_preview' %}";
   </script>
-  <script src="{% static 'admindash/matchbasedevent.js' %}?v=20260725"></script>
+  <script src="{% static 'admindash/matchbasedevent.js' %}?v=20260804b"></script>
 </body>
 </html>
