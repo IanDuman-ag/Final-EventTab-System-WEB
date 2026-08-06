@@ -162,8 +162,10 @@ def _auto_complete_lone_team_match(match, depth=0):
     match.winner = lone
     match.loser = None
     match.status = BracketMatch.STATUS_COMPLETED
-    match.remarks = 'Auto-advance (Bye)'
-    match.save(update_fields=['winner', 'loser', 'status', 'remarks'])
+    match.remarks = 'Automatic Advance (BYE)'
+    match.is_automatic_advance = True
+    match.match_number = 0
+    match.save(update_fields=['winner', 'loser', 'status', 'remarks', 'is_automatic_advance', 'match_number'])
     _advance_winner(match)
     if match.next_match_winner_id:
         _auto_complete_lone_team_match(match.next_match_winner, depth=depth + 1)

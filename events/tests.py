@@ -1,10 +1,19 @@
 import json
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.test import TestCase
 from django.urls import reverse
 
-from .models import BracketMatch, BracketTeam, Department, Event, Team
+from .match_event_service import (
+    build_match_blueprint,
+    build_match_event_name,
+    count_actual_matches,
+    count_automatic_advances,
+    ensure_unique_match_event_name,
+    MatchEventValidationError,
+)
+from .models import BracketMatch, BracketTeam, Department, Event, SystemSettings, Team
 
 
 class MatchEventWorkflowTests(TestCase):
@@ -22,6 +31,8 @@ class MatchEventWorkflowTests(TestCase):
             email='faculty@example.com',
             is_staff=True,
         )
+        faculty_group, _ = Group.objects.get_or_create(name='Faculty')
+        self.faculty.groups.add(faculty_group)
         department = Department.objects.create(name='Engineering', code='ENG')
         self.team_a = Team.objects.create(name='Blue Falcons', code='BF', department=department)
         self.team_b = Team.objects.create(name='Gold Hawks', code='GH', department=department)
@@ -31,6 +42,7 @@ class MatchEventWorkflowTests(TestCase):
     def payload(self, **overrides):
         data = {
             'event_name': 'Basketball Championship',
+            'sport_type': 'Basketball',
             'event_classification': 'major',
             'division': 'Mixed',
             'venue': 'University Gym',
@@ -38,18 +50,26 @@ class MatchEventWorkflowTests(TestCase):
             'end_date': '2026-08-11',
             'publication_status': 'draft',
             'tournament_type': 'single_elimination',
+            'pairing_method': 'random_draw',
+            'result_entry_format': 'team_final_score',
             'team_ids': json.dumps([self.team_a.id, self.team_b.id]),
             'draw_order': json.dumps([self.team_a.id, self.team_b.id]),
             'schedule_mode': 'auto',
             'daily_start_time': '08:00',
             'daily_end_time': '17:00',
+            'match_duration_minutes': '60',
+            'break_between_matches_minutes': '10',
+            'min_rest_minutes': '30',
+            'playing_area_count': '1',
+            'playing_areas': json.dumps(['Court 1']),
+            'tie_break_rules': json.dumps(['head_to_head', 'score_difference']),
             'faculty_account': str(self.faculty.id),
             'auto_update_bracket': 'on',
             'allow_result_editing': 'on',
             'apply_championship_points': 'on',
             'points_config': json.dumps([
-                {'label': '1st Place', 'points': 15},
-                {'label': '2nd Place', 'points': 10},
+                {'label': '1st Place', 'points': 100},
+                {'label': '2nd Place', 'points': 75},
             ]),
         }
         data.update(overrides)
@@ -126,16 +146,17 @@ class MatchEventWorkflowTests(TestCase):
         self.assertRedirects(response, reverse('admin_match_events'))
         event = Event.objects.get(name='Basketball Championship')
         self.assertEqual(event.tournament_type, 'double_elimination')
-        matches = list(event.bracket_matches.order_by('match_number'))
+        matches = list(event.bracket_matches.order_by('match_number', 'id'))
         rounds = {match.round_name for match in matches}
-        self.assertIn('Winners Semi Finals', rounds)
+        self.assertIn('Winners Semifinals', rounds)
         self.assertIn('Winners Final', rounds)
         self.assertIn('Losers Round 1', rounds)
         self.assertIn('Losers Final', rounds)
         self.assertIn('Grand Final', rounds)
-        self.assertEqual(len(matches), 6)
-        winners_semi = [match for match in matches if match.round_name == 'Winners Semi Finals']
-        self.assertTrue(all(match.next_match_loser_id for match in winners_semi))
+        actual = [match for match in matches if not match.is_automatic_advance]
+        self.assertEqual(len(actual), 6)  # 2N-2 for N=4
+        winners_semi = [match for match in matches if match.round_name == 'Winners Semifinals']
+        self.assertTrue(any(match.next_match_loser_id for match in winners_semi))
         grand_final = event.bracket_matches.get(client_key='gf')
         self.assertIsNone(grand_final.next_match_winner_id)
 
@@ -199,7 +220,7 @@ class MatchEventWorkflowTests(TestCase):
         persisted = list(event.bracket_matches.values_list('client_key', flat=True))
         self.assertEqual(persisted, [match['key'] for match in preview['matches']])
 
-    def test_single_elimination_preview_labels_empty_opponent_as_bye(self):
+    def test_single_elimination_preview_labels_empty_opponent_as_automatic_advance(self):
         response = self.client.post(
             reverse('admin_match_event_preview'),
             data=json.dumps({
@@ -210,7 +231,71 @@ class MatchEventWorkflowTests(TestCase):
             content_type='application/json',
         )
         self.assertEqual(response.status_code, 200)
-        self.assertIn('Bye', [match['team_b'] for match in response.json()['matches']])
+        payload = response.json()
+        self.assertEqual(payload['automatic_advance_count'], 1)
+        self.assertEqual(payload['actual_match_count'], 2)
+        self.assertTrue(any(match.get('is_automatic_advance') for match in payload['matches']))
+        self.assertIn('Automatic Advance', [match['team_b'] for match in payload['matches']])
+
+    def test_bye_slots_are_not_counted_or_scheduled_as_actual_matches(self):
+        team_d = Team.objects.create(name='Silver Wolves', code='SW', department=self.team_a.department)
+        team_e = Team.objects.create(name='Iron Bears', code='IB', department=self.team_a.department)
+        team_ids = [self.team_a.id, self.team_b.id, self.team_c.id, team_d.id, team_e.id]
+        response = self.client.post(
+            reverse('admin_match_events'),
+            self.payload(
+                sport_type='Basketball',
+                tournament_type='single_elimination',
+                team_ids=json.dumps(team_ids),
+                draw_order=json.dumps(team_ids),
+            ),
+        )
+        self.assertRedirects(response, reverse('admin_match_events'))
+        event = Event.objects.get(name='Basketball Championship')
+        actual = event.bracket_matches.filter(is_automatic_advance=False)
+        advances = event.bracket_matches.filter(is_automatic_advance=True)
+        # Compressed bracket seats BYEs directly; synthetic advances are preview-only.
+        self.assertEqual(actual.count(), 4)  # N-1
+        self.assertEqual(advances.count(), 0)
+        self.assertTrue(all(match.match_date for match in actual))
+        self.assertTrue(all(match.match_number > 0 for match in actual))
+
+    def test_double_elimination_five_teams_has_eight_actual_matches(self):
+        team_d = Team.objects.create(name='Silver Wolves', code='SW', department=self.team_a.department)
+        team_e = Team.objects.create(name='Iron Bears', code='IB', department=self.team_a.department)
+        team_ids = [self.team_a.id, self.team_b.id, self.team_c.id, team_d.id, team_e.id]
+        blueprint = build_match_blueprint(
+            team_ids,
+            'double_elimination',
+            draw_order=team_ids,
+        )
+        self.assertEqual(blueprint['actual_match_count'], 8)  # 2N-2
+        self.assertEqual(count_actual_matches(blueprint['matches']), 8)
+        self.assertEqual(count_automatic_advances(blueprint['matches']), 3)
+        self.assertFalse(any(row['key'] == 'gf-reset' for row in blueprint['matches']))
+
+    def test_round_robin_match_count_formula(self):
+        team_ids = [self.team_a.id, self.team_b.id, self.team_c.id]
+        blueprint = build_match_blueprint(team_ids, 'round_robin', draw_order=team_ids)
+        self.assertEqual(blueprint['actual_match_count'], 3)  # N*(N-1)/2
+
+    def test_event_name_is_built_from_sport_and_division(self):
+        self.assertEqual(build_match_event_name('Basketball', '', 'Men'), "Men's Basketball")
+        self.assertEqual(build_match_event_name('Chess', '', 'Open'), 'Chess – Open Division')
+        self.assertEqual(build_match_event_name('Custom', 'Arnis', 'Women'), "Women's Arnis")
+
+    def test_event_name_must_be_unique_in_same_season(self):
+        settings = SystemSettings.load()
+        settings.academic_year = '2025-2026'
+        settings.save()
+        self.client.post(
+            reverse('admin_match_events'),
+            self.payload(event_name="Men's Basketball", sport_type='Basketball', division='Men'),
+        )
+        with self.assertRaises(MatchEventValidationError):
+            ensure_unique_match_event_name("Men's Basketball", academic_year='2025-2026')
+        # Same name is allowed in a different season.
+        ensure_unique_match_event_name("Men's Basketball", academic_year='2026-2027')
 
     def test_manual_schedule_maps_by_stable_match_key(self):
         schedule_rows = [

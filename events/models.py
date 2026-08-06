@@ -35,6 +35,12 @@ class Event(models.Model):
         (STATUS_INACTIVE,  'Deactivated'),
     ]
     name               = models.CharField(max_length=200)
+    academic_year      = models.CharField(
+        max_length=40,
+        blank=True,
+        default='',
+        help_text='Intramurals season / academic year this event belongs to.',
+    )
     category           = models.CharField(max_length=100)
     division           = models.CharField(max_length=100, blank=True, default='')
     department         = models.CharField(max_length=150, blank=True, default='')
@@ -77,6 +83,22 @@ class Event(models.Model):
     )
     include_third_place = models.BooleanField(default=False)
     seeding_method = models.CharField(max_length=20, default='random_draw')
+    pairing_method = models.CharField(
+        max_length=20,
+        default='random_draw',
+        help_text='random_draw | seeded_draw | manual_pairing',
+    )
+    sport_type = models.CharField(max_length=80, blank=True, default='')
+    sport_custom_name = models.CharField(max_length=120, blank=True, default='')
+    result_entry_format = models.CharField(max_length=40, blank=True, default='')
+    schedule_config = models.JSONField(default=dict, blank=True)
+    assigned_scorer = models.ForeignKey(
+        User,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='scorer_events',
+    )
     bracket_draw_order = models.JSONField(default=list, blank=True)
     schedule_mode = models.CharField(
         max_length=10,
@@ -350,6 +372,17 @@ class BracketMatch(models.Model):
     score_a = models.CharField(max_length=50, blank=True, default='')
     score_b = models.CharField(max_length=50, blank=True, default='')
     remarks = models.TextField(blank=True, default='')
+    is_automatic_advance = models.BooleanField(
+        default=False,
+        help_text='True for Automatic Advance (BYE) slots — not an actual match.',
+    )
+    playing_area = models.CharField(max_length=120, blank=True, default='')
+    dependency_label = models.CharField(
+        max_length=200,
+        blank=True,
+        default='',
+        help_text='e.g. Winner of Game 1 vs Winner of Game 2',
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

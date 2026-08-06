@@ -147,7 +147,10 @@ def generate_double_elimination(event, teams):
     # Local ids stand in for source team ids; snapshots map 1:1 onto BracketTeam rows.
     ordered_ids = [team.id for team in teams]
     snapshots_by_id = {team.id: team for team in teams}
-    rows = _build_double_elimination_matches(ordered_ids)
+    rows = [
+        row for row in _build_double_elimination_matches(ordered_ids)
+        if not row.get('synthetic_advance')
+    ]
     created_by_key = {}
     for row in rows:
         match = BracketMatch.objects.create(
@@ -158,6 +161,8 @@ def generate_double_elimination(event, teams):
             team_a=snapshots_by_id.get(row['team_a_id']) if row['team_a_id'] else None,
             team_b=snapshots_by_id.get(row['team_b_id']) if row['team_b_id'] else None,
             status=BracketMatch.STATUS_PENDING,
+            is_automatic_advance=bool(row.get('is_automatic_advance')),
+            dependency_label=str(row.get('dependency_label') or '')[:200],
         )
         created_by_key[row['key']] = match
 
@@ -166,15 +171,11 @@ def generate_double_elimination(event, teams):
         match.next_match_winner = created_by_key.get(row['next_winner_key'])
         match.next_match_loser = created_by_key.get(row['next_loser_key'])
         update_fields = ['next_match_winner', 'next_match_loser']
-        if (
-            row['team_a_id'] is not None
-            and row['team_b_id'] is None
-            and match.team_a
-            and match.next_match_winner
-        ):
+        if row.get('is_automatic_advance') and match.team_a and match.next_match_winner:
             match.winner = match.team_a
             match.status = BracketMatch.STATUS_COMPLETED
-            match.remarks = 'Auto-advance (Bye)'
+            match.remarks = 'Automatic Advance (BYE)'
+            match.is_automatic_advance = True
             target = match.next_match_winner
             if target.team_a is None:
                 target.team_a = match.team_a
@@ -182,10 +183,10 @@ def generate_double_elimination(event, teams):
             elif target.team_b is None:
                 target.team_b = match.team_a
                 target.save(update_fields=['team_b'])
-            update_fields += ['winner', 'status', 'remarks']
+            update_fields += ['winner', 'status', 'remarks', 'is_automatic_advance']
         match.save(update_fields=update_fields)
 
-    return list(event.bracket_matches.order_by('match_number'))
+    return list(event.bracket_matches.order_by('match_number', 'id'))
 
 def generate_round_robin(event, teams):
     """

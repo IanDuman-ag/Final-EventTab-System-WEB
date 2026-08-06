@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Match-Based Events · EventTab</title>
-  <link rel="stylesheet" href="{% static 'admindash/matchbasedevent.css' %}?v=20260804b">
+  <link rel="stylesheet" href="{% static 'admindash/matchbasedevent.css' %}?v=20260806d">
 </head>
 <body class="admin-dashboard-page admin-dashboard-v2 match-events-page">
   <div class="dashboard-shell">
@@ -105,32 +105,50 @@
         <section class="wizard-panel active" data-step="1">
           <div class="wizard-section-title"><span>01</span><div><h3>Basic information</h3><p>Define where this event sits in the intramural program.</p></div></div>
           <div class="wizard-grid">
-            <label class="wide">Event Name <input name="event_name" required maxlength="200"></label>
-            <label>Category <select name="category" disabled><option>Sports</option></select></label>
-            <label>Event Classification <select name="event_classification" required><option value="">Select classification</option><option value="major">Major Event</option><option value="minor">Minor Event</option></select></label>
-            <label>Division <select name="division" required><option value="">Select division</option><option>Men</option><option>Women</option><option>Mixed</option><option>Open</option></select></label>
+            <label>Sport/Game Type
+              <select name="sport_type" id="sport-type" required>
+                <option value="">Select sport or game</option>
+                <option>Basketball</option>
+                <option>Volleyball</option>
+                <option>Badminton</option>
+                <option>Table Tennis</option>
+                <option>Chess</option>
+                <option>Sepak Takraw</option>
+                <option>Esports</option>
+                <option>Custom</option>
+              </select>
+              <small class="field-hint">Controls sport rules, result-entry format, bracket behavior, and scoresheet recommendation.</small>
+            </label>
+            <label id="sport-custom-wrap" hidden>Custom Sport/Game Name <input name="sport_custom_name" id="sport-custom-name" maxlength="120" placeholder="Enter custom sport or game"></label>
+            <label>Division <select name="division" id="event-division" required><option value="">Select division</option><option>Men</option><option>Women</option><option>Mixed</option><option>Open</option></select></label>
+            <label class="wide">Event Name
+              <input name="event_name" id="event-name" required maxlength="200" autocomplete="off">
+              <small class="field-hint" id="event-name-hint">Auto-generated from Sport/Game Type and Division (for example, Men’s Basketball or Chess – Open Division). Edit anytime for a custom title. Must be unique in the current intramurals season.</small>
+            </label>
+            <label>Category <select name="category" disabled><option>Sports</option></select><small class="field-hint">Automatically set to Sports for match-based events.</small></label>
+            <label>Event Classification <select name="event_classification" id="event-classification" required><option value="">Select classification</option><option value="major">Major Event</option><option value="minor">Minor Event</option></select></label>
             <label>Venue <input name="venue" required maxlength="200"></label>
             <label>Start Date <input name="start_date" type="date" required></label>
             <label>End Date <input name="end_date" type="date" required></label>
-            <label>Status <select id="status-preview"><option value="draft">Draft</option><option value="published">Published</option></select><small class="field-hint">This choice is shown in Review; the final action will state any override explicitly.</small></label>
           </div>
         </section>
 
         <section class="wizard-panel" data-step="2">
-          <div class="wizard-section-title"><span>02</span><div><h3>Participation & format</h3><p>Choose competitors and generate the tournament structure.</p></div></div>
-          <fieldset class="team-picker"><legend>Participating Teams <span id="selected-team-count" class="selected-count">0 selected</span></legend>
+          <div class="wizard-section-title"><span>02</span><div><h3>Participation &amp; tournament format</h3><p>Choose competitors and generate the tournament structure.</p></div></div>
+          <fieldset class="team-picker"><legend>Participating Teams / Participants <span id="selected-team-count" class="selected-count">0 selected</span></legend>
             <input type="search" id="team-search" placeholder="Search active teams">
             <div class="team-options">
               {% for team in teams %}
               <label data-team-search="{{ team.name|lower }} {{ team.code|lower }}"><input type="checkbox" class="team-check" value="{{ team.id }}" data-name="{{ team.name }}"><span><strong>{{ team.name }}</strong><small>{{ team.code }}{% if team.department %} · {{ team.department.name }}{% endif %}</small></span></label>
               {% empty %}<p>No active teams are available. Add teams before creating a match event.</p>{% endfor %}
             </div>
+            <p class="field-hint" id="min-participants-hint">Select at least 2 participants for the chosen tournament format.</p>
           </fieldset>
-          <fieldset><legend>Event Type</legend>
+          <fieldset><legend>Tournament Format</legend>
             <div class="format-cards">
               <label><input type="radio" name="tournament_type" value="single_elimination" checked><span><strong>Single Elimination</strong><small>A participant is eliminated after one loss.</small></span></label>
               <label><input type="radio" name="tournament_type" value="double_elimination"><span><strong>Double Elimination</strong><small>A participant is eliminated after two losses via Winners and Losers brackets.</small></span></label>
-              <label><input type="radio" name="tournament_type" value="round_robin"><span><strong>Round Robin</strong><small>Each participant competes against every other participant.</small></span></label>
+              <label><input type="radio" name="tournament_type" value="round_robin"><span><strong>Round Robin</strong><small>Each participant competes against every other participant once.</small></span></label>
             </div>
             <div class="legacy-format-notice" id="legacy-format-notice" hidden role="alert">
               <strong>Legacy Double Elimination event</strong>
@@ -138,9 +156,34 @@
               <button type="button" class="match-secondary" id="change-legacy-format">Regenerate as Double Elimination</button>
             </div>
           </fieldset>
+          <fieldset>
+            <legend>Pairing Method</legend>
+            <div class="schedule-modes">
+              <label><input type="radio" name="pairing_method" value="random_draw" checked> <span><strong>Random Draw</strong><small>System randomly assigns participants to slots.</small></span></label>
+              <label><input type="radio" name="pairing_method" value="seeded_draw"> <span><strong>Seeded Draw</strong><small>Arrange seed numbers before generating.</small></span></label>
+              <label><input type="radio" name="pairing_method" value="manual_pairing"> <span><strong>Manual Pairing</strong><small>Choose opening-round opponents.</small></span></label>
+            </div>
+            <div id="seed-editor" class="seed-editor" hidden>
+              <p class="field-hint">Drag or reorder selected participants to assign seed 1 (top) downward.</p>
+              <ol id="seed-list"></ol>
+            </div>
+          </fieldset>
+          <label class="inline-check" id="third-place-wrap">
+            <input type="checkbox" name="include_third_place" id="include-third-place">
+            Include Third-Place Match
+          </label>
+          <p class="config-hint" id="third-place-hint">Creates Loser of Semifinal Game 1 vs Loser of Semifinal Game 2. Shown for Single Elimination only.</p>
           <div class="blueprint-box">
-            <div><strong>Random Draw</strong><p>The system randomly assigns participants to match slots.</p></div>
-            <button type="button" class="match-secondary" id="generate-bracket">Generate Bracket</button>
+            <div>
+              <strong id="pairing-summary-label">Random Draw</strong>
+              <p>Automatic Advance (BYE) slots are not actual matches and are excluded from game numbering and schedules.</p>
+            </div>
+            <div class="bracket-actions">
+              <button type="button" class="match-secondary" id="generate-bracket">Generate Bracket</button>
+              <button type="button" class="match-secondary" id="regenerate-bracket">Regenerate Bracket</button>
+              <button type="button" class="match-secondary" id="reset-bracket">Reset Bracket</button>
+            </div>
+            <div id="bracket-stats" class="bracket-stats" hidden></div>
             <div id="bracket-preview" class="bracket-preview" aria-live="polite"><p>Select teams, then generate a preview.</p></div>
           </div>
         </section>
@@ -149,46 +192,87 @@
           <div class="wizard-section-title"><span>03</span><div><h3>Schedule setup</h3><p>Turn generated matchups into an operational timetable.</p></div></div>
           <fieldset><legend>Schedule Generation</legend>
             <div class="schedule-modes">
-              <label><input type="radio" name="schedule_mode" value="auto" checked> <span><strong>Auto Generate Schedule</strong><small>Place matches in hourly slots.</small></span></label>
+              <label><input type="radio" name="schedule_mode" value="auto" checked> <span><strong>Auto Generate Schedule</strong><small>Place actual matches using duration, rest, and courts.</small></span></label>
               <label><input type="radio" name="schedule_mode" value="manual"> <span><strong>Manual Scheduling</strong><small>Edit every date, time, and venue.</small></span></label>
             </div>
           </fieldset>
           <div class="wizard-grid" id="auto-settings">
+            <label>First Match Date <input name="first_match_date" type="date"></label>
+            <label>Default Venue <input name="default_schedule_venue" maxlength="200" placeholder="Uses event venue if blank"></label>
             <label>Daily Start Time <input name="daily_start_time" type="time" value="08:00"></label>
             <label>Daily End Time <input name="daily_end_time" type="time" value="17:00"></label>
+            <label>Match Duration (minutes) <input name="match_duration_minutes" type="number" min="5" value="60"></label>
+            <label>Break Between Matches (minutes) <input name="break_between_matches_minutes" type="number" min="0" value="10"></label>
+            <label>Minimum Rest Time Per Team (minutes) <input name="min_rest_minutes" type="number" min="0" value="30"></label>
+            <label>Number of Playing Areas <input name="playing_area_count" id="playing-area-count" type="number" min="1" value="1"></label>
           </div>
+          <div id="playing-areas-editor" class="playing-areas-editor"></div>
+          <input type="hidden" name="playing_areas" id="playing-areas" value="[]">
           <button type="button" class="match-secondary" id="generate-schedule">Generate Schedule</button>
+          <div id="schedule-conflicts" class="schedule-conflicts" hidden role="alert"></div>
           <div id="schedule-preview" class="schedule-preview"><p>Generate the bracket first, then create its schedule.</p></div>
         </section>
 
         <section class="wizard-panel" data-step="4">
-          <div class="wizard-section-title"><span>04</span><div><h3>Configuration</h3><p>Assign Faculty In Charge and optional ranking rewards. Everything else runs automatically.</p></div></div>
+          <div class="wizard-section-title"><span>04</span><div><h3>Configuration</h3><p>Assign personnel, result format, scoresheet, points, and tie-break rules.</p></div></div>
 
-          <label class="field-block">Faculty In Charge
-            <select name="faculty_account" required>
-              <option value="">Select a faculty account</option>
-              {% for user in faculty_options %}
-              <option value="{{ user.id }}">{{ user.get_full_name|default:user.username }} · {{ user.username }}</option>
-              {% empty %}
-              <option value="" disabled>No faculty accounts available — create one under Users → Faculty</option>
-              {% endfor %}
-            </select>
-          </label>
+          <fieldset>
+            <legend>Faculty and Personnel</legend>
+            <label class="field-block">Faculty In Charge
+              <select name="faculty_account" required>
+                <option value="">Select a faculty account</option>
+                {% for user in faculty_options %}
+                <option value="{{ user.id }}">{{ user.get_full_name|default:user.username }} · {{ user.username }}</option>
+                {% empty %}
+                <option value="" disabled>No faculty accounts available — create one under Users → Faculty</option>
+                {% endfor %}
+              </select>
+              <small class="field-hint">Can view assigned events and confirm winners from paper scoresheets.</small>
+            </label>
+            <label class="field-block">Assigned Scorer (optional)
+              <select name="assigned_scorer">
+                <option value="">None</option>
+                {% for user in faculty_options %}
+                <option value="{{ user.id }}">{{ user.get_full_name|default:user.username }} · {{ user.username }}</option>
+                {% endfor %}
+              </select>
+            </label>
+          </fieldset>
 
-          <label class="field-block">Scoresheet Template
-            <select name="scoresheet_template">
-              <option value="">Auto-match by event type / category</option>
-              {% for tpl in scoresheet_templates %}
-              <option value="{{ tpl.id }}">{{ tpl.name }}{% if tpl.category %} · {{ tpl.category }}{% endif %}</option>
-              {% endfor %}
-            </select>
-          </label>
+          <fieldset>
+            <legend>Result Entry Format</legend>
+            <label class="field-block">Format
+              <select name="result_entry_format" id="result-entry-format">
+                <option value="team_final_score">Team final score</option>
+                <option value="best_of_sets">Best-of sets / set scores</option>
+                <option value="best_of_games">Best-of games / game scores</option>
+                <option value="win_draw_loss">Win / Draw / Loss (match points)</option>
+                <option value="maps_rounds_custom">Esports maps, rounds, or custom values</option>
+                <option value="manual_winner">Manual score fields or winner selection</option>
+              </select>
+              <small class="field-hint">Recommended from Sport/Game Type; authorized admins may change it.</small>
+            </label>
+          </fieldset>
 
-          <label class="inline-check" id="third-place-wrap">
-            <input type="checkbox" name="include_third_place" id="include-third-place">
-            Enable Third Place Match
-          </label>
-          <p class="config-hint" id="third-place-hint">Schedules a consolation match between semifinal losers. Available for Single Elimination with at least four teams.</p>
+          <fieldset>
+            <legend>Scoresheet Template</legend>
+            <label class="field-block">Template source
+              <select name="scoresheet_template_mode" id="scoresheet-template-mode">
+                <option value="auto">Automatically select based on Sport/Game Type</option>
+                <option value="existing">Select existing template</option>
+              </select>
+            </label>
+            <label class="field-block" id="scoresheet-template-wrap">
+              Select Existing Template
+              <select name="scoresheet_template" id="scoresheet-template">
+                <option value="">Auto-match by Sport/Game Type</option>
+                {% for tpl in scoresheet_templates %}
+                <option value="{{ tpl.id }}" data-category="{{ tpl.category }}">{{ tpl.name }}{% if tpl.category %} · {{ tpl.category }}{% endif %}</option>
+                {% endfor %}
+              </select>
+              <small class="field-hint">Recommendation uses Sport/Game Type, not Category (all match events are Sports).</small>
+            </label>
+          </fieldset>
 
           <fieldset id="points-fieldset">
             <legend>Championship Points</legend>
@@ -200,25 +284,26 @@
               <button type="button" id="add-points-row" class="match-secondary">+ Add Place</button>
             </div>
             <div class="points-editor" id="points-editor" aria-live="polite"></div>
-            <p class="points-editor-hint">Adjust ranks and point values for this event’s classification. Add or remove places as needed.</p>
+            <p class="points-editor-hint">Defaults load from Event Classification (Major/Minor). Edit before publishing if authorized.</p>
           </fieldset>
 
-          <aside class="auto-workflow-panel" aria-label="Automatic system workflow">
-            <h4>Automatic System Workflow</h4>
-            <ul>
-              <li>Tournament brackets are automatically updated after the Faculty confirms the match result.</li>
-              <li>Winners automatically advance to the next round; losers are eliminated per the selected format.</li>
-              <li>The next match schedule is automatically generated and updated.</li>
-              <li>Final rankings, Champion, and Runner-Up are automatically computed when the tournament ends.</li>
-              <li>Championship points are automatically applied after official results are published.</li>
-              <li>The Overall Leaderboard and department standings are automatically updated.</li>
-              <li>Official results become visible to viewers immediately after publication and are locked.</li>
-            </ul>
-          </aside>
+          <fieldset>
+            <legend>Tie-Breaking Rules</legend>
+            <div class="tiebreak-list" id="tiebreak-list">
+              <label class="inline-check"><input type="checkbox" name="tie_break_option" value="head_to_head" checked> Head-to-head result</label>
+              <label class="inline-check"><input type="checkbox" name="tie_break_option" value="score_difference" checked> Score difference</label>
+              <label class="inline-check"><input type="checkbox" name="tie_break_option" value="points_scored" checked> Points scored</label>
+              <label class="inline-check"><input type="checkbox" name="tie_break_option" value="fewest_penalties"> Fewest penalties</label>
+              <label class="inline-check"><input type="checkbox" name="tie_break_option" value="playoff_match"> Additional playoff match</label>
+              <label class="inline-check"><input type="checkbox" name="tie_break_option" value="manual_decision"> Manual decision with required remarks</label>
+            </div>
+            <input type="hidden" name="tie_break_rules" id="tie-break-rules" value="[]">
+          </fieldset>
         </section>
 
         <section class="wizard-panel" data-step="5">
-          <div class="wizard-section-title"><span>05</span><div><h3>Review blueprint</h3><p>Confirm the operational plan before saving.</p></div></div>
+          <div class="wizard-section-title"><span>05</span><div><h3>Review and publish</h3><p>Confirm the operational plan. Publish only when validations pass.</p></div></div>
+          <div id="review-requirements" class="review-requirements" aria-live="polite"></div>
           <div id="review-summary" class="review-summary"></div>
         </section>
       </div>
@@ -236,15 +321,44 @@
     <header><h2>Event summary</h2><button type="button" data-close-view aria-label="Close">×</button></header>
     <div id="view-summary"></div>
   </dialog>
-  <dialog id="delete-event" class="confirm-dialog" aria-labelledby="delete-event-title">
-    <form method="post" id="delete-form">{% csrf_token %}<h2 id="delete-event-title">Delete match event?</h2><p>This permanently removes <strong id="delete-name"></strong>, its bracket, and schedule.</p><div><button type="button" class="match-secondary" data-cancel-delete>Cancel</button><button class="match-danger" type="submit">Delete</button></div></form>
+  <dialog id="delete-event" class="confirm-dialog confirm-dialog--danger" aria-labelledby="delete-event-title">
+    <form method="post" id="delete-form">
+      {% csrf_token %}
+      <div class="confirm-dialog__icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+      </div>
+      <div class="confirm-dialog__body">
+        <h2 id="delete-event-title">Delete match event?</h2>
+        <p>This permanently removes <strong id="delete-name"></strong>, its bracket, and schedule. This action cannot be undone.</p>
+      </div>
+      <div class="confirm-dialog__actions">
+        <button type="button" class="match-secondary" data-cancel-delete>Cancel</button>
+        <button class="match-danger" type="submit">Delete event</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="bracket-confirm" class="confirm-dialog confirm-dialog--warning" aria-labelledby="bracket-confirm-title">
+    <div class="confirm-dialog__icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    </div>
+    <div class="confirm-dialog__body">
+      <p class="confirm-dialog__eyebrow">Bracket action</p>
+      <h2 id="bracket-confirm-title">Confirm bracket change</h2>
+      <p id="bracket-confirm-message">Regenerating or resetting will replace unconfirmed matches. Confirmed results are preserved unless you choose a controlled reset.</p>
+    </div>
+    <div class="confirm-dialog__actions">
+      <button type="button" class="match-secondary" id="bracket-confirm-cancel">Cancel</button>
+      <button type="button" class="match-danger" id="bracket-confirm-ok">Continue</button>
+    </div>
   </dialog>
 
   {{ event_rows_json|json_script:"match-events-data" }}
   <script>
     window.MATCH_EVENT_EDIT_ID = "{{ edit_event_id|escapejs }}";
     window.MATCH_EVENT_PREVIEW_URL = "{% url 'admin_match_event_preview' %}";
+    window.MATCH_EVENT_ACADEMIC_YEAR = "{{ academic_year|escapejs }}";
+    window.MATCH_EVENT_SEASON_NAMES = {{ season_event_names_json|safe }};
   </script>
-  <script src="{% static 'admindash/matchbasedevent.js' %}?v=20260804b"></script>
+  <script src="{% static 'admindash/matchbasedevent.js' %}?v=20260806b"></script>
 </body>
 </html>

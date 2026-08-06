@@ -2752,6 +2752,7 @@ def _serialize_match_event(event):
     return {
         'id': event.id,
         'name': event.name,
+        'academic_year': event.academic_year or '',
         'category': event.category or 'Sports',
         'classification': event.event_classification,
         'classification_label': event.get_event_classification_display() or '—',
@@ -2764,6 +2765,13 @@ def _serialize_match_event(event):
         'tournament_type': normalized_tournament_type,
         'tournament_type_label': _tournament_type_label(event.tournament_type or 'single_elimination'),
         'include_third_place': event.include_third_place,
+        'sport_type': event.sport_type or '',
+        'sport_custom_name': event.sport_custom_name or '',
+        'pairing_method': event.pairing_method or event.seeding_method or 'random_draw',
+        'result_entry_format': event.result_entry_format or '',
+        'tie_break_rules': event.tie_break_rules or [],
+        'schedule_config': event.schedule_config or {},
+        'assigned_scorer_id': event.assigned_scorer_id,
         'schedule_mode': event.schedule_mode,
         'daily_start_time': event.daily_start_time.strftime('%H:%M') if event.daily_start_time else '',
         'daily_end_time': event.daily_end_time.strftime('%H:%M') if event.daily_end_time else '',
@@ -2774,6 +2782,8 @@ def _serialize_match_event(event):
         'require_faculty_confirmation': event.require_faculty_confirmation,
         'apply_championship_points': event.apply_championship_points,
         'points_config': event.championship_points_config or [],
+        'actual_match_count': sum(1 for match in matches if not match.is_automatic_advance),
+        'automatic_advance_count': sum(1 for match in matches if match.is_automatic_advance),
         'team_ids': [
             team.source_team_id or registry_ids.get(team.name)
             for team in event.bracket_teams.all()
@@ -2791,11 +2801,22 @@ def _serialize_match_event(event):
                 'match_number': match.match_number,
                 'match_key': match.client_key or f'legacy-{match.pk}',
                 'round_name': match.round_name,
-                'team_a': match.team_a.name if match.team_a else 'TBD',
+                'is_automatic_advance': match.is_automatic_advance,
+                'dependency_label': match.dependency_label,
+                'playing_area': match.playing_area,
+                'team_a': match.team_a.name if match.team_a else (
+                    match.dependency_label.split(' vs ')[0]
+                    if match.dependency_label and ' vs ' in match.dependency_label
+                    else 'TBD'
+                ),
                 'team_b': (
                     match.team_b.name if match.team_b
-                    else 'Bye' if 'bye' in (match.remarks or '').lower()
-                    else 'TBD'
+                    else 'Automatic Advance' if match.is_automatic_advance or 'bye' in (match.remarks or '').lower()
+                    else (
+                        match.dependency_label.split(' vs ')[1]
+                        if match.dependency_label and ' vs ' in match.dependency_label
+                        else 'TBD'
+                    )
                 ),
                 'date': match.match_date.isoformat() if match.match_date else '',
                 'time': match.match_time.strftime('%H:%M') if match.match_time else '',
@@ -2868,6 +2889,12 @@ def admin_match_events(request, event_id=None):
     ).order_by('name')
     teams = Team.objects.filter(status=Team.STATUS_ACTIVE).select_related('department').order_by('name')
     all_match_events = _match_event_queryset()
+    from events.match_event_service import current_intramurals_season
+    academic_year = current_intramurals_season()
+    season_qs = all_match_events
+    if academic_year:
+        season_qs = season_qs.filter(academic_year=academic_year)
+    season_event_names = list(season_qs.values_list('name', flat=True))
     return render(request, 'admindash/matchbasedevent.html', {
         'event_rows': rows,
         'event_rows_json': rows,
@@ -2880,6 +2907,8 @@ def admin_match_events(request, event_id=None):
         'search_query': search_query,
         'status_filter': status_filter,
         'edit_event_id': request.GET.get('edit', ''),
+        'academic_year': academic_year,
+        'season_event_names_json': json.dumps(season_event_names),
     })
 
 
@@ -2916,32 +2945,58 @@ def admin_match_event_preview(request):
             return JsonResponse({'success': False, 'message': 'Bracket draw is invalid.'}, status=400)
         if set(draw_order) != set(team_ids) or len(draw_order) != len(team_ids):
             return JsonResponse({'success': False, 'message': 'Bracket draw must include every selected team.'}, status=400)
+    pairing_method = (payload.get('pairing_method') or 'random_draw').strip()
     try:
         blueprint = build_match_blueprint(
             team_ids,
             tournament_type,
             include_third_place=include_third_place,
             draw_order=draw_order,
+            pairing_method=pairing_method,
         )
     except MatchEventValidationError as exc:
         return JsonResponse({'success': False, 'message': str(exc)}, status=400)
     names = {team['id']: team['name'] for team in teams}
+
+    def display_side(match, side):
+        team_id = match.get(f'team_{side}_id')
+        if team_id is not None:
+            return names.get(team_id, 'TBD')
+        label = match.get(f'label_{side}') or ''
+        if label.startswith('Winner of') or label.startswith('Loser of'):
+            return label
+        if match.get('is_automatic_advance'):
+            return 'Automatic Advance'
+        return label if label and label != 'TBD' else 'TBD'
+
+    serialized = []
+    for match in blueprint['matches']:
+        team_a = display_side(match, 'a')
+        team_b = display_side(match, 'b')
+        if match.get('is_automatic_advance') and match.get('team_a_id') is not None:
+            team_a = names.get(match['team_a_id'], team_a)
+            team_b = 'Automatic Advance'
+        serialized.append({
+            **match,
+            'team_a': team_a,
+            'team_b': team_b,
+            'display_label': (
+                f'{team_a} — Automatic Advance'
+                if match.get('is_automatic_advance')
+                else match.get('dependency_label') or f'{team_a} vs {team_b}'
+            ),
+            'tooltip': (
+                'This team has no opponent in this round and will automatically proceed to the next round.'
+                if match.get('is_automatic_advance')
+                else ''
+            ),
+        })
     return JsonResponse({
         'success': True,
         'draw_order': blueprint['draw_order'],
-        'matches': [
-            {
-                **match,
-                'team_a': names.get(match['team_a_id'], 'TBD'),
-                'team_b': (
-                    names.get(match['team_b_id'])
-                    if match['team_b_id'] is not None
-                    else 'Bye' if match['team_a_id'] is not None
-                    else 'TBD'
-                ),
-            }
-            for match in blueprint['matches']
-        ],
+        'actual_match_count': blueprint.get('actual_match_count', len(serialized)),
+        'automatic_advance_count': blueprint.get('automatic_advance_count', 0),
+        'matches': serialized,
     })
 
 
