@@ -319,8 +319,13 @@ def _tournament_type_label(raw):
     return TOURNAMENT_TYPE_LABELS.get(key, raw.replace('_', ' ').title())
 
 
-def get_bracket_status_meta(has_bracket, total=0, completed=0, ongoing=0):
-    """Bracket lifecycle: Not Generated → Generated → In Progress → Completed."""
+def get_bracket_status_meta(has_bracket, total=0, completed=0, ongoing=0, locked=False):
+    """
+    Listing bracket status (separate from tournament status):
+    Not Generated | Generated | Locked
+    Progress fields still reflect actual-match completion for the progress column.
+    """
+    pct = int(round(completed / total * 100)) if total else 0
     if not has_bracket or total == 0:
         return {
             'bracket_status': 'not_generated',
@@ -329,19 +334,179 @@ def get_bracket_status_meta(has_bracket, total=0, completed=0, ongoing=0):
             'match_total': 0,
             'match_progress_pct': 0,
         }
-    if completed >= total:
-        status_key, status_label = 'completed', 'Completed'
-    elif completed > 0 or ongoing > 0:
-        status_key, status_label = 'in_progress', 'In Progress'
+    if locked:
+        status_key, status_label = 'locked', 'Locked'
     else:
         status_key, status_label = 'generated', 'Generated'
-    pct = int(round(completed / total * 100)) if total else 0
     return {
         'bracket_status': status_key,
         'bracket_status_label': status_label,
         'match_completed': completed,
         'match_total': total,
         'match_progress_pct': pct,
+    }
+
+
+def get_tournament_status_meta(event, today=None):
+    """
+    Tournament lifecycle status for the brackets listing.
+    Maps existing Event.status / dates onto Upcoming, Ongoing, Completed, Cancelled.
+    Postponed is reserved for an explicit status value if present.
+    """
+    today = today or timezone.localdate()
+    raw = (event.status or '').strip().lower()
+    if raw in ('postponed',):
+        return {'tournament_status': 'postponed', 'tournament_status_label': 'Postponed'}
+    if raw in ('cancelled', 'canceled', Event.STATUS_INACTIVE):
+        return {'tournament_status': 'cancelled', 'tournament_status_label': 'Cancelled'}
+
+    availability = normalize_event_availability_status(event.status)
+    if availability == Event.STATUS_INACTIVE:
+        return {'tournament_status': 'cancelled', 'tournament_status_label': 'Cancelled'}
+
+    end = event.end_date or event.event_date
+    if event.event_date and event.event_date > today:
+        return {'tournament_status': 'upcoming', 'tournament_status_label': 'Upcoming'}
+    if end and end < today:
+        return {'tournament_status': 'completed', 'tournament_status_label': 'Completed'}
+    if availability == Event.STATUS_COMPLETED or raw == Event.STATUS_COMPLETED:
+        return {'tournament_status': 'completed', 'tournament_status_label': 'Completed'}
+    if availability == Event.STATUS_UPCOMING and event.event_date and event.event_date > today:
+        return {'tournament_status': 'upcoming', 'tournament_status_label': 'Upcoming'}
+    return {'tournament_status': 'ongoing', 'tournament_status_label': 'Ongoing'}
+
+
+def _bracket_listing_sport_label(event):
+    sport_type = (event.sport_type or '').strip()
+    if sport_type == 'Custom':
+        custom = (event.sport_custom_name or '').strip()
+        return custom or 'Custom'
+    if sport_type:
+        return sport_type
+    category = (event.category or '').strip()
+    if category and category.lower() != 'sports':
+        return category
+    return 'Not set'
+
+
+def _bracket_listing_queryset():
+    """Match-Based Events only — never Criteria-Based / judged events."""
+    return (
+        _match_event_queryset()
+        .exclude(scoring_method='criteria')
+        .exclude(scoring_method__iexact='criteria')
+    )
+
+
+def _serialize_bracket_listing_row(event, *, team_count, match_stats, today):
+    from events.match_event_service import normalize_tournament_type
+
+    ms = match_stats.get(event.id, {})
+    actual_total = int(ms.get('total') or 0)
+    actual_completed = int(ms.get('completed') or 0)
+    actual_ongoing = int(ms.get('ongoing') or 0)
+    has_structure = actual_total > 0
+    tournament_type = normalize_tournament_type(event.tournament_type or 'single_elimination')
+    tournament_meta = get_tournament_status_meta(event, today)
+    bracket_meta = get_bracket_status_meta(
+        has_structure,
+        total=actual_total,
+        completed=actual_completed,
+        ongoing=actual_ongoing,
+        locked=bool(event.bracket_locked),
+    )
+    participants = int(team_count or 0)
+    participant_label = f'{participants} Team' if participants == 1 else f'{participants} Teams'
+    classification = (event.event_classification or '').strip().lower()
+    classification_label = ''
+    if classification == Event.CLASSIFICATION_MAJOR:
+        classification_label = 'Major Event'
+    elif classification == Event.CLASSIFICATION_MINOR:
+        classification_label = 'Minor Event'
+
+    return {
+        'id': event.id,
+        'name': event.name,
+        'sport': _bracket_listing_sport_label(event),
+        'division': (event.division or '').strip() or '—',
+        'classification': classification,
+        'classification_label': classification_label,
+        'tournament_type': tournament_type,
+        'tournament_type_label': _tournament_type_label(tournament_type),
+        'participant_count': participants,
+        'participant_label': participant_label,
+        'has_bracket': has_structure,
+        'bracket_locked': bool(event.bracket_locked),
+        'edit_url': f'/admin/events/match/{event.id}/edit/',
+        'is_round_robin': tournament_type == 'round_robin',
+        **tournament_meta,
+        **bracket_meta,
+        'match_progress_label': (
+            f'{actual_completed} of {actual_total} actual matches completed — {bracket_meta["match_progress_pct"]}%'
+            if has_structure else 'No actual matches yet'
+        ),
+    }
+
+
+def build_tournament_bracket_listing(today=None):
+    """Eligible Match-Based rows + summary counts for the Tournament Brackets page."""
+    from events.models import BracketMatch, BracketTeam
+
+    today = today or timezone.localdate()
+    events = list(_bracket_listing_queryset().order_by('-created_at', '-id'))
+    event_ids = [event.id for event in events]
+
+    team_counts = {
+        row['event_id']: row['c']
+        for row in BracketTeam.objects.filter(event_id__in=event_ids)
+        .values('event_id')
+        .annotate(c=Count('id'))
+    }
+    match_stats = {
+        row['event_id']: row
+        for row in BracketMatch.objects.filter(event_id__in=event_ids, is_automatic_advance=False)
+        .values('event_id')
+        .annotate(
+            total=Count('id'),
+            completed=Count(
+                'id',
+                filter=Q(status__in=[BracketMatch.STATUS_COMPLETED, BracketMatch.STATUS_FORFEIT]),
+            ),
+            ongoing=Count('id', filter=Q(status=BracketMatch.STATUS_ONGOING)),
+        )
+    }
+
+    event_rows = [
+        _serialize_bracket_listing_row(
+            event,
+            team_count=team_counts.get(event.id, 0),
+            match_stats=match_stats,
+            today=today,
+        )
+        for event in events
+    ]
+
+    generated = sum(1 for row in event_rows if row['has_bracket'])
+    not_generated = sum(1 for row in event_rows if not row['has_bracket'])
+    completed = sum(1 for row in event_rows if row['tournament_status'] == 'completed')
+
+    return {
+        'event_rows': event_rows,
+        'summary': {
+            'match_based_events': len(event_rows),
+            'generated_brackets': generated,
+            'not_generated': not_generated,
+            'completed_tournaments': completed,
+        },
+        'filter_options': {
+            'sports': sorted({row['sport'] for row in event_rows if row['sport'] and row['sport'] != 'Not set'}),
+            'divisions': sorted({row['division'] for row in event_rows if row['division'] and row['division'] != '—'}),
+            'formats': [
+                {'value': 'single_elimination', 'label': 'Single Elimination'},
+                {'value': 'double_elimination', 'label': 'Double Elimination'},
+                {'value': 'round_robin', 'label': 'Round Robin'},
+            ],
+        },
     }
 
 
@@ -2712,15 +2877,43 @@ def _match_event_queryset():
     ).distinct()
 
 
+def _bracket_team_logo_url(bracket_team):
+    if not bracket_team:
+        return ''
+    source = getattr(bracket_team, 'source_team', None)
+    image = getattr(source, 'image', None) if source else None
+    if not image:
+        return ''
+    try:
+        return image.url
+    except ValueError:
+        return ''
+
+
 def _serialize_match_event(event):
-    from events.match_event_service import normalize_tournament_type
+    from events.match_event_service import (
+        heal_unconfirmed_match_labels,
+        normalize_tournament_type,
+    )
     from events.faculty_service import resolve_faculty_user_from_text
 
+    heal_unconfirmed_match_labels(event)
     registry_ids = {
         name: pk for pk, name in Team.objects.filter(status=Team.STATUS_ACTIVE)
         .values_list('id', 'name')
     }
-    matches = list(event.bracket_matches.order_by('match_number'))
+    matches = list(
+        event.bracket_matches.select_related(
+            'team_a',
+            'team_b',
+            'team_a__source_team',
+            'team_b__source_team',
+            'winner',
+            'winner__source_team',
+            'next_match_winner',
+            'next_match_loser',
+        ).order_by('match_number', 'id')
+    )
     normalized_tournament_type = normalize_tournament_type(
         event.tournament_type or 'single_elimination'
     )
@@ -2802,22 +2995,37 @@ def _serialize_match_event(event):
                 'match_key': match.client_key or f'legacy-{match.pk}',
                 'round_name': match.round_name,
                 'is_automatic_advance': match.is_automatic_advance,
-                'dependency_label': match.dependency_label,
+                'dependency_label': _resolved_schedule_label(match),
                 'playing_area': match.playing_area,
-                'team_a': match.team_a.name if match.team_a else (
-                    match.dependency_label.split(' vs ')[0]
-                    if match.dependency_label and ' vs ' in match.dependency_label
-                    else 'TBD'
+                'team_a': _resolved_side_name(match, 'a'),
+                'team_b': _resolved_side_name(match, 'b'),
+                'participant_a': {
+                    'team_id': match.team_a.source_team_id if match.team_a else None,
+                    'team_name': match.team_a.name if match.team_a else None,
+                    'seed': match.team_a.seed if match.team_a else None,
+                    'team_logo': _bracket_team_logo_url(match.team_a),
+                } if match.team_a else None,
+                'participant_b': {
+                    'team_id': match.team_b.source_team_id if match.team_b else None,
+                    'team_name': match.team_b.name if match.team_b else None,
+                    'seed': match.team_b.seed if match.team_b else None,
+                    'team_logo': _bracket_team_logo_url(match.team_b),
+                } if match.team_b else None,
+                'next_winner_key': (
+                    match.next_match_winner.client_key
+                    if match.next_match_winner_id and match.next_match_winner.client_key
+                    else None
                 ),
-                'team_b': (
-                    match.team_b.name if match.team_b
-                    else 'Automatic Advance' if match.is_automatic_advance or 'bye' in (match.remarks or '').lower()
-                    else (
-                        match.dependency_label.split(' vs ')[1]
-                        if match.dependency_label and ' vs ' in match.dependency_label
-                        else 'TBD'
-                    )
+                'next_loser_key': (
+                    match.next_match_loser.client_key
+                    if match.next_match_loser_id and match.next_match_loser.client_key
+                    else None
                 ),
+                'status': match.status,
+                'score_a': match.score_a or '',
+                'score_b': match.score_b or '',
+                'winner_name': match.winner.name if match.winner_id else '',
+                'winner_team_id': match.winner.source_team_id if match.winner_id else None,
                 'date': match.match_date.isoformat() if match.match_date else '',
                 'time': match.match_time.strftime('%H:%M') if match.match_time else '',
                 'venue': match.venue,
@@ -2825,6 +3033,27 @@ def _serialize_match_event(event):
             for match in matches
         ],
     }
+
+
+def _resolved_side_name(match, side):
+    from events.match_event_service import MISSING_TEAM_LABEL, resolve_persisted_match_label
+    team = match.team_a if side == 'a' else match.team_b
+    if team is not None:
+        return team.name or MISSING_TEAM_LABEL
+    if match.is_automatic_advance and side == 'b':
+        return 'Automatic Advance'
+    label = resolve_persisted_match_label(match)
+    if ' vs ' in label:
+        left, right = label.split(' vs ', 1)
+        return left if side == 'a' else right
+    if side == 'a':
+        return label
+    return 'TBD'
+
+
+def _resolved_schedule_label(match):
+    from events.match_event_service import resolve_persisted_match_label
+    return resolve_persisted_match_label(match)
 
 
 @login_required(login_url='login')
@@ -2946,6 +3175,10 @@ def admin_match_event_preview(request):
         if set(draw_order) != set(team_ids) or len(draw_order) != len(team_ids):
             return JsonResponse({'success': False, 'message': 'Bracket draw must include every selected team.'}, status=400)
     pairing_method = (payload.get('pairing_method') or 'random_draw').strip()
+    if pairing_method not in ('random_draw', 'seeded_draw', 'manual_pairing'):
+        pairing_method = 'random_draw'
+    # Wizard now supports Random Draw only; ignore legacy pairing values for generation.
+    pairing_method = 'random_draw'
     try:
         blueprint = build_match_blueprint(
             team_ids,
@@ -2956,47 +3189,38 @@ def admin_match_event_preview(request):
         )
     except MatchEventValidationError as exc:
         return JsonResponse({'success': False, 'message': str(exc)}, status=400)
-    names = {team['id']: team['name'] for team in teams}
 
-    def display_side(match, side):
-        team_id = match.get(f'team_{side}_id')
-        if team_id is not None:
-            return names.get(team_id, 'TBD')
-        label = match.get(f'label_{side}') or ''
-        if label.startswith('Winner of') or label.startswith('Loser of'):
-            return label
-        if match.get('is_automatic_advance'):
-            return 'Automatic Advance'
-        return label if label and label != 'TBD' else 'TBD'
+    team_rows = list(Team.objects.filter(id__in=team_ids, status=Team.STATUS_ACTIVE))
+    names = {team.id: team.name for team in team_rows}
+    logos = {}
+    for team in team_rows:
+        if team.image:
+            try:
+                logos[team.id] = team.image.url
+            except ValueError:
+                logos[team.id] = ''
+    seeds = {team_id: index for index, team_id in enumerate(blueprint['draw_order'], start=1)}
 
-    serialized = []
-    for match in blueprint['matches']:
-        team_a = display_side(match, 'a')
-        team_b = display_side(match, 'b')
-        if match.get('is_automatic_advance') and match.get('team_a_id') is not None:
-            team_a = names.get(match['team_a_id'], team_a)
-            team_b = 'Automatic Advance'
-        serialized.append({
-            **match,
-            'team_a': team_a,
-            'team_b': team_b,
-            'display_label': (
-                f'{team_a} — Automatic Advance'
-                if match.get('is_automatic_advance')
-                else match.get('dependency_label') or f'{team_a} vs {team_b}'
-            ),
-            'tooltip': (
-                'This team has no opponent in this round and will automatically proceed to the next round.'
-                if match.get('is_automatic_advance')
-                else ''
-            ),
-        })
+    from events.match_event_service import bracket_display_graph, serialize_blueprint_matches
+    serialized = serialize_blueprint_matches(
+        blueprint['matches'],
+        names,
+        logos=logos,
+        seeds=seeds,
+    )
+    layout = bracket_display_graph(serialized, blueprint['draw_order'])
     return JsonResponse({
         'success': True,
         'draw_order': blueprint['draw_order'],
-        'actual_match_count': blueprint.get('actual_match_count', len(serialized)),
-        'automatic_advance_count': blueprint.get('automatic_advance_count', 0),
+        'actual_match_count': blueprint.get('actual_match_count', len([
+            m for m in serialized if not m.get('is_automatic_advance')
+        ])),
+        'automatic_advance_count': blueprint.get('automatic_advance_count', len([
+            m for m in serialized if m.get('is_automatic_advance')
+        ])),
         'matches': serialized,
+        'layout': layout,
+        'tournament_type': tournament_type,
     })
 
 
@@ -3293,74 +3517,17 @@ def admin_tab_delete(request, tab_key, record_id):
 @login_required
 @user_passes_test(lambda user: user.is_staff, login_url='login')
 def admin_brackets(request):
-    """Display the tournament brackets management page."""
-    from events.models import BracketMatch, BracketTeam
-    all_events = list(Event.objects.all())
-    today = timezone.localdate()
-
-    events_with_bracket = set(
-        BracketMatch.objects.values_list('event_id', flat=True).distinct()
-    )
-    team_counts = {}
-    for row in BracketTeam.objects.values('event_id'):
-        team_counts[row['event_id']] = team_counts.get(row['event_id'], 0) + 1
-
-    match_stats = {
-        row['event_id']: row
-        for row in BracketMatch.objects.values('event_id').annotate(
-            total=Count('id'),
-            completed=Count('id', filter=Q(status=BracketMatch.STATUS_COMPLETED)),
-            ongoing=Count('id', filter=Q(status=BracketMatch.STATUS_ONGOING)),
-        )
-    }
-
-    event_rows = []
-    for ev in all_events[:50]:
-        status_meta = get_event_status_meta(ev, today)
-        bracket_team_count = team_counts.get(ev.id, 0)
-        has_bracket = ev.id in events_with_bracket
-        ms = match_stats.get(ev.id, {})
-        bracket_meta = get_bracket_status_meta(
-            has_bracket,
-            total=ms.get('total', 0),
-            completed=ms.get('completed', 0),
-            ongoing=ms.get('ongoing', 0),
-        )
-        event_rows.append({
-            'id': ev.id,
-            'name': ev.name,
-            'category': ev.category,
-            'division': ev.division,
-            'department': ev.department,
-            'schedule_label': ev.schedule_label,
-            'event_date': ev.event_date.strftime('%Y-%m-%d') if ev.event_date else '',
-            'event_time': ev.event_time_str,
-            'venue': ev.venue,
-            'status': status_meta['status'],
-            'status_label': status_meta['status_label'],
-            'num_teams': str(ev.num_teams) if ev.num_teams else '',
-            'bracket_team_count': bracket_team_count,
-            'tournament_type': ev.tournament_type or '',
-            'tournament_type_label': _tournament_type_label(ev.tournament_type),
-            'scoring_method': ev.scoring_method or '',
-            'bracket_locked': ev.bracket_locked,
-            'has_bracket': has_bracket,
-            **bracket_meta,
-        })
-
-    status_counts = get_event_status_counts(all_events, today)
-    total_events = len(all_events)
-    active_count = status_counts['ongoing']
-    upcoming_count = status_counts['upcoming']
-    
-    departments = Department.objects.all()
-
+    """Tournament Brackets listing — Match-Based Events only."""
+    listing = build_tournament_bracket_listing()
     return render(request, 'admindash/bracket.html', {
-        'event_rows': event_rows,
-        'total_events': total_events,
-        'active_count': active_count,
-        'upcoming_count': upcoming_count,
-        'departments': departments,
+        'event_rows': listing['event_rows'],
+        'event_rows_json': listing['event_rows'],
+        'summary': listing['summary'],
+        'filter_options': listing['filter_options'],
+        'match_events_url': '/admin/events/match/',
+        'total_events': listing['summary']['match_based_events'],
+        'active_count': listing['summary']['generated_brackets'],
+        'upcoming_count': listing['summary']['not_generated'],
     })
 
 
@@ -3411,6 +3578,8 @@ def get_tabulator_activity_score_rows(limit=60):
 
 
 def _ensure_default_scoresheet_templates(user=None):
+    """One-time helper for empty catalogs. Not called from the listing page so
+    intentional deletes are never undone by re-seeding."""
     from events.models import ScoresheetTemplate
     from events.scoresheet_pdf import pack_template_layout
 
@@ -3498,8 +3667,6 @@ def admin_scoresheets(request):
         default_fields_for,
         default_order_for,
     )
-
-    _ensure_default_scoresheet_templates(request.user)
 
     qs = ScoresheetTemplate.objects.all()
     q = (request.GET.get('q') or '').strip()
@@ -3634,11 +3801,75 @@ def admin_scoresheet_template_delete(request, template_id):
     template = get_object_or_404(ScoresheetTemplate, pk=template_id)
     name = template.name
     assigned = template.assigned_events.count()
+    template_pk = template.pk
     template.delete()
+    still_exists = ScoresheetTemplate.objects.filter(pk=template_pk).exists()
+    if still_exists:
+        return JsonResponse({'success': False, 'message': f'Failed to delete "{name}".'}, status=500)
     msg = f'Template "{name}" deleted.'
     if assigned:
         msg += f' {assigned} event(s) will use auto-matched templates.'
-    return JsonResponse({'success': True, 'message': msg})
+    return JsonResponse({'success': True, 'message': msg, 'deleted_id': template_pk})
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+def admin_scoresheet_template_bulk_delete(request):
+    """Delete multiple scoresheet templates. Body: {ids: [1,2,3]}"""
+    from events.models import ScoresheetTemplate
+
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': 'POST required.'}, status=405)
+    try:
+        payload = json.loads(request.body.decode('utf-8') or '{}')
+    except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
+        return JsonResponse({'success': False, 'message': 'Invalid JSON.'}, status=400)
+
+    raw_ids = payload.get('ids') or []
+    if not isinstance(raw_ids, list) or not raw_ids:
+        return JsonResponse({'success': False, 'message': 'No template IDs provided.'}, status=400)
+
+    ids = []
+    for raw in raw_ids:
+        try:
+            ids.append(int(raw))
+        except (TypeError, ValueError):
+            continue
+    ids = list(dict.fromkeys(ids))
+    if not ids:
+        return JsonResponse({'success': False, 'message': 'No valid template IDs provided.'}, status=400)
+
+    qs = ScoresheetTemplate.objects.filter(pk__in=ids)
+    templates = list(qs)
+    found_ids = [t.pk for t in templates]
+    assigned_total = sum(t.assigned_events.count() for t in templates)
+    if found_ids:
+        ScoresheetTemplate.objects.filter(pk__in=found_ids).delete()
+    remaining = ScoresheetTemplate.objects.filter(pk__in=found_ids).count()
+    actually_deleted = len(found_ids) - remaining
+    skipped = len(ids) - len(found_ids)
+    deleted_ids = [i for i in found_ids if not ScoresheetTemplate.objects.filter(pk=i).exists()]
+
+    msg = f'{actually_deleted} template(s) deleted.'
+    if skipped:
+        msg += f' {skipped} not found.'
+    if assigned_total:
+        msg += f' {assigned_total} event assignment(s) cleared.'
+    if actually_deleted <= 0:
+        return JsonResponse({
+            'success': False,
+            'message': 'No matching templates were deleted.',
+            'deleted': 0,
+            'skipped': skipped,
+            'deleted_ids': [],
+        }, status=404)
+    return JsonResponse({
+        'success': True,
+        'message': msg,
+        'deleted': actually_deleted,
+        'skipped': skipped,
+        'deleted_ids': deleted_ids,
+    })
 
 
 @login_required(login_url='login')
@@ -6477,6 +6708,58 @@ def admin_generate_bracket(request):
         if not event or not format_type:
             return JsonResponse({'success': False, 'message': 'Event and format are required.'}, status=400)
 
+        force_reset = bool(data.get('force_reset'))
+        reset_reason = str(data.get('reason') or '').strip()
+        confirmed_qs = BracketMatch.objects.filter(
+            event=event,
+            is_automatic_advance=False,
+            status__in=[BracketMatch.STATUS_COMPLETED, BracketMatch.STATUS_FORFEIT],
+        ).filter(Q(winner__isnull=False) | Q(score_a__gt='') | Q(score_b__gt=''))
+        confirmed_count = confirmed_qs.count()
+        if confirmed_count and not force_reset:
+            return JsonResponse({
+                'success': False,
+                'blocked': True,
+                'message': (
+                    'This bracket contains confirmed results or dependent matches and cannot be '
+                    'regenerated normally. Use a controlled reset if you need to rebuild it.'
+                ),
+            }, status=409)
+        if force_reset:
+            if not request.user.is_staff:
+                return JsonResponse({'success': False, 'message': 'Permission denied.'}, status=403)
+            if confirmed_count and not reset_reason:
+                return JsonResponse({
+                    'success': False,
+                    'message': 'A reason is required when confirmed results exist.',
+                }, status=400)
+            try:
+                from events.audit_service import record_audit
+                previous = list(
+                    BracketMatch.objects.filter(event=event).values(
+                        'id', 'match_number', 'round_name', 'status', 'score_a', 'score_b', 'is_automatic_advance'
+                    )[:200]
+                )
+                record_audit(
+                    user=request.user,
+                    action='Updated Event',
+                    description=(
+                        f'Controlled bracket reset for "{event.name}". '
+                        f'Reason: {reset_reason or "n/a"}. Removed {BracketMatch.objects.filter(event=event).count()} match rows.'
+                    ),
+                    module='Match-Based Event',
+                    event_name=event.name,
+                    request=request,
+                    metadata={
+                        'action': 'bracket_reset',
+                        'reason': reset_reason,
+                        'confirmed_results': confirmed_count,
+                        'previous_matches': previous,
+                    },
+                )
+            except Exception:
+                pass
+
         # Auto-fill teams from the event's existing BracketTeams if none supplied.
         existing_teams = list(BracketTeam.objects.filter(event=event).order_by('seed'))
         if not teams_data and not existing_teams:
@@ -6629,10 +6912,15 @@ def admin_view_bracket(request, event_id):
         for t in teams_data:
             t['department_name'] = t.pop('department__name') or '—'
 
-        total = matches_qs.count()
-        completed = matches_qs.filter(status=BracketMatch.STATUS_COMPLETED).count()
-        ongoing = matches_qs.filter(status=BracketMatch.STATUS_ONGOING).count()
-        bracket_meta = get_bracket_status_meta(total > 0, total, completed, ongoing)
+        actual_qs = matches_qs.filter(is_automatic_advance=False)
+        total = actual_qs.count()
+        completed = actual_qs.filter(
+            status__in=[BracketMatch.STATUS_COMPLETED, BracketMatch.STATUS_FORFEIT]
+        ).count()
+        ongoing = actual_qs.filter(status=BracketMatch.STATUS_ONGOING).count()
+        bracket_meta = get_bracket_status_meta(
+            total > 0, total, completed, ongoing, locked=bool(event.bracket_locked)
+        )
 
         rounds = []
         seen = set()

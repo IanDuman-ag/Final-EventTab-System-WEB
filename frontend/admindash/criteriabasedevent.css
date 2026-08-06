@@ -73,3 +73,122 @@
 @media (max-width:760px) {
   .tie-break-list label { grid-template-columns:1fr; }
 }
+
+/* ── Pageant guided wizard ───────────────────────────────────────── */
+.pageant-badges { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px; }
+.pageant-badge {
+  display:inline-flex; align-items:center; min-height:28px; padding:0 12px;
+  border:1px solid #c9d7e8; background:#eef4ff; color:#124da8; font-size:11px; font-weight:800;
+  letter-spacing:.04em; text-transform:uppercase;
+}
+.pageant-badge--accent { background:#08264d; border-color:#08264d; color:#fff; }
+.pageant-format-cards, .pageant-choice-cards, .pageant-start-options {
+  display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin:12px 0 18px;
+}
+.pageant-format-card, .pageant-choice-cards label {
+  display:block; border:1px solid #cfdbe8; background:#fff; cursor:pointer;
+}
+.pageant-format-card input, .pageant-choice-cards input { position:absolute; opacity:0; pointer-events:none; }
+.pageant-format-card span, .pageant-choice-cards label span {
+  display:block; padding:14px 16px; border:2px solid transparent;
+}
+.pageant-format-card input:checked + span,
+.pageant-choice-cards input:checked + span {
+  border-color:var(--blue); background:#f3f7ff;
+}
+.pageant-format-card strong, .pageant-choice-cards strong { display:block; color:var(--navy); font-size:14px; }
+.pageant-format-card small, .pageant-choice-cards small {
+  display:block; margin-top:6px; color:var(--slate); font-size:12px; font-weight:600; line-height:1.4;
+}
+.pageant-format-card:focus-within span, .pageant-choice-cards label:focus-within span {
+  outline:3px solid rgba(21,91,215,.25); outline-offset:2px;
+}
+.req { color:var(--red); font-size:10px; font-weight:800; text-transform:uppercase; margin-left:4px; }
+.opt { color:#7a90a8; font-size:10px; font-weight:700; text-transform:uppercase; margin-left:4px; }
+.pageant-advanced {
+  margin:16px 0; border:1px solid #e2eaf3; background:#f8fbff; padding:10px 14px;
+}
+.pageant-advanced summary {
+  cursor:pointer; font-weight:800; color:#173465; font-size:13px;
+}
+.pageant-category-list { list-style:none; margin:10px 0; padding:0; display:grid; gap:8px; }
+.pageant-category-list li { display:flex; gap:8px; align-items:center; }
+.pageant-category-list input { flex:1; height:38px; border:1px solid #cad8e6; padding:0 10px; }
+.pageant-counts {
+  display:flex; flex-wrap:wrap; gap:12px; margin-bottom:14px;
+}
+.pageant-counts span {
+  background:#fff; border:1px solid #dbe5f0; padding:8px 12px; font-size:12px; color:#465d75;
+}
+.pageant-counts strong { color:var(--navy); font-size:18px; display:block; }
+.pageant-candidate-card, .pageant-segment-card, .pageant-review-card {
+  border:1px solid #dbe5f0; background:#fff; padding:12px 14px; margin-bottom:10px;
+}
+.pageant-candidate-card, .pageant-segment-card {
+  display:flex; justify-content:space-between; gap:12px; align-items:flex-start; flex-wrap:wrap;
+}
+.pageant-candidate-main span, .pageant-segment-card p {
+  display:block; color:var(--slate); font-size:12px; margin-top:4px;
+}
+.pageant-pill {
+  display:inline-flex; margin-top:6px; padding:2px 8px; background:#e8f7f0; color:var(--green);
+  font-size:10px; font-weight:800; text-transform:uppercase;
+}
+.pageant-segment-card.is-disabled { opacity:.55; }
+.pageant-weight-meter {
+  margin:12px 0 16px; padding:12px 14px; border:1px solid #dbe5f0; font-size:13px; font-weight:700;
+}
+.pageant-weight-meter.is-green { background:#e8f7f0; border-color:#b7e8d4; color:var(--green); }
+.pageant-weight-meter.is-amber { background:#fff7e8; border-color:#f0d7a4; color:var(--amber); }
+.pageant-weight-meter.is-red { background:#fff0f2; border-color:#f3c2c9; color:var(--red); }
+.pageant-empty-state {
+  text-align:center; padding:28px 16px; border:1px dashed #c9d7e8; background:#f8fbff; color:var(--slate);
+}
+.pageant-empty-state strong { display:block; color:var(--navy); margin-bottom:6px; }
+.pageant-empty-state .match-primary { margin-top:12px; }
+.pageant-tabs { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px; }
+.pageant-tab {
+  border:1px solid #cfdbe8; background:#fff; color:#30455e; padding:8px 12px;
+  font:inherit; font-size:12px; font-weight:750; cursor:pointer;
+}
+.pageant-tab.is-active { background:var(--blue); border-color:var(--blue); color:#fff; }
+.pageant-tab:focus-visible { outline:3px solid rgba(21,91,215,.3); outline-offset:2px; }
+.pageant-award-presets { display:flex; flex-wrap:wrap; gap:8px; margin:10px 0; }
+.pageant-award-row {
+  display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:space-between;
+  padding:10px 12px; border:1px solid #e2eaf3; background:#fff; margin-bottom:8px;
+}
+.pageant-checklist { list-style:none; margin:0 0 16px; padding:0; display:grid; gap:8px; }
+.pageant-checklist li {
+  display:flex; justify-content:space-between; gap:12px; padding:10px 12px;
+  border:1px solid #e2eaf3; background:#fff; font-size:13px; font-weight:700;
+}
+.pageant-checklist .is-complete em { color:var(--green); }
+.pageant-checklist .is-needs-attention em { color:var(--amber); }
+.pageant-checklist .is-optional em { color:#7a90a8; }
+.pageant-publish-banner {
+  padding:14px 16px; margin-bottom:14px; border:1px solid #dbe5f0; font-size:14px;
+}
+.pageant-publish-banner.is-ready { background:#e8f7f0; border-color:#b7e8d4; color:var(--green); }
+.pageant-publish-banner.is-blocked { background:#fff7e8; border-color:#f0d7a4; color:var(--amber); }
+.pageant-issue-list { list-style:none; margin:0 0 16px; padding:0; display:grid; gap:8px; }
+.pageant-issue-list li {
+  display:flex; justify-content:space-between; gap:12px; align-items:center;
+  padding:10px 12px; background:#fff0f2; border:1px solid #f3c2c9; font-size:13px;
+}
+.pageant-review-cards { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.pageant-review-card header { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+.pageant-review-card h4 { margin:0; font-size:14px; }
+.pageant-review-card ul { margin:8px 0 0; padding-left:18px; color:var(--slate); font-size:12px; }
+.pageant-dialog { width:min(720px, calc(100vw - 28px)); max-height:min(86vh, 720px); overflow:auto; padding:18px 20px; }
+.wizard.pageant-mode .wizard-kicker { color:#8eb8ff; }
+
+@media (max-width:900px) {
+  .pageant-format-cards, .pageant-choice-cards, .pageant-start-options, .pageant-review-cards {
+    grid-template-columns:1fr;
+  }
+}
+@media (max-width:640px) {
+  .pageant-candidate-card, .pageant-segment-card { flex-direction:column; }
+}
+

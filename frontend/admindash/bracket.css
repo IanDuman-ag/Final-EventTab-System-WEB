@@ -9,7 +9,7 @@
 }
 
 .bracket-page .main-content {
-  width: min(100%, 1100px);
+  width: min(100%, 1240px);
   padding-top: 18px;
 }
 
@@ -31,6 +31,21 @@
   letter-spacing: 0.03em;
 }
 
+.bracket-page-head {
+  margin: 8px 0 18px;
+}
+.bracket-page-head h1 {
+  margin: 0;
+  color: #083174;
+  font-size: 28px;
+  font-weight: 850;
+}
+.bracket-page-head p {
+  margin: 6px 0 0;
+  color: #52677e;
+  font-size: 14px;
+}
+
 /* ── Stats Cards ─────────────────────────────────────────────────── */
 .bracket-stats {
   display: grid;
@@ -38,6 +53,155 @@
   gap: 8px;
   margin-bottom: 18px;
   max-width: 520px;
+}
+.bracket-stats--four {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  max-width: none;
+  gap: 12px;
+}
+
+.bracket-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 14px;
+  padding: 12px;
+  background: #f4f8ff;
+  border: 1px solid #d5e0ec;
+}
+.bracket-toolbar label { margin: 0; }
+.bracket-toolbar input,
+.bracket-toolbar select {
+  min-height: 36px;
+  border: 1px solid #c9d7e8;
+  background: #fff;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: #1d3554;
+}
+.bracket-search { flex: 1 1 220px; }
+.bracket-search input { width: 100%; }
+.bracket-clear-filters,
+.match-secondary {
+  border: 1px solid #c9d7e8;
+  background: #fff;
+  color: #124da8;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+}
+.bracket-actions-cell {
+  min-width: 128px;
+  width: 1%;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.bracket-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+.btn-view-bracket {
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+.bracket-tournament-status--upcoming { background: #e7f0ff; color: #124da8; }
+.bracket-tournament-status--ongoing { background: #fff4e8; color: #9a5408; }
+.bracket-tournament-status--completed { background: #e8f7f0; color: #0d6b49; }
+.bracket-tournament-status--postponed { background: #f3eefe; color: #5b3aa8; }
+.bracket-tournament-status--cancelled { background: #fdecec; color: #b42318; }
+.bracket-bracket-status--locked { background: #eef2f7; color: #31475f; }
+.bracket-bracket-status--generated { background: #e7f0ff; color: #124da8; }
+.bracket-bracket-status--not_generated { background: #fff4e8; color: #9a5408; }
+.bracket-empty-state {
+  text-align: center;
+  padding: 28px 16px;
+  color: #52677e;
+}
+.bracket-empty-state strong { display: block; color: #083174; margin-bottom: 6px; }
+.bracket-empty-state span { display: block; margin-bottom: 12px; }
+.bracket-filtered-empty,
+.bracket-error-state { margin-top: 12px; }
+.confirm-dialog {
+  display: none;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  max-width: calc(100vw - 32px);
+}
+.confirm-dialog[open] {
+  display: grid;
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  width: min(440px, calc(100vw - 32px));
+  height: fit-content;
+  margin: auto;
+  padding: 22px;
+  background: #fff;
+  box-shadow: 0 28px 80px rgba(4, 25, 50, .38);
+  gap: 14px;
+}
+.confirm-dialog::backdrop { background: rgba(4, 25, 50, .72); }
+.confirm-dialog__actions { display: flex; justify-content: flex-end; gap: 8px; }
+.confirm-dialog textarea {
+  width: 100%;
+  margin-top: 8px;
+  border: 1px solid #c9d7e8;
+  padding: 8px;
+  font: inherit;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+.btn-bracket-details {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  text-decoration: none;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px solid #022068;
+  background: #022068;
+  color: #fff !important;
+  font-size: 12px;
+  font-weight: 750;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.btn-bracket-details:hover,
+.btn-bracket-details:focus-visible {
+  filter: brightness(1.08);
+  outline: 2px solid rgba(2, 32, 104, .25);
+  outline-offset: 2px;
+}
+.match-danger {
+  border: 1px solid #b42318;
+  background: #b42318;
+  color: #fff;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+@media (max-width: 960px) {
+  .bracket-stats--four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .bracket-table-wrap { overflow-x: auto; }
+  .bracket-page .bracket-events-table { min-width: 920px; }
 }
 
 .bracket-stat-card {
@@ -88,7 +252,7 @@
   border-radius: 8px;
   background: #ffffff;
   box-shadow: 0 14px 32px rgba(9, 34, 72, 0.08);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .bracket-table-header {
@@ -112,13 +276,24 @@
 
 .bracket-table-wrap {
   width: 100%;
+  max-width: 100%;
   overflow-x: auto;
+  overflow-y: visible;
+  padding: 0;
+  -webkit-overflow-scrolling: touch;
 }
 
 .bracket-events-table {
   width: 100%;
-  min-width: 820px;
+  min-width: 0;
+  table-layout: auto;
   border-collapse: collapse;
+}
+
+@media (max-width: 1200px) {
+  .bracket-events-table {
+    min-width: 920px;
+  }
 }
 
 .bracket-events-table thead {
@@ -126,22 +301,25 @@
 }
 
 .bracket-events-table th {
-  height: 30px;
-  padding: 0 16px;
-  color: #778295;
-  font-size: 8px;
-  font-weight: 900;
-  letter-spacing: 0.8px;
+  height: 42px;
+  padding: 10px 14px;
+  color: #44566d;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
   text-align: left;
   text-transform: uppercase;
+  border-bottom: 1px solid #d7e3f2;
+  white-space: nowrap;
 }
 
 .bracket-events-table td {
-  height: 52px;
-  padding: 12px 16px;
+  height: auto;
+  min-height: 56px;
+  padding: 14px;
   border-bottom: 1px solid #f0f3f7;
-  color: #49586f;
-  font-size: 10px;
+  color: #31475f;
+  font-size: 13px;
   font-weight: 600;
   vertical-align: middle;
 }
@@ -153,14 +331,61 @@
 .bracket-event-name strong {
   display: block;
   color: #173465;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 800;
 }
 
 .bracket-event-name span {
-  color: #919eaf;
-  font-size: 9px;
+  display: block;
+  margin-top: 2px;
+  color: #7a8ba0;
+  font-size: 11px;
   font-weight: 600;
+}
+
+@media (max-width: 560px) {
+  .bracket-stats--four { grid-template-columns: 1fr; }
+  .bracket-page .bracket-events-table,
+  .bracket-page .bracket-events-table tbody,
+  .bracket-page .bracket-events-table tr,
+  .bracket-page .bracket-events-table td {
+    display: block;
+    width: 100%;
+  }
+  .bracket-page .bracket-events-table {
+    min-width: 0;
+  }
+  .bracket-page .bracket-events-table thead {
+    display: none;
+  }
+  .bracket-page .bracket-events-table tr {
+    margin-bottom: 12px;
+    border: 1px solid #d5e0ec;
+    background: #fff;
+    padding: 10px 12px;
+  }
+  .bracket-page .bracket-events-table td {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 0;
+    border: 0;
+    height: auto;
+    min-height: 0;
+  }
+  .bracket-page .bracket-events-table td::before {
+    content: attr(data-label);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: #61758a;
+  }
+  .bracket-actions-cell { display: block; }
+  .bracket-row-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
 }
 
 /* Status pills */
@@ -2277,12 +2502,6 @@
   font-weight: 600;
 }
 
-.bracket-row-actions {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-}
-
 .btn-bracket-details {
   min-width: auto;
   height: 28px;
@@ -2295,8 +2514,11 @@
   font-weight: 700;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 5px;
   cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
 }
 
 .btn-bracket-details:hover {

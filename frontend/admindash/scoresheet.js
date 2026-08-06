@@ -44,10 +44,12 @@
 
   async function api(url, options = {}) {
     const res = await fetch(url, {
+      credentials: 'same-origin',
       ...options,
       headers: {
         'Content-Type': 'application/json',
         'X-CSRFToken': csrf,
+        'X-Requested-With': 'XMLHttpRequest',
         ...(options.headers || {}),
       },
     });
@@ -55,6 +57,72 @@
     if (!res.ok || data.success === false) throw new Error(data.message || `Request failed (${res.status})`);
     return data;
   }
+
+  function selectedCheckboxes() {
+    return Array.from(document.querySelectorAll('.ss-row-check:checked'));
+  }
+
+  function updateBulkBar() {
+    const selectAll = document.getElementById('ss-select-all');
+    const bulkBar = document.getElementById('ss-bulk-bar');
+    const bulkCount = document.getElementById('ss-bulk-count');
+    const bulkBtn = document.getElementById('btn-bulk-delete');
+    const all = Array.from(document.querySelectorAll('.ss-row-check'));
+    const selected = selectedCheckboxes();
+    const n = selected.length;
+    if (bulkBar) bulkBar.hidden = n === 0;
+    if (bulkCount) bulkCount.textContent = `${n} selected`;
+    if (bulkBtn) bulkBtn.disabled = n === 0;
+    if (selectAll) {
+      selectAll.checked = all.length > 0 && n === all.length;
+      selectAll.indeterminate = n > 0 && n < all.length;
+    }
+  }
+
+  function removeTemplateRows(ids) {
+    const idSet = new Set((ids || []).map(String));
+    idSet.forEach((id) => {
+      document.querySelector(`tr[data-id="${id}"]`)?.remove();
+      templates = templates.filter((t) => String(t.id) !== id);
+    });
+    const tbody = document.getElementById('templates-tbody');
+    if (tbody && !tbody.querySelector('tr[data-id]')) {
+      tbody.innerHTML = '<tr class="ss-empty-row"><td colspan="7" class="ss-empty">No templates found.</td></tr>';
+    }
+    updateBulkBar();
+  }
+
+  document.getElementById('ss-select-all')?.addEventListener('change', (e) => {
+    document.querySelectorAll('.ss-row-check').forEach((cb) => {
+      cb.checked = e.target.checked;
+    });
+    updateBulkBar();
+  });
+
+  document.getElementById('templates-tbody')?.addEventListener('change', (e) => {
+    if (e.target.classList.contains('ss-row-check')) updateBulkBar();
+  });
+
+  document.getElementById('btn-bulk-delete')?.addEventListener('click', async () => {
+    const selected = selectedCheckboxes();
+    if (!selected.length) return;
+    const names = selected.map((cb) => cb.getAttribute('data-name') || 'template');
+    const assigned = selected.reduce((sum, cb) => sum + Number(cb.getAttribute('data-assigned') || 0), 0);
+    let msg = `Delete ${selected.length} selected template(s)?\n\n${names.slice(0, 8).join('\n')}`;
+    if (names.length > 8) msg += `\n…and ${names.length - 8} more`;
+    msg += '\n\nThis cannot be undone.';
+    if (assigned) msg += `\n\n${assigned} event assignment(s) will fall back to auto-matched templates.`;
+    if (!window.confirm(msg)) return;
+    const ids = selected.map((cb) => cb.value);
+    try {
+      const data = await api(urls.bulkDelete, { method: 'POST', body: JSON.stringify({ ids }) });
+      toast(data.message || 'Templates deleted.');
+      removeTemplateRows(data.deleted_ids || ids);
+      setTimeout(() => window.location.reload(), 600);
+    } catch (err) {
+      toast(err.message || 'Bulk delete failed.', true);
+    }
+  });
 
   function eventType() {
     return document.querySelector('input[name="event_type"]:checked')?.value || 'match';
@@ -547,7 +615,8 @@
       try {
         const data = await api(`${urls.deleteBase}${id}/delete/`, { method: 'POST', body: '{}' });
         toast(data.message || 'Template deleted.');
-        window.location.reload();
+        removeTemplateRows([data.deleted_id || id]);
+        setTimeout(() => window.location.reload(), 600);
       } catch (err) { toast(err.message || 'Delete failed.', true); }
     }
   });

@@ -167,6 +167,17 @@ class Event(models.Model):
     judge_settings = models.JSONField(default=dict, blank=True)
     tie_break_rules = models.JSONField(default=list, blank=True)
     participant_ids = models.JSONField(default=list, blank=True)
+    special_event_type = models.CharField(
+        max_length=40,
+        blank=True,
+        default='',
+        help_text='Subtype when category is Special Event (e.g. pageant).',
+    )
+    pageant_config = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Pageant wizard metadata: format, categories, awards, pairs, etc.',
+    )
     chief_judge = models.ForeignKey(
         User,
         null=True,

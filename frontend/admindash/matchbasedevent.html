@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Match-Based Events · EventTab</title>
-  <link rel="stylesheet" href="{% static 'admindash/matchbasedevent.css' %}?v=20260806d">
+  <link rel="stylesheet" href="{% static 'admindash/matchbasedevent.css' %}?v=20260806h">
 </head>
 <body class="admin-dashboard-page admin-dashboard-v2 match-events-page">
   <div class="dashboard-shell">
@@ -158,14 +158,12 @@
           </fieldset>
           <fieldset>
             <legend>Pairing Method</legend>
-            <div class="schedule-modes">
-              <label><input type="radio" name="pairing_method" value="random_draw" checked> <span><strong>Random Draw</strong><small>System randomly assigns participants to slots.</small></span></label>
-              <label><input type="radio" name="pairing_method" value="seeded_draw"> <span><strong>Seeded Draw</strong><small>Arrange seed numbers before generating.</small></span></label>
-              <label><input type="radio" name="pairing_method" value="manual_pairing"> <span><strong>Manual Pairing</strong><small>Choose opening-round opponents.</small></span></label>
-            </div>
-            <div id="seed-editor" class="seed-editor" hidden>
-              <p class="field-hint">Drag or reorder selected participants to assign seed 1 (top) downward.</p>
-              <ol id="seed-list"></ol>
+            <input type="hidden" name="pairing_method" value="random_draw">
+            <div class="blueprint-box" style="margin:0">
+              <div>
+                <strong>Random Draw</strong>
+                <p>The system randomly assigns participants to match slots. Automatic Advance (BYE) slots are not actual matches and are excluded from game numbering and schedules.</p>
+              </div>
             </div>
           </fieldset>
           <label class="inline-check" id="third-place-wrap">
@@ -176,7 +174,7 @@
           <div class="blueprint-box">
             <div>
               <strong id="pairing-summary-label">Random Draw</strong>
-              <p>Automatic Advance (BYE) slots are not actual matches and are excluded from game numbering and schedules.</p>
+              <p>Generate the tournament structure from the selected participants.</p>
             </div>
             <div class="bracket-actions">
               <button type="button" class="match-secondary" id="generate-bracket">Generate Bracket</button>
@@ -184,6 +182,12 @@
               <button type="button" class="match-secondary" id="reset-bracket">Reset Bracket</button>
             </div>
             <div id="bracket-stats" class="bracket-stats" hidden></div>
+            <div class="tb-toolbar" id="bracket-toolbar" hidden>
+              <button type="button" class="match-secondary" id="bracket-zoom-out" title="Zoom out">−</button>
+              <button type="button" class="match-secondary" id="bracket-zoom-reset" title="Fit to screen">Fit</button>
+              <button type="button" class="match-secondary" id="bracket-zoom-in" title="Zoom in">+</button>
+              <span id="bracket-zoom-label" class="tb-zoom-label">100%</span>
+            </div>
             <div id="bracket-preview" class="bracket-preview" aria-live="polite"><p>Select teams, then generate a preview.</p></div>
           </div>
         </section>
@@ -192,21 +196,19 @@
           <div class="wizard-section-title"><span>03</span><div><h3>Schedule setup</h3><p>Turn generated matchups into an operational timetable.</p></div></div>
           <fieldset><legend>Schedule Generation</legend>
             <div class="schedule-modes">
-              <label><input type="radio" name="schedule_mode" value="auto" checked> <span><strong>Auto Generate Schedule</strong><small>Place actual matches using duration, rest, and courts.</small></span></label>
+              <label><input type="radio" name="schedule_mode" value="auto" checked> <span><strong>Auto Generate Schedule</strong><small>Place actual matches across the event date range using daily hours.</small></span></label>
               <label><input type="radio" name="schedule_mode" value="manual"> <span><strong>Manual Scheduling</strong><small>Edit every date, time, and venue.</small></span></label>
             </div>
           </fieldset>
           <div class="wizard-grid" id="auto-settings">
             <label>First Match Date <input name="first_match_date" type="date"></label>
-            <label>Default Venue <input name="default_schedule_venue" maxlength="200" placeholder="Uses event venue if blank"></label>
             <label>Daily Start Time <input name="daily_start_time" type="time" value="08:00"></label>
             <label>Daily End Time <input name="daily_end_time" type="time" value="17:00"></label>
-            <label>Match Duration (minutes) <input name="match_duration_minutes" type="number" min="5" value="60"></label>
-            <label>Break Between Matches (minutes) <input name="break_between_matches_minutes" type="number" min="0" value="10"></label>
-            <label>Minimum Rest Time Per Team (minutes) <input name="min_rest_minutes" type="number" min="0" value="30"></label>
-            <label>Number of Playing Areas <input name="playing_area_count" id="playing-area-count" type="number" min="1" value="1"></label>
           </div>
-          <div id="playing-areas-editor" class="playing-areas-editor"></div>
+          <input type="hidden" name="match_duration_minutes" value="60">
+          <input type="hidden" name="break_between_matches_minutes" value="10">
+          <input type="hidden" name="min_rest_minutes" value="30">
+          <input type="hidden" name="playing_area_count" value="1">
           <input type="hidden" name="playing_areas" id="playing-areas" value="[]">
           <button type="button" class="match-secondary" id="generate-schedule">Generate Schedule</button>
           <div id="schedule-conflicts" class="schedule-conflicts" hidden role="alert"></div>
@@ -214,7 +216,7 @@
         </section>
 
         <section class="wizard-panel" data-step="4">
-          <div class="wizard-section-title"><span>04</span><div><h3>Configuration</h3><p>Assign personnel, result format, scoresheet, points, and tie-break rules.</p></div></div>
+          <div class="wizard-section-title"><span>04</span><div><h3>Configuration</h3><p>Assign faculty, scoresheet, and championship points.</p></div></div>
 
           <fieldset>
             <legend>Faculty and Personnel</legend>
@@ -229,30 +231,11 @@
               </select>
               <small class="field-hint">Can view assigned events and confirm winners from paper scoresheets.</small>
             </label>
-            <label class="field-block">Assigned Scorer (optional)
-              <select name="assigned_scorer">
-                <option value="">None</option>
-                {% for user in faculty_options %}
-                <option value="{{ user.id }}">{{ user.get_full_name|default:user.username }} · {{ user.username }}</option>
-                {% endfor %}
-              </select>
-            </label>
           </fieldset>
 
-          <fieldset>
-            <legend>Result Entry Format</legend>
-            <label class="field-block">Format
-              <select name="result_entry_format" id="result-entry-format">
-                <option value="team_final_score">Team final score</option>
-                <option value="best_of_sets">Best-of sets / set scores</option>
-                <option value="best_of_games">Best-of games / game scores</option>
-                <option value="win_draw_loss">Win / Draw / Loss (match points)</option>
-                <option value="maps_rounds_custom">Esports maps, rounds, or custom values</option>
-                <option value="manual_winner">Manual score fields or winner selection</option>
-              </select>
-              <small class="field-hint">Recommended from Sport/Game Type; authorized admins may change it.</small>
-            </label>
-          </fieldset>
+          <input type="hidden" name="assigned_scorer" value="">
+          <input type="hidden" name="result_entry_format" id="result-entry-format" value="team_final_score">
+          <input type="hidden" name="tie_break_rules" id="tie-break-rules" value='["head_to_head","score_difference","points_scored"]'>
 
           <fieldset>
             <legend>Scoresheet Template</legend>
@@ -285,19 +268,6 @@
             </div>
             <div class="points-editor" id="points-editor" aria-live="polite"></div>
             <p class="points-editor-hint">Defaults load from Event Classification (Major/Minor). Edit before publishing if authorized.</p>
-          </fieldset>
-
-          <fieldset>
-            <legend>Tie-Breaking Rules</legend>
-            <div class="tiebreak-list" id="tiebreak-list">
-              <label class="inline-check"><input type="checkbox" name="tie_break_option" value="head_to_head" checked> Head-to-head result</label>
-              <label class="inline-check"><input type="checkbox" name="tie_break_option" value="score_difference" checked> Score difference</label>
-              <label class="inline-check"><input type="checkbox" name="tie_break_option" value="points_scored" checked> Points scored</label>
-              <label class="inline-check"><input type="checkbox" name="tie_break_option" value="fewest_penalties"> Fewest penalties</label>
-              <label class="inline-check"><input type="checkbox" name="tie_break_option" value="playoff_match"> Additional playoff match</label>
-              <label class="inline-check"><input type="checkbox" name="tie_break_option" value="manual_decision"> Manual decision with required remarks</label>
-            </div>
-            <input type="hidden" name="tie_break_rules" id="tie-break-rules" value="[]">
           </fieldset>
         </section>
 
@@ -359,6 +329,6 @@
     window.MATCH_EVENT_ACADEMIC_YEAR = "{{ academic_year|escapejs }}";
     window.MATCH_EVENT_SEASON_NAMES = {{ season_event_names_json|safe }};
   </script>
-  <script src="{% static 'admindash/matchbasedevent.js' %}?v=20260806b"></script>
+  <script src="{% static 'admindash/matchbasedevent.js' %}?v=20260806h"></script>
 </body>
 </html>

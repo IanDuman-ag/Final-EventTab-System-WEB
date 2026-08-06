@@ -4,8 +4,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Brackets - EventTab</title>
-  <link rel="stylesheet" href="{% static 'admindash/bracket.css' %}?v=20260702a">
+  <title>Tournament Brackets - EventTab</title>
+  <link rel="stylesheet" href="{% static 'admindash/bracket.css' %}?v=20260806k">
 </head>
 <body class="admin-dashboard-page bracket-page admin-dashboard-v2">
   <div class="dashboard-shell">
@@ -23,110 +23,194 @@
       </header>
 
       <main class="main-content">
-        <section class="bracket-title-band">
-          <h3>BRACKETS</h3>
+        <section class="bracket-page-head">
+          <div>
+            <h1>Tournament Brackets</h1>
+            <p>View tournament structures for match-based events.</p>
+          </div>
         </section>
 
-        <section class="bracket-stats" aria-label="Bracket summaries">
+        <section class="bracket-stats bracket-stats--four" aria-label="Tournament bracket summaries" id="bracket-summary-cards">
           <article class="bracket-stat-card">
-            <div class="stat-icon">📋</div>
             <div>
-              <strong>{{ total_events|default:"0" }}</strong>
-              <small>Total Events</small>
+              <strong id="stat-match-based">{{ summary.match_based_events|default:0 }}</strong>
+              <small>Match-Based Events</small>
             </div>
           </article>
           <article class="bracket-stat-card">
-            <div class="stat-icon">⚡</div>
             <div>
-              <strong>{{ active_count|default:"0" }}</strong>
-              <small>Ongoing</small>
+              <strong id="stat-generated">{{ summary.generated_brackets|default:0 }}</strong>
+              <small>Generated Brackets</small>
             </div>
           </article>
           <article class="bracket-stat-card">
-            <div class="stat-icon">◔</div>
             <div>
-              <strong>{{ upcoming_count|default:"0" }}</strong>
-              <small>Upcoming</small>
+              <strong id="stat-not-generated">{{ summary.not_generated|default:0 }}</strong>
+              <small>Not Generated</small>
+            </div>
+          </article>
+          <article class="bracket-stat-card">
+            <div>
+              <strong id="stat-completed">{{ summary.completed_tournaments|default:0 }}</strong>
+              <small>Completed Tournaments</small>
             </div>
           </article>
         </section>
 
         <section class="bracket-table-card">
-          <div class="bracket-table-header">
-            <h3>Event Brackets</h3>
-            <button type="button" class="btn-create-bracket" id="openCreateBracketBtn">Create Bracket</button>
-          </div>
+          <form class="bracket-toolbar" id="bracket-filters" action="#" onsubmit="return false;">
+            <label class="bracket-search">
+              <span class="sr-only">Search by event name or sport</span>
+              <input type="search" id="filter-q" placeholder="Search event or sport/game" autocomplete="off">
+            </label>
+            <label>
+              <span class="sr-only">Sport/Game Type</span>
+              <select id="filter-sport">
+                <option value="">All sports</option>
+                {% for sport in filter_options.sports %}
+                <option value="{{ sport }}">{{ sport }}</option>
+                {% endfor %}
+              </select>
+            </label>
+            <label>
+              <span class="sr-only">Division</span>
+              <select id="filter-division">
+                <option value="">All divisions</option>
+                {% for division in filter_options.divisions %}
+                <option value="{{ division }}">{{ division }}</option>
+                {% endfor %}
+              </select>
+            </label>
+            <label>
+              <span class="sr-only">Tournament Format</span>
+              <select id="filter-format">
+                <option value="">All formats</option>
+                {% for fmt in filter_options.formats %}
+                <option value="{{ fmt.value }}">{{ fmt.label }}</option>
+                {% endfor %}
+              </select>
+            </label>
+            <label>
+              <span class="sr-only">Bracket Status</span>
+              <select id="filter-bracket-status">
+                <option value="">All bracket statuses</option>
+                <option value="not_generated">Not Generated</option>
+                <option value="generated">Generated</option>
+                <option value="locked">Locked</option>
+              </select>
+            </label>
+            <label>
+              <span class="sr-only">Tournament Status</span>
+              <select id="filter-tournament-status">
+                <option value="">All tournament statuses</option>
+                <option value="upcoming">Upcoming</option>
+                <option value="ongoing">Ongoing</option>
+                <option value="completed">Completed</option>
+                <option value="postponed">Postponed</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+            </label>
+            <button type="button" class="match-secondary bracket-clear-filters" id="clear-bracket-filters">Clear Filters</button>
+          </form>
 
-          <div class="bracket-table-wrap">
-            <table class="bracket-events-table">
+          <div class="bracket-table-wrap" id="bracket-table-wrap">
+            <table class="bracket-events-table" id="bracket-events-table">
               <thead>
                 <tr>
-                  <th>Event</th>
-                  <th>Category</th>
-                  <th>Format</th>
-                  <th>Teams</th>
-                  <th>Bracket Status</th>
-                  <th>Progress</th>
-                  <th>Actions</th>
+                  <th scope="col">Event</th>
+                  <th scope="col">Sport/Game</th>
+                  <th scope="col">Division</th>
+                  <th scope="col">Tournament Format</th>
+                  <th scope="col">Participants</th>
+                  <th scope="col">Bracket Status</th>
+                  <th scope="col">Tournament Status</th>
+                  <th scope="col">Match Progress</th>
+                  <th scope="col">Actions</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody id="bracket-events-body">
                 {% for row in event_rows %}
-                  <tr data-event-id="{{ row.id }}">
-                    <td>
+                  <tr data-event-id="{{ row.id }}"
+                      data-name="{{ row.name|lower }}"
+                      data-sport="{{ row.sport|lower }}"
+                      data-division="{{ row.division }}"
+                      data-format="{{ row.tournament_type }}"
+                      data-bracket-status="{{ row.bracket_status }}"
+                      data-tournament-status="{{ row.tournament_status }}">
+                    <td data-label="Event">
                       <div class="bracket-event-name">
                         <strong>{{ row.name }}</strong>
-                        <span>{{ row.schedule_label }}{% if row.division %} · {{ row.division }}{% endif %}</span>
+                        {% if row.classification_label %}<span>{{ row.classification_label }}</span>{% endif %}
                       </div>
                     </td>
-                    <td>{{ row.category }}</td>
-                    <td><span class="bracket-format-pill">{{ row.tournament_type_label|default:"—" }}</span></td>
-                    <td>{{ row.bracket_team_count|default:row.num_teams|default:"—" }}</td>
-                    <td>
+                    <td data-label="Sport/Game">{{ row.sport }}</td>
+                    <td data-label="Division">{{ row.division }}</td>
+                    <td data-label="Tournament Format"><span class="bracket-format-pill">{{ row.tournament_type_label }}</span></td>
+                    <td data-label="Participants">{{ row.participant_label }}</td>
+                    <td data-label="Bracket Status">
                       <span class="bracket-status bracket-bracket-status bracket-bracket-status--{{ row.bracket_status }}">
                         {{ row.bracket_status_label }}
                       </span>
-                      {% if row.bracket_locked %}
-                      <span class="bracket-lock-badge bracket-lock-badge--sm" title="Locked after generation">
-                        <svg viewBox="0 0 24 24" aria-hidden="true" width="11" height="11"><path fill="currentColor" d="M12 1a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2h-1V6a5 5 0 0 0-5-5Zm-3 8V6a3 3 0 0 1 6 0v3H9Z"/></svg>
-                      </span>
-                      {% endif %}
                     </td>
-                    <td>
+                    <td data-label="Tournament Status">
+                      <span class="bracket-status bracket-tournament-status bracket-tournament-status--{{ row.tournament_status }}">
+                        {{ row.tournament_status_label }}
+                      </span>
+                    </td>
+                    <td data-label="Match Progress">
                       {% if row.has_bracket %}
                       <div class="bracket-progress-cell">
-                        <div class="bracket-progress-bar" role="progressbar" aria-valuenow="{{ row.match_progress_pct }}" aria-valuemin="0" aria-valuemax="100">
+                        <div class="bracket-progress-bar" role="progressbar" aria-valuenow="{{ row.match_progress_pct }}" aria-valuemin="0" aria-valuemax="100" aria-label="{{ row.match_progress_label }}">
                           <span style="width:{{ row.match_progress_pct }}%"></span>
                         </div>
-                        <small>{{ row.match_completed }}/{{ row.match_total }} matches</small>
+                        <small>{{ row.match_completed }} of {{ row.match_total }} actual matches · {{ row.match_progress_pct }}%</small>
                       </div>
                       {% else %}
-                      <span class="bracket-muted">—</span>
+                      <span class="bracket-muted">No actual matches yet</span>
                       {% endif %}
                     </td>
-                    <td>
+                    <td class="bracket-actions-cell" data-label="Actions">
                       <div class="bracket-row-actions">
-                        <button type="button" class="btn-bracket-details btn-view-bracket" data-id="{{ row.id }}" title="Open bracket details">
-                          <svg viewBox="0 0 24 24" aria-hidden="true" width="14" height="14"><path fill="currentColor" d="M4 6h16v2H4V6Zm0 5h16v2H4v-2Zm0 5h10v2H4v-2Z"/></svg>
-                          Bracket
-                        </button>
+                        {% if row.has_bracket %}
+                        <button type="button" class="btn-bracket-details btn-view-bracket" data-listing-action="view" data-id="{{ row.id }}" aria-label="View bracket for {{ row.name }}">View Bracket</button>
+                        {% else %}
+                        <a class="btn-bracket-details" href="{{ row.edit_url }}">Complete Event Setup</a>
+                        {% endif %}
                       </div>
                     </td>
                   </tr>
                 {% empty %}
-                  <tr>
-                    <td colspan="7" class="bracket-empty-state">No events with brackets yet. Create events first from Manage Events, then generate a bracket.</td>
+                  <tr class="bracket-empty-row" id="bracket-empty-initial">
+                    <td colspan="9" class="bracket-empty-state">
+                      <strong>No match-based events found</strong>
+                      <span>Create and configure a match-based event to view its tournament structure here.</span>
+                      <a class="btn-create-bracket" href="{% url 'admin_match_events' %}">Go to Match-Based Events</a>
+                    </td>
                   </tr>
                 {% endfor %}
               </tbody>
             </table>
+            <div class="bracket-empty-state bracket-filtered-empty" id="bracket-filtered-empty" hidden>
+              <strong>No tournaments match the selected filters.</strong>
+              <button type="button" class="match-secondary" id="clear-filters-empty">Clear Filters</button>
+            </div>
+            <div class="bracket-empty-state bracket-error-state" id="bracket-error-state" hidden>
+              <strong>We couldn’t load the tournament brackets. Please try again.</strong>
+              <button type="button" class="match-secondary" id="retry-bracket-load">Retry</button>
+            </div>
           </div>
         </section>
       </main>
     </div>
   </div>
 
-  <!-- Create Bracket Modal -->
+  {{ event_rows_json|json_script:"bracket-listing-data" }}
+  <script>
+    window.BRACKET_MATCH_EVENTS_URL = "{% url 'admin_match_events' %}";
+    window.BRACKET_CSRF = "{{ csrf_token }}";
+  </script>
+
+  <!-- Create Bracket Modal (kept for legacy regenerate tooling; not opened from listing) -->
   <div class="bracket-modal-overlay" id="createBracketModal" aria-hidden="true">
     <div class="bracket-modal-container bracket-modal-wide" role="dialog" aria-modal="true" aria-labelledby="create-bracket-title">
       <div class="bracket-modal-header bracket-modal-header--blue">
@@ -154,12 +238,12 @@
                   <option value="">Select Event</option>
                   {% for row in event_rows %}
                   <option value="{{ row.id }}"
-                          data-category="{{ row.category }}"
+                          data-category="{{ row.sport }}"
                           data-division="{{ row.division|default:'' }}"
-                          data-num-teams="{{ row.num_teams|default:'0' }}"
+                          data-num-teams="{{ row.participant_count|default:'0' }}"
                           data-tournament-type="{{ row.tournament_type|default:'' }}"
                           data-has-bracket="{{ row.has_bracket|yesno:'1,0' }}"
-                          data-locked="{{ row.bracket_locked|yesno:'1,0' }}">{{ row.name }} ({{ row.category }})</option>
+                          data-locked="{{ row.bracket_locked|yesno:'1,0' }}">{{ row.name }} ({{ row.sport }})</option>
                   {% endfor %}
                 </select>
               </div>
@@ -345,11 +429,11 @@
             <span class="legend-item"><span class="legend-dot legend-dot--pending"></span>Pending</span>
           </div>
           <div class="bracket-view-actions">
-            <button type="button" class="btn-toolbar" id="exportBracketBtn" title="Print bracket">
+            <button type="button" class="btn-toolbar" id="exportBracketBtn" title="Print bracket" hidden>
               <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M19 8H5a3 3 0 0 0-3 3v6h4v4h12v-4h4v-6a3 3 0 0 0-3-3Zm-1 10H6v-5h12v5Zm-1-9V4H7v5h10Z"/></svg>
               Print
             </button>
-            <button type="button" class="btn-toolbar" id="regenerateFromViewBtn" title="Regenerate bracket (only if not locked)">
+            <button type="button" class="btn-toolbar" id="regenerateFromViewBtn" title="Regenerate bracket" hidden>
               <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M17.65 6.35A7.95 7.95 0 0 0 12 4a8 8 0 1 0 7.74 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
               Regenerate
             </button>
@@ -445,6 +529,7 @@
   </div>
 
   <div id="bracketPrintSheet" class="bracket-print-sheet" aria-hidden="true"></div>
+
 
   <script>
     /**
@@ -570,6 +655,112 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
+      /* ── Tournament Brackets listing (filters + context actions) ── */
+      const listingDataEl = document.getElementById('bracket-listing-data');
+      let listingRows = [];
+      try {
+        listingRows = listingDataEl ? JSON.parse(listingDataEl.textContent || '[]') : [];
+      } catch (err) {
+        const errBox = document.getElementById('bracket-error-state');
+        if (errBox) errBox.hidden = false;
+      }
+      const rowsById = Object.fromEntries(listingRows.map(row => [String(row.id), row]));
+
+      function escapeHtml(value) {
+        return String(value ?? '').replace(/[&<>"']/g, ch => ({
+          '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[ch]));
+      }
+
+      function applyListingFilters() {
+        const q = (document.getElementById('filter-q')?.value || '').trim().toLowerCase();
+        const sport = (document.getElementById('filter-sport')?.value || '').toLowerCase();
+        const division = document.getElementById('filter-division')?.value || '';
+        const format = document.getElementById('filter-format')?.value || '';
+        const bracketStatus = document.getElementById('filter-bracket-status')?.value || '';
+        const tournamentStatus = document.getElementById('filter-tournament-status')?.value || '';
+        const body = document.getElementById('bracket-events-body');
+        const filteredEmpty = document.getElementById('bracket-filtered-empty');
+        if (!body) return;
+        let visible = 0;
+        body.querySelectorAll('tr[data-event-id]').forEach(tr => {
+          const id = tr.getAttribute('data-event-id');
+          const row = rowsById[id];
+          if (!row) { tr.hidden = true; return; }
+          const hay = `${row.name} ${row.sport}`.toLowerCase();
+          const match =
+            (!q || hay.includes(q))
+            && (!sport || row.sport.toLowerCase() === sport)
+            && (!division || row.division === division)
+            && (!format || row.tournament_type === format)
+            && (!bracketStatus || row.bracket_status === bracketStatus)
+            && (!tournamentStatus || row.tournament_status === tournamentStatus);
+          tr.hidden = !match;
+          if (match) visible += 1;
+        });
+        const initialEmpty = document.getElementById('bracket-empty-initial');
+        if (filteredEmpty) {
+          filteredEmpty.hidden = !(listingRows.length && visible === 0);
+        }
+        if (initialEmpty) initialEmpty.hidden = listingRows.length > 0;
+      }
+
+      function clearListingFilters() {
+        ['filter-q', 'filter-sport', 'filter-division', 'filter-format', 'filter-bracket-status', 'filter-tournament-status']
+          .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+        applyListingFilters();
+      }
+
+      ['filter-q', 'filter-sport', 'filter-division', 'filter-format', 'filter-bracket-status', 'filter-tournament-status']
+        .forEach(id => {
+          const el = document.getElementById(id);
+          if (!el) return;
+          el.addEventListener('input', applyListingFilters);
+          el.addEventListener('change', applyListingFilters);
+        });
+      document.getElementById('clear-bracket-filters')?.addEventListener('click', clearListingFilters);
+      document.getElementById('clear-filters-empty')?.addEventListener('click', clearListingFilters);
+      document.getElementById('retry-bracket-load')?.addEventListener('click', () => window.location.reload());
+
+      async function openBracketView(eventId) {
+        currentViewEventId = eventId;
+        const response = await fetch(`/admin/brackets/${eventId}/view/`, {
+          method: 'GET',
+          credentials: 'same-origin',
+          headers: { 'Accept': 'application/json' },
+        });
+        const data = await response.json();
+        if (!data.success) throw new Error(data.message || 'Unable to load bracket.');
+        currentViewLocked = !!data.locked;
+        populateBracketDetails(data);
+        const result = renderBracketFlowTree(visualizer, data.matches || [], { mode: 'view' });
+        if (championBar && championNameEl) {
+          if (result.champion) {
+            championNameEl.textContent = result.champion;
+            championBar.hidden = false;
+          } else {
+            championBar.hidden = true;
+          }
+        }
+        const modalEl = document.getElementById('viewBracketModal');
+        if (modalEl) {
+          modalEl.classList.add('active');
+          modalEl.setAttribute('aria-hidden', 'false');
+        }
+      }
+
+      document.getElementById('bracket-table-wrap')?.addEventListener('click', async (event) => {
+        const actionBtn = event.target.closest('[data-listing-action="view"]');
+        if (!actionBtn) return;
+        const id = actionBtn.getAttribute('data-id');
+        if (!id) return;
+        try {
+          await openBracketView(id);
+        } catch (err) {
+          alert(err.message || 'Unable to open bracket.');
+        }
+      });
+
       const modal = document.getElementById('createBracketModal');
       const openBtn = document.getElementById('openCreateBracketBtn');
       const closeBtn = document.getElementById('closeBracketBtn');
@@ -764,7 +955,7 @@
         } catch (e) { /* non-fatal — admin can still add teams manually */ }
       }
 
-      openBtn.addEventListener('click', openModal);
+      if (openBtn) openBtn.addEventListener('click', openModal);
       closeBtn.addEventListener('click', closeModal);
       cancelBtn.addEventListener('click', closeModal);
       modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
@@ -1637,11 +1828,10 @@
             '</li>'
           ).join('');
         }
+        if (exportBracketBtn) exportBracketBtn.hidden = true;
         if (regenerateFromViewBtn) {
-          regenerateFromViewBtn.disabled = !!data.locked;
-          regenerateFromViewBtn.title = data.locked
-            ? 'Bracket is locked after generation'
-            : 'Open bracket setup to regenerate';
+          regenerateFromViewBtn.hidden = true;
+          regenerateFromViewBtn.disabled = true;
         }
       }
 
@@ -1654,75 +1844,6 @@
       }
       closeViewBtn.addEventListener('click', closeViewModal);
       viewModal.addEventListener('click', e => { if (e.target === viewModal) closeViewModal(); });
-
-      if (exportBracketBtn) {
-        exportBracketBtn.addEventListener('click', () => {
-          const printSheet = document.getElementById('bracketPrintSheet');
-          const bracketCanvas = document.getElementById('bracketVisualizer');
-          if (!printSheet || !bracketCanvas) {
-            window.print();
-            return;
-          }
-
-          printSheet.innerHTML = '';
-          const bracketClone = bracketCanvas.cloneNode(true);
-          bracketClone.removeAttribute('id');
-          bracketClone.classList.add('bracket-print-canvas');
-          printSheet.appendChild(bracketClone);
-
-          const cleanupPrint = () => {
-            document.body.classList.remove('bracket-print-mode');
-            printSheet.innerHTML = '';
-            window.removeEventListener('afterprint', cleanupPrint);
-          };
-
-          document.body.classList.add('bracket-print-mode');
-          window.addEventListener('afterprint', cleanupPrint);
-          window.print();
-          setTimeout(cleanupPrint, 1000);
-        });
-      }
-
-      if (regenerateFromViewBtn) {
-        regenerateFromViewBtn.addEventListener('click', () => {
-          if (!currentViewEventId || currentViewLocked) return;
-          closeViewModal();
-          eventSelect.value = currentViewEventId;
-          eventSelect.dispatchEvent(new Event('change'));
-          openModal();
-        });
-      }
-
-      document.querySelectorAll('.btn-view-bracket').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          const eventId = btn.getAttribute('data-id');
-          currentViewEventId = eventId;
-          try {
-            const response = await fetch(`/admin/brackets/${eventId}/view/`);
-            const data = await response.json();
-            if (data.success) {
-              currentViewLocked = !!data.locked;
-              populateBracketDetails(data);
-              const result = renderBracketFlowTree(visualizer, data.matches, { mode: 'view' });
-              if (championBar && championNameEl) {
-                if (result.champion) {
-                  championNameEl.textContent = result.champion;
-                  championBar.hidden = false;
-                } else {
-                  championBar.hidden = true;
-                }
-              }
-              viewModal.classList.add('active');
-              viewModal.setAttribute('aria-hidden', 'false');
-            } else {
-              showToast(data.message || 'Failed to load bracket', true);
-            }
-          } catch (err) {
-            console.error(err);
-            showToast('Error loading bracket.', true);
-          }
-        });
-      });
 
     });
   </script>

@@ -57,6 +57,230 @@ DEFAULT_TIE_BREAKS = [
 AUTOMATIC_ADVANCE_TOOLTIP = (
     'This team has no opponent in this round and will automatically proceed to the next round.'
 )
+MISSING_TEAM_LABEL = 'Team information unavailable'
+
+
+def _team_name_from_lookup(team_id, names):
+    """Resolve a team id to a display name. Never return the raw numeric id."""
+    if team_id is None:
+        return None
+    try:
+        key = int(team_id)
+    except (TypeError, ValueError):
+        import logging
+        logging.getLogger(__name__).warning(
+            'Invalid team id in bracket label resolution: %r', team_id
+        )
+        return MISSING_TEAM_LABEL
+    name = names.get(key)
+    if name:
+        return str(name)
+    import logging
+    logging.getLogger(__name__).warning(
+        'Missing team relationship for bracket participant id=%s', key
+    )
+    return MISSING_TEAM_LABEL
+
+
+def resolve_side_label(match, side, names):
+    """
+    Build a user-facing label for one side of a match.
+    Prefer seated team names; otherwise Winner/Loser dependency text.
+    Never expose raw database ids.
+    """
+    team_id = match.get(f'team_{side}_id')
+    stored = (match.get(f'label_{side}') or '').strip()
+    if team_id is not None:
+        return _team_name_from_lookup(team_id, names)
+    if stored.startswith('Winner of') or stored.startswith('Loser of') or stored.startswith('Awaiting'):
+        return stored
+    if stored and not stored.isdigit():
+        # Avoid leaking numeric ids that may have been stored historically.
+        try:
+            int(stored)
+        except (TypeError, ValueError):
+            return stored
+        return MISSING_TEAM_LABEL
+    return 'TBD'
+
+
+def participant_payload(team_id, names, logos=None, seeds=None):
+    """Structured participant info for API consumers."""
+    if team_id is None:
+        return None
+    try:
+        key = int(team_id)
+    except (TypeError, ValueError):
+        return {
+            'team_id': None,
+            'team_name': MISSING_TEAM_LABEL,
+            'team_logo': '',
+            'seed': None,
+        }
+    name = names.get(key)
+    if not name:
+        import logging
+        logging.getLogger(__name__).warning(
+            'Missing team relationship for bracket participant id=%s', key
+        )
+    return {
+        'team_id': key,
+        'team_name': str(name) if name else MISSING_TEAM_LABEL,
+        'team_logo': (logos or {}).get(key, '') or '',
+        'seed': (seeds or {}).get(key),
+    }
+
+
+def serialize_blueprint_matches(matches, names, logos=None, seeds=None):
+    """
+    Attach resolved display fields and structured participants to blueprint rows.
+    IDs remain for relationships; display_* fields never use raw ids.
+    """
+    logos = logos or {}
+    seeds = seeds or {}
+    serialized = []
+    for match in matches:
+        team_a = resolve_side_label(match, 'a', names)
+        team_b = resolve_side_label(match, 'b', names)
+        is_advance = bool(match.get('is_automatic_advance') or match.get('synthetic_advance'))
+        if is_advance and match.get('team_a_id') is not None:
+            team_a = _team_name_from_lookup(match['team_a_id'], names)
+            team_b = 'Automatic Advance'
+            display_label = f'{team_a} — Automatic Advance'
+        elif (
+            team_a in ('', 'TBD')
+            and (team_b.startswith('Winner of') or team_b.startswith('Loser of'))
+            and match.get('team_a_id') is None
+            and match.get('team_b_id') is None
+            and not (match.get('label_a') or '').startswith(('Winner', 'Loser'))
+        ):
+            display_label = f'Awaiting {team_b}'
+            team_a = display_label
+            team_b = ''
+        else:
+            if not team_a:
+                team_a = 'TBD'
+            if not team_b:
+                team_b = 'TBD'
+            display_label = f'{team_a} vs {team_b}'
+
+        dependency_label = 'Automatic Advance' if is_advance else display_label
+        participant_a = participant_payload(match.get('team_a_id'), names, logos, seeds)
+        participant_b = participant_payload(match.get('team_b_id'), names, logos, seeds)
+        serialized.append({
+            **match,
+            'label_a': team_a,
+            'label_b': team_b if not is_advance else 'Automatic Advance',
+            'dependency_label': dependency_label,
+            'team_a': team_a,
+            'team_b': team_b if team_b else 'TBD',
+            'display_label': display_label,
+            'participant_a': participant_a,
+            'participant_b': participant_b,
+            'tooltip': AUTOMATIC_ADVANCE_TOOLTIP if is_advance else '',
+        })
+    return serialized
+
+
+def match_display_name(bracket_team, fallback='TBD'):
+    """Safe display name for a BracketTeam / Team snapshot."""
+    if bracket_team is None:
+        return fallback
+    name = (getattr(bracket_team, 'name', None) or '').strip()
+    if name:
+        return name
+    source = getattr(bracket_team, 'source_team', None)
+    if source is not None:
+        source_name = (getattr(source, 'name', None) or '').strip()
+        if source_name:
+            return source_name
+    import logging
+    logging.getLogger(__name__).warning(
+        'Bracket team %s has no resolvable display name', getattr(bracket_team, 'pk', None)
+    )
+    return MISSING_TEAM_LABEL
+
+
+def resolve_persisted_match_label(match):
+    """Build schedule/bracket label from a saved BracketMatch row."""
+    from django.db.models import Q
+
+    if match.is_automatic_advance:
+        return f'{match_display_name(match.team_a)} — Automatic Advance'
+
+    left = match_display_name(match.team_a) if match.team_a_id else None
+    right = match_display_name(match.team_b) if match.team_b_id else None
+    stored = (match.dependency_label or '').strip()
+
+    if left and right:
+        return f'{left} vs {right}'
+
+    # Rebuild dependency text from feeder matches when a side is unresolved.
+    if left is None or right is None:
+        feeders = list(
+            BracketMatch.objects.filter(event_id=match.event_id).filter(
+                Q(next_match_winner_id=match.pk) | Q(next_match_loser_id=match.pk)
+            ).order_by('match_number', 'id')
+        )
+        pending = []
+        for feeder in feeders:
+            if feeder.is_automatic_advance:
+                continue
+            if feeder.match_number:
+                via_loser = feeder.next_match_loser_id == match.pk
+                prefix = 'Loser' if via_loser else 'Winner'
+                pending.append(f'{prefix} of Game {feeder.match_number}')
+        if left is None and pending:
+            left = pending.pop(0)
+        if right is None and pending:
+            right = pending.pop(0)
+
+    if left is None:
+        if stored and ' vs ' in stored and not _label_contains_raw_id(stored):
+            left = stored.split(' vs ', 1)[0].strip()
+        else:
+            left = 'TBD'
+    if right is None:
+        if stored and ' vs ' in stored and not _label_contains_raw_id(stored):
+            right = stored.split(' vs ', 1)[1].strip()
+        else:
+            right = 'TBD'
+
+    return f'{left} vs {right}'
+
+
+def heal_unconfirmed_match_labels(event):
+    """
+    Repair stored dependency labels that accidentally contain raw team ids.
+    Skips confirmed/completed non-advance matches so results stay intact.
+    """
+    updated = 0
+    qs = event.bracket_matches.select_related('team_a', 'team_b')
+    for match in qs:
+        if (
+            match.status in (BracketMatch.STATUS_COMPLETED, BracketMatch.STATUS_ONGOING)
+            and not match.is_automatic_advance
+        ):
+            continue
+        label = resolve_persisted_match_label(match)
+        if match.dependency_label != label:
+            match.dependency_label = label[:200]
+            match.save(update_fields=['dependency_label'])
+            updated += 1
+    return updated
+
+
+def _label_contains_raw_id(label):
+    """True when a stored label looks like it embeds a bare numeric id."""
+    import re
+    if not label:
+        return False
+    parts = re.split(r'\s+vs\s+', label.strip(), maxsplit=1)
+    for part in parts:
+        token = part.strip()
+        if token.isdigit():
+            return True
+    return False
 
 
 def _opening_pairs(ordered_ids):
@@ -255,7 +479,8 @@ def _finalize_blueprint(matches):
 
     for match in matches:
         if match.get('is_automatic_advance'):
-            match['label_a'] = str(match['team_a_id'] or 'Automatic Advance')
+            # Keep ids only; names are resolved at serialization time.
+            match['label_a'] = ''
             match['label_b'] = 'Automatic Advance'
             match['dependency_label'] = 'Automatic Advance'
             continue
@@ -264,23 +489,21 @@ def _finalize_blueprint(matches):
         loser_labels = source_label(match['key'], via_loser=True)
         pending = winner_labels + loser_labels
 
+        # Never store raw team ids in label fields — only dependency text or blanks.
         if match['team_a_id'] is not None:
-            label_a = str(match['team_a_id'])
+            label_a = ''
         elif pending:
             label_a = pending.pop(0)
         else:
             label_a = 'TBD'
 
         if match['team_b_id'] is not None:
-            label_b = str(match['team_b_id'])
+            label_b = ''
         elif pending:
             label_b = pending.pop(0)
-        elif winner_labels or loser_labels:
-            label_b = 'TBD'
         else:
             label_b = 'TBD'
 
-        # Prefer explicit dependency wording over generic TBD vs TBD.
         if match['team_a_id'] is None and match['team_b_id'] is None and (winner_labels or loser_labels):
             ordered = winner_labels + loser_labels
             if len(ordered) >= 2:
@@ -290,7 +513,10 @@ def _finalize_blueprint(matches):
 
         match['label_a'] = label_a
         match['label_b'] = label_b
-        match['dependency_label'] = f'{label_a} vs {label_b}'
+        # Temporary dependency text using dependency phrases only (no team ids).
+        left = label_a or 'TBD'
+        right = label_b or 'TBD'
+        match['dependency_label'] = f'{left} vs {right}'
 
     for match in matches:
         match.pop('_resolved', None)
@@ -323,11 +549,17 @@ def _build_winners_bracket_rows(ordered_ids, key_prefix='wb'):
     for slot, (team_a_id, team_b_id) in enumerate(opening_pairs):
         if team_b_id is None and team_a_id is not None:
             # Seat the Automatic Advance recipient into the parent slot.
-            preseats[(1, slot // 2)].append(team_a_id)
+            parent_slot = slot // 2
+            preseats[(1, parent_slot)].append(team_a_id)
+            next_side = 'a' if len(preseats[(1, parent_slot)]) == 1 else 'b'
             advances.append({
                 'team_id': team_a_id,
                 'round': round_name_fn(0, round_count),
                 'label': 'Automatic Advance',
+                'opening_slot': slot,
+                'parent_round': 1,
+                'parent_slot': parent_slot,
+                'next_side': next_side,
             })
 
     matches = []
@@ -355,6 +587,15 @@ def _build_winners_bracket_rows(ordered_ids, key_prefix='wb'):
             if key not in match_by_key:
                 continue
             match_by_key[key]['next_winner_key'] = round_keys[round_index + 1][slot // 2]
+            match_by_key[key]['opening_slot'] = slot if round_index == 0 else None
+
+    for advance in advances:
+        parent_round = advance.get('parent_round', 1)
+        parent_slot = advance.get('parent_slot', 0)
+        if parent_round < len(round_keys) and parent_slot < len(round_keys[parent_round]):
+            advance['next_winner_key'] = round_keys[parent_round][parent_slot]
+        else:
+            advance['next_winner_key'] = None
 
     final_key = round_keys[-1][0] if round_keys else None
     return matches, advances, final_key, round_keys
@@ -368,14 +609,169 @@ def _attach_synthetic_advances(matches, advances):
             **_blank_match(f'aa-{index}', advance['round'], advance['team_id'], None),
             'is_automatic_advance': True,
             'number': 0,
-            'label_a': str(advance['team_id']),
+            'label_a': '',
             'label_b': 'Automatic Advance',
             'dependency_label': 'Automatic Advance',
             'synthetic_advance': True,
-            'next_winner_key': None,
+            'next_winner_key': advance.get('next_winner_key'),
             'next_loser_key': None,
+            'opening_slot': advance.get('opening_slot'),
+            'next_side': advance.get('next_side'),
         })
     return attached
+
+
+def bracket_display_graph(matches, draw_order=None):
+    """
+    Build connector edges and round columns for elimination bracket previews.
+    Used by tests and mirrors the frontend tree relationships.
+    """
+    if not matches:
+        return {'columns': [], 'edges': [], 'champion_from': None}
+
+    advances = [m for m in matches if m.get('is_automatic_advance')]
+    actual = [m for m in matches if not m.get('is_automatic_advance')]
+    is_rr = all((m.get('round') or '') == 'Pool Play' for m in actual) and not advances
+    if is_rr:
+        return {
+            'columns': [{'name': 'Pool Play', 'nodes': [
+                {'key': m['key'], 'kind': 'match', 'number': m.get('number')} for m in actual
+            ]}],
+            'edges': [],
+            'champion_from': None,
+            'is_round_robin': True,
+        }
+
+    ordered = [int(x) for x in (draw_order or [])]
+    if not ordered:
+        seen = []
+        for match in matches:
+            for side in ('team_a_id', 'team_b_id'):
+                tid = match.get(side)
+                if tid is not None and tid not in seen:
+                    seen.append(tid)
+        ordered = seen
+
+    bracket_size, opening_pairs = _opening_pairs(ordered) if ordered else (0, [])
+    by_key = {m['key']: m for m in matches}
+    advance_by_team = {}
+    for advance in advances:
+        tid = advance.get('team_a_id')
+        if tid is not None:
+            advance_by_team[int(tid)] = advance
+
+    opening_nodes = []
+    edges = []
+    if opening_pairs:
+        opening_round = opening_pairs and (
+            next((m.get('round') for m in advances), None)
+            or next((m.get('round') for m in actual if m.get('round')), 'Opening Round')
+        )
+        for slot, (team_a_id, team_b_id) in enumerate(opening_pairs):
+            if team_b_id is None:
+                advance = advance_by_team.get(int(team_a_id))
+                if not advance:
+                    continue
+                opening_nodes.append({
+                    'key': advance['key'],
+                    'kind': 'advance',
+                    'opening_slot': slot,
+                    'round': advance.get('round') or opening_round,
+                })
+                nxt = advance.get('next_winner_key')
+                if nxt and nxt in by_key:
+                    edges.append({
+                        'from_key': advance['key'],
+                        'to_key': nxt,
+                        'kind': 'automatic_advance',
+                        'side': advance.get('next_side'),
+                    })
+            else:
+                match = next(
+                    (
+                        m for m in actual
+                        if {m.get('team_a_id'), m.get('team_b_id')} == {team_a_id, team_b_id}
+                    ),
+                    None,
+                )
+                if not match:
+                    continue
+                opening_nodes.append({
+                    'key': match['key'],
+                    'kind': 'match',
+                    'opening_slot': slot,
+                    'number': match.get('number'),
+                    'round': match.get('round'),
+                })
+                nxt = match.get('next_winner_key')
+                if nxt and nxt in by_key:
+                    edges.append({
+                        'from_key': match['key'],
+                        'to_key': nxt,
+                        'kind': 'winner_progression',
+                    })
+
+    later = [
+        m for m in actual
+        if m['key'] not in {n['key'] for n in opening_nodes}
+        and 'Third Place' not in (m.get('round') or '')
+    ]
+    for match in later:
+        nxt = match.get('next_winner_key')
+        if nxt and nxt in by_key:
+            edges.append({
+                'from_key': match['key'],
+                'to_key': nxt,
+                'kind': 'winner_progression',
+            })
+
+    # Group later matches into columns by round order of first appearance.
+    round_order = []
+    rounds = {}
+    if opening_nodes:
+        round_name = opening_nodes[0].get('round') or 'Opening Round'
+        rounds[round_name] = opening_nodes
+        round_order.append(round_name)
+    for match in later:
+        name = match.get('round') or 'Round'
+        if name not in rounds:
+            rounds[name] = []
+            round_order.append(name)
+        rounds[name].append({
+            'key': match['key'],
+            'kind': 'match',
+            'number': match.get('number'),
+            'round': name,
+        })
+
+    final_matches = [
+        m for m in actual
+        if (m.get('round') or '') in ('Finals', 'Winners Final', 'Grand Final')
+        and not m.get('next_winner_key')
+    ]
+    champion_from = final_matches[-1]['key'] if final_matches else None
+    if champion_from:
+        edges.append({
+            'from_key': champion_from,
+            'to_key': 'champion',
+            'kind': 'champion',
+        })
+
+    columns = [{'name': name, 'nodes': rounds[name]} for name in round_order]
+    if champion_from:
+        columns.append({
+            'name': 'Champion',
+            'nodes': [{'key': 'champion', 'kind': 'champion'}],
+        })
+
+    return {
+        'columns': columns,
+        'edges': edges,
+        'champion_from': champion_from,
+        'is_round_robin': False,
+        'bracket_size': bracket_size,
+        'opening_slot_count': len(opening_pairs),
+    }
 
 
 def _build_double_elimination_matches(ordered_ids):
@@ -704,12 +1100,25 @@ def _sync_teams(event, teams):
 def _generate_matches(event, snapshots_by_source, blueprint):
     from events.bracket_progression import _auto_complete_lone_team_match
 
+    names = {
+        source_id: snapshot.name
+        for source_id, snapshot in snapshots_by_source.items()
+    }
+    resolved_rows = {
+        row['key']: row
+        for row in serialize_blueprint_matches(
+            [row for row in blueprint['matches'] if not row.get('synthetic_advance')],
+            names,
+        )
+    }
+
     created_by_key = {}
     persistable = [
         row for row in blueprint['matches']
         if not row.get('synthetic_advance')
     ]
     for row in persistable:
+        resolved = resolved_rows.get(row['key'], row)
         is_advance = bool(row.get('is_automatic_advance'))
         match = BracketMatch.objects.create(
             event=event,
@@ -720,7 +1129,7 @@ def _generate_matches(event, snapshots_by_source, blueprint):
             team_b=snapshots_by_source.get(row['team_b_id']),
             status=BracketMatch.STATUS_PENDING,
             is_automatic_advance=is_advance,
-            dependency_label=str(row.get('dependency_label') or '')[:200],
+            dependency_label=str(resolved.get('dependency_label') or resolved.get('display_label') or '')[:200],
             remarks='Automatic Advance (BYE)' if is_advance else '',
         )
         created_by_key[row['key']] = match
@@ -1043,9 +1452,10 @@ def save_match_event(data, actor, instance=None):
     sport_custom = (data.get('sport_custom_name') or '').strip()
     if sport_type == 'Custom' and not sport_custom and publication == Event.PUBLICATION_PUBLISHED:
         raise MatchEventValidationError('Enter a custom sport or game name.')
-    pairing_method = (data.get('pairing_method') or 'random_draw').strip()
-    if pairing_method not in ALLOWED_PAIRING:
-        raise MatchEventValidationError('Pairing Method is invalid.')
+    pairing_method = 'random_draw'
+    if (data.get('pairing_method') or '').strip() not in ('', 'random_draw'):
+        # Seeded / manual pairing removed from the wizard; force Random Draw.
+        pairing_method = 'random_draw'
     result_entry_format = (data.get('result_entry_format') or '').strip()
     if not result_entry_format and sport_type:
         result_entry_format = RESULT_FORMAT_BY_SPORT.get(sport_type, 'manual_winner')

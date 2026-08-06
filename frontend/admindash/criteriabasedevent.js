@@ -833,6 +833,15 @@
     syncFormatPanels();
     updateJudgeCount();
     setStep(1);
+    var specialSel = document.getElementById('special-event-type');
+    if (specialSel) specialSel.value = '';
+    var typeInput = document.getElementById('special-event-type-input');
+    if (typeInput) typeInput.value = '';
+    if (window.PageantWizard && typeof window.PageantWizard.hydrate === 'function') {
+      // Force exit pageant mode after reset
+      var cat = form.category;
+      if (cat) cat.dispatchEvent(new Event('change'));
+    }
   }
 
   function normalizeLoadedFormat(value) {
@@ -968,6 +977,14 @@
       };
     }));
     setStep(1);
+    if (window.PageantWizard && event.is_pageant) {
+      window.PageantWizard.hydrate(event);
+    } else if (window.PageantWizard) {
+      var specialSel = document.getElementById('special-event-type');
+      if (specialSel) specialSel.value = event.special_event_type || '';
+      var cat = form.category;
+      if (cat) cat.dispatchEvent(new Event('change'));
+    }
   }
 
   function openWizard() {
@@ -988,6 +1005,8 @@
     var rows = [
       ['Event Name', event.name],
       ['Category', event.category],
+      ['Special Event Type', event.is_pageant ? 'Pageant' : (event.special_event_type || '—')],
+      ['Pageant Format', event.pageant_format_label || ''],
       ['Event Classification', event.classification_label],
       ['Division', event.division],
       ['Participation Type', event.participation_label],
@@ -998,6 +1017,7 @@
       ['Competition Structure', (event.rounds_config || []).map(function (row) {
         return (row.name || 'Stage') + ' (' + (row.weight != null ? row.weight : '—') + '%)';
       }).join(' → ') || 'Single performance'],
+      ['Recommended Next', (event.next_actions || []).join(' · ') || ''],
       ['Judging Criteria', (event.judging_criteria_config || []).map(function (row) {
         return row.name + ' (' + row.weight + '%)';
       }).join(' · ') || '—'],
@@ -1017,7 +1037,7 @@
         return row.label + ': ' + row.points;
       }).join(' · ') || '—'],
       ['Status', event.publication_label],
-    ];
+    ].filter(function (row) { return row[1] !== '' && row[1] != null; });
     $('#view-summary').innerHTML = rows.map(function (row) {
       return '<div><span>' + escapeHtml(row[0]) + '</span><strong>' + escapeHtml(row[1]) + '</strong></div>';
     }).join('');
@@ -1047,6 +1067,11 @@
     });
   });
   form.addEventListener('submit', function (e) {
+    if (window.PageantWizard && window.PageantWizard.isActive()) {
+      // Pageant wizard owns validation + hidden-field sync.
+      window.PageantWizard.sync();
+      return;
+    }
     var error = validateStep(1) || validateStep(2) || validateStep(3) || validateStep(4);
     if (error) {
       e.preventDefault();

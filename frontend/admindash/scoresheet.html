@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Scoresheet Templates · EventTab</title>
-  <link rel="stylesheet" href="{% static 'admindash/scoresheet.css' %}?v=20260804b">
+  <link rel="stylesheet" href="{% static 'admindash/scoresheet.css' %}?v=20260806a">
 </head>
 <body class="admin-dashboard-page admin-dashboard-v2 ss-page">
   <div class="dashboard-shell">
@@ -30,9 +30,15 @@
         <!-- LIST -->
         <section class="ss-panel is-active" data-panel="list" aria-label="Scoresheet Template List">
           <article class="ss-card">
-            <header class="ss-card-head">
-              <h3>Scoresheet Template List</h3>
-              <p class="ss-card-sub">Search, filter, and manage official scoresheet layouts.</p>
+            <header class="ss-card-head ss-card-head--row">
+              <div>
+                <h3>Scoresheet Template List</h3>
+                <p class="ss-card-sub">Search, filter, and manage official scoresheet layouts.</p>
+              </div>
+              <div class="ss-bulk-bar" id="ss-bulk-bar" hidden>
+                <span id="ss-bulk-count">0 selected</span>
+                <button type="button" class="ss-btn ss-btn-danger" id="btn-bulk-delete" disabled>Delete Selected</button>
+              </div>
             </header>
             <form class="ss-toolbar" method="get" id="list-filters">
               <input type="search" name="q" value="{{ filters.q }}" placeholder="Search name or category…" aria-label="Search">
@@ -60,6 +66,9 @@
               <table class="ss-table" id="templates-table">
                 <thead>
                   <tr>
+                    <th class="ss-col-check" scope="col">
+                      <input type="checkbox" id="ss-select-all" aria-label="Select all templates">
+                    </th>
                     <th>Template Name</th>
                     <th>Event Type</th>
                     <th>Category</th>
@@ -71,6 +80,9 @@
                 <tbody id="templates-tbody">
                   {% for t in templates %}
                   <tr data-id="{{ t.id }}">
+                    <td class="ss-col-check">
+                      <input type="checkbox" class="ss-row-check" value="{{ t.id }}" data-name="{{ t.name }}" data-assigned="{{ t.assigned_event_count }}" aria-label="Select {{ t.name }}">
+                    </td>
                     <td><strong>{{ t.name }}</strong></td>
                     <td>{{ t.event_type_label }}</td>
                     <td>{{ t.category }}</td>
@@ -86,7 +98,7 @@
                     </td>
                   </tr>
                   {% empty %}
-                  <tr class="ss-empty-row"><td colspan="6" class="ss-empty">No templates found.</td></tr>
+                  <tr class="ss-empty-row"><td colspan="7" class="ss-empty">No templates found.</td></tr>
                   {% endfor %}
                 </tbody>
               </table>
@@ -247,9 +259,10 @@
       preview: "{% url 'admin_scoresheet_preview' %}",
       sample: "{% url 'admin_scoresheet_sample_pdf' %}",
       deleteBase: "/admin/scoresheets/templates/",
+      bulkDelete: "{% url 'admin_scoresheet_template_bulk_delete' %}",
       duplicateBase: "/admin/scoresheets/templates/"
     };
   </script>
-  <script src="{% static 'admindash/scoresheet.js' %}?v=20260804b"></script>
+  <script src="{% static 'admindash/scoresheet.js' %}?v=20260806a"></script>
 </body>
 </html>
