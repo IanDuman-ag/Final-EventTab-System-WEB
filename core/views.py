@@ -3270,6 +3270,186 @@ def admin_criteria_events(request, event_id=None):
     if event_id is not None:
         instance = get_object_or_404(_criteria_event_queryset(), pk=event_id)
     if request.method == 'POST':
+        workflow_action = request.POST.get('workflow_action', '').strip()
+        if workflow_action:
+            from decimal import Decimal, InvalidOperation
+            from events.models import EventScoringCategory, EventScoringCriterion
+
+            def workflow_error(message, status=400):
+                return JsonResponse({'success': False, 'message': message}, status=status)
+
+            if workflow_action == 'save_event_draft':
+                event_pk = request.POST.get('event_id')
+                draft = (
+                    _criteria_event_queryset().filter(pk=event_pk).first()
+                    if event_pk else Event()
+                )
+                if event_pk and draft is None:
+                    return workflow_error('Event draft was not found.', 404)
+                name = request.POST.get('event_name', '').strip()
+                classification = request.POST.get('event_classification', '').strip()
+                participation = request.POST.get('participation_type', '').strip()
+                venue = request.POST.get('venue', '').strip()
+                start_date = request.POST.get('start_date', '').strip()
+                if not all([name, classification, participation, venue, start_date]):
+                    return workflow_error('Complete Event Name, classification, participation type, venue, and date first.')
+                try:
+                    from datetime import date
+                    event_date = date.fromisoformat(start_date)
+                except ValueError:
+                    return workflow_error('Enter a valid event date.')
+                draft.name = name[:200]
+                draft.category = request.POST.get('event_category', 'Special Event').strip() or 'Special Event'
+                draft.event_classification = classification
+                draft.participation_type = participation
+                draft.venue = venue[:200]
+                draft.event_date = event_date
+                draft.end_date = event_date
+                draft.event_time = request.POST.get('event_time') or None
+                draft.scoring_method = 'criteria'
+                draft.publication_status = Event.PUBLICATION_DRAFT
+                draft.status = Event.STATUS_UPCOMING
+                if not draft.pk:
+                    draft.created_by = request.user
+                draft.save()
+                return JsonResponse({'success': True, 'event': {'id': draft.id, 'name': draft.name}})
+
+            event_pk = request.POST.get('event_id')
+            event = _criteria_event_queryset().filter(pk=event_pk).first()
+            if event is None:
+                return workflow_error('Create the Event details in Step 1 first.', 404)
+            if workflow_action == 'list_categories':
+                categories = [{
+                    'id': category.id, 'name': category.name, 'judge_mode': category.judge_mode,
+                    'display_order': category.display_order,
+                    'overall_weight_percent': float(category.overall_weight_percent),
+                } for category in event.scoring_categories.all()]
+                return JsonResponse({'success': True, 'categories': categories})
+            if workflow_action == 'create_category':
+                name = request.POST.get('category_name', '').strip()
+                mode = request.POST.get('judge_mode', '').strip()
+                try:
+                    order = int(request.POST.get('display_order', ''))
+                    weight = Decimal(request.POST.get('overall_weight_percent', ''))
+                except (ValueError, InvalidOperation):
+                    return workflow_error('Display Order and Overall Category Weighted % must be numeric.')
+                if not name or mode not in {'scoring', 'ranking'} or order < 1 or not Decimal('0') < weight <= Decimal('100'):
+                    return workflow_error('Enter a unique category name, judge mode, positive order, and a weight from 0 to 100.')
+                if event.scoring_categories.filter(name__iexact=name).exists():
+                    return workflow_error('A category with this name already exists for the Event.')
+                if event.scoring_categories.filter(display_order=order).exists():
+                    return workflow_error('This display order is already in use for the Event.')
+                category = EventScoringCategory.objects.create(
+                    event=event, name=name[:120], judge_mode=mode,
+                    display_order=order, overall_weight_percent=weight,
+                )
+                return JsonResponse({'success': True, 'category': {
+                    'id': category.id, 'name': category.name, 'judge_mode': category.judge_mode,
+                    'display_order': category.display_order,
+                    'overall_weight_percent': float(category.overall_weight_percent),
+                }})
+            if workflow_action == 'update_category':
+                category = event.scoring_categories.filter(pk=request.POST.get('category_id')).first()
+                if category is None:
+                    return workflow_error('Category was not found for this Event.', 404)
+                name = request.POST.get('category_name', '').strip()
+                mode = request.POST.get('judge_mode', '').strip()
+                try:
+                    order = int(request.POST.get('display_order', ''))
+                    weight = Decimal(request.POST.get('overall_weight_percent', ''))
+                except (ValueError, InvalidOperation):
+                    return workflow_error('Display Order and Overall Category Weighted % must be numeric.')
+                if not name or mode not in {'scoring', 'ranking'} or order < 1 or not Decimal('0') < weight <= Decimal('100'):
+                    return workflow_error('Enter a category name, judge mode, positive order, and a weight from 0 to 100.')
+                if event.scoring_categories.exclude(pk=category.pk).filter(name__iexact=name).exists():
+                    return workflow_error('A category with this name already exists for the Event.')
+                if event.scoring_categories.exclude(pk=category.pk).filter(display_order=order).exists():
+                    return workflow_error('This display order is already in use for the Event.')
+                category.name, category.judge_mode = name[:120], mode
+                category.display_order, category.overall_weight_percent = order, weight
+                category.save()
+                return JsonResponse({'success': True})
+            if workflow_action == 'delete_category':
+                category = event.scoring_categories.filter(pk=request.POST.get('category_id')).first()
+                if category is None:
+                    return workflow_error('Category was not found for this Event.', 404)
+                category.delete()
+                return JsonResponse({'success': True})
+            if workflow_action == 'list_criteria':
+                category = event.scoring_categories.filter(pk=request.POST.get('category_id')).first()
+                if category is None:
+                    return workflow_error('Category was not found for this Event.', 404)
+                criteria = [{
+                    'id': criterion.id, 'name': criterion.name,
+                    'weight_percent': float(criterion.weight_percent),
+                    'max_score': float(criterion.max_score) if criterion.max_score is not None else None,
+                    'display_order': criterion.display_order,
+                } for criterion in category.criteria.all()]
+                return JsonResponse({'success': True, 'category': {
+                    'id': category.id, 'name': category.name, 'judge_mode': category.judge_mode,
+                }, 'criteria': criteria})
+            if workflow_action == 'create_criterion':
+                category = event.scoring_categories.filter(pk=request.POST.get('category_id')).first()
+                if category is None:
+                    return workflow_error('Select a category belonging to this Event.', 404)
+                name = request.POST.get('criterion_name', '').strip()
+                try:
+                    weight = Decimal(request.POST.get('weight_percent', ''))
+                    order = int(request.POST.get('display_order', ''))
+                    max_score = Decimal(request.POST.get('max_score', '')) if category.judge_mode == 'scoring' else None
+                except (ValueError, InvalidOperation):
+                    return workflow_error('Criterion Weight, Max Score, and Order must be numeric.')
+                if not name or order < 1 or not Decimal('0') < weight <= Decimal('100'):
+                    return workflow_error('Enter a criterion name, positive order, and a weight from 0 to 100.')
+                if category.judge_mode == 'scoring' and (max_score is None or max_score <= 0):
+                    return workflow_error('Max Score must be greater than zero for Scoring Mode.')
+                if category.criteria.filter(name__iexact=name).exists() or category.criteria.filter(display_order=order).exists():
+                    return workflow_error('Criterion name and order must be unique within this category.')
+                total = sum((row.weight_percent for row in category.criteria.all()), Decimal('0')) + weight
+                if total > Decimal('100'):
+                    return workflow_error('Criterion weights cannot exceed 100% within a category.')
+                criterion = EventScoringCriterion.objects.create(
+                    category=category, name=name[:120], weight_percent=weight,
+                    max_score=max_score, display_order=order,
+                )
+                return JsonResponse({'success': True, 'criterion': {
+                    'id': criterion.id, 'name': criterion.name, 'weight_percent': float(criterion.weight_percent),
+                    'max_score': float(criterion.max_score) if criterion.max_score is not None else None,
+                    'display_order': criterion.display_order,
+                }})
+            if workflow_action == 'update_criterion':
+                category = event.scoring_categories.filter(pk=request.POST.get('category_id')).first()
+                criterion = category.criteria.filter(pk=request.POST.get('criterion_id')).first() if category else None
+                if criterion is None:
+                    return workflow_error('Criterion was not found for this category.', 404)
+                name = request.POST.get('criterion_name', '').strip()
+                try:
+                    weight = Decimal(request.POST.get('weight_percent', ''))
+                    order = int(request.POST.get('display_order', ''))
+                    max_score = Decimal(request.POST.get('max_score', '')) if category.judge_mode == 'scoring' else None
+                except (ValueError, InvalidOperation):
+                    return workflow_error('Criterion Weight, Max Score, and Order must be numeric.')
+                if not name or order < 1 or not Decimal('0') < weight <= Decimal('100'):
+                    return workflow_error('Enter a criterion name, positive order, and a weight from 0 to 100.')
+                if category.judge_mode == 'scoring' and (max_score is None or max_score <= 0):
+                    return workflow_error('Max Score must be greater than zero for Scoring Mode.')
+                if category.criteria.exclude(pk=criterion.pk).filter(name__iexact=name).exists() or category.criteria.exclude(pk=criterion.pk).filter(display_order=order).exists():
+                    return workflow_error('Criterion name and order must be unique within this category.')
+                total = sum((row.weight_percent for row in category.criteria.exclude(pk=criterion.pk)), Decimal('0')) + weight
+                if total > Decimal('100'):
+                    return workflow_error('Criterion weights cannot exceed 100% within a category.')
+                criterion.name, criterion.weight_percent = name[:120], weight
+                criterion.max_score, criterion.display_order = max_score, order
+                criterion.save()
+                return JsonResponse({'success': True})
+            if workflow_action == 'delete_criterion':
+                category = event.scoring_categories.filter(pk=request.POST.get('category_id')).first()
+                criterion = category.criteria.filter(pk=request.POST.get('criterion_id')).first() if category else None
+                if criterion is None:
+                    return workflow_error('Criterion was not found for this category.', 404)
+                criterion.delete()
+                return JsonResponse({'success': True})
+            return workflow_error('Unsupported workflow action.')
         try:
             event = save_criteria_event(
                 request.POST,

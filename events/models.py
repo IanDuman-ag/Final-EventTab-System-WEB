@@ -240,6 +240,49 @@ class Event(models.Model):
         return self.event_time.strftime('%H:%M') if self.event_time else ''
 
 
+class EventScoringCategory(models.Model):
+    JUDGE_MODE_SCORING = 'scoring'
+    JUDGE_MODE_RANKING = 'ranking'
+    JUDGE_MODE_CHOICES = [
+        (JUDGE_MODE_SCORING, 'Scoring Mode'),
+        (JUDGE_MODE_RANKING, 'Ranking Mode'),
+    ]
+
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='scoring_categories')
+    name = models.CharField(max_length=120)
+    judge_mode = models.CharField(max_length=12, choices=JUDGE_MODE_CHOICES)
+    display_order = models.PositiveIntegerField()
+    overall_weight_percent = models.DecimalField(max_digits=5, decimal_places=2)
+
+    class Meta:
+        ordering = ['display_order', 'id']
+        constraints = [
+            models.UniqueConstraint(fields=['event', 'name'], name='unique_event_scoring_category_name'),
+            models.UniqueConstraint(fields=['event', 'display_order'], name='unique_event_scoring_category_order'),
+        ]
+
+    def __str__(self):
+        return f'{self.event.name} · {self.name}'
+
+
+class EventScoringCriterion(models.Model):
+    category = models.ForeignKey(EventScoringCategory, on_delete=models.CASCADE, related_name='criteria')
+    name = models.CharField(max_length=120)
+    weight_percent = models.DecimalField(max_digits=5, decimal_places=2)
+    max_score = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)
+    display_order = models.PositiveIntegerField()
+
+    class Meta:
+        ordering = ['display_order', 'id']
+        constraints = [
+            models.UniqueConstraint(fields=['category', 'name'], name='unique_category_criterion_name'),
+            models.UniqueConstraint(fields=['category', 'display_order'], name='unique_category_criterion_order'),
+        ]
+
+    def __str__(self):
+        return f'{self.category.name} · {self.name}'
+
+
 class Department(models.Model):
     STATUS_ACTIVE = 'active'
     STATUS_INACTIVE = 'inactive'

@@ -1,7 +1,10 @@
 @import url("matchbasedevent.css?v=20260725");
 
 .criteria-page { background:#edf3f8; color:var(--navy); }
+html.event-wizard-open,
+html.event-wizard-open body { overflow:hidden; }
 .criteria-page .match-page-head h1 { font-size:30px; }
+.criteria-page .wizard-steps { grid-template-columns:repeat(6, minmax(0, 1fr)); }
 .criteria-editor-table { width:100%; border-collapse:collapse; margin-top:10px; font-size:12px; }
 .criteria-editor-table th,.criteria-editor-table td { border:1px solid var(--line); padding:8px; text-align:left; vertical-align:middle; }
 .criteria-editor-table th { background:#f4f8fc; color:#465d75; font-size:10px; text-transform:uppercase; letter-spacing:.08em; }
@@ -75,6 +78,67 @@
 }
 
 /* ── Pageant guided wizard ───────────────────────────────────────── */
+.wizard.pageant-mode {
+  width:min(1100px, calc(100vw - 48px));
+  max-height:min(90vh, 900px);
+  height:auto;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+}
+.wizard.pageant-mode #wizard-form {
+  min-height:0;
+  height:auto;
+  display:flex;
+  flex:1;
+  flex-direction:column;
+  overflow:hidden;
+}
+.wizard.pageant-mode .wizard-head,
+.wizard.pageant-mode .wizard-steps,
+.wizard.pageant-mode .wizard-footer { flex:0 0 auto; }
+.wizard.pageant-mode .wizard-body {
+  flex:1 1 auto;
+  min-height:0;
+  overflow-y:auto;
+  overflow-x:hidden;
+}
+.wizard.pageant-mode .team-options {
+  max-height:none;
+  overflow:visible;
+}
+.wizard-subtitle { margin:5px 0 0; color:#667c93; font-size:13px; font-weight:600; }
+.pageant-head-meta { display:flex; align-items:center; gap:7px; margin-top:10px; }
+.pageant-head-icon {
+  display:inline-grid; place-items:center; width:26px; height:26px;
+  background:#08264d; color:#fff; font-size:15px;
+}
+.wizard:not(.pageant-mode) .pageant-head-meta { display:none !important; }
+.wizard.pageant-mode .wizard-kicker { display:none; }
+.wizard.pageant-mode .wizard-subtitle { color:#526f8f; }
+.wizard.pageant-mode #wizard-steps {
+  display:flex;
+  align-items:stretch;
+  padding:0 22px;
+  border-top:1px solid #dbe5f0;
+  border-bottom:1px solid #dbe5f0;
+  background:#f8fbff;
+}
+.wizard.pageant-mode #wizard-steps li {
+  flex:1;
+  min-width:0;
+  padding:11px 7px;
+}
+.wizard.pageant-mode #wizard-steps small { white-space:normal; }
+.wizard.pageant-mode .wizard-footer { border-top:1px solid #dbe5f0; background:#fff; }
+.wizard.pageant-mode #save-draft-action { display:inline-flex; }
+.pageant-danger-button {
+  display:inline-flex; align-items:center; gap:5px; border:1px solid #d65a66;
+  color:#a92332; background:#fff; padding:5px 8px; font:inherit; font-size:11px; font-weight:800;
+}
+.pageant-danger-button:hover { background:#fff0f2; }
+.pageant-danger-button:focus-visible,
+.wizard.pageant-mode button:focus-visible { outline:3px solid rgba(21,91,215,.35); outline-offset:2px; }
 .pageant-badges { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px; }
 .pageant-badge {
   display:inline-flex; align-items:center; min-height:28px; padding:0 12px;
@@ -181,14 +245,68 @@
 .pageant-review-card h4 { margin:0; font-size:14px; }
 .pageant-review-card ul { margin:8px 0 0; padding-left:18px; color:var(--slate); font-size:12px; }
 .pageant-dialog { width:min(720px, calc(100vw - 28px)); max-height:min(86vh, 720px); overflow:auto; padding:18px 20px; }
-.wizard.pageant-mode .wizard-kicker { color:#8eb8ff; }
 
 @media (max-width:900px) {
   .pageant-format-cards, .pageant-choice-cards, .pageant-start-options, .pageant-review-cards {
     grid-template-columns:1fr;
   }
 }
+@media (min-width:641px) and (max-width:760px) {
+  .wizard.pageant-mode #wizard-steps {
+    display:block;
+    padding:8px 14px;
+    overflow:hidden;
+  }
+  .wizard.pageant-mode #wizard-steps::before {
+    content:attr(data-mobile-step);
+    display:block;
+    color:#173465;
+    font-size:12px;
+    font-weight:800;
+  }
+  .wizard.pageant-mode #wizard-steps::after {
+    content:"";
+    display:block;
+    height:3px;
+    margin-top:6px;
+    background:linear-gradient(to right, var(--blue) var(--pageant-progress), #dbe5f0 var(--pageant-progress));
+  }
+  .wizard.pageant-mode #wizard-steps li { display:none; }
+}
 @media (max-width:640px) {
+  .wizard.pageant-mode {
+    width:calc(100vw - 20px);
+    max-height:calc(100vh - 20px);
+  }
+  .wizard.pageant-mode #wizard-steps {
+    display:block;
+    padding:8px 14px;
+    overflow:hidden;
+  }
+  .wizard.pageant-mode #wizard-steps::before {
+    content:attr(data-mobile-step);
+    display:block;
+    color:#173465;
+    font-size:12px;
+    font-weight:800;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .wizard.pageant-mode #wizard-steps::after {
+    content:"";
+    display:block;
+    height:3px;
+    margin-top:6px;
+    background:linear-gradient(to right, var(--blue) var(--pageant-progress), #dbe5f0 var(--pageant-progress));
+  }
+  .wizard.pageant-mode #wizard-steps li { display:none; }
+  .wizard.pageant-mode #wizard-steps li.active {
+    display:none;
+  }
+  .wizard.pageant-mode #wizard-steps li.active small { display:block; font-size:12px; }
+  .wizard.pageant-mode .wizard-footer { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .wizard.pageant-mode .wizard-footer .wizard-error { grid-column:1 / -1; }
   .pageant-candidate-card, .pageant-segment-card { flex-direction:column; }
 }
 

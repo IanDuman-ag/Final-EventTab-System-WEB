@@ -6,12 +6,17 @@
 
   var form = $('#wizard-form');
   var wizard = $('#event-wizard');
-  var step = 1;
+  var activeStep = 1;
+  var mode = 'standard';
   var criteria = [];
   var deductions = [];
   var points = [];
   var stages = [];
   var events = [];
+  var scoringWorkflow = {
+    eventId: null, eventName: '', categories: [], selectedCategoryId: null,
+    editingCategoryId: null, editingCriterionId: null, criteria: [],
+  };
 
   try {
     events = JSON.parse($('#criteria-events-data').textContent || '[]');
@@ -48,19 +53,53 @@
   }
 
   function setStep(next) {
-    step = next;
+    activeStep = Math.max(1, Math.min(6, Number(next) || 1));
     $$('.wizard-panel').forEach(function (panel) {
-      panel.classList.toggle('active', Number(panel.dataset.step) === step);
+      var pageantPanel = panel.hasAttribute('data-pageant');
+      var visible = mode === 'pageant'
+        ? pageantPanel && Number(panel.dataset.pageantStep) === activeStep
+        : !pageantPanel && Number(panel.dataset.step) === activeStep;
+      panel.hidden = !visible;
+      panel.classList.toggle('active', visible);
     });
     $$('[data-step-marker]').forEach(function (marker) {
       var n = Number(marker.dataset.stepMarker);
-      marker.classList.toggle('active', n === step);
-      marker.classList.toggle('done', n < step);
+      marker.classList.toggle('active', n === activeStep);
+      marker.classList.toggle('done', n < activeStep);
     });
-    wizard.classList.toggle('at-review', step === 5);
-    $('#wizard-back').style.display = step === 1 ? 'none' : '';
+    var activeMarker = $('[data-step-marker="' + activeStep + '"]');
+    if (activeMarker) {
+      $('#wizard-steps').dataset.mobileStep = 'Step ' + activeStep + ' of 6 — ' + $('small', activeMarker).textContent;
+      $('#wizard-steps').style.setProperty('--pageant-progress', (activeStep / 6 * 100) + '%');
+    }
+    wizard.classList.toggle('at-review', activeStep === 6);
+    $('#wizard-back').style.display = activeStep === 1 ? 'none' : '';
     showError('');
-    if (step === 5) buildReview();
+    if (mode === 'pageant' && window.PageantWizard) window.PageantWizard.render(activeStep);
+    if (mode === 'standard' && activeStep === 6) buildReview();
+    if (mode === 'standard' && activeStep === 3) renderScoringCategories();
+    if (mode === 'standard' && activeStep === 4) renderScoringCriteria();
+    var body = $('.wizard-body');
+    if (body) body.scrollTop = 0;
+    var heading = $('.wizard-panel.active h3');
+    if (heading) {
+      heading.setAttribute('tabindex', '-1');
+      heading.focus({ preventScroll: true });
+    }
+  }
+
+  function setMode(nextMode) {
+    mode = nextMode === 'pageant' ? 'pageant' : 'standard';
+    wizard.classList.toggle('pageant-mode', mode === 'pageant');
+    $('#wizard-steps').setAttribute('aria-label', mode === 'pageant' ? 'Pageant setup progress' : 'Creation progress');
+    var labels = mode === 'pageant'
+      ? ['Details', 'Candidates', 'Segments & Scoring', 'Judges, Advancement & Awards', 'Review & Publish']
+      : ['Basics', 'Participants', 'Category', 'Criteria', 'Judges', 'Review'];
+    $$('[data-step-marker]').forEach(function (marker, index) {
+      $('small', marker).textContent = labels[index];
+    });
+    activeStep = 1;
+    setStep(activeStep);
   }
 
   function participationType() {
@@ -683,7 +722,6 @@
   function validateStep(current) {
     if (current === 1) {
       if (!form.event_name.value.trim()) return 'Event Name is required.';
-      if (!form.category.value) return 'Category is required.';
       if (!form.event_classification.value) return 'Event Classification is required.';
       if (!form.venue.value.trim()) return 'Venue is required.';
       if (!form.start_date.value || !form.end_date.value) return 'Start Date and End Date are required.';
@@ -724,6 +762,9 @@
       }
     }
     if (current === 3) {
+      if (!form.category.value) return 'Category is required.';
+    }
+    if (current === 4) {
       syncCriteriaFromDom();
       if (!criteria.length) return 'Create at least one judging criterion.';
       var cTotal = criteria.reduce(function (sum, row) { return sum + row.weight; }, 0);
@@ -738,7 +779,7 @@
         if (deductions.some(function (row) { return !row.name; })) return 'Each penalty needs a name.';
       }
     }
-    if (current === 4) {
+    if (current === 5) {
       if (!$('#chief-judge').value) return 'Chief Judge is required.';
       if (!form.faculty_account.value) return 'Faculty In Charge is required.';
       var judges = collectJudges();
@@ -760,54 +801,29 @@
 
   function buildReview() {
     syncHiddenFields();
-    var fmt = eventFormat();
-    var method = ($('input[name="criteria_score_method"]:checked') || {}).value || '';
-    var methodLabels = {
-      weighted_percentage: 'Weighted Percentage',
-      raw_score: 'Raw Score',
-      average_score: 'Average Score',
-      ranking_based: 'Ranking-Based Score',
-    };
-    var formatLabels = {
-      single_performance: 'Single Performance',
-      multiple_stage: 'Multiple Stage Competition',
-      multiple_rounds: 'Multiple Stage Competition',
-      preliminary_final: 'Multiple Stage Competition',
-    };
     var panel = participationType() === 'team' ? '#team-options' : '#candidate-options';
     var names = $$(panel + ' .participant-check:checked').map(function (box) { return box.dataset.name; });
     var judgeNames = $$('.judge-check:checked').map(function (box) { return box.dataset.name; });
     var chief = $('#chief-judge');
     var faculty = form.faculty_account;
-    var stageSummary = 'Single performance';
-    if (fmt === 'multiple_stage') {
-      stageSummary = collectRounds().map(function (stage) {
-        return stage.name + ' (' + stage.weight + '%)';
-      }).join(' → ');
-    }
+    var categories = scoringWorkflow.categories.map(function (category) {
+      var criteriaSummary = (category.criteria || []).map(function (criterion) {
+        return criterion.name + ' (' + criterion.weight_percent + '%)';
+      }).join(', ') || 'No criteria saved';
+      return category.name + ' · ' + (category.judge_mode === 'ranking' ? 'Ranking Mode' : 'Scoring Mode') +
+        ' · ' + category.overall_weight_percent + '% · ' + criteriaSummary;
+    }).join(' | ') || '—';
     var rows = [
       ['Event Name', form.event_name.value],
-      ['Category', form.category.value],
       ['Event Classification', form.event_classification.options[form.event_classification.selectedIndex].text],
-      ['Division', form.division.value || '—'],
       ['Participation Type', participationType() === 'team' ? 'Team' : 'Individual'],
       ['Venue', form.venue.value],
-      ['Event Date Range', form.start_date.value + ' to ' + form.end_date.value],
+      ['Date & Time', form.start_date.value + (($('#event-time') || {}).value ? ' · ' + $('#event-time').value : '')],
       ['Participants', names.join(', ') || '—'],
-      ['Event Format', formatLabels[fmt] || fmt],
-      ['Competition Structure', stageSummary],
-      ['Stage Tie-Break', fmt === 'multiple_stage' ? ($('#stage-tiebreak-method').selectedOptions[0].text || '—') : '—'],
-      ['Judging Criteria', criteria.map(function (row) { return row.name + ' (' + row.weight + '%)'; }).join(' · ') || '—'],
-      ['Scoring Method', methodLabels[method] || method],
-      ['Score Settings', 'Min ' + $('#min-score').value + ' / Max ' + $('#max-score').value + ' · Decimals ' + $('#decimal-places').value],
-      ['Penalties', $('#deductions-enabled').checked ? (deductions.map(function (row) { return row.name; }).join(', ') || 'Enabled') : 'Disabled'],
+      ['Scoring Categories & Criteria', categories],
       ['Chief Judge', chief.options[chief.selectedIndex] ? chief.options[chief.selectedIndex].text : '—'],
       ['Assigned Judges', judgeNames.join(', ') || '—'],
       ['Faculty In Charge', faculty.options[faculty.selectedIndex] ? faculty.options[faculty.selectedIndex].text : '—'],
-      ['Result Processing', Object.keys(collectResultProcessing()).filter(function (key) { return collectResultProcessing()[key]; }).join(', ') || '—'],
-      ['Tie-Breaking', collectTieBreaks().map(function (row) { return row.method; }).join(' → ') || '—'],
-      ['Championship Points', points.map(function (row) { return row.label + ': ' + row.points; }).join(' · ') || '—'],
-      ['Intended Status', $('#status-preview').value === 'published' ? 'Published' : 'Draft'],
     ];
     $('#review-summary').innerHTML = rows.map(function (row) {
       return '<div><span>' + escapeHtml(row[0]) + '</span><strong>' + escapeHtml(row[1]) + '</strong></div>';
@@ -989,6 +1005,7 @@
 
   function openWizard() {
     wizard.showModal();
+    document.documentElement.classList.add('event-wizard-open');
   }
 
   function closeWizard() {
@@ -999,40 +1016,135 @@
     return events.find(function (row) { return String(row.id) === String(id); });
   }
 
+  function csrfToken() {
+    var match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+    return match ? decodeURIComponent(match[1]) : '';
+  }
+
+  function workflowRequest(action, values) {
+    var body = new URLSearchParams(values || {});
+    body.set('workflow_action', action);
+    return fetch('/admin/events/criteria/', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRFToken': csrfToken(), 'X-Requested-With': 'XMLHttpRequest' },
+      body: body.toString(),
+    }).then(function (response) { return response.json().then(function (data) {
+      if (!response.ok || !data.success) throw new Error(data.message || 'Unable to save workflow data.');
+      return data;
+    }); });
+  }
+
+  function saveEventDraft() {
+    return workflowRequest('save_event_draft', {
+      event_id: scoringWorkflow.eventId || '',
+      event_name: form.event_name.value.trim(),
+      event_classification: form.event_classification.value,
+      participation_type: form.participation_type.value,
+      venue: form.venue.value.trim(),
+      start_date: form.start_date.value,
+      event_time: ($('#event-time') || {}).value || '',
+    }).then(function (data) {
+      scoringWorkflow.eventId = data.event.id;
+      scoringWorkflow.eventName = data.event.name;
+      form.action = '/admin/events/criteria/' + data.event.id + '/edit/';
+      return data;
+    });
+  }
+
+  function judgeModeExplanation() {
+    var modeField = $('#scoring-category-mode');
+    var host = $('#judge-mode-explanation');
+    if (!modeField || !host) return;
+    host.textContent = modeField.value === 'ranking'
+      ? 'Ranking Mode: judges rank candidates from first to last. The system assigns inverse points using the live candidate count, then averages those points across judges.'
+      : 'Scoring Mode: judges enter numerical criterion scores. Scores are weighted and averaged across judges to produce the final tally.';
+  }
+
+  function renderScoringCategories() {
+    var eventSelect = $('#scoring-category-event');
+    if (eventSelect) eventSelect.innerHTML = scoringWorkflow.eventId
+      ? '<option value="' + scoringWorkflow.eventId + '">' + escapeHtml(scoringWorkflow.eventName) + '</option>'
+      : '<option value="">Complete Step 1 first</option>';
+    judgeModeExplanation();
+    var host = $('#scoring-category-list');
+    if (host) host.innerHTML = scoringWorkflow.categories.map(function (category) {
+      return '<article class="pageant-review-card"><h4>' + escapeHtml(category.name) + '</h4><ul><li>' +
+        escapeHtml(category.judge_mode === 'ranking' ? 'Ranking Mode' : 'Scoring Mode') +
+        '</li><li>Order ' + category.display_order + ' · ' + category.overall_weight_percent + '%</li></ul>' +
+        '<div class="criteria-editor-actions"><button type="button" class="match-secondary" data-category-edit="' + category.id + '">Edit</button>' +
+        '<button type="button" class="pageant-danger-button" data-category-delete="' + category.id + '">Delete</button></div></article>';
+    }).join('') || '<p class="pageant-empty-state">No categories saved yet.</p>';
+  }
+
+  function loadCategories() {
+    if (!scoringWorkflow.eventId) return Promise.resolve();
+    return workflowRequest('list_categories', { event_id: scoringWorkflow.eventId }).then(function (data) {
+      scoringWorkflow.categories = data.categories || [];
+      if (!scoringWorkflow.selectedCategoryId && scoringWorkflow.categories.length) {
+        scoringWorkflow.selectedCategoryId = scoringWorkflow.categories[0].id;
+      }
+    });
+  }
+
+  function renderScoringCriteria() {
+    var picker = $('#scoring-criterion-category');
+    if (!picker) return;
+    picker.innerHTML = '<option value="">Select category</option>' + scoringWorkflow.categories.map(function (category) {
+      return '<option value="' + category.id + '">' + escapeHtml(category.name) + '</option>';
+    }).join('');
+    picker.value = scoringWorkflow.selectedCategoryId || '';
+    loadScoringCriteria();
+  }
+
+  function loadScoringCriteria() {
+    var categoryId = ($('#scoring-criterion-category') || {}).value;
+    var host = $('#scoring-criterion-list');
+    if (!categoryId || !scoringWorkflow.eventId) {
+      if (host) host.innerHTML = '<p class="pageant-empty-state">Save and select a category first.</p>';
+      return;
+    }
+    scoringWorkflow.selectedCategoryId = categoryId;
+    workflowRequest('list_criteria', { event_id: scoringWorkflow.eventId, category_id: categoryId }).then(function (data) {
+      var ranking = data.category.judge_mode === 'ranking';
+      $('#scoring-criterion-max-score-wrap').hidden = ranking;
+      $('#scoring-criterion-max-score').required = !ranking;
+      var total = data.criteria.reduce(function (sum, row) { return sum + Number(row.weight_percent); }, 0);
+      scoringWorkflow.criteria = data.criteria;
+      scoringWorkflow.categories.forEach(function (row) {
+        if (String(row.id) === String(data.category.id)) row.criteria = data.criteria;
+      });
+      $('#scoring-criterion-total').textContent = 'Criteria total: ' + total + '% of 100%';
+      host.innerHTML = data.criteria.map(function (criterion) {
+        return '<article class="pageant-review-card"><h4>' + escapeHtml(criterion.name) + '</h4><ul><li>Weight ' +
+          criterion.weight_percent + '% · Order ' + criterion.display_order + '</li><li>' +
+          (ranking ? 'Ranking Mode' : 'Max Score ' + criterion.max_score) + '</li></ul>' +
+          '<div class="criteria-editor-actions"><button type="button" class="match-secondary" data-criterion-edit="' + criterion.id + '">Edit</button>' +
+          '<button type="button" class="pageant-danger-button" data-criterion-delete="' + criterion.id + '">Delete</button></div></article>';
+      }).join('') || '<p class="pageant-empty-state">No criteria saved for this category.</p>';
+    }).catch(function (error) { showError(error.message); });
+  }
+
   function renderView(event) {
-    var settings = event.score_settings || {};
-    var rp = event.result_processing_config || {};
+    var savedCategories = (event.scoring_categories || []).map(function (category) {
+      var criteria = (category.criteria || []).map(function (criterion) {
+        return criterion.name + ' (' + criterion.weight_percent + '%)';
+      }).join(', ');
+      return category.name + ' · ' + (category.judge_mode === 'ranking' ? 'Ranking Mode' : 'Scoring Mode') +
+        ' · ' + category.overall_weight_percent + '%' + (criteria ? ' · ' + criteria : '');
+    }).join(' | ');
     var rows = [
       ['Event Name', event.name],
       ['Category', event.category],
-      ['Special Event Type', event.is_pageant ? 'Pageant' : (event.special_event_type || '—')],
-      ['Pageant Format', event.pageant_format_label || ''],
       ['Event Classification', event.classification_label],
-      ['Division', event.division],
       ['Participation Type', event.participation_label],
       ['Venue', event.venue],
-      ['Event Date Range', event.start_date + ' to ' + event.end_date],
+      ['Date & Time', event.start_date + (event.start_time ? ' · ' + event.start_time : '')],
       ['Participants', (event.participant_names || []).join(', ') || '—'],
-      ['Event Format', event.event_format_label],
-      ['Competition Structure', (event.rounds_config || []).map(function (row) {
-        return (row.name || 'Stage') + ' (' + (row.weight != null ? row.weight : '—') + '%)';
-      }).join(' → ') || 'Single performance'],
-      ['Recommended Next', (event.next_actions || []).join(' · ') || ''],
-      ['Judging Criteria', (event.judging_criteria_config || []).map(function (row) {
-        return row.name + ' (' + row.weight + '%)';
-      }).join(' · ') || '—'],
-      ['Scoring Method', event.criteria_score_method_label],
-      ['Score Settings', 'Min ' + (settings.min_score != null ? settings.min_score : '—') +
-        ' / Max ' + (settings.max_score != null ? settings.max_score : '—') +
-        ' · Decimals ' + (settings.decimal_places != null ? settings.decimal_places : '—')],
-      ['Penalties and Deductions', event.deductions_enabled
-        ? ((event.deductions_config || []).map(function (row) { return row.name; }).join(', ') || 'Enabled')
-        : 'Disabled'],
+      ['Scoring Categories & Criteria', savedCategories || '—'],
       ['Assigned Judges', (event.judge_names || []).join(', ') || '—'],
       ['Chief Judge', event.chief_judge_name],
       ['Faculty In Charge', event.faculty_name],
-      ['Result Processing', Object.keys(rp).filter(function (key) { return rp[key]; }).join(', ') || '—'],
-      ['Tie-Breaking Rules', (event.tie_break_rules || []).map(function (row) { return row.method; }).join(' → ') || '—'],
       ['Championship Points', (event.points_config || []).map(function (row) {
         return row.label + ': ' + row.points;
       }).join(' · ') || '—'],
@@ -1050,16 +1162,35 @@
     openWizard();
   });
   $('#close-wizard').addEventListener('click', closeWizard);
+  wizard.addEventListener('close', function () {
+    document.documentElement.classList.remove('event-wizard-open');
+  });
   $('#wizard-back').addEventListener('click', function () {
-    if (step > 1) setStep(step - 1);
+    if (activeStep > 1) setStep(activeStep - 1);
   });
   $('#wizard-next').addEventListener('click', function () {
-    var error = validateStep(step);
+    var error = mode === 'pageant' && window.PageantWizard
+      ? window.PageantWizard.validate(activeStep)
+      : validateStep(activeStep);
     if (error) {
       showError(error);
       return;
     }
-    setStep(step + 1);
+    if (mode === 'standard' && activeStep === 1) {
+      var button = this;
+      button.disabled = true;
+      saveEventDraft().then(function () {
+        return loadCategories();
+      }).then(function () {
+        setStep(2);
+      }).catch(function (draftError) {
+        showError(draftError.message);
+      }).finally(function () {
+        button.disabled = false;
+      });
+      return;
+    }
+    if (activeStep < 6) setStep(activeStep + 1);
   });
   $$('.final-action').forEach(function (btn) {
     btn.addEventListener('click', function () {
@@ -1067,12 +1198,19 @@
     });
   });
   form.addEventListener('submit', function (e) {
-    if (window.PageantWizard && window.PageantWizard.isActive()) {
-      // Pageant wizard owns validation + hidden-field sync.
+    if (mode === 'pageant' && window.PageantWizard) {
       window.PageantWizard.sync();
+      if ($('#publication-status').value === 'published') {
+        var issues = window.PageantWizard.publishIssues();
+        if (issues.length) {
+          e.preventDefault();
+          setStep(5);
+          showError(issues[0].text);
+        }
+      }
       return;
     }
-    var error = validateStep(1) || validateStep(2) || validateStep(3) || validateStep(4);
+    var error = validateStep(1) || validateStep(2) || validateStep(3) || validateStep(4) || validateStep(5);
     if (error) {
       e.preventDefault();
       showError(error);
@@ -1127,6 +1265,95 @@
   $('#status-preview').addEventListener('change', function () {
     $('#publication-status').value = $('#status-preview').value;
   });
+  form.start_date.addEventListener('change', function () {
+    form.end_date.value = form.start_date.value;
+  });
+  $('#event-time').addEventListener('change', function () {
+    var pageantTime = $('#pageant-start-time');
+    if (pageantTime) pageantTime.value = $('#event-time').value;
+  });
+  $('#scoring-category-mode').addEventListener('change', judgeModeExplanation);
+  $('#save-scoring-category').addEventListener('click', function () {
+    if (!scoringWorkflow.eventId) {
+      showError('Complete Step 1 first.');
+      return;
+    }
+    workflowRequest(scoringWorkflow.editingCategoryId ? 'update_category' : 'create_category', {
+      event_id: scoringWorkflow.eventId,
+      category_id: scoringWorkflow.editingCategoryId || '',
+      category_name: $('#scoring-category-name').value.trim(),
+      judge_mode: $('#scoring-category-mode').value,
+      display_order: $('#scoring-category-order').value,
+      overall_weight_percent: $('#scoring-category-weight').value,
+    }).then(function () {
+      return loadCategories();
+    }).then(function () {
+      $('#scoring-category-name').value = '';
+      $('#scoring-category-order').value = '';
+      $('#scoring-category-weight').value = '';
+      scoringWorkflow.editingCategoryId = null;
+      $('#save-scoring-category').textContent = 'Save Category';
+      renderScoringCategories();
+      renderScoringCriteria();
+    }).catch(function (workflowError) { showError(workflowError.message); });
+  });
+  $('#scoring-criterion-category').addEventListener('change', loadScoringCriteria);
+  $('#save-scoring-criterion').addEventListener('click', function () {
+    var categoryId = $('#scoring-criterion-category').value;
+    workflowRequest(scoringWorkflow.editingCriterionId ? 'update_criterion' : 'create_criterion', {
+      event_id: scoringWorkflow.eventId || '',
+      category_id: categoryId,
+      criterion_id: scoringWorkflow.editingCriterionId || '',
+      criterion_name: $('#scoring-criterion-name').value.trim(),
+      weight_percent: $('#scoring-criterion-weight').value,
+      max_score: $('#scoring-criterion-max-score').value,
+      display_order: $('#scoring-criterion-order').value,
+    }).then(function () {
+      $('#scoring-criterion-name').value = '';
+      $('#scoring-criterion-weight').value = '';
+      $('#scoring-criterion-max-score').value = '';
+      $('#scoring-criterion-order').value = '';
+      scoringWorkflow.editingCriterionId = null;
+      $('#save-scoring-criterion').textContent = 'Save Criterion';
+      loadScoringCriteria();
+    }).catch(function (workflowError) { showError(workflowError.message); });
+  });
+  document.addEventListener('click', function (event) {
+    var categoryEdit = event.target.closest('[data-category-edit]');
+    var categoryDelete = event.target.closest('[data-category-delete]');
+    var criterionEdit = event.target.closest('[data-criterion-edit]');
+    var criterionDelete = event.target.closest('[data-criterion-delete]');
+    if (categoryEdit) {
+      var category = scoringWorkflow.categories.filter(function (row) { return String(row.id) === categoryEdit.dataset.categoryEdit; })[0];
+      if (!category) return;
+      scoringWorkflow.editingCategoryId = category.id;
+      $('#scoring-category-name').value = category.name;
+      $('#scoring-category-mode').value = category.judge_mode;
+      $('#scoring-category-order').value = category.display_order;
+      $('#scoring-category-weight').value = category.overall_weight_percent;
+      $('#save-scoring-category').textContent = 'Update Category';
+      judgeModeExplanation();
+    } else if (categoryDelete) {
+      workflowRequest('delete_category', { event_id: scoringWorkflow.eventId, category_id: categoryDelete.dataset.categoryDelete })
+        .then(loadCategories).then(function () { renderScoringCategories(); renderScoringCriteria(); })
+        .catch(function (workflowError) { showError(workflowError.message); });
+    } else if (criterionEdit) {
+      var criterion = scoringWorkflow.criteria.filter(function (row) { return String(row.id) === criterionEdit.dataset.criterionEdit; })[0];
+      if (!criterion) return;
+      scoringWorkflow.editingCriterionId = criterion.id;
+      $('#scoring-criterion-name').value = criterion.name;
+      $('#scoring-criterion-weight').value = criterion.weight_percent;
+      $('#scoring-criterion-max-score').value = criterion.max_score || '';
+      $('#scoring-criterion-order').value = criterion.display_order;
+      $('#save-scoring-criterion').textContent = 'Update Criterion';
+    } else if (criterionDelete) {
+      workflowRequest('delete_criterion', {
+        event_id: scoringWorkflow.eventId,
+        category_id: scoringWorkflow.selectedCategoryId,
+        criterion_id: criterionDelete.dataset.criterionDelete,
+      }).then(loadScoringCriteria).catch(function (workflowError) { showError(workflowError.message); });
+    }
+  });
 
   $$('[data-view]').forEach(function (btn) {
     btn.addEventListener('click', function () {
@@ -1168,4 +1395,10 @@
   } else if (window.CRITERIA_OPEN_CREATE) {
     openWizard();
   }
+  window.CriteriaWizard = {
+    setMode: setMode,
+    setStep: setStep,
+    getMode: function () { return mode; },
+    getActiveStep: function () { return activeStep; },
+  };
 }());

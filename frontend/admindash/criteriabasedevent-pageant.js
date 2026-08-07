@@ -6,14 +6,25 @@
 (function () {
   'use strict';
 
-  var $ = function (sel, root) { return (root || document).querySelector(sel); };
-  var $$ = function (sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); };
+  var canonicalSelector = function (sel) {
+    return String(sel)
+      .replace(/#pageant-event-name/g, '[name="event_name"]')
+      .replace(/#pageant-classification/g, '#event-classification')
+      .replace(/#pageant-venue/g, '[name="venue"]')
+      .replace(/#pageant-start-date/g, '[name="start_date"]')
+      .replace(/#pageant-end-date/g, '[name="end_date"]')
+      .replace(/#pageant-faculty/g, '[name="faculty_account"]')
+      .replace(/#pageant-chief-judge/g, '#chief-judge')
+      .replace(/#pageant-existing-candidates/g, '#candidate-options')
+      .replace(/#pageant-judge-options/g, '#judge-options');
+  };
+  var $ = function (sel, root) { return (root || document).querySelector(canonicalSelector(sel)); };
+  var $$ = function (sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(canonicalSelector(sel))); };
 
   var form = $('#wizard-form');
   var wizard = $('#event-wizard');
   if (!form || !wizard) return;
 
-  var pageantStep = 1;
   var pageantMode = false;
   var pageantSegments = [];
   var pendingCandidates = [];
@@ -21,6 +32,8 @@
   var competitionCategories = [];
   var pairEntries = [];
   var advancementEnabled = false;
+  var pendingModeChange = null;
+  var canonicalHomes = {};
 
   var FORMAT_META = {
     male_female: {
@@ -98,7 +111,7 @@
 
   function pageantFormat() {
     var checked = $('input[name="pageant_format"]:checked');
-    return checked ? checked.value : '';
+    return checked ? checked.value : 'individual';
   }
 
   function isPageantSelected() {
@@ -124,26 +137,65 @@
     applyPageantMode(isPageantSelected());
   }
 
+  function requestModeChange(message, accept, options) {
+    var dialog = $('#pageant-confirm-dialog');
+    if (!dialog) return;
+    options = options || {};
+    pendingModeChange = accept;
+    $('#pageant-confirm-title').textContent = options.title || 'Leave Pageant setup?';
+    $('#pageant-confirm-message').textContent = message;
+    $('#pageant-confirm-cancel').textContent = options.cancelLabel || 'Keep Pageant';
+    $('#pageant-confirm-accept').textContent = options.acceptLabel || 'Switch setup';
+    dialog.showModal();
+  }
+
+  function moveCanonical(id, destination, first) {
+    var node = $('#' + id);
+    if (!node || !destination) return;
+    if (!canonicalHomes[id]) {
+      var marker = document.createComment(id + '-home');
+      node.parentNode.insertBefore(marker, node);
+      canonicalHomes[id] = marker;
+    }
+    if (first) destination.insertBefore(node, destination.firstChild);
+    else destination.appendChild(node);
+  }
+
+  function restoreCanonical() {
+    Object.keys(canonicalHomes).forEach(function (id) {
+      var node = $('#' + id);
+      var marker = canonicalHomes[id];
+      if (node && marker && marker.parentNode) marker.parentNode.insertBefore(node, marker.nextSibling);
+    });
+  }
+
+  function adoptCanonicalControls() {
+    var detailsGrid = $('[data-pageant-step="1"] .wizard-grid');
+    var standardGrid = $('[data-step="1"] .wizard-grid');
+    ['pageant-event-name', 'pageant-classification', 'pageant-venue', 'pageant-start-date', 'pageant-end-date',
+      'pageant-faculty', 'pageant-chief-judge', 'pageant-existing-candidates', 'pageant-judge-options']
+      .forEach(function (id) {
+        var node = document.getElementById(id);
+        if (node) node.closest('label,fieldset,details,div').remove();
+      });
+    if (detailsGrid && standardGrid) {
+      ['faculty_account', 'start_date', 'venue', 'event_classification', 'event_name'].forEach(function (name) {
+        var control = form.querySelector('[name="' + name + '"]');
+        if (control) moveCanonical(control.closest('label').id || (control.closest('label').id = 'canonical-' + name), detailsGrid, true);
+      });
+    }
+    var judges = $('[data-pageant-tab-panel="judges"]');
+    ['chief-judge', 'judge-options'].forEach(function (id) { moveCanonical(id, judges); });
+    moveCanonical('candidate-options', $('#pageant-existing-candidates-section'));
+  }
+
   function applyPageantMode(on) {
     var was = pageantMode;
     pageantMode = !!on;
-    wizard.classList.toggle('pageant-mode', pageantMode);
-    var stdSteps = $('#standard-wizard-steps');
-    var pgSteps = $('#pageant-wizard-steps');
-    if (stdSteps) stdSteps.hidden = pageantMode;
-    if (pgSteps) pgSteps.hidden = !pageantMode;
+    if (window.CriteriaWizard) window.CriteriaWizard.setMode(pageantMode ? 'pageant' : 'standard');
 
-    $$('.wizard-panel[data-step]').forEach(function (panel) {
-      if (panel.hasAttribute('data-pageant')) return;
-      panel.classList.toggle('criteria-hidden', pageantMode);
-      if (pageantMode) panel.classList.remove('active');
-    });
-    $$('.wizard-panel[data-pageant]').forEach(function (panel) {
-      panel.classList.toggle('criteria-hidden', !pageantMode);
-    });
-
-    var badge = $('#pageant-readonly-badges');
-    if (badge) badge.hidden = !pageantMode;
+    var headMeta = $('.pageant-head-meta');
+    if (headMeta) headMeta.hidden = !pageantMode;
 
     var draftBtn = $('#save-draft-action');
     var publishBtn = $('#publish-action');
@@ -151,13 +203,21 @@
     if (publishBtn) publishBtn.textContent = pageantMode ? 'Publish Pageant' : 'Publish';
 
     var title = $('#wizard-title');
-    if (title && pageantMode) title.textContent = title.textContent.indexOf('Edit') === 0 ? 'Edit pageant' : 'Create pageant';
+    if (title) {
+      var editing = title.textContent.indexOf('Edit') === 0;
+      title.textContent = pageantMode ? (editing ? 'Edit Pageant' : 'Create Pageant') : (editing ? 'Edit criteria event' : 'Create criteria event');
+    }
+    var subtitle = $('#wizard-subtitle');
+    if (subtitle) subtitle.textContent = pageantMode
+      ? 'Set up the candidates, scoring segments, judges, and awards for this Pageant.'
+      : 'Configure participants, judging criteria, score settings, and championship points.';
 
     var hiddenType = $('#special-event-type-input');
     if (hiddenType) hiddenType.value = pageantMode ? 'pageant' : (specialTypeValue() || '');
 
     // Force individual + multiple stage for pageants (backend expectation)
     if (pageantMode) {
+      adoptCanonicalControls();
       var part = $('#participation-type');
       if (part) part.value = 'individual';
       var fmt = $('input[name="event_format"][value="multiple_stage"]');
@@ -169,37 +229,25 @@
           return seg;
         });
       }
-      if (!was) setPageantStep(1);
-      else setPageantStep(pageantStep);
+      if (!was && window.CriteriaWizard) window.CriteriaWizard.setStep(1);
       renderCategories();
       renderCandidates();
       renderSegments();
       renderAwards();
       syncAdvancementPanel();
-    } else if (was) {
-      // restore standard step 1
-      $$('.wizard-panel[data-step]:not([data-pageant])').forEach(function (panel) {
-        panel.classList.toggle('active', Number(panel.dataset.step) === 1);
-      });
-    }
+    } else if (was) restoreCanonical();
   }
 
-  function setPageantStep(n) {
-    pageantStep = n;
-    $$('.wizard-panel[data-pageant]').forEach(function (panel) {
-      panel.classList.toggle('active', Number(panel.dataset.pageantStep) === pageantStep);
-    });
-    $$('#pageant-wizard-steps [data-pageant-marker]').forEach(function (marker) {
-      var m = Number(marker.dataset.pageantMarker);
-      marker.classList.toggle('active', m === pageantStep);
-      marker.classList.toggle('done', m < pageantStep);
-    });
-    wizard.classList.toggle('at-review', pageantStep === 5);
-    var back = $('#wizard-back');
-    if (back) back.style.display = pageantStep === 1 ? 'none' : '';
-    showError('');
-    if (pageantStep === 5) buildPageantReview();
-    if (pageantStep === 3) updateWeightMeter();
+  function renderPageant(activeStep) {
+    if (activeStep === 5) buildPageantReview();
+    if (activeStep === 3) updateWeightMeter();
+    var body = $('.wizard-body');
+    if (body) body.scrollTop = 0;
+    var heading = $('.wizard-panel[data-pageant-step="' + activeStep + '"] h3');
+    if (heading) {
+      heading.setAttribute('tabindex', '-1');
+      heading.focus({ preventScroll: true });
+    }
   }
 
   function selectedFormatCard() {
@@ -218,7 +266,7 @@
     list.innerHTML = competitionCategories.map(function (name, idx) {
       return '<li><input type="text" class="pageant-category-input" data-idx="' + idx + '" value="' +
         escapeAttr(name) + '" aria-label="Competition category ' + (idx + 1) + '">' +
-        '<button type="button" class="ss-link-btn danger pageant-cat-remove" data-idx="' + idx + '" aria-label="Remove category">Remove</button></li>';
+        '<button type="button" class="pageant-danger-button pageant-cat-remove" data-idx="' + idx + '" aria-label="Remove category">Remove</button></li>';
     }).join('') || '<li class="pageant-empty-inline">No categories yet.</li>';
   }
 
@@ -237,8 +285,7 @@
     if (!pendingCandidates.length) {
       host.innerHTML = '<div class="pageant-empty-state">' +
         '<strong>No candidates have been added yet.</strong>' +
-        '<p>Register the candidates and assign the team or department they represent.</p>' +
-        '<button type="button" class="match-primary" id="pageant-add-first">Add First Candidate</button></div>';
+        '<p>Select candidates from the registry below.</p></div>';
     } else {
       host.innerHTML = pendingCandidates.map(function (c, idx) {
         return '<article class="pageant-candidate-card" data-idx="' + idx + '">' +
@@ -247,8 +294,9 @@
           '<span>' + escapeHtml(c.category || '—') + ' · ' + escapeHtml(c.team_label || c.team || 'No team') + '</span>' +
           '<span class="pageant-pill">' + escapeHtml(c.status || 'Active') + '</span></div>' +
           '<div class="pageant-candidate-actions">' +
-          '<button type="button" class="ss-link-btn" data-cand-edit="' + idx + '">Edit</button>' +
-          '<button type="button" class="ss-link-btn danger" data-cand-remove="' + idx + '">Remove</button>' +
+          '<button type="button" class="match-secondary" data-cand-edit="' + idx + '">Edit</button>' +
+          '<button type="button" class="pageant-danger-button" data-cand-remove="' + idx + '" aria-label="Remove ' +
+          escapeAttr(c.name || 'candidate') + ' from Pageant roster">⌫ Remove</button>' +
           '</div></article>';
       }).join('');
     }
@@ -292,11 +340,11 @@
         '<p>Weight <strong>' + Number(seg.weight || 0) + '%</strong> · ' + critCount + ' criteria · Criteria ' +
         Number(critTotal.toFixed(1)) + '% — ' + critStatus + '</p>' +
         '<div class="pageant-segment-actions">' +
-        '<button type="button" class="ss-link-btn" data-seg-edit="' + idx + '">Edit</button>' +
-        '<button type="button" class="ss-link-btn" data-seg-dup="' + idx + '">Duplicate</button>' +
-        '<button type="button" class="ss-link-btn" data-seg-up="' + idx + '" aria-label="Move up">↑</button>' +
-        '<button type="button" class="ss-link-btn" data-seg-down="' + idx + '" aria-label="Move down">↓</button>' +
-        '<button type="button" class="ss-link-btn danger" data-seg-remove="' + idx + '">Remove</button>' +
+        '<button type="button" class="match-secondary" data-seg-edit="' + idx + '">Edit</button>' +
+        '<button type="button" class="match-secondary" data-seg-dup="' + idx + '">Duplicate</button>' +
+        '<button type="button" class="match-secondary" data-seg-up="' + idx + '" aria-label="Move up">↑</button>' +
+        '<button type="button" class="match-secondary" data-seg-down="' + idx + '" aria-label="Move down">↓</button>' +
+        '<button type="button" class="pageant-danger-button" data-seg-remove="' + idx + '">Remove</button>' +
         '</div></article>';
     }).join('');
     updateWeightMeter();
@@ -310,9 +358,9 @@
     }).reduce(function (sum, s) { return sum + Number(s.weight || 0); }, 0);
     total = Math.round(total * 100) / 100;
     var cls = 'is-amber';
-    var text = 'Needs attention';
+    var text = 'Below Required Total';
     if (Math.abs(total - 100) < 0.01) { cls = 'is-green'; text = 'Complete'; }
-    else if (total > 100) { cls = 'is-red'; text = 'Over configured'; }
+    else if (total > 100) { cls = 'is-red'; text = 'Above Required Total'; }
     meter.className = 'pageant-weight-meter ' + cls;
     meter.innerHTML = '<strong>Main Pageant Score: ' + total + '% of 100% configured</strong> — ' + text;
   }
@@ -327,7 +375,7 @@
     host.innerHTML = specialAwards.map(function (a, idx) {
       return '<div class="pageant-award-row"><strong>' + escapeHtml(a.title || a.name) + '</strong>' +
         '<span>' + escapeHtml(a.category || 'All categories') + ' · ' + escapeHtml(a.method || 'Highest segment score') + '</span>' +
-        '<button type="button" class="ss-link-btn danger" data-award-remove="' + idx + '">Remove</button></div>';
+        '<button type="button" class="pageant-danger-button" data-award-remove="' + idx + '">Remove</button></div>';
     }).join('');
   }
 
@@ -341,8 +389,8 @@
     return {
       pageant_format: fmt,
       competition_categories: competitionCategories.slice(),
-      description: ($('#pageant-description') && $('#pageant-description').value) || '',
-      rules: ($('#pageant-rules') && $('#pageant-rules').value) || '',
+      description: '',
+      rules: '',
       segment_template: pageantSegments.length ? 'custom' : 'standard',
       advancement_enabled: advancementEnabled,
       advancement: advancementEnabled ? {
@@ -398,9 +446,8 @@
     var start = $('#pageant-start-date');
     var stdStart = form.querySelector('[name="start_date"]');
     if (start && stdStart) stdStart.value = start.value;
-    var end = $('#pageant-end-date');
     var stdEnd = form.querySelector('[name="end_date"]');
-    if (end && stdEnd) stdEnd.value = end.value;
+    if (stdStart && stdEnd) stdEnd.value = stdStart.value;
     var classification = form.querySelector('[name="event_classification"]');
     var pClass = $('#pageant-classification');
     if (classification && pClass) classification.value = pClass.value;
@@ -467,11 +514,7 @@
     if (n === 1) {
       var name = ($('#pageant-event-name') && $('#pageant-event-name').value || '').trim();
       if (!name) return 'Event Name is required.';
-      if (!pageantFormat()) return 'Select a pageant format.';
       if (!competitionCategories.length) return 'Add at least one competition category.';
-      var start = $('#pageant-start-date') && $('#pageant-start-date').value;
-      var end = $('#pageant-end-date') && $('#pageant-end-date').value;
-      if (start && end && end < start) return 'End Date cannot be earlier than Start Date.';
     }
     if (n === 2) {
       var existing = $$('#pageant-existing-candidates .participant-check:checked').length;
@@ -576,7 +619,7 @@
       (issues.length
         ? '<ul class="pageant-issue-list">' + issues.map(function (issue) {
           return '<li><span>' + escapeHtml(issue.text) + '</span>' +
-            '<button type="button" class="ss-link-btn" data-goto-step="' + issue.step + '">Go fix</button></li>';
+            '<button type="button" class="match-secondary" data-goto-step="' + issue.step + '">Go fix</button></li>';
         }).join('') + '</ul>'
         : '') +
       '<div class="review-summary pageant-review-cards">' +
@@ -604,7 +647,7 @@
 
   function card(title, lines, step) {
     return '<article class="pageant-review-card"><header><h4>' + escapeHtml(title) +
-      '</h4><button type="button" class="ss-link-btn" data-goto-step="' + step + '">Edit</button></header><ul>' +
+      '</h4><button type="button" class="match-secondary" data-goto-step="' + step + '">Edit</button></header><ul>' +
       lines.map(function (l) { return '<li>' + escapeHtml(l) + '</li>'; }).join('') +
       '</ul></article>';
   }
@@ -716,7 +759,7 @@
         '<td><input type="number" min="0" step="0.1" value="' + Number(c.weight || 0) + '" data-f="weight"></td>' +
         '<td><input type="number" min="0.1" step="0.1" value="' + Number(c.max_score || 100) + '" data-f="max_score"></td>' +
         '<td><input value="' + escapeAttr(c.description || '') + '" data-f="description"></td>' +
-        '<td><button type="button" class="ss-link-btn danger" data-crit-remove="' + i + '">Remove</button></td></tr>';
+        '<td><button type="button" class="pageant-danger-button" data-crit-remove="' + i + '">Remove</button></td></tr>';
     }).join('');
     var total = (rows || []).reduce(function (s, c) { return s + Number(c.weight || 0); }, 0);
     var meter = $('#pageant-seg-criteria-meter');
@@ -814,25 +857,31 @@
     renderSegments();
     renderAwards();
     syncAdvancementPanel();
-    setPageantStep(1);
+    if (window.CriteriaWizard) window.CriteriaWizard.setStep(1);
   }
 
   // ── Event wiring ──────────────────────────────────────────────────────────
   form.querySelector('[name="category"]')?.addEventListener('change', function () {
     if (pageantMode && categoryValue() !== 'Special Event') {
-      if (!window.confirm('Leave Pageant setup? Unsaved pageant-only fields may be cleared from the active pageant mode.')) {
-        this.value = 'Special Event';
-        return;
-      }
+      var nextValue = this.value;
+      this.value = 'Special Event';
+      requestModeChange('Switching categories exits the Pageant setup. Your Pageant data will stay in this draft until you save or publish.', function () {
+        form.querySelector('[name="category"]').value = nextValue;
+        syncSpecialTypeVisibility();
+      });
+      return;
     }
     syncSpecialTypeVisibility();
   });
   $('#special-event-type')?.addEventListener('change', function () {
     if (pageantMode && this.value !== 'pageant') {
-      if (!window.confirm('Switch away from Pageant setup?')) {
-        this.value = 'pageant';
-        return;
-      }
+      var nextValue = this.value;
+      this.value = 'pageant';
+      requestModeChange('Switching event types exits the Pageant setup. Your Pageant data will stay in this draft until you save or publish.', function () {
+        $('#special-event-type').value = nextValue;
+        applyPageantMode(isPageantSelected());
+      });
+      return;
     }
     applyPageantMode(isPageantSelected());
   });
@@ -880,9 +929,15 @@
     if (edit) { openCandidateForm(Number(edit.dataset.candEdit)); return; }
     var rem = e.target.closest('[data-cand-remove]');
     if (rem) {
-      if (!window.confirm('Remove this candidate from the pageant roster?')) return;
-      pendingCandidates.splice(Number(rem.dataset.candRemove), 1);
-      renderCandidates();
+      var index = Number(rem.dataset.candRemove);
+      requestModeChange('Remove this candidate from the Pageant roster?', function () {
+        pendingCandidates.splice(index, 1);
+        renderCandidates();
+      }, {
+        title: 'Remove Pageant candidate?',
+        cancelLabel: 'Keep candidate',
+        acceptLabel: 'Remove candidate',
+      });
       return;
     }
     if (e.target.id === 'pageant-use-template') {
@@ -930,9 +985,15 @@
     }
     var sr = e.target.closest('[data-seg-remove]');
     if (sr) {
-      if (!window.confirm('Remove this segment and its criteria?')) return;
-      pageantSegments.splice(Number(sr.dataset.segRemove), 1);
-      renderSegments();
+      var segmentIndex = Number(sr.dataset.segRemove);
+      requestModeChange('Remove this segment and all of its scoring criteria?', function () {
+        pageantSegments.splice(segmentIndex, 1);
+        renderSegments();
+      }, {
+        title: 'Remove Pageant segment?',
+        cancelLabel: 'Keep segment',
+        acceptLabel: 'Remove segment',
+      });
       return;
     }
     var ar = e.target.closest('[data-award-remove]');
@@ -942,7 +1003,7 @@
       return;
     }
     var goto = e.target.closest('[data-goto-step]');
-    if (goto) { setPageantStep(Number(goto.dataset.gotoStep)); return; }
+    if (goto) { window.CriteriaWizard.setStep(Number(goto.dataset.gotoStep)); return; }
     if (e.target.classList.contains('pageant-award-preset')) {
       specialAwards.push({
         id: uid('a'),
@@ -955,6 +1016,16 @@
   });
 
   $('#pageant-cand-save')?.addEventListener('click', saveCandidateFromForm);
+  $('#pageant-confirm-cancel')?.addEventListener('click', function () {
+    pendingModeChange = null;
+    $('#pageant-confirm-dialog').close();
+  });
+  $('#pageant-confirm-accept')?.addEventListener('click', function () {
+    var accept = pendingModeChange;
+    pendingModeChange = null;
+    $('#pageant-confirm-dialog').close();
+    if (accept) accept();
+  });
   $('#pageant-cand-cancel')?.addEventListener('click', function () {
     $('#pageant-candidate-dialog')?.close();
   });
@@ -995,44 +1066,6 @@
     });
   });
 
-  // Intercept Next / Back when in pageant mode
-  var nextBtn = $('#wizard-next');
-  var backBtn = $('#wizard-back');
-  if (nextBtn) {
-    nextBtn.addEventListener('click', function (e) {
-      if (!pageantMode) return;
-      e.stopImmediatePropagation();
-      e.preventDefault();
-      var err = validatePageantStep(pageantStep);
-      if (err) { showError(err); return; }
-      if (pageantStep < 5) setPageantStep(pageantStep + 1);
-    }, true);
-  }
-  if (backBtn) {
-    backBtn.addEventListener('click', function (e) {
-      if (!pageantMode) return;
-      e.stopImmediatePropagation();
-      e.preventDefault();
-      if (pageantStep > 1) setPageantStep(pageantStep - 1);
-    }, true);
-  }
-
-  form.addEventListener('submit', function (e) {
-    if (!pageantMode) return;
-    syncPageantHidden();
-    var status = ($('#publication-status') && $('#publication-status').value) || 'draft';
-    if (status === 'published') {
-      var issues = publishIssues();
-      if (issues.length) {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        setPageantStep(5);
-        buildPageantReview();
-        showError(issues[0].text);
-      }
-    }
-  }, true);
-
   // Hook fill after standard editor loads an event
   var origFill = window.__criteriaFillEditor;
   window.__criteriaHydratePageant = hydrateFromEvent;
@@ -1050,6 +1083,8 @@
     isActive: function () { return pageantMode; },
     hydrate: hydrateFromEvent,
     sync: syncPageantHidden,
-    setStep: setPageantStep,
+    validate: validatePageantStep,
+    publishIssues: publishIssues,
+    render: renderPageant,
   };
 })();

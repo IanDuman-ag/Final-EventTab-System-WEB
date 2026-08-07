@@ -1,4 +1,5 @@
 import json
+from datetime import date
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
@@ -996,3 +997,34 @@ class PageantCriteriaEventTests(TestCase):
                 publication='published',
                 rounds_config=json.dumps(bad_segments),
             ), self.admin)
+
+
+class EventScoringCategoryTests(TestCase):
+    def setUp(self):
+        self.event = Event.objects.create(
+            name='Category workflow event',
+            category='Special Event',
+            event_date=date.today(),
+            venue='Hall',
+            scoring_method='criteria',
+        )
+
+    def test_category_and_criteria_are_scoped_to_event(self):
+        from .models import EventScoringCategory, EventScoringCriterion
+        category = EventScoringCategory.objects.create(
+            event=self.event,
+            name='Interview',
+            judge_mode=EventScoringCategory.JUDGE_MODE_SCORING,
+            display_order=1,
+            overall_weight_percent=20,
+        )
+        criterion = EventScoringCriterion.objects.create(
+            category=category,
+            name='Confidence',
+            weight_percent=100,
+            max_score=100,
+            display_order=1,
+        )
+        self.assertEqual(category.event_id, self.event.id)
+        self.assertEqual(criterion.category_id, category.id)
+        self.assertEqual(list(self.event.scoring_categories.values_list('name', flat=True)), ['Interview'])

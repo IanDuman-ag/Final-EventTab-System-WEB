@@ -1256,6 +1256,20 @@ def serialize_criteria_event(event):
             participant_names.append(item.name)
     pageant_config = event.pageant_config or {}
     is_pageant = is_pageant_event(event)
+    scoring_categories = [{
+        'id': category.id,
+        'name': category.name,
+        'judge_mode': category.judge_mode,
+        'display_order': category.display_order,
+        'overall_weight_percent': float(category.overall_weight_percent),
+        'criteria': [{
+            'id': criterion.id,
+            'name': criterion.name,
+            'weight_percent': float(criterion.weight_percent),
+            'max_score': float(criterion.max_score) if criterion.max_score is not None else None,
+            'display_order': criterion.display_order,
+        } for criterion in category.criteria.all()],
+    } for category in event.scoring_categories.prefetch_related('criteria').all()]
     format_key = pageant_config.get('pageant_format') or ''
     format_labels = {
         'male_female': 'Male and Female Pageant',
@@ -1276,6 +1290,7 @@ def serialize_criteria_event(event):
         'pageant_format': format_key,
         'pageant_format_label': format_labels.get(format_key, format_key or '—'),
         'competition_categories': pageant_config.get('competition_categories') or [],
+        'scoring_categories': scoring_categories,
         'classification': event.event_classification,
         'classification_label': event.get_event_classification_display() or '—',
         'division': event.division or '—',

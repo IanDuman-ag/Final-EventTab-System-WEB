@@ -125,7 +125,7 @@
     </div>
   </div>
 
-  <dialog id="event-wizard" class="wizard" aria-labelledby="wizard-title">
+  <dialog id="event-wizard" class="wizard" aria-labelledby="wizard-title" aria-describedby="wizard-subtitle">
     <form method="post" id="wizard-form" action="{% url 'admin_criteria_events' %}" novalidate>
       {% csrf_token %}
       <input type="hidden" name="participant_ids" id="participant-ids" value="[]">
@@ -141,43 +141,33 @@
       <input type="hidden" name="publication_status" id="publication-status" value="draft">
       <input type="hidden" name="special_event_type" id="special-event-type-input" value="">
       <input type="hidden" name="pageant_config" id="pageant-config-input" value="{}">
+      <input type="hidden" name="category" value="Special Event">
       <header class="wizard-head">
-        <div><span class="wizard-kicker">JUDGING BLUEPRINT</span><h2 id="wizard-title">Create criteria event</h2></div>
+        <div>
+          <span class="wizard-kicker">JUDGING BLUEPRINT</span>
+          <h2 id="wizard-title">Create criteria event</h2>
+          <p id="wizard-subtitle" class="wizard-subtitle">Configure participants, judging criteria, score settings, and championship points.</p>
+          <div class="pageant-head-meta" hidden>
+            <span class="pageant-head-icon" aria-hidden="true">♛</span>
+            <span class="pageant-badge">Special Event</span>
+            <span class="pageant-badge pageant-badge--accent">Pageant</span>
+          </div>
+        </div>
         <button type="button" id="close-wizard" class="wizard-close" aria-label="Close wizard">×</button>
       </header>
-      <ol class="wizard-steps" id="standard-wizard-steps" aria-label="Creation progress">
+      <ol class="wizard-steps" id="wizard-steps" aria-label="Creation progress">
         <li class="active" data-step-marker="1"><span>1</span><small>Basics</small></li>
         <li data-step-marker="2"><span>2</span><small>Participants</small></li>
-        <li data-step-marker="3"><span>3</span><small>Criteria</small></li>
-        <li data-step-marker="4"><span>4</span><small>Judges</small></li>
-        <li data-step-marker="5"><span>5</span><small>Review</small></li>
-      </ol>
-      <ol class="wizard-steps" id="pageant-wizard-steps" aria-label="Pageant setup progress" hidden>
-        <li class="active" data-pageant-marker="1"><span>1</span><small>Details</small></li>
-        <li data-pageant-marker="2"><span>2</span><small>Candidates</small></li>
-        <li data-pageant-marker="3"><span>3</span><small>Segments</small></li>
-        <li data-pageant-marker="4"><span>4</span><small>Judges</small></li>
-        <li data-pageant-marker="5"><span>5</span><small>Review</small></li>
+        <li data-step-marker="3"><span>3</span><small>Category</small></li>
+        <li data-step-marker="4"><span>4</span><small>Criteria</small></li>
+        <li data-step-marker="5"><span>5</span><small>Judges</small></li>
+        <li data-step-marker="6"><span>6</span><small>Review</small></li>
       </ol>
       <div class="wizard-body">
         <section class="wizard-panel active" data-step="1">
           <div class="wizard-section-title"><span>01</span><div><h3>Basic information</h3><p>Define the event identity, classification, and schedule.</p></div></div>
           <div class="wizard-grid">
             <label class="wide">Event Name <input name="event_name" required maxlength="200"></label>
-            <label>Category
-              <select name="category" required>
-                <option value="">Select category</option>
-                <option value="SOCIO-CULTURAL & LITERARY ARTS COMPETITION">SOCIO-CULTURAL & LITERARY ARTS COMPETITION</option>
-                <option value="Special Event">Special Event</option>
-              </select>
-            </label>
-            <label id="special-event-type-wrap" hidden>Special Event Type
-              <select id="special-event-type" aria-describedby="special-event-type-hint">
-                <option value="">Select type</option>
-                <option value="pageant">Pageant</option>
-              </select>
-              <small class="field-hint" id="special-event-type-hint">Choosing Pageant opens a guided five-step setup.</small>
-            </label>
             <label>Event Classification
               <select name="event_classification" required id="event-classification">
                 <option value="">Select classification</option>
@@ -191,19 +181,12 @@
                 <option value="individual">Individual</option>
               </select>
             </label>
-            <label>Division
-              <select name="division">
-                <option value="">Open / Not specified</option>
-                <option>Men</option><option>Women</option><option>Mixed</option><option>Open</option>
-              </select>
-            </label>
+            <input type="hidden" name="division" value="">
             <label>Venue <input name="venue" required maxlength="200"></label>
-            <label>Start Date <input name="start_date" type="date" required></label>
-            <label>End Date <input name="end_date" type="date" required></label>
-            <label>Status
-              <select id="status-preview"><option value="draft">Draft</option><option value="published">Published</option></select>
-              <small class="field-hint">Final Save as Draft / Publish can still override this choice.</small>
-            </label>
+            <label>Date <input name="start_date" type="date" required></label>
+            <input name="end_date" type="hidden">
+            <label>Time <input id="event-time" type="time"></label>
+            <select id="status-preview" hidden><option value="draft" selected>Draft</option><option value="published">Published</option></select>
           </div>
         </section>
 
@@ -229,7 +212,7 @@
               {% empty %}<p data-kind="individual">No active candidates available.</p>{% endfor %}
             </div>
           </fieldset>
-          <fieldset>
+          <fieldset hidden>
             <legend>Event Format</legend>
             <div class="format-cards format-cards-two">
               <label>
@@ -249,7 +232,7 @@
             </div>
           </fieldset>
 
-          <div id="multiple-stage-panel" class="criteria-hidden">
+          <div id="multiple-stage-panel" class="criteria-hidden" hidden>
             <div class="stage-builder-head">
               <div>
                 <strong>Competition Structure Builder</strong>
@@ -302,8 +285,35 @@
         </section>
 
         <section class="wizard-panel" data-step="3">
-          <div class="wizard-section-title"><span>03</span><div><h3>Criteria & scoring setup</h3><p>Build the rubric and score controls used by judges.</p></div></div>
-          <fieldset>
+          <div class="wizard-section-title"><span>03</span><div><h3>Category setup</h3><p>Create scoring categories for the Event from Step 1.</p></div></div>
+          <div class="wizard-grid">
+            <label class="wide">Event Name
+              <select id="scoring-category-event" disabled></select>
+              <small class="field-hint">This Event is created from the details entered in Step 1.</small>
+            </label>
+            <label>Category Name <input id="scoring-category-name" maxlength="120"></label>
+            <label>Judge Mode <select id="scoring-category-mode"><option value="scoring">Scoring Mode</option><option value="ranking">Ranking Mode</option></select></label>
+            <label>Display Order <input id="scoring-category-order" type="number" min="1" step="1"></label>
+            <label>Overall Category Weighted % <input id="scoring-category-weight" type="number" min="0.01" max="100" step="0.01"></label>
+          </div>
+          <p class="pageant-weight-meter is-amber" id="judge-mode-explanation" role="status"></p>
+          <div class="criteria-editor-actions"><button type="button" class="match-primary" id="save-scoring-category">Save Category</button></div>
+          <div id="scoring-category-list" class="pageant-review-cards"></div>
+        </section>
+
+        <section class="wizard-panel" data-step="4">
+          <div class="wizard-section-title"><span>04</span><div><h3>Criteria setup</h3><p>Add criteria to one saved Event category at a time.</p></div></div>
+          <div class="wizard-grid">
+            <label class="wide">Category <select id="scoring-criterion-category"></select></label>
+            <label>Criterion Name <input id="scoring-criterion-name" maxlength="120"></label>
+            <label>Weight % <input id="scoring-criterion-weight" type="number" min="0.01" max="100" step="0.01"></label>
+            <label id="scoring-criterion-max-score-wrap">Max Score <input id="scoring-criterion-max-score" type="number" min="0.01" step="0.01"></label>
+            <label>Order <input id="scoring-criterion-order" type="number" min="1" step="1"></label>
+          </div>
+          <p class="criteria-weight-meter" id="scoring-criterion-total">Criteria total: 0% of 100%</p>
+          <div class="criteria-editor-actions"><button type="button" class="match-primary" id="save-scoring-criterion">Save Criterion</button></div>
+          <div id="scoring-criterion-list" class="pageant-review-cards"></div>
+          <fieldset hidden>
             <legend>Criteria Setup</legend>
             <div class="criteria-editor-actions">
               <button type="button" id="add-criterion">+ Add Criterion</button>
@@ -314,7 +324,7 @@
             </table>
             <p class="criteria-weight-meter" id="criteria-weight-meter">Criteria total: 0%</p>
           </fieldset>
-          <fieldset>
+          <fieldset hidden>
             <legend>Scoring Method</legend>
             <div class="format-cards">
               <label><input type="radio" name="criteria_score_method" value="weighted_percentage" checked><span><strong>Weighted Percentage</strong><small>Score from weighted criterion values.</small></span></label>
@@ -323,7 +333,7 @@
               <label><input type="radio" name="criteria_score_method" value="ranking_based"><span><strong>Ranking-Based Score</strong><small>Use placements instead of numeric totals.</small></span></label>
             </div>
           </fieldset>
-          <fieldset>
+          <fieldset hidden>
             <legend>Score Settings</legend>
             <div class="wizard-grid">
               <label>Minimum Score <input type="number" id="min-score" value="0" step="0.1"></label>
@@ -337,7 +347,7 @@
               <label><span><strong>Show Criteria Description to Judges</strong></span><input type="checkbox" id="show-criteria-description" checked></label>
             </div>
           </fieldset>
-          <fieldset>
+          <fieldset hidden>
             <legend>Deductions and Penalties</legend>
             <label class="inline-check"><input type="checkbox" id="deductions-enabled" name="deductions_enabled"> Enable Deductions and Penalties</label>
             <div id="deductions-panel" class="criteria-hidden">
@@ -350,8 +360,8 @@
           </fieldset>
         </section>
 
-        <section class="wizard-panel" data-step="4">
-          <div class="wizard-section-title"><span>04</span><div><h3>Judges, results & points</h3><p>Assign officials and finalize processing rules.</p></div></div>
+        <section class="wizard-panel" data-step="5">
+          <div class="wizard-section-title"><span>05</span><div><h3>Judges, results & points</h3><p>Assign officials and finalize processing rules.</p></div></div>
           <label class="field-block">Chief Judge
             <select name="chief_judge" id="chief-judge" required>
               <option value="">Select chief judge</option>
@@ -375,7 +385,7 @@
               {% for user in faculty_options %}<option value="{{ user.id }}">{{ user.get_full_name|default:user.username }} · {{ user.username }}</option>{% endfor %}
             </select>
           </label>
-          <label class="field-block">Scoresheet Template
+          <label class="field-block" hidden>Scoresheet Template
             <select name="scoresheet_template">
               <option value="">Auto-match by event type / category</option>
               {% for tpl in scoresheet_templates %}
@@ -383,7 +393,7 @@
               {% endfor %}
             </select>
           </label>
-          <fieldset>
+          <fieldset hidden>
             <legend>Result Processing</legend>
             <div class="toggle-list" id="result-processing-list">
               <label><span><strong>Automatically Calculate Final Scores</strong></span><input type="checkbox" data-rp="auto_calculate_final" checked></label>
@@ -393,7 +403,7 @@
               <label><span><strong>Display Score Breakdown</strong></span><input type="checkbox" data-rp="display_score_breakdown" checked></label>
             </div>
           </fieldset>
-          <fieldset>
+          <fieldset hidden>
             <legend>Judge Settings</legend>
             <div class="toggle-list">
               <label><span><strong>Require All Judges to Submit Scores</strong></span><input type="checkbox" data-js="require_all_judges" checked></label>
@@ -401,7 +411,7 @@
               <label><span><strong>Remove Highest and Lowest Judge Scores</strong><small>Only when three or more judges are assigned.</small></span><input type="checkbox" data-js="remove_high_low" id="remove-high-low"></label>
             </div>
           </fieldset>
-          <fieldset>
+          <fieldset hidden>
             <legend>Tie-Breaking Rules</legend>
             <p class="stage-builder-note">Used for final rankings when contestants share the same score. For multi-stage qualification ties, the method chosen in the Competition Structure Builder takes priority.</p>
             <div class="tie-break-list" id="tie-break-list"></div>
@@ -418,15 +428,11 @@
 
 
         <!-- ═══════ PAGEANT WIZARD PANELS ═══════ -->
-        <section class="wizard-panel criteria-hidden" data-pageant data-pageant-step="1">
+        <section class="wizard-panel" data-pageant data-pageant-step="1">
           <div class="wizard-section-title"><span>01</span><div>
             <h3>Set up your Pageant</h3>
             <p>Start with the basic event information. You can configure scoring, judges, and awards in the next steps.</p>
           </div></div>
-          <div class="pageant-badges" id="pageant-readonly-badges">
-            <span class="pageant-badge">Special Event</span>
-            <span class="pageant-badge pageant-badge--accent">Pageant</span>
-          </div>
           <div class="wizard-grid">
             <label class="wide">Event Name <span class="req">required</span>
               <input id="pageant-event-name" maxlength="200" autocomplete="off">
@@ -440,10 +446,7 @@
             <label>Venue <span class="req">required to publish</span>
               <input id="pageant-venue" maxlength="200">
             </label>
-            <label>Start Date <input id="pageant-start-date" type="date"></label>
-            <label>End Date <input id="pageant-end-date" type="date"></label>
-            <label>Start Time <input id="pageant-start-time" type="time"></label>
-            <label>End Time <input id="pageant-end-time" type="time"></label>
+            <label>Time <input id="pageant-start-time" type="time"></label>
             <label class="wide">Faculty in Charge <span class="req">required to publish</span>
               <select id="pageant-faculty">
                 <option value="">Select faculty account</option>
@@ -451,36 +454,7 @@
               </select>
               <small class="field-hint">Faculty oversee scoring review and advancement confirmation.</small>
             </label>
-            <label class="wide">Event Description <span class="opt">optional</span>
-              <textarea id="pageant-description" rows="3" placeholder="Brief overview for officials and participants"></textarea>
-            </label>
-            <label class="wide">Rules and Guidelines <span class="opt">optional</span>
-              <textarea id="pageant-rules" rows="3" placeholder="House rules, dress code, conduct expectations"></textarea>
-            </label>
           </div>
-
-          <fieldset class="pageant-format-fieldset">
-            <legend>Pageant Format <span class="req">required</span></legend>
-            <p class="field-hint">Select the competition structure. Recommended categories appear below and remain editable.</p>
-            <div class="pageant-format-cards">
-              <label class="pageant-format-card">
-                <input type="radio" name="pageant_format" value="male_female">
-                <span><strong>Male and Female Pageant</strong><small>Separate candidates, rankings, and winners for male and female categories.</small></span>
-              </label>
-              <label class="pageant-format-card">
-                <input type="radio" name="pageant_format" value="individual">
-                <span><strong>Individual Pageant</strong><small>All candidates compete individually in one category.</small></span>
-              </label>
-              <label class="pageant-format-card">
-                <input type="radio" name="pageant_format" value="pairs">
-                <span><strong>Pair or Couple Pageant</strong><small>Two linked candidates compete as one entry.</small></span>
-              </label>
-              <label class="pageant-format-card">
-                <input type="radio" name="pageant_format" value="custom">
-                <span><strong>Custom Format</strong><small>Create your own competition categories.</small></span>
-              </label>
-            </div>
-          </fieldset>
 
           <details class="pageant-advanced" id="customize-categories" open>
             <summary>Customize Categories</summary>
@@ -489,17 +463,14 @@
           </details>
         </section>
 
-        <section class="wizard-panel criteria-hidden" data-pageant data-pageant-step="2">
+        <section class="wizard-panel" data-pageant data-pageant-step="2">
           <div class="wizard-section-title"><span>02</span><div>
             <h3>Add Pageant Candidates</h3>
             <p>Register the candidates and assign the team or department they represent.</p>
           </div></div>
           <div class="pageant-counts" id="pageant-candidate-counts" aria-live="polite"></div>
-          <div class="pageant-cand-actions">
-            <button type="button" class="match-primary" id="pageant-add-candidate">Add Candidate Manually</button>
-          </div>
           <div id="pageant-candidates-list"></div>
-          <details class="pageant-advanced" open>
+          <details class="pageant-advanced" id="pageant-existing-candidates-section" open>
             <summary>Select Existing Participant</summary>
             <p class="field-hint">Choose from the candidate registry when available.</p>
             <div class="team-options" id="pageant-existing-candidates">
@@ -513,7 +484,7 @@
           </details>
         </section>
 
-        <section class="wizard-panel criteria-hidden" data-pageant data-pageant-step="3">
+        <section class="wizard-panel" data-pageant data-pageant-step="3">
           <div class="wizard-section-title"><span>03</span><div>
             <h3>Set Up Segments and Scoring</h3>
             <p>Choose the parts of the Pageant and define how judges will score each one.</p>
@@ -526,7 +497,7 @@
           <div id="pageant-segments-list"></div>
         </section>
 
-        <section class="wizard-panel criteria-hidden" data-pageant data-pageant-step="4">
+        <section class="wizard-panel" data-pageant data-pageant-step="4">
           <div class="wizard-section-title"><span>04</span><div>
             <h3>Judges, Advancement, and Awards</h3>
             <p>Assign officials, decide whether candidates advance between rounds, and optionally add special awards.</p>
@@ -557,10 +528,6 @@
                 {% empty %}<p>No authorized judges available.</p>{% endfor %}
               </div>
             </fieldset>
-            <details class="pageant-advanced">
-              <summary>Customize Judge Assignments</summary>
-              <p class="field-hint">Per-segment and per-category assignments can be refined later from the Pageant overview. Default assignment covers all scoring segments.</p>
-            </details>
           </div>
 
           <div data-pageant-tab-panel="advancement" hidden>
@@ -607,7 +574,7 @@
           </div>
         </section>
 
-        <section class="wizard-panel criteria-hidden" data-pageant data-pageant-step="5">
+        <section class="wizard-panel" data-pageant data-pageant-step="5">
           <div class="wizard-section-title"><span>05</span><div>
             <h3>Review Your Pageant</h3>
             <p>Check the setup before saving or publishing the Pageant.</p>
@@ -615,8 +582,8 @@
           <div id="pageant-review"></div>
         </section>
 
-        <section class="wizard-panel" data-step="5">
-          <div class="wizard-section-title"><span>05</span><div><h3>Review & publish</h3><p>Confirm the full configuration before saving.</p></div></div>
+        <section class="wizard-panel" data-step="6">
+          <div class="wizard-section-title"><span>06</span><div><h3>Review & publish</h3><p>Confirm the full configuration before saving.</p></div></div>
           <div id="review-summary" class="review-summary"></div>
         </section>
       </div>
@@ -697,6 +664,15 @@
     </footer>
   </dialog>
 
+  <dialog id="pageant-confirm-dialog" class="confirm-dialog" aria-labelledby="pageant-confirm-title">
+    <h2 id="pageant-confirm-title">Leave Pageant setup?</h2>
+    <p id="pageant-confirm-message">Your Pageant configuration will remain saved in this draft until you confirm the change.</p>
+    <div>
+      <button type="button" class="match-secondary" id="pageant-confirm-cancel">Keep Pageant</button>
+      <button type="button" class="match-danger" id="pageant-confirm-accept">Switch setup</button>
+    </div>
+  </dialog>
+
   <dialog id="view-event" class="summary-dialog">
     <header><h2>Event summary</h2><button type="button" data-close-view aria-label="Close">×</button></header>
     <div id="view-summary" class="review-summary"></div>
@@ -719,7 +695,6 @@
     window.CRITERIA_OPEN_CREATE = {{ open_create|yesno:"true,false" }};
     window.CRITERIA_IS_SUPERUSER = {{ request.user.is_superuser|yesno:"true,false" }};
   </script>
-  <script src="{% static 'admindash/criteriabasedevent.js' %}?v=20260806p"></script>
-  <script src="{% static 'admindash/criteriabasedevent-pageant.js' %}?v=20260806p"></script>
+  <script src="{% static 'admindash/criteriabasedevent.js' %}?v=20260807p"></script>
 </body>
 </html>
