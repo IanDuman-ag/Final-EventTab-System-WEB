@@ -76,9 +76,20 @@
     $('#wizard-back').style.display = activeStep === 1 ? 'none' : '';
     showError('');
     if (mode === 'pageant' && window.PageantWizard) window.PageantWizard.render(activeStep);
-    if (mode === 'standard' && activeStep === 6) buildReview();
-    if (mode === 'standard' && activeStep === 3) renderScoringCategories();
-    if (mode === 'standard' && activeStep === 4) renderScoringCriteria();
+    if (mode === 'standard' && activeStep === 6) {
+      syncCriteriaFromScoringWorkflow();
+      buildReview();
+    }
+    if (mode === 'standard' && activeStep === 3) {
+      loadCategories().then(function () {
+        renderScoringCategories();
+      }).catch(function (error) { showError(error.message); });
+    }
+    if (mode === 'standard' && activeStep === 4) {
+      loadCategories().then(function () {
+        renderScoringCriteria();
+      }).catch(function (error) { showError(error.message); });
+    }
     var body = $('.wizard-body');
     if (body) body.scrollTop = 0;
     var heading = $('.wizard-panel.active h3');
@@ -546,13 +557,15 @@
     editor.innerHTML = '';
     points.forEach(function (row, index) {
       var div = document.createElement('div');
+      div.className = 'points-row';
       div.innerHTML =
-        '<input data-p-label value="' + escapeAttr(row.label) + '" aria-label="Rank label">' +
+        '<input data-p-label value="' + escapeAttr(row.label) + '" aria-label="Rank label" placeholder="Rank label">' +
         '<input type="number" min="0" data-p-points value="' + escapeAttr(row.points) + '" aria-label="Points">' +
-        '<button type="button" data-p-up ' + (index === 0 ? 'disabled' : '') + '>Up</button>' +
-        '<button type="button" data-p-down ' + (index === points.length - 1 ? 'disabled' : '') + '>Down</button>' +
-        '<button type="button" data-p-del>Delete</button>';
-      div.style.gridTemplateColumns = '1fr 90px auto auto auto';
+        '<div class="points-row-actions">' +
+          '<button type="button" class="points-btn points-btn-up" data-p-up ' + (index === 0 ? 'disabled' : '') + ' aria-label="Move rank up">Up</button>' +
+          '<button type="button" class="points-btn points-btn-down" data-p-down ' + (index === points.length - 1 ? 'disabled' : '') + ' aria-label="Move rank down">Down</button>' +
+          '<button type="button" class="points-btn points-btn-del" data-p-del aria-label="Delete rank">Delete</button>' +
+        '</div>';
       editor.appendChild(div);
     });
     $$('#points-editor [data-p-del]').forEach(function (btn, index) {
@@ -703,8 +716,170 @@
     $('#selected-judge-count').textContent = collectJudges().length + ' selected';
   }
 
+  function categoryOverallWeightTotal() {
+    return scoringWorkflow.categories.reduce(function (sum, row) {
+      return sum + (Number(row.overall_weight_percent) || 0);
+    }, 0);
+  }
+
+  function roundWeight(value) {
+    return Math.round((Number(value) || 0) * 100) / 100;
+  }
+
+  function validateCategoryOverallWeights() {
+    var total = roundWeight(categoryOverallWeightTotal());
+    // Preserve existing simple-average mode: all category weights 0.
+    if (Math.abs(total) < 0.01) return '';
+    if (total < 100) {
+      return (
+        'Event category weights must total 100%. Current total: ' + total + '%. ' +
+        roundWeight(100 - total) + '% remaining.'
+      );
+    }
+    if (total > 100) {
+      return 'Event category weights exceed 100% by ' + roundWeight(total - 100) + '%.';
+    }
+    return '';
+  }
+
+  function categoryTargetWeight(category, categoryCount, eventWeightTotal) {
+    var raw = Number(category.overall_weight_percent) || 0;
+    if (Math.abs(eventWeightTotal) < 0.01) {
+      return categoryCount ? roundWeight(100 / categoryCount) : 0;
+    }
+    return raw;
+  }
+
+  function criteriaWeightTotal(categoryRow) {
+    return roundWeight((categoryRow.criteria || []).reduce(function (sum, row) {
+      return sum + (Number(row.weight_percent) || 0);
+    }, 0));
+  }
+
+  function validateCriteriaWeightsForCategory(categoryRow) {
+    if (!categoryRow) return '';
+    var rows = categoryRow.criteria || [];
+    if (!rows.length) {
+      return 'Add criteria for "' + categoryRow.name + '" before continuing.';
+    }
+    // Ranking Mode keeps existing ranking logic; weight totals are for Scoring Mode.
+    if (categoryRow.judge_mode === 'ranking') return '';
+
+    for (var i = 0; i < rows.length; i++) {
+      var raw = rows[i].weight_percent;
+      if (raw === '' || raw == null || Number.isNaN(Number(raw))) {
+        return 'Criterion "' + (rows[i].name || 'Untitled') + '" in "' + categoryRow.name + '" needs a valid Event Weight %.';
+      }
+      if (Number(raw) < 0) {
+        return 'Criterion weights cannot be negative in "' + categoryRow.name + '".';
+      }
+    }
+
+    var eventWeightTotal = categoryOverallWeightTotal();
+    var categoryWeight = categoryTargetWeight(
+      categoryRow,
+      scoringWorkflow.categories.length,
+      eventWeightTotal
+    );
+    var weightTotal = criteriaWeightTotal(categoryRow);
+
+    // Preserve simple-average mode within a category when all criteria are 0
+    // and the category itself is in average mode (category weight effectively shared).
+    if (Math.abs(weightTotal) < 0.01 && Math.abs(Number(categoryRow.overall_weight_percent) || 0) < 0.01) {
+      return '';
+    }
+
+    if (Math.abs(weightTotal - categoryWeight) < 0.01) return '';
+    if (weightTotal > categoryWeight) {
+      return (
+        'Criteria weights for "' + categoryRow.name + '" exceed the category weight by ' +
+        roundWeight(weightTotal - categoryWeight) + '%.'
+      );
+    }
+    return (
+      'Criteria weights for "' + categoryRow.name + '" must total ' + categoryWeight +
+      '%. Current total: ' + weightTotal + '%.'
+    );
+  }
+
+  function absoluteCriterionEventWeight(criterion, criteriaCount, localSum, categoryWeight) {
+    var local = Number(criterion.weight_percent) || 0;
+    // Absolute event weight: 10 means 10% of the final score.
+    // If all criteria are 0 (simple average), split the category weight equally.
+    if (Math.abs(localSum) < 0.01) {
+      return criteriaCount ? roundWeight(categoryWeight / criteriaCount) : 0;
+    }
+    return roundWeight(local);
+  }
+
+  function syncCriteriaFromScoringWorkflow() {
+    // Criterion weight_percent is an absolute % of the overall event.
+    // Category overall_weight_percent is the target sum for its criteria (and event categories sum to 100%).
+    var flat = [];
+    var cats = scoringWorkflow.categories;
+    var eventWeightTotal = categoryOverallWeightTotal();
+    cats.forEach(function (category) {
+      var categoryWeight = categoryTargetWeight(category, cats.length, eventWeightTotal);
+      var rows = category.criteria || [];
+      var localSum = criteriaWeightTotal(category);
+      rows.forEach(function (criterion) {
+        flat.push({
+          id: 'esc_' + criterion.id,
+          name: criterion.name || '',
+          description: category.name || '',
+          weight: absoluteCriterionEventWeight(criterion, rows.length, localSum, categoryWeight),
+          max_score: criterion.max_score != null ? Number(criterion.max_score) : 100,
+        });
+      });
+    });
+    if (flat.length) {
+      var total = roundWeight(flat.reduce(function (sum, row) { return sum + Number(row.weight); }, 0));
+      var drift = roundWeight(100 - total);
+      if (Math.abs(drift) <= 0.15 && Math.abs(drift) > 0.001) {
+        flat[flat.length - 1].weight = roundWeight(flat[flat.length - 1].weight + drift);
+      }
+      criteria = flat;
+    }
+  }
+
+  function updateCriteriaWeightMeter(category, criteriaRows) {
+    var meter = $('#scoring-criterion-total');
+    if (!meter) return;
+    var eventWeightTotal = categoryOverallWeightTotal();
+    var categoryWeight = category
+      ? categoryTargetWeight(category, scoringWorkflow.categories.length, eventWeightTotal)
+      : 0;
+    var total = roundWeight((criteriaRows || []).reduce(function (sum, row) {
+      return sum + (Number(row.weight_percent) || 0);
+    }, 0));
+    meter.classList.remove('is-ok', 'is-bad');
+    if (!category) {
+      meter.textContent = 'Category criteria total: 0% / 0%';
+      return;
+    }
+    if (Math.abs(total - categoryWeight) < 0.01) {
+      meter.classList.add('is-ok');
+      meter.textContent = '✓ Category criteria total: ' + total + '% / ' + categoryWeight + '%';
+      return;
+    }
+    if (total > categoryWeight) {
+      meter.classList.add('is-bad');
+      meter.textContent = (
+        'Category criteria total: ' + total + '% / ' + categoryWeight + '%\n' +
+        roundWeight(total - categoryWeight) + '% over the allowed category weight'
+      );
+      return;
+    }
+    meter.classList.add('is-bad');
+    meter.textContent = (
+      'Category criteria total: ' + total + '% / ' + categoryWeight + '%\n' +
+      roundWeight(categoryWeight - total) + '% remaining'
+    );
+  }
+
   function syncHiddenFields() {
-    syncCriteriaFromDom();
+    syncCriteriaFromScoringWorkflow();
+    if (!criteria.length) syncCriteriaFromDom();
     syncDeductionsFromDom();
     syncPointsFromDom();
     $('#participant-ids').value = JSON.stringify(collectParticipants());
@@ -722,6 +897,7 @@
   function validateStep(current) {
     if (current === 1) {
       if (!form.event_name.value.trim()) return 'Event Name is required.';
+      if (!form.category.value) return 'Category Name is required. Select a category type.';
       if (!form.event_classification.value) return 'Event Classification is required.';
       if (!form.venue.value.trim()) return 'Venue is required.';
       if (!form.start_date.value || !form.end_date.value) return 'Start Date and End Date are required.';
@@ -762,26 +938,34 @@
       }
     }
     if (current === 3) {
-      if (!form.category.value) return 'Category is required.';
+      if (!scoringWorkflow.eventId) return 'Complete Step 1 so categories can be saved to this event.';
+      if (!scoringWorkflow.categories.length) return 'Save at least one scoring category.';
+      var categoryWeightError = validateCategoryOverallWeights();
+      if (categoryWeightError) return categoryWeightError;
     }
     if (current === 4) {
-      syncCriteriaFromDom();
-      if (!criteria.length) return 'Create at least one judging criterion.';
-      var cTotal = criteria.reduce(function (sum, row) { return sum + row.weight; }, 0);
-      if (Math.abs(cTotal - 100) >= 0.01) return 'Total criteria weight must equal 100%.';
-      if (criteria.some(function (row) { return !row.name || row.max_score <= 0; })) {
-        return 'Each criterion needs a name and maximum score.';
+      if (!scoringWorkflow.categories.length) return 'Save at least one scoring category first.';
+      var emptyCategory = scoringWorkflow.categories.filter(function (category) {
+        return !(category.criteria && category.criteria.length);
+      })[0];
+      if (emptyCategory) {
+        return 'Add criteria for "' + emptyCategory.name + '" before continuing.';
       }
-      var settings = collectScoreSettings();
-      if (settings.min_score >= settings.max_score) return 'Minimum score must be less than maximum score.';
-      if ($('#deductions-enabled').checked) {
-        syncDeductionsFromDom();
-        if (deductions.some(function (row) { return !row.name; })) return 'Each penalty needs a name.';
+      var categoryWeightErrorStep4 = validateCategoryOverallWeights();
+      if (categoryWeightErrorStep4) return categoryWeightErrorStep4;
+      for (var c = 0; c < scoringWorkflow.categories.length; c++) {
+        var criteriaWeightError = validateCriteriaWeightsForCategory(scoringWorkflow.categories[c]);
+        if (criteriaWeightError) return criteriaWeightError;
+      }
+      syncCriteriaFromScoringWorkflow();
+      var flatTotal = roundWeight(criteria.reduce(function (sum, row) { return sum + (Number(row.weight) || 0); }, 0));
+      if (criteria.length && Math.abs(flatTotal - 100) >= 0.01 && Math.abs(categoryOverallWeightTotal()) >= 0.01) {
+        return 'All criterion event weights must total 100%. Current total: ' + flatTotal + '%.';
       }
     }
     if (current === 5) {
       if (!$('#chief-judge').value) return 'Chief Judge is required.';
-      if (!form.faculty_account.value) return 'Faculty In Charge is required.';
+      if (!form.faculty_account.value) return 'Tabulator in Charge is required.';
       var judges = collectJudges();
       if (!judges.length) return 'Assign at least one judge.';
       if ($('#remove-high-low').checked && judges.length < 3) {
@@ -808,13 +992,16 @@
     var faculty = form.faculty_account;
     var categories = scoringWorkflow.categories.map(function (category) {
       var criteriaSummary = (category.criteria || []).map(function (criterion) {
-        return criterion.name + ' (' + criterion.weight_percent + '%)';
+        return criterion.name + ' (' + criterion.weight_percent + '% of event)';
       }).join(', ') || 'No criteria saved';
+      var criteriaTotal = criteriaWeightTotal(category);
       return category.name + ' · ' + (category.judge_mode === 'ranking' ? 'Ranking Mode' : 'Scoring Mode') +
-        ' · ' + category.overall_weight_percent + '% · ' + criteriaSummary;
+        ' · Category ' + category.overall_weight_percent + '% · Criteria ' + criteriaTotal + '%' +
+        ' · ' + criteriaSummary;
     }).join(' | ') || '—';
     var rows = [
       ['Event Name', form.event_name.value],
+      ['Category Name', form.category.options[form.category.selectedIndex] ? form.category.options[form.category.selectedIndex].text : '—'],
       ['Event Classification', form.event_classification.options[form.event_classification.selectedIndex].text],
       ['Participation Type', participationType() === 'team' ? 'Team' : 'Individual'],
       ['Venue', form.venue.value],
@@ -823,11 +1010,55 @@
       ['Scoring Categories & Criteria', categories],
       ['Chief Judge', chief.options[chief.selectedIndex] ? chief.options[chief.selectedIndex].text : '—'],
       ['Assigned Judges', judgeNames.join(', ') || '—'],
-      ['Faculty In Charge', faculty.options[faculty.selectedIndex] ? faculty.options[faculty.selectedIndex].text : '—'],
+      ['Tabulator in Charge', faculty.options[faculty.selectedIndex] ? faculty.options[faculty.selectedIndex].text : '—'],
     ];
     $('#review-summary').innerHTML = rows.map(function (row) {
       return '<div><span>' + escapeHtml(row[0]) + '</span><strong>' + escapeHtml(row[1]) + '</strong></div>';
     }).join('');
+  }
+
+  function resetScoringWorkflow() {
+    scoringWorkflow = {
+      eventId: null, eventName: '', categories: [], selectedCategoryId: null,
+      editingCategoryId: null, editingCriterionId: null, criteria: [],
+    };
+    var categoryList = $('#scoring-category-list');
+    if (categoryList) categoryList.innerHTML = '<p class="pageant-empty-state">No categories saved yet.</p>';
+    var criterionList = $('#scoring-criterion-list');
+    if (criterionList) criterionList.innerHTML = '<p class="pageant-empty-state">Save and select a category first.</p>';
+    var categoryPicker = $('#scoring-criterion-category');
+    if (categoryPicker) categoryPicker.innerHTML = '<option value="">Select category</option>';
+  }
+
+  function hydrateScoringWorkflow(event) {
+    scoringWorkflow.eventId = event.id;
+    scoringWorkflow.eventName = event.name || '';
+    scoringWorkflow.editingCategoryId = null;
+    scoringWorkflow.editingCriterionId = null;
+    scoringWorkflow.categories = (event.scoring_categories || []).map(function (category) {
+      return {
+        id: category.id,
+        name: category.name,
+        judge_mode: category.judge_mode,
+        display_order: category.display_order,
+        overall_weight_percent: category.overall_weight_percent,
+        criteria: (category.criteria || []).slice(),
+      };
+    });
+    scoringWorkflow.selectedCategoryId = scoringWorkflow.categories.length
+      ? scoringWorkflow.categories[0].id
+      : null;
+    scoringWorkflow.criteria = scoringWorkflow.categories.length
+      ? (scoringWorkflow.categories[0].criteria || []).slice()
+      : [];
+    syncCriteriaFromScoringWorkflow();
+    renderScoringCategories();
+  }
+
+  function currentEventId() {
+    if (scoringWorkflow.eventId) return scoringWorkflow.eventId;
+    var match = String(form.action || '').match(/\/criteria\/(\d+)\/edit\/?/);
+    return match ? match[1] : '';
   }
 
   function resetWizard() {
@@ -839,6 +1070,7 @@
     deductions = [];
     points = defaultPoints('major');
     stages = defaultStages(2);
+    resetScoringWorkflow();
     $('#stage-count').value = '2';
     $('#stage-tiebreak-method').value = 'highest_selected_criterion';
     renderCriteria();
@@ -923,8 +1155,11 @@
     form.division.value = event.division === '—' ? '' : (event.division || '');
     form.venue.value = event.venue || '';
     form.start_date.value = event.start_date || '';
-    form.end_date.value = event.end_date || '';
+    form.end_date.value = event.end_date || event.start_date || '';
+    if ($('#event-time')) $('#event-time').value = event.start_time || '';
     $('#status-preview').value = event.publication_status || 'draft';
+    $('#publication-status').value = event.publication_status || 'draft';
+    hydrateScoringWorkflow(event);
     var loadedFormat = normalizeLoadedFormat(event.event_format);
     $$('input[name="event_format"]').forEach(function (input) {
       input.checked = input.value === loadedFormat;
@@ -943,15 +1178,18 @@
     var stageTie = ((event.result_processing_config || {}).stage_tiebreak_method) || 'highest_selected_criterion';
     $('#stage-tiebreak-method').value = stageTie;
     syncFormatPanels();
-    criteria = (event.judging_criteria_config || []).map(function (row) {
-      return {
-        id: row.id || uid('c'),
-        name: row.name || '',
-        description: row.description || '',
-        weight: row.weight || 0,
-        max_score: row.max_score || 0,
-      };
-    });
+    syncCriteriaFromScoringWorkflow();
+    if (!criteria.length) {
+      criteria = (event.judging_criteria_config || []).map(function (row) {
+        return {
+          id: row.id || uid('c'),
+          name: row.name || '',
+          description: row.description || '',
+          weight: row.weight || 0,
+          max_score: row.max_score || 0,
+        };
+      });
+    }
     if (!criteria.length) criteria = defaultCriteria();
     renderCriteria();
     var settings = event.score_settings || {};
@@ -1036,14 +1274,16 @@
   }
 
   function saveEventDraft() {
+    if (!form.end_date.value && form.start_date.value) form.end_date.value = form.start_date.value;
     return workflowRequest('save_event_draft', {
-      event_id: scoringWorkflow.eventId || '',
+      event_id: currentEventId(),
       event_name: form.event_name.value.trim(),
       event_classification: form.event_classification.value,
       participation_type: form.participation_type.value,
       venue: form.venue.value.trim(),
       start_date: form.start_date.value,
       event_time: ($('#event-time') || {}).value || '',
+      event_category: form.category && form.category.value ? form.category.value : '',
     }).then(function (data) {
       scoringWorkflow.eventId = data.event.id;
       scoringWorkflow.eventName = data.event.name;
@@ -1069,9 +1309,12 @@
     judgeModeExplanation();
     var host = $('#scoring-category-list');
     if (host) host.innerHTML = scoringWorkflow.categories.map(function (category) {
+      var weightLabel = Number(category.overall_weight_percent)
+        ? (category.overall_weight_percent + '%')
+        : '0% (simple average)';
       return '<article class="pageant-review-card"><h4>' + escapeHtml(category.name) + '</h4><ul><li>' +
         escapeHtml(category.judge_mode === 'ranking' ? 'Ranking Mode' : 'Scoring Mode') +
-        '</li><li>Order ' + category.display_order + ' · ' + category.overall_weight_percent + '%</li></ul>' +
+        '</li><li>Order ' + category.display_order + ' · ' + weightLabel + '</li></ul>' +
         '<div class="criteria-editor-actions"><button type="button" class="match-secondary" data-category-edit="' + category.id + '">Edit</button>' +
         '<button type="button" class="pageant-danger-button" data-category-delete="' + category.id + '">Delete</button></div></article>';
     }).join('') || '<p class="pageant-empty-state">No categories saved yet.</p>';
@@ -1080,10 +1323,29 @@
   function loadCategories() {
     if (!scoringWorkflow.eventId) return Promise.resolve();
     return workflowRequest('list_categories', { event_id: scoringWorkflow.eventId }).then(function (data) {
-      scoringWorkflow.categories = data.categories || [];
-      if (!scoringWorkflow.selectedCategoryId && scoringWorkflow.categories.length) {
-        scoringWorkflow.selectedCategoryId = scoringWorkflow.categories[0].id;
+      var previous = scoringWorkflow.categories.slice();
+      scoringWorkflow.categories = (data.categories || []).map(function (category) {
+        var prior = previous.filter(function (row) { return String(row.id) === String(category.id); })[0];
+        return {
+          id: category.id,
+          name: category.name,
+          judge_mode: category.judge_mode,
+          display_order: category.display_order,
+          overall_weight_percent: category.overall_weight_percent,
+          criteria: category.criteria || (prior && prior.criteria) || [],
+        };
+      });
+      if (
+        !scoringWorkflow.selectedCategoryId
+        || !scoringWorkflow.categories.some(function (row) {
+          return String(row.id) === String(scoringWorkflow.selectedCategoryId);
+        })
+      ) {
+        scoringWorkflow.selectedCategoryId = scoringWorkflow.categories.length
+          ? scoringWorkflow.categories[0].id
+          : null;
       }
+      syncCriteriaFromScoringWorkflow();
     });
   }
 
@@ -1091,7 +1353,8 @@
     var picker = $('#scoring-criterion-category');
     if (!picker) return;
     picker.innerHTML = '<option value="">Select category</option>' + scoringWorkflow.categories.map(function (category) {
-      return '<option value="' + category.id + '">' + escapeHtml(category.name) + '</option>';
+      return '<option value="' + category.id + '">' + escapeHtml(category.name) +
+        ' (' + (Number(category.overall_weight_percent) || 0) + '%)</option>';
     }).join('');
     picker.value = scoringWorkflow.selectedCategoryId || '';
     loadScoringCriteria();
@@ -1109,15 +1372,34 @@
       var ranking = data.category.judge_mode === 'ranking';
       $('#scoring-criterion-max-score-wrap').hidden = ranking;
       $('#scoring-criterion-max-score').required = !ranking;
-      var total = data.criteria.reduce(function (sum, row) { return sum + Number(row.weight_percent); }, 0);
       scoringWorkflow.criteria = data.criteria;
+      var matchedCategory = null;
       scoringWorkflow.categories.forEach(function (row) {
-        if (String(row.id) === String(data.category.id)) row.criteria = data.criteria;
+        if (String(row.id) === String(data.category.id)) {
+          row.criteria = data.criteria;
+          row.judge_mode = data.category.judge_mode;
+          if (data.category.overall_weight_percent != null) {
+            row.overall_weight_percent = data.category.overall_weight_percent;
+          }
+          matchedCategory = row;
+        }
       });
-      $('#scoring-criterion-total').textContent = 'Criteria total: ' + total + '% of 100%';
+      if (!matchedCategory) {
+        matchedCategory = {
+          id: data.category.id,
+          name: data.category.name,
+          judge_mode: data.category.judge_mode,
+          overall_weight_percent: data.category.overall_weight_percent || 0,
+          criteria: data.criteria,
+        };
+      }
+      updateCriteriaWeightMeter(matchedCategory, data.criteria);
       host.innerHTML = data.criteria.map(function (criterion) {
-        return '<article class="pageant-review-card"><h4>' + escapeHtml(criterion.name) + '</h4><ul><li>Weight ' +
-          criterion.weight_percent + '% · Order ' + criterion.display_order + '</li><li>' +
+        var weightLabel = Number(criterion.weight_percent)
+          ? (criterion.weight_percent + '% of event')
+          : '0% (simple average)';
+        return '<article class="pageant-review-card"><h4>' + escapeHtml(criterion.name) + '</h4><ul><li>Event Weight ' +
+          weightLabel + ' · Order ' + criterion.display_order + '</li><li>' +
           (ranking ? 'Ranking Mode' : 'Max Score ' + criterion.max_score) + '</li></ul>' +
           '<div class="criteria-editor-actions"><button type="button" class="match-secondary" data-criterion-edit="' + criterion.id + '">Edit</button>' +
           '<button type="button" class="pageant-danger-button" data-criterion-delete="' + criterion.id + '">Delete</button></div></article>';
@@ -1128,14 +1410,18 @@
   function renderView(event) {
     var savedCategories = (event.scoring_categories || []).map(function (category) {
       var criteria = (category.criteria || []).map(function (criterion) {
-        return criterion.name + ' (' + criterion.weight_percent + '%)';
+        return criterion.name + ' (' + criterion.weight_percent + '% of event)';
       }).join(', ');
+      var criteriaTotal = roundWeight((category.criteria || []).reduce(function (sum, row) {
+        return sum + (Number(row.weight_percent) || 0);
+      }, 0));
       return category.name + ' · ' + (category.judge_mode === 'ranking' ? 'Ranking Mode' : 'Scoring Mode') +
-        ' · ' + category.overall_weight_percent + '%' + (criteria ? ' · ' + criteria : '');
+        ' · Category ' + category.overall_weight_percent + '% · Criteria ' + criteriaTotal + '%' +
+        (criteria ? ' · ' + criteria : '');
     }).join(' | ');
     var rows = [
       ['Event Name', event.name],
-      ['Category', event.category],
+      ['Category', event.category_label || event.category],
       ['Event Classification', event.classification_label],
       ['Participation Type', event.participation_label],
       ['Venue', event.venue],
@@ -1144,7 +1430,7 @@
       ['Scoring Categories & Criteria', savedCategories || '—'],
       ['Assigned Judges', (event.judge_names || []).join(', ') || '—'],
       ['Chief Judge', event.chief_judge_name],
-      ['Faculty In Charge', event.faculty_name],
+      ['Tabulator in Charge', event.faculty_name],
       ['Championship Points', (event.points_config || []).map(function (row) {
         return row.label + ': ' + row.points;
       }).join(' · ') || '—'],
@@ -1278,13 +1564,15 @@
       showError('Complete Step 1 first.');
       return;
     }
+    var overallWeight = $('#scoring-category-weight').value;
+    if (overallWeight === '' || overallWeight == null) overallWeight = '0';
     workflowRequest(scoringWorkflow.editingCategoryId ? 'update_category' : 'create_category', {
       event_id: scoringWorkflow.eventId,
       category_id: scoringWorkflow.editingCategoryId || '',
       category_name: $('#scoring-category-name').value.trim(),
       judge_mode: $('#scoring-category-mode').value,
       display_order: $('#scoring-category-order').value,
-      overall_weight_percent: $('#scoring-category-weight').value,
+      overall_weight_percent: overallWeight,
     }).then(function () {
       return loadCategories();
     }).then(function () {
@@ -1300,12 +1588,21 @@
   $('#scoring-criterion-category').addEventListener('change', loadScoringCriteria);
   $('#save-scoring-criterion').addEventListener('click', function () {
     var categoryId = $('#scoring-criterion-category').value;
+    var weightPercent = $('#scoring-criterion-weight').value;
+    if (weightPercent === '' || weightPercent == null) {
+      showError('Event Weight % is required for each criterion.');
+      return;
+    }
+    if (Number(weightPercent) < 0) {
+      showError('Criterion weights cannot be negative.');
+      return;
+    }
     workflowRequest(scoringWorkflow.editingCriterionId ? 'update_criterion' : 'create_criterion', {
       event_id: scoringWorkflow.eventId || '',
       category_id: categoryId,
       criterion_id: scoringWorkflow.editingCriterionId || '',
       criterion_name: $('#scoring-criterion-name').value.trim(),
-      weight_percent: $('#scoring-criterion-weight').value,
+      weight_percent: weightPercent,
       max_score: $('#scoring-criterion-max-score').value,
       display_order: $('#scoring-criterion-order').value,
     }).then(function () {
@@ -1372,7 +1669,7 @@
   });
   $$('[data-delete]').forEach(function (btn) {
     btn.addEventListener('click', function () {
-      if (btn.dataset.finalized === '1' && !window.CRITERIA_IS_SUPERUSER) {
+      if (btn.dataset.finalized === '1' && !window.CRITERIA_CAN_DELETE_FINALIZED && !window.CRITERIA_IS_SUPERUSER) {
         alert('Events with finalized results can only be deleted by an administrator.');
         return;
       }

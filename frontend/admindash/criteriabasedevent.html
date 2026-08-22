@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Criteria-Based Events · EventTab</title>
-  <link rel="stylesheet" href="{% static 'admindash/criteriabasedevent.css' %}?v=20260806p">
+  <link rel="stylesheet" href="{% static 'admindash/criteriabasedevent.css' %}?v=20260822b">
 </head>
 <body class="admin-dashboard-page admin-dashboard-v2 criteria-page match-events-page">
   <div class="dashboard-shell">
@@ -54,8 +54,8 @@
             <label><span class="sr-only">Filter category</span>
               <select name="category">
                 <option value="all">All categories</option>
-                <option value="SOCIO-CULTURAL & LITERARY ARTS COMPETITION" {% if category_filter == 'SOCIO-CULTURAL & LITERARY ARTS COMPETITION' %}selected{% endif %}>Socio-Cultural & Literary Arts</option>
-                <option value="Special Event" {% if category_filter == 'Special Event' %}selected{% endif %}>Special Event</option>
+                <option value="SOCIO-CULTURAL & LITERARY ARTS COMPETITION" {% if category_filter == 'SOCIO-CULTURAL & LITERARY ARTS COMPETITION' %}selected{% endif %}>Socio-Cultural &amp; Literary Arts Competition</option>
+                <option value="Special Event" {% if category_filter == 'Special Event' %}selected{% endif %}>Special Events &amp; Competitions</option>
               </select>
             </label>
             <label><span class="sr-only">Sort</span>
@@ -87,7 +87,7 @@
                 {% for event in event_rows %}
                 <tr>
                   <td><strong>{{ event.name }}</strong><small>{{ event.venue }}</small></td>
-                  <td>{{ event.category }}</td>
+                  <td>{{ event.category_label|default:event.category }}</td>
                   <td>{{ event.classification_label }}</td>
                   <td>{{ event.division }}</td>
                   <td>{{ event.criteria_score_method_label }}</td>
@@ -141,7 +141,6 @@
       <input type="hidden" name="publication_status" id="publication-status" value="draft">
       <input type="hidden" name="special_event_type" id="special-event-type-input" value="">
       <input type="hidden" name="pageant_config" id="pageant-config-input" value="{}">
-      <input type="hidden" name="category" value="Special Event">
       <header class="wizard-head">
         <div>
           <span class="wizard-kicker">JUDGING BLUEPRINT</span>
@@ -168,6 +167,14 @@
           <div class="wizard-section-title"><span>01</span><div><h3>Basic information</h3><p>Define the event identity, classification, and schedule.</p></div></div>
           <div class="wizard-grid">
             <label class="wide">Event Name <input name="event_name" required maxlength="200"></label>
+            <label class="wide">Category Name
+              <select name="category" id="event-category" required>
+                <option value="">Select category type</option>
+                <option value="SOCIO-CULTURAL & LITERARY ARTS COMPETITION">Socio-Cultural &amp; Literary Arts Competition</option>
+                <option value="Special Event">Special Events &amp; Competitions</option>
+              </select>
+              <small class="field-hint"> </small>
+            </label>
             <label>Event Classification
               <select name="event_classification" required id="event-classification">
                 <option value="">Select classification</option>
@@ -294,7 +301,10 @@
             <label>Category Name <input id="scoring-category-name" maxlength="120"></label>
             <label>Judge Mode <select id="scoring-category-mode"><option value="scoring">Scoring Mode</option><option value="ranking">Ranking Mode</option></select></label>
             <label>Display Order <input id="scoring-category-order" type="number" min="1" step="1"></label>
-            <label>Overall Category Weighted % <input id="scoring-category-weight" type="number" min="0.01" max="100" step="0.01"></label>
+            <label>Overall Category Weighted %
+              <input id="scoring-category-weight" type="number" min="0" max="100" step="0.01" placeholder="0">
+              <small class="field-hint">This category’s share of the event. All category weights must total 100%. Enter 0 on every category to use a simple average.</small>
+            </label>
           </div>
           <p class="pageant-weight-meter is-amber" id="judge-mode-explanation" role="status"></p>
           <div class="criteria-editor-actions"><button type="button" class="match-primary" id="save-scoring-category">Save Category</button></div>
@@ -306,11 +316,14 @@
           <div class="wizard-grid">
             <label class="wide">Category <select id="scoring-criterion-category"></select></label>
             <label>Criterion Name <input id="scoring-criterion-name" maxlength="120"></label>
-            <label>Weight % <input id="scoring-criterion-weight" type="number" min="0.01" max="100" step="0.01"></label>
+            <label>Event Weight %
+              <input id="scoring-criterion-weight" type="number" min="0" max="100" step="0.01" placeholder="10" required>
+              <small class="field-hint">Enter the percentage this criterion contributes to the overall event. All criteria under this category must total the category weight.</small>
+            </label>
             <label id="scoring-criterion-max-score-wrap">Max Score <input id="scoring-criterion-max-score" type="number" min="0.01" step="0.01"></label>
             <label>Order <input id="scoring-criterion-order" type="number" min="1" step="1"></label>
           </div>
-          <p class="criteria-weight-meter" id="scoring-criterion-total">Criteria total: 0% of 100%</p>
+          <p class="criteria-weight-meter" id="scoring-criterion-total">Category criteria total: 0% / 0%</p>
           <div class="criteria-editor-actions"><button type="button" class="match-primary" id="save-scoring-criterion">Save Criterion</button></div>
           <div id="scoring-criterion-list" class="pageant-review-cards"></div>
           <fieldset hidden>
@@ -379,20 +392,20 @@
               {% empty %}<p>No authorized judges available.</p>{% endfor %}
             </div>
           </fieldset>
-          <label class="field-block">Faculty In Charge
+          <label class="field-block">Tabulator in Charge
             <select name="faculty_account" required>
-              <option value="">Select faculty account</option>
-              {% for user in faculty_options %}<option value="{{ user.id }}">{{ user.get_full_name|default:user.username }} · {{ user.username }}</option>{% endfor %}
-            </select>
-          </label>
-          <label class="field-block" hidden>Scoresheet Template
-            <select name="scoresheet_template">
-              <option value="">Auto-match by event type / category</option>
-              {% for tpl in scoresheet_templates %}
-              <option value="{{ tpl.id }}">{{ tpl.name }}{% if tpl.category %} · {{ tpl.category }}{% endif %}</option>
+              <option value="">Select tabulator account</option>
+              {% for user in tabulator_options %}
+              <option value="{{ user.id }}">
+                {% if user.get_full_name %}{{ user.get_full_name }} · {% endif %}{{ user.username }}
+              </option>
+              {% empty %}
+              <option value="" disabled>No Tabulator accounts yet — create one under Users → Faculty</option>
               {% endfor %}
             </select>
+            <small class="field-hint">Uses Tabulator accounts created under Users → Faculty. This account opens the event in the Tabulator portal.</small>
           </label>
+          <input type="hidden" name="scoresheet_template" value="">
           <fieldset hidden>
             <legend>Result Processing</legend>
             <div class="toggle-list" id="result-processing-list">
@@ -447,12 +460,18 @@
               <input id="pageant-venue" maxlength="200">
             </label>
             <label>Time <input id="pageant-start-time" type="time"></label>
-            <label class="wide">Faculty in Charge <span class="req">required to publish</span>
+            <label class="wide">Tabulator in Charge <span class="req">required to publish</span>
               <select id="pageant-faculty">
-                <option value="">Select faculty account</option>
-                {% for user in faculty_options %}<option value="{{ user.id }}">{{ user.get_full_name|default:user.username }} · {{ user.username }}</option>{% endfor %}
+                <option value="">Select tabulator account</option>
+                {% for user in tabulator_options %}
+                <option value="{{ user.id }}">
+                  {% if user.get_full_name %}{{ user.get_full_name }} · {% endif %}{{ user.username }}
+                </option>
+                {% empty %}
+                <option value="" disabled>No Tabulator accounts yet — create one under Users → Faculty</option>
+                {% endfor %}
               </select>
-              <small class="field-hint">Faculty oversee scoring review and advancement confirmation.</small>
+              <small class="field-hint">Uses Tabulator accounts created under Users → Faculty.</small>
             </label>
           </div>
 
@@ -694,7 +713,8 @@
     window.CRITERIA_EVENT_EDIT_ID = "{{ edit_event_id|escapejs }}";
     window.CRITERIA_OPEN_CREATE = {{ open_create|yesno:"true,false" }};
     window.CRITERIA_IS_SUPERUSER = {{ request.user.is_superuser|yesno:"true,false" }};
+    window.CRITERIA_CAN_DELETE_FINALIZED = {% if request.user.is_superuser or request.user.is_staff %}true{% else %}false{% endif %};
   </script>
-  <script src="{% static 'admindash/criteriabasedevent.js' %}?v=20260807p"></script>
+  <script src="{% static 'admindash/criteriabasedevent.js' %}?v=20260822c"></script>
 </body>
 </html>

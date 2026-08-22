@@ -435,16 +435,12 @@ def compute_criteria_rankings(event):
             elif method == 'average_score':
                 total = sum(cmap.values()) / max(1, len(cmap))
             else:
-                # weighted percentage of max
+                # Absolute event weight: (score / max) × event_weight_%
                 total = 0.0
-                weight_sum = 0.0
                 for cid, val in cmap.items():
                     w = weight_by_id.get(cid, 1.0)
                     mx = max_by_id.get(cid, 100) or 100
                     total += (val / mx) * w
-                    weight_sum += w
-                if weight_sum and abs(weight_sum - 100) > 0.01:
-                    total = total * (100.0 / weight_sum) if weight_sum else total
             judge_totals.append(total)
         if not judge_totals:
             final = 0.0

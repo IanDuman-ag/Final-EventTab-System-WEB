@@ -1,0 +1,388 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Results &amp; Rankings · EventTab</title>
+  <link rel="stylesheet" href="{% static 'tabulator/tabulator-shell.css' %}?v=3">
+  <link rel="stylesheet" href="{% static 'tabulator/tabresults.css' %}?v=2">
+</head>
+<body class="et-tab" data-page="results">
+<div class="et-shell">
+  {% include 'tabulator/_sidebar.html' %}
+  <div class="et-main">
+    {% include 'tabulator/_topbar.html' with topbar_title='Results & Rankings' status_label=payload.status_label %}
+
+    <main class="et-content" id="etResultsApp"
+          data-event-id="{% if event %}{{ event.id }}{% endif %}"
+          data-mode="{{ payload.mode }}"
+          data-refresh-url="{% url 'tabulator_results_data' %}"
+          data-csv-url="{% url 'tabulator_results_csv' %}">
+
+      <div class="res-head">
+        <div>
+          <h1>{% if payload.is_finalized %}Final Results{% else %}Results &amp; Rankings{% endif %}</h1>
+          <p class="lead">
+            {% if event %}
+              Official standings for {{ event.name }}
+            {% else %}
+              Assign an event to review final standings.
+            {% endif %}
+          </p>
+        </div>
+      </div>
+
+      {% if not event %}
+        <section class="et-card et-empty">{{ payload.message|default:"No events are currently assigned to you." }}</section>
+      {% else %}
+        <form class="et-filters et-no-print" method="get" id="etFilters">
+          <input type="hidden" name="event_id" value="{{ event.id }}">
+          <label>
+            Category
+            <select class="et-select" name="category" data-filter="category">
+              <option value="">All Categories</option>
+              {% for cat in payload.categories %}
+                <option value="{{ cat }}" {% if payload.selected_category == cat %}selected{% endif %}>{{ cat }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>
+            Search
+            <input class="et-input" type="search" name="q" value="{{ payload.q }}" placeholder="Name or number" data-filter="q">
+          </label>
+          <div class="actions">
+            <a class="et-btn et-btn-ghost" id="etExportCsv" href="{% url 'tabulator_results_csv' %}?event_id={{ event.id }}{% if payload.selected_category %}&category={{ payload.selected_category|urlencode }}{% endif %}{% if payload.q %}&q={{ payload.q|urlencode }}{% endif %}">Export CSV</a>
+            <button type="button" class="et-btn et-btn-primary" id="etPrintBtn">Print / PDF</button>
+          </div>
+        </form>
+
+        <div class="res-tabs et-no-print" role="tablist">
+          <button type="button" class="res-tab{% if payload.tab == 'overall' or not payload.tab %} is-active{% endif %}" data-tab="overall">Overall Results</button>
+          <button type="button" class="res-tab{% if payload.tab == 'category' %} is-active{% endif %}" data-tab="category">By Category</button>
+          <button type="button" class="res-tab{% if payload.tab == 'round' %} is-active{% endif %}" data-tab="round">By Round</button>
+          {% if payload.mode == 'scoring' %}
+            <button type="button" class="res-tab{% if payload.tab == 'breakdown' %} is-active{% endif %}" data-tab="breakdown">Score Breakdown</button>
+          {% endif %}
+        </div>
+
+        <section class="et-card res-notice">
+          <div>
+            <strong>
+              {% if payload.is_finalized %}
+                Congratulations to the {{ payload.participant_label|lower }}s
+              {% else %}
+                {{ payload.status_label }}
+              {% endif %}
+            </strong>
+            <p>{{ payload.message }}</p>
+            <div class="res-badges">
+              <span class="res-badge">{{ event.mode_label }}</span>
+              <span class="res-badge">{{ event.category }}</span>
+              <span class="res-badge">{{ payload.participant_label }}</span>
+            </div>
+          </div>
+        </section>
+
+        <div class="res-layout">
+          <div>
+            <section class="et-card res-pane" data-pane="overall" {% if payload.tab and payload.tab != 'overall' %}hidden{% endif %}>
+              <div class="res-panel-head">
+                <h2>Overall Results</h2>
+                <span>{{ payload.results|length }} {{ payload.participant_label|lower }}s</span>
+              </div>
+              <div class="et-table-wrap">
+                <table class="et-table" id="etResultsTable">
+                  <thead>
+                    {% if payload.mode == 'ranking' %}
+                      <tr>
+                        <th>Rank</th>
+                        <th>Team</th>
+                        <th>W</th>
+                        <th>L</th>
+                        <th>Pts</th>
+                        <th>PF</th>
+                        <th>PA</th>
+                        <th>Prize</th>
+                      </tr>
+                    {% else %}
+                      <tr>
+                        <th>Rank</th>
+                        <th>{{ payload.participant_label }}</th>
+                        <th>Category</th>
+                        <th>Score</th>
+                        <th>Prize</th>
+                      </tr>
+                    {% endif %}
+                  </thead>
+                  <tbody>
+                    {% for row in payload.results %}
+                      {% if payload.mode == 'ranking' %}
+                        <tr>
+                          <td>
+                            {% if row.rank == 1 %}<span class="et-medal gold">1</span>
+                            {% elif row.rank == 2 %}<span class="et-medal silver">2</span>
+                            {% elif row.rank == 3 %}<span class="et-medal bronze">3</span>
+                            {% else %}<span class="et-medal plain">{{ row.rank }}</span>{% endif %}
+                          </td>
+                          <td>
+                            <div class="res-person">
+                              <div class="et-avatar">{{ row.name|slice:":1"|upper }}</div>
+                              <div>
+                                <strong>{{ row.name }}</strong>
+                                <small>{{ row.department }}</small>
+                              </div>
+                            </div>
+                          </td>
+                          <td class="res-score">{{ row.wins }}</td>
+                          <td class="res-score">{{ row.losses }}</td>
+                          <td class="res-score">{{ row.points }}</td>
+                          <td class="res-score">{{ row.pf }}</td>
+                          <td class="res-score">{{ row.pa }}</td>
+                          <td>{{ row.prize }}</td>
+                        </tr>
+                      {% else %}
+                        <tr>
+                          <td>
+                            {% if row.rank == 1 %}<span class="et-medal gold">1</span>
+                            {% elif row.rank == 2 %}<span class="et-medal silver">2</span>
+                            {% elif row.rank == 3 %}<span class="et-medal bronze">3</span>
+                            {% elif row.rank %}<span class="et-medal plain">{{ row.rank }}</span>
+                            {% else %}<span class="et-medal plain">—</span>{% endif %}
+                          </td>
+                          <td>
+                            <div class="res-person">
+                              <div class="et-avatar">
+                                {% if row.photo %}<img src="{{ row.photo }}" alt="">{% else %}{% if row.number %}#{{ row.number }}{% else %}{{ row.name|slice:":1"|upper }}{% endif %}{% endif %}
+                              </div>
+                              <div>
+                                <strong>{% if row.number %}#{{ row.number }} {% endif %}{{ row.name }}</strong>
+                                <small>{{ row.breakdown }}</small>
+                              </div>
+                            </div>
+                          </td>
+                          <td>{{ row.department }}</td>
+                          <td class="res-score">{{ row.final_score }}</td>
+                          <td>{{ row.prize }}</td>
+                        </tr>
+                      {% endif %}
+                    {% empty %}
+                      <tr><td colspan="8" class="et-empty">No standings available yet.</td></tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="et-card res-pane" data-pane="category" {% if payload.tab != 'category' %}hidden{% endif %}>
+              <div class="res-panel-head"><h2>By Category</h2></div>
+              {% for group in payload.by_category %}
+                <div style="padding:14px 18px;border-bottom:1px solid var(--et-line);">
+                  <h3 style="margin:0 0 10px;font-size:14px;">{{ group.category }}</h3>
+                  <div class="et-table-wrap">
+                    <table class="et-table">
+                      <thead><tr><th>Rank</th><th>Name</th><th>Score / Pts</th><th>Prize</th></tr></thead>
+                      <tbody>
+                        {% for row in group.rows %}
+                          <tr>
+                            <td>{{ row.rank|default:"—" }}</td>
+                            <td>{{ row.name }}</td>
+                            <td class="res-score">{% if payload.mode == 'ranking' %}{{ row.points }}{% else %}{{ row.final_score }}{% endif %}</td>
+                            <td>{{ row.prize }}</td>
+                          </tr>
+                        {% endfor %}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              {% empty %}
+                <p class="et-empty">No category groupings for this event.</p>
+              {% endfor %}
+            </section>
+
+            <section class="et-card res-pane" data-pane="round" {% if payload.tab != 'round' %}hidden{% endif %}>
+              <div class="res-panel-head"><h2>By Round</h2></div>
+              {% if payload.mode == 'ranking' %}
+                <div class="body" style="padding:16px;">
+                  <div class="games-list">
+                    {% for g in payload.recent_games %}
+                      <div class="game-row">
+                        <div>
+                          <strong>{{ g.team_a }} vs {{ g.team_b }}</strong>
+                          <small>{{ g.round_name }} · Game {{ g.match_number }}</small>
+                        </div>
+                        <div class="res-score">{{ g.score_a }} – {{ g.score_b }}</div>
+                      </div>
+                    {% empty %}
+                      <p class="et-empty">No completed games yet.</p>
+                    {% endfor %}
+                  </div>
+                </div>
+              {% else %}
+                {% for group in payload.by_round %}
+                  <div style="padding:14px 18px;border-bottom:1px solid var(--et-line);">
+                    <h3 style="margin:0 0 4px;font-size:14px;">{{ group.name }}</h3>
+                    <p style="margin:0 0 10px;color:var(--et-muted);font-size:12.5px;">{{ group.rule }} · {{ group.status_label }}</p>
+                    {% if group.rows %}
+                      <div class="et-table-wrap">
+                        <table class="et-table">
+                          <thead><tr><th>Rank</th><th>Name</th><th>Score</th></tr></thead>
+                          <tbody>
+                            {% for row in group.rows|slice:":10" %}
+                              <tr>
+                                <td>{{ row.rank|default:"—" }}</td>
+                                <td>{{ row.name }}</td>
+                                <td class="res-score">{{ row.final_score }}</td>
+                              </tr>
+                            {% endfor %}
+                          </tbody>
+                        </table>
+                      </div>
+                    {% else %}
+                      <p class="et-empty" style="padding:8px 0;">Round not open yet.</p>
+                    {% endif %}
+                  </div>
+                {% empty %}
+                  <p class="et-empty">No round configuration for this event.</p>
+                {% endfor %}
+              {% endif %}
+            </section>
+
+            {% if payload.mode == 'scoring' %}
+              <section class="et-card res-pane" data-pane="breakdown" {% if payload.tab != 'breakdown' %}hidden{% endif %}>
+                <div class="res-panel-head"><h2>Score Breakdown</h2><span>{% if payload.winner %}{{ payload.winner.name }}{% endif %}</span></div>
+                <div style="padding:8px 16px 16px;">
+                  {% for row in payload.score_breakdown %}
+                    <div class="break-row">
+                      <span>{{ row.name }}</span>
+                      <span>avg {{ row.average }} · w{{ row.weight }}%</span>
+                      <span>{{ row.contribution }}</span>
+                    </div>
+                  {% empty %}
+                    <p class="et-empty">No criterion averages yet.</p>
+                  {% endfor %}
+                </div>
+              </section>
+            {% endif %}
+          </div>
+
+          <aside class="res-side">
+            <section class="et-card winner-card">
+              <p class="kicker">Overall Winner</p>
+              {% if payload.winner %}
+                <h3>{{ payload.winner.name }}</h3>
+                <p class="meta">
+                  {% if payload.mode == 'ranking' %}
+                    {{ payload.winner.wins }}W · {{ payload.winner.losses }}L · {{ payload.winner.department }}
+                  {% else %}
+                    {% if payload.winner.number %}#{{ payload.winner.number }} · {% endif %}{{ payload.winner.department }}
+                  {% endif %}
+                </p>
+                <div class="winner-score">
+                  <strong>
+                    {% if payload.mode == 'ranking' %}{{ payload.winner.points }}{% else %}{{ payload.winner.final_score }}{% endif %}
+                  </strong>
+                  <span>{% if payload.mode == 'ranking' %}points{% else %}final score{% endif %}</span>
+                </div>
+              {% else %}
+                <h3>Awaiting scores</h3>
+                <p class="meta">Winner appears once standings are calculated.</p>
+              {% endif %}
+            </section>
+
+            {% if payload.mode == 'scoring' %}
+              <section class="et-card side-card">
+                <h3>Score Breakdown</h3>
+                <div class="body">
+                  {% for row in payload.score_breakdown %}
+                    <div class="break-row">
+                      <span>{{ row.name }}</span>
+                      <span>{{ row.average }}</span>
+                      <span>{{ row.contribution }}</span>
+                    </div>
+                  {% empty %}
+                    <p class="et-empty" style="padding:8px 0;">No breakdown yet.</p>
+                  {% endfor %}
+                </div>
+              </section>
+
+              <section class="et-card side-card">
+                <h3>Judges' Scores</h3>
+                <div class="body et-table-wrap">
+                  {% if payload.judges_scores.rows %}
+                    <table class="et-table judge-table">
+                      <thead>
+                        <tr>
+                          <th>Judge</th>
+                          {% for c in payload.judges_scores.criteria %}
+                            <th>{{ c.name }}</th>
+                          {% endfor %}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {% for row in payload.judges_scores.rows %}
+                          <tr>
+                            <td>{{ row.judge_name }}</td>
+                            {% for s in row.scores %}
+                              <td class="res-score">{% if s != None %}{{ s }}{% else %}—{% endif %}</td>
+                            {% endfor %}
+                          </tr>
+                        {% endfor %}
+                        <tr>
+                          <td><strong>Average</strong></td>
+                          {% for a in payload.judges_scores.averages %}
+                            <td class="res-score"><strong>{% if a != None %}{{ a }}{% else %}—{% endif %}</strong></td>
+                          {% endfor %}
+                        </tr>
+                      </tbody>
+                    </table>
+                  {% else %}
+                    <p class="et-empty" style="padding:8px 0;">No locked judge scores yet.</p>
+                  {% endif %}
+                </div>
+              </section>
+            {% else %}
+              <section class="et-card side-card">
+                <h3>Recent Games</h3>
+                <div class="body games-list">
+                  {% for g in payload.recent_games %}
+                    <div class="game-row">
+                      <div>
+                        <strong>{{ g.team_a }} vs {{ g.team_b }}</strong>
+                        <small>{{ g.round_name }}</small>
+                      </div>
+                      <div class="res-score">{{ g.score_a }}–{{ g.score_b }}</div>
+                    </div>
+                  {% empty %}
+                    <p class="et-empty" style="padding:8px 0;">No completed games.</p>
+                  {% endfor %}
+                </div>
+              </section>
+            {% endif %}
+
+            <section class="et-card side-card">
+              <h3>Result Updates</h3>
+              <div class="body">
+                <ul class="update-list">
+                  {% for u in payload.updates %}
+                    <li>
+                      <strong>{{ u.action }}</strong>
+                      <span>{{ u.description }}</span>
+                      <small>{{ u.user }} · {{ u.when }}</small>
+                    </li>
+                  {% empty %}
+                    <li class="et-empty" style="border:0;background:transparent;">No recent updates.</li>
+                  {% endfor %}
+                </ul>
+              </div>
+            </section>
+          </aside>
+        </div>
+      {% endif %}
+    </main>
+  </div>
+</div>
+<script>window.ET_PAYLOAD = {{ payload_json|safe }};</script>
+<script src="{% static 'tabulator/tabulator.js' %}?v=2"></script>
+</body>
+</html>

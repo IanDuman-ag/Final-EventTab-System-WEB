@@ -110,6 +110,31 @@ def get_active_judge_users():
     )
 
 
+def _sync_criteria_from_config(judging_event, criteria_config):
+    """Sync mobile Criterion rows from absolute event-weight judging_criteria_config."""
+    judging_event.criteria.all().delete()
+    for order, item in enumerate(criteria_config or []):
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get('name') or f'Criterion {order + 1}').strip()[:100]
+        try:
+            weight = float(item.get('weight') if item.get('weight') is not None else item.get('weight_percent') or 0)
+        except (TypeError, ValueError):
+            weight = 0
+        try:
+            max_score = float(item.get('max_score') or 100)
+        except (TypeError, ValueError):
+            max_score = 100
+        Criterion.objects.create(
+            event=judging_event,
+            name=name or f'Criterion {order + 1}',
+            description=str(item.get('description') or '')[:200],
+            max_score=max_score,
+            weight_percent=weight,
+            order=int(item.get('order') or order),
+        )
+
+
 def _sync_criteria(judging_event, scoring_criteria_text):
     judging_event.criteria.all().delete()
     for order, item in enumerate(parse_scoring_criteria(scoring_criteria_text)):
@@ -216,7 +241,10 @@ def sync_event_to_mobile(event, explicit_candidates=None):
         judging_event.description = description
         judging_event.save()
 
-    _sync_criteria(judging_event, event.scoring_criteria)
+    if event.judging_criteria_config:
+        _sync_criteria_from_config(judging_event, event.judging_criteria_config)
+    else:
+        _sync_criteria(judging_event, event.scoring_criteria)
     _sync_candidates(judging_event, event, explicit_candidates=explicit_candidates)
     _assign_judges(judging_event, event)
     return judging_event

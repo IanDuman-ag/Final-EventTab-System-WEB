@@ -106,6 +106,14 @@ from .faculty_views import (
     faculty_match_result,
     faculty_results_action,
     faculty_stage_confirm,
+    tabulator_dashboard,
+    tabulator_live_rankings,
+    tabulator_results,
+    tabulator_results_data,
+    tabulator_results_csv,
+    tabulator_rankings_data,
+    tabulator_participants,
+    tabulator_categories,
 )
 from .superadmin_views import (
     superadmin_dashboard as sa_dashboard,
@@ -153,8 +161,16 @@ urlpatterns = [
         RedirectView.as_view(pattern_name='faculty_dashboard', permanent=False),
         name='faculty_profile',
     ),
-    # Legacy /tabulator/* aliases → Faculty portal (frontend/facultydash)
-    path('tabulator/dashboard/', faculty_dashboard, name='tabulator_dashboard'),
+    # Tabulator portal — dedicated Dashboard / Live Rankings / Results.
+    path('tabulator/dashboard/', tabulator_dashboard, name='tabulator_dashboard'),
+    path('tabulator/live-rankings/', tabulator_live_rankings, name='tabulator_live_rankings'),
+    path('tabulator/results/', tabulator_results, name='tabulator_results'),
+    path('tabulator/results/data/', tabulator_results_data, name='tabulator_results_data'),
+    path('tabulator/results/export.csv', tabulator_results_csv, name='tabulator_results_csv'),
+    path('tabulator/rankings/data/', tabulator_rankings_data, name='tabulator_rankings_data'),
+    path('tabulator/participants/', tabulator_participants, name='tabulator_participants'),
+    path('tabulator/categories/', tabulator_categories, name='tabulator_categories'),
+    # Legacy aliases share faculty tools / approve-reject actions.
     path('tabulator/assigned/', faculty_my_events, name='tabulator_assigned'),
     path('tabulator/scoresheets/', faculty_scoresheets, name='tabulator_scoresheets'),
     path('tabulator/ocr/', faculty_scoresheets, name='tabulator_ocr_upload'),
@@ -166,7 +182,6 @@ urlpatterns = [
     path('tabulator/review/<int:sheet_id>/verify/', tabulator_verify_lock, name='tabulator_verify_lock'),
     path('tabulator/review/<int:sheet_id>/request-changes/', tabulator_request_changes, name='tabulator_request_changes'),
     path('tabulator/review/', faculty_results_review, name='tabulator_review'),
-    path('tabulator/results/', faculty_results_review, name='tabulator_results'),
     path('tabulator/activity-logs/', faculty_dashboard, name='tabulator_activity_logs'),
     path('tabulator/activity-logs/feed/', tabulator_activity_logs_feed, name='tabulator_activity_logs_feed'),
     path('tabulator/pending-results/', faculty_results_review, name='tabulator_pending_results'),

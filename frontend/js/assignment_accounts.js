@@ -124,20 +124,30 @@ document.addEventListener('DOMContentLoaded', function () {
   function configureRoleSelect() {
     if (!role) return;
     Array.prototype.forEach.call(role.options, function (opt) {
-      if (pageType === 'tabulator') {
+      if (pageType === 'faculty_tabulator') {
+        var allowed = opt.value === 'Faculty' || opt.value === 'Tabulator';
+        opt.hidden = !allowed;
+        opt.disabled = !allowed;
+      } else if (pageType === 'tabulator') {
         opt.hidden = opt.value !== 'Tabulator';
         opt.disabled = opt.value !== 'Tabulator';
       } else if (pageType === 'judge_scorer') {
-        opt.hidden = opt.value === 'Tabulator';
-        opt.disabled = opt.value === 'Tabulator';
+        var judgeScorer = opt.value === 'Judge' || opt.value === 'Scorer';
+        opt.hidden = !judgeScorer;
+        opt.disabled = !judgeScorer;
       }
     });
-    if (pageType === 'tabulator') {
+    if (pageType === 'faculty_tabulator') {
+      role.disabled = false;
+      if (role.value !== 'Faculty' && role.value !== 'Tabulator') {
+        role.value = defaultRole || 'Faculty';
+      }
+    } else if (pageType === 'tabulator') {
       role.value = 'Tabulator';
       role.disabled = true;
     } else if (pageType === 'judge_scorer') {
       role.disabled = false;
-      if (role.value === 'Tabulator') role.value = defaultRole;
+      if (role.value !== 'Judge' && role.value !== 'Scorer') role.value = defaultRole;
     }
   }
 
@@ -168,7 +178,10 @@ document.addEventListener('DOMContentLoaded', function () {
   function roleSubtitle(r) {
     if (r === 'Judge')  { return 'Enter the judge\'s official name and Gmail, then generate an access code (JDG01, JDG02…) to email them.'; }
     if (r === 'Scorer') { return 'Enter the scorer\'s official name and Gmail, then generate an access code (SCR01, SCR02…) to email them.'; }
-    return 'Faculty sign in with username and password. Add their Gmail so they are notified when assigned to an event.';
+    if (r === 'Tabulator') {
+      return 'Tabulators sign in with username and password and open the Tabulator dashboard.';
+    }
+    return 'Faculty members sign in with username and password and open the Faculty dashboard.';
   }
 
   function isValidEmail(value) {
@@ -509,7 +522,7 @@ document.addEventListener('DOMContentLoaded', function () {
     passwordInput.value      = '';
     nameInput.value          = '';
     setEmailValue('');
-    role.value               = pageType === 'judge_scorer' ? defaultRole : 'Tabulator';
+    role.value               = defaultRole || 'Faculty';
     statusSelect.value       = 'active';
     modalTitle.textContent   = 'Create Account';
     submitButton.disabled    = false;
@@ -526,7 +539,7 @@ document.addEventListener('DOMContentLoaded', function () {
     submitButton.type = 'submit';
     submitButton.removeEventListener('click', onDoneClick);
     accountId.value          = row.dataset.accountId || '';
-    var validRoles           = ['Tabulator', 'Judge', 'Scorer'];
+    var validRoles           = ['Faculty', 'Tabulator', 'Judge', 'Scorer'];
     var assignedRole         = (row.dataset.role || defaultRole).trim();
     var matched              = validRoles.find(function (r) {
       return r.toLowerCase() === assignedRole.toLowerCase();

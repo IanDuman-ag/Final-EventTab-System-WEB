@@ -16,7 +16,87 @@ html.event-wizard-open body { overflow:hidden; }
 .criteria-editor-actions button {
   border:1px solid #cfdbe8; background:#fff; color:#30455e; padding:6px 8px; font:inherit; font-size:11px; font-weight:700; cursor:pointer;
 }
-.criteria-weight-meter { margin-top:8px; font-size:12px; font-weight:750; color:#465d75; }
+
+/* Championship points row actions */
+.criteria-page .points-editor { display:grid; gap:8px; }
+.criteria-page .points-editor .points-row {
+  display:grid;
+  grid-template-columns:minmax(0, 1fr) 96px auto;
+  gap:10px;
+  align-items:center;
+  padding:10px 12px;
+  background:#f7fafc;
+  border:1px solid #d7e3ef;
+  border-radius:10px;
+}
+.criteria-page .points-editor .points-row input {
+  margin:0 !important;
+  min-height:38px;
+  border:1px solid #cad8e6;
+  border-radius:8px;
+  padding:8px 10px;
+  font:inherit;
+  background:#fff;
+}
+.criteria-page .points-row-actions {
+  display:flex;
+  gap:6px;
+  flex-wrap:wrap;
+}
+.criteria-page .points-btn {
+  appearance:none;
+  border:1px solid transparent;
+  border-radius:8px;
+  min-height:34px;
+  padding:7px 12px;
+  font:inherit;
+  font-size:12px;
+  font-weight:700;
+  cursor:pointer;
+  transition:background .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease;
+}
+.criteria-page .points-btn-up,
+.criteria-page .points-btn-down {
+  background:#eef4ff;
+  border-color:#c5d7f5;
+  color:#1d4ed8;
+}
+.criteria-page .points-btn-up:hover:not(:disabled),
+.criteria-page .points-btn-down:hover:not(:disabled) {
+  background:#dbe7ff;
+  border-color:#93b4f0;
+  box-shadow:0 2px 8px rgba(37, 99, 235, .12);
+}
+.criteria-page .points-btn-del {
+  background:#fff1f2;
+  border-color:#fecdd3;
+  color:#be123c;
+}
+.criteria-page .points-btn-del:hover:not(:disabled) {
+  background:#ffe4e6;
+  border-color:#fda4af;
+  box-shadow:0 2px 8px rgba(190, 18, 60, .12);
+}
+.criteria-page .points-btn:disabled {
+  opacity:.42;
+  cursor:not-allowed;
+  box-shadow:none;
+}
+.criteria-page #add-points-row {
+  border:1px solid #c5d7f5;
+  background:#eef4ff;
+  color:#1d4ed8;
+  border-radius:8px;
+  padding:8px 12px;
+  font:inherit;
+  font-size:12px;
+  font-weight:700;
+  cursor:pointer;
+}
+.criteria-page #add-points-row:hover {
+  background:#dbe7ff;
+}
+.criteria-weight-meter { margin-top:8px; font-size:12px; font-weight:750; color:#465d75; white-space:pre-line; }
 .criteria-weight-meter.is-ok { color:var(--green); }
 .criteria-weight-meter.is-bad { color:var(--red); }
 .criteria-hidden { display:none !important; }

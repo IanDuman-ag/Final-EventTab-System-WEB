@@ -1,0 +1,97 @@
+.dash-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(240px, .8fr);
+  gap: 18px;
+  margin-bottom: 18px;
+}
+.dash-hero-main {
+  padding: 22px 24px;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(37,99,235,.14), transparent 40%),
+    #fff;
+}
+.dash-hero-main .kicker {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--et-blue-btn);
+  font-family: var(--font-mono);
+}
+.dash-hero-main h1 {
+  margin: 0 0 8px;
+  font-size: clamp(1.5rem, 2.5vw, 2rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+.dash-hero-main p { margin: 0 0 16px; color: var(--et-muted); font-size: 14px; line-height: 1.45; }
+.dash-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.dash-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.dash-stat {
+  padding: 16px;
+  background: #fff;
+}
+.dash-stat span {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--et-muted);
+  margin-bottom: 8px;
+}
+.dash-stat strong {
+  font-family: var(--font-mono);
+  font-size: 1.6rem;
+  font-weight: 700;
+}
+
+.dash-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(260px, .8fr);
+  gap: 18px;
+}
+.dash-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--et-line);
+}
+.dash-panel-head h2 { margin: 0; font-size: 1rem; font-weight: 800; }
+.dash-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--et-muted);
+}
+.dash-toggle input { accent-color: var(--et-blue-btn); }
+
+.dash-events { display: flex; flex-direction: column; gap: 8px; padding: 14px; }
+.dash-event {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--et-line);
+  text-decoration: none;
+  color: inherit;
+  transition: border-color .15s, background .15s;
+}
+.dash-event:hover { border-color: #bfdbfe; background: #f8fbff; }
+.dash-event strong { display: block; font-size: 13.5px; }
+.dash-event small { color: var(--et-muted); font-size: 12px; font-family: var(--font-mono); }
+
+@media (max-width: 960px) {
+  .dash-hero, .dash-grid { grid-template-columns: 1fr; }
+}

@@ -1,0 +1,57 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Participants · EventTab</title>
+  <link rel="stylesheet" href="{% static 'tabulator/tabulator-shell.css' %}?v=3">
+</head>
+<body class="et-tab" data-page="participants">
+<div class="et-shell">
+  {% include 'tabulator/_sidebar.html' %}
+  <div class="et-main">
+    {% include 'tabulator/_topbar.html' with topbar_title='Participants' status_label=payload.status_label|default:'' %}
+    <main class="et-content">
+      <h1 style="margin:0 0 8px;font-size:1.6rem;font-weight:800;">Participants</h1>
+      <p style="margin:0 0 18px;color:var(--et-muted);">
+        {% if event %}{{ event.participant_label }}s for {{ event.name }}{% else %}Select an assigned event.{% endif %}
+      </p>
+      <section class="et-card">
+        <div class="et-table-wrap">
+          <table class="et-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Name</th>
+                <th>Category / Dept</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in rows %}
+                <tr>
+                  <td class="res-score">{{ row.number|default:"—" }}</td>
+                  <td>
+                    <div style="display:flex;align-items:center;gap:10px;">
+                      <div class="et-avatar">
+                        {% if row.photo %}<img src="{{ row.photo }}" alt="">{% else %}{{ row.label|slice:":1"|upper }}{% endif %}
+                      </div>
+                      <strong>{{ row.label }}</strong>
+                    </div>
+                  </td>
+                  <td>{{ row.meta }}</td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="3" class="et-empty">{{ payload.message|default:"No participants." }}</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+<script>window.ET_PAYLOAD = {{ payload_json|safe }};</script>
+<script src="{% static 'tabulator/tabulator.js' %}?v=2"></script>
+</body>
+</html>

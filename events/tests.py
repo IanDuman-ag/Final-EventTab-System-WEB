@@ -1,5 +1,5 @@
 import json
-from datetime import date
+from datetime import date, time
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
@@ -14,7 +14,7 @@ from .match_event_service import (
     ensure_unique_match_event_name,
     MatchEventValidationError,
 )
-from .models import BracketMatch, BracketTeam, Department, Event, SystemSettings, Team
+from .models import BracketMatch, BracketTeam, Department, Event, EventCategory, SystemSettings, Team
 
 
 class MatchEventWorkflowTests(TestCase):
@@ -1021,10 +1021,139 @@ class EventScoringCategoryTests(TestCase):
         criterion = EventScoringCriterion.objects.create(
             category=category,
             name='Confidence',
-            weight_percent=100,
+            weight_percent=20,
             max_score=100,
             display_order=1,
         )
         self.assertEqual(category.event_id, self.event.id)
         self.assertEqual(criterion.category_id, category.id)
         self.assertEqual(list(self.event.scoring_categories.values_list('name', flat=True)), ['Interview'])
+
+
+class TabulatorResultsPortalTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.tabulator = User.objects.create_user(
+            username='tab-results',
+            password='test-password',
+            email='tab-results@example.com',
+        )
+        tab_group, _ = Group.objects.get_or_create(name='Tabulator')
+        self.tabulator.groups.add(tab_group)
+        other = User.objects.create_user(
+            username='tab-other',
+            password='test-password',
+            email='tab-other@example.com',
+        )
+        other.groups.add(tab_group)
+
+        from .models import Candidate, Criterion, JudgingEvent
+
+        category = EventCategory.objects.create(name='Special', category_type='socio_cultural')
+        self.judging = JudgingEvent.objects.create(
+            title='Pageant Night',
+            category=category,
+            date=date.today(),
+            time=time(18, 0),
+            venue='Auditorium',
+            status='active',
+        )
+        self.event = Event.objects.create(
+            name='Campus Pageant Finals',
+            category='Special Event',
+            special_event_type='pageant',
+            event_date=date.today(),
+            venue='Auditorium',
+            scoring_method='criteria',
+            participation_type=Event.PARTICIPATION_INDIVIDUAL,
+            criteria_score_method=Event.CRITERIA_SCORE_WEIGHTED,
+            judging_event=self.judging,
+            results_finalized=True,
+        )
+        self.event.assigned_tabulators.add(self.tabulator)
+
+        Criterion.objects.create(
+            event=self.judging,
+            name='Poise',
+            max_score=100,
+            weight_percent=100,
+            order=1,
+        )
+        self.cand_a = Candidate.objects.create(event=self.judging, name='Alice', number=1, department='Eng')
+        self.cand_b = Candidate.objects.create(event=self.judging, name='Bianca', number=2, department='Arts')
+
+        self.foreign = Event.objects.create(
+            name='Other Event',
+            category='Sports',
+            event_date=date.today(),
+            venue='Gym',
+            scoring_method='match',
+        )
+        self.foreign.assigned_tabulators.add(other)
+
+        self._ranking_rows = [
+            {
+                'candidate_id': self.cand_a.id,
+                'name': 'Alice',
+                'number': 1,
+                'final_score': 90.0,
+                'breakdown': '1 judge(s)',
+                'comments': [],
+                'penalties': 0,
+                'rank': 1,
+                'department': 'Eng',
+                'qualification_status': 'Finalist',
+            },
+            {
+                'candidate_id': self.cand_b.id,
+                'name': 'Bianca',
+                'number': 2,
+                'final_score': 80.0,
+                'breakdown': '1 judge(s)',
+                'comments': [],
+                'penalties': 0,
+                'rank': 2,
+                'department': 'Arts',
+                'qualification_status': 'Finalist',
+            },
+        ]
+
+    def test_results_payload_scoped_to_assigned_event(self):
+        from unittest.mock import patch
+        from core.faculty_views import _tabulator_results_payload
+
+        with patch('core.faculty_views.compute_criteria_rankings', return_value=self._ranking_rows):
+            payload = _tabulator_results_payload(self.tabulator, event_id=self.event.id)
+        self.assertEqual(payload['event']['id'], self.event.id)
+        self.assertEqual(payload['mode'], 'scoring')
+        self.assertTrue(payload['is_finalized'])
+        self.assertIsNotNone(payload['winner'])
+        self.assertEqual(payload['winner']['name'], 'Alice')
+        event_ids = {e['id'] for e in payload['events']}
+        self.assertIn(self.event.id, event_ids)
+        self.assertNotIn(self.foreign.id, event_ids)
+
+    def test_results_csv_exports_ranked_rows(self):
+        from unittest.mock import patch
+
+        self.client.force_login(self.tabulator)
+        with patch('core.faculty_views.compute_criteria_rankings', return_value=self._ranking_rows):
+            response = self.client.get(
+                reverse('tabulator_results_csv'),
+                {'event_id': self.event.id},
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'text/csv')
+        body = response.content.decode('utf-8')
+        self.assertIn('Alice', body)
+        self.assertIn('Bianca', body)
+
+    def test_results_page_renders_for_tabulator(self):
+        from unittest.mock import patch
+
+        self.client.force_login(self.tabulator)
+        with patch('core.faculty_views.compute_criteria_rankings', return_value=self._ranking_rows):
+            response = self.client.get(reverse('tabulator_results'), {'event_id': self.event.id})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Final Results')
+        self.assertContains(response, 'Alice')

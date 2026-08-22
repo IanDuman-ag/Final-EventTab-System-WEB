@@ -1,0 +1,120 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tabulator Dashboard · EventTab</title>
+  <link rel="stylesheet" href="{% static 'tabulator/tabulator-shell.css' %}?v=3">
+  <link rel="stylesheet" href="{% static 'tabulator/tabulatordashboard.css' %}?v=2">
+</head>
+<body class="et-tab" data-page="dashboard">
+<div class="et-shell">
+  {% include 'tabulator/_sidebar.html' %}
+  <div class="et-main">
+    {% include 'tabulator/_topbar.html' with topbar_title='Dashboard' status_label=payload.status_label %}
+    <main class="et-content"
+          data-event-id="{% if event %}{{ event.id }}{% endif %}"
+          data-refresh-url="{% url 'tabulator_rankings_data' %}">
+
+      {% if not event %}
+        <section class="et-card et-empty">{{ payload.message|default:"No events are currently assigned to you." }}</section>
+      {% else %}
+        <section class="dash-hero">
+          <article class="et-card dash-hero-main">
+            <p class="kicker">Selected event</p>
+            <h1>{{ event.name }}</h1>
+            <p>{{ event.category }} · {{ event.mode_label }} · {{ event.date }} · {{ event.venue }}</p>
+            <div class="dash-actions">
+              <a class="et-btn et-btn-primary" href="{% url 'tabulator_results' %}?event_id={{ event.id }}">Full Results</a>
+              <a class="et-btn et-btn-ghost" href="{% url 'tabulator_live_rankings' %}?event_id={{ event.id }}">Live Rankings</a>
+            </div>
+          </article>
+          <div class="dash-stats">
+            <article class="et-card dash-stat"><span>{{ payload.participant_label }}s</span><strong>{{ payload.stats.participant_count }}</strong></article>
+            <article class="et-card dash-stat"><span>Scored</span><strong>{{ payload.stats.scored_count }}</strong></article>
+            <article class="et-card dash-stat"><span>Judges / Scorers</span><strong>{{ payload.stats.judge_count }}</strong></article>
+            <article class="et-card dash-stat"><span>Matches</span><strong>{{ payload.stats.match_count }}</strong></article>
+          </div>
+        </section>
+
+        <div class="dash-grid">
+          <section class="et-card">
+            <div class="dash-panel-head">
+              <h2>Top Standings</h2>
+              <label class="dash-toggle et-no-print">
+                <input type="checkbox" id="etAutoRefresh" checked>
+                Auto-refresh
+              </label>
+            </div>
+            <div class="et-table-wrap">
+              <table class="et-table" id="etStandingsTable">
+                <thead>
+                  {% if payload.mode == 'ranking' %}
+                    <tr><th>Rank</th><th>Team</th><th>W</th><th>L</th><th>Pts</th></tr>
+                  {% else %}
+                    <tr><th>Rank</th><th>{{ payload.participant_label }}</th><th>Score</th><th>Prize</th></tr>
+                  {% endif %}
+                </thead>
+                <tbody>
+                  {% for row in payload.results|slice:":8" %}
+                    {% if payload.mode == 'ranking' %}
+                      <tr>
+                        <td>
+                          {% if row.rank == 1 %}<span class="et-medal gold">1</span>
+                          {% elif row.rank == 2 %}<span class="et-medal silver">2</span>
+                          {% elif row.rank == 3 %}<span class="et-medal bronze">3</span>
+                          {% else %}<span class="et-medal plain">{{ row.rank }}</span>{% endif %}
+                        </td>
+                        <td><strong>{{ row.name }}</strong></td>
+                        <td>{{ row.wins }}</td>
+                        <td>{{ row.losses }}</td>
+                        <td class="res-score">{{ row.points }}</td>
+                      </tr>
+                    {% else %}
+                      <tr>
+                        <td>
+                          {% if row.rank == 1 %}<span class="et-medal gold">1</span>
+                          {% elif row.rank == 2 %}<span class="et-medal silver">2</span>
+                          {% elif row.rank == 3 %}<span class="et-medal bronze">3</span>
+                          {% elif row.rank %}<span class="et-medal plain">{{ row.rank }}</span>
+                          {% else %}<span class="et-medal plain">—</span>{% endif %}
+                        </td>
+                        <td><strong>{% if row.number %}#{{ row.number }} {% endif %}{{ row.name }}</strong></td>
+                        <td class="res-score">{{ row.final_score }}</td>
+                        <td>{{ row.prize }}</td>
+                      </tr>
+                    {% endif %}
+                  {% empty %}
+                    <tr><td colspan="5" class="et-empty">No standings yet.</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="et-card">
+            <div class="dash-panel-head"><h2>Assigned Events</h2></div>
+            <div class="dash-events">
+              {% for ev in events %}
+                <a class="dash-event" href="{% url 'tabulator_dashboard' %}?event_id={{ ev.id }}">
+                  <div>
+                    <strong>{{ ev.name }}</strong>
+                    <small>{{ ev.category }} · {{ ev.mode_label }}</small>
+                  </div>
+                  <small>{{ ev.status }}</small>
+                </a>
+              {% empty %}
+                <p class="et-empty">No assigned events.</p>
+              {% endfor %}
+            </div>
+          </section>
+        </div>
+      {% endif %}
+    </main>
+  </div>
+</div>
+<script>window.ET_PAYLOAD = {{ payload_json|safe }};</script>
+<script src="{% static 'tabulator/tabulator.js' %}?v=2"></script>
+</body>
+</html>

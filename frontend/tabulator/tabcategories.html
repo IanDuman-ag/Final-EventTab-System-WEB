@@ -1,0 +1,52 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Categories · EventTab</title>
+  <link rel="stylesheet" href="{% static 'tabulator/tabulator-shell.css' %}?v=3">
+</head>
+<body class="et-tab" data-page="categories">
+<div class="et-shell">
+  {% include 'tabulator/_sidebar.html' %}
+  <div class="et-main">
+    {% include 'tabulator/_topbar.html' with topbar_title='Categories' status_label=payload.status_label|default:'' %}
+    <main class="et-content">
+      <h1 style="margin:0 0 8px;font-size:1.6rem;font-weight:800;">Categories</h1>
+      <p style="margin:0 0 18px;color:var(--et-muted);">
+        {% if event %}Scoring categories / criteria for {{ event.name }}{% else %}Select an assigned event.{% endif %}
+      </p>
+      <section class="et-card">
+        <div class="et-table-wrap">
+          <table class="et-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Mode</th>
+                <th>Weight %</th>
+                <th>Criteria</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in rows %}
+                <tr>
+                  <td><strong>{{ row.name }}</strong></td>
+                  <td>{{ row.mode }}</td>
+                  <td class="res-score">{{ row.weight }}</td>
+                  <td>{{ row.criteria_count }}{% if row.max_score %} · max {{ row.max_score }}{% endif %}</td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="4" class="et-empty">{{ payload.message|default:"No categories." }}</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+<script>window.ET_PAYLOAD = {{ payload_json|safe }};</script>
+<script src="{% static 'tabulator/tabulator.js' %}?v=2"></script>
+</body>
+</html>

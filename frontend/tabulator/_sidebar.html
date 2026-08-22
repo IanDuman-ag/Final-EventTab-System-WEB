@@ -1,0 +1,60 @@
+<aside class="et-sidebar" id="etSidebar" aria-label="Tabulator navigation">
+  <div class="et-brand">
+    <h1>EventTab</h1>
+    <span>TABULATOR PORTAL</span>
+  </div>
+
+  <nav class="et-nav">
+    <a class="et-nav-link{% if active == 'dashboard' %} is-active{% endif %}" href="{% url 'tabulator_dashboard' %}{% if event %}?event_id={{ event.id }}{% endif %}" {% if active == 'dashboard' %}aria-current="page"{% endif %}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm9 0h7v7h-7v-7Z"/></svg>
+      <span>Dashboard</span>
+    </a>
+
+    <div class="et-nav-label">MANAGE</div>
+
+    <a class="et-nav-link{% if active == 'live_rankings' %} is-active{% endif %}" href="{% url 'tabulator_live_rankings' %}{% if event %}?event_id={{ event.id }}{% endif %}" {% if active == 'live_rankings' %}aria-current="page"{% endif %}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18V3H3Zm16 16H5V5h14v14ZM7 17h2v-7H7v7Zm4 0h2V7h-2v10Zm4 0h2v-4h-2v4Z"/></svg>
+      <span>Live Rankings</span>
+    </a>
+    <a class="et-nav-link{% if active == 'participants' %} is-active{% endif %}" href="{% url 'tabulator_participants' %}{% if event %}?event_id={{ event.id }}{% endif %}" {% if active == 'participants' %}aria-current="page"{% endif %}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 11c1.66 0 3-1.57 3-3.5S17.66 4 16 4s-3 1.57-3 3.5 1.34 3.5 3 3.5ZM8 11c1.66 0 3-1.57 3-3.5S9.66 4 8 4 5 5.57 5 7.5 6.34 11 8 11Zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 14.17 10.33 13 8 13Zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5Z"/></svg>
+      <span>Participants</span>
+    </a>
+    <a class="et-nav-link{% if active == 'categories' %} is-active{% endif %}" href="{% url 'tabulator_categories' %}{% if event %}?event_id={{ event.id }}{% endif %}" {% if active == 'categories' %}aria-current="page"{% endif %}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v2H4V6Zm0 5h16v2H4v-2Zm0 5h10v2H4v-2Z"/></svg>
+      <span>Categories</span>
+    </a>
+    <a class="et-nav-link{% if active == 'results' %} is-active{% endif %}" href="{% url 'tabulator_results' %}{% if event %}?event_id={{ event.id }}{% endif %}" {% if active == 'results' %}aria-current="page"{% endif %}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Zm0 16H5V5h14v14zM7 7h10v2H7V7zm0 4h10v2H7v-2zm0 4h7v2H7v-2z"/></svg>
+      <span>Results</span>
+    </a>
+
+    <div class="et-nav-label">EVENTS</div>
+    <div class="et-event-list">
+      {% for ev in events %}
+        <a class="et-event-link{% if event and event.id == ev.id %} is-active{% endif %}"
+           href="?event_id={{ ev.id }}"
+           data-event-id="{{ ev.id }}">
+          <strong>{{ ev.name }}</strong>
+          <small>{{ ev.category }} · {{ ev.mode_label }}</small>
+        </a>
+      {% empty %}
+        <p class="et-empty-events">No assigned events.</p>
+      {% endfor %}
+    </div>
+  </nav>
+
+  <div class="et-user-card">
+    <div class="et-user-avatar">{{ request.user.username|default:"TU"|slice:":2"|upper }}</div>
+    <div class="et-user-info">
+      <strong>{{ request.user.get_full_name|default:request.user.username|default:user_display|default:"Tabulator" }}</strong>
+      <small>Tabulator Portal</small>
+    </div>
+  </div>
+
+  <a class="et-logout" href="{% url 'logout' %}">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17v-3H3v-4h7V7l5 5-5 5Zm2-14h8v18h-8v-2h6V5h-6V3Z"/></svg>
+    <span>Logout</span>
+  </a>
+</aside>
+<div class="et-backdrop" id="etBackdrop" hidden></div>

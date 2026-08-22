@@ -1,0 +1,35 @@
+<header class="et-topbar">
+  <div class="et-topbar-left">
+    <button type="button" class="et-menu-btn" id="etMenuBtn" aria-label="Open navigation">
+      <svg viewBox="0 0 24 24"><path d="M4 7h16v2H4V7Zm0 5h16v2H4v-2Zm0 5h16v2H4v-2Z"/></svg>
+    </button>
+    <div>
+      <h2>{{ topbar_title|default:"Tabulator" }}</h2>
+      <p>
+        {% if event %}
+          {{ event.name }} · {{ event.mode_label }}
+        {% else %}
+          No event selected
+        {% endif %}
+      </p>
+    </div>
+  </div>
+  <div class="et-topbar-right">
+    {% if event %}
+      {% if status_label == 'Live' %}
+        <span class="et-status-pill is-live">Live</span>
+      {% elif status_label == 'Completed' %}
+        <span class="et-status-pill is-completed">{{ status_label }}</span>
+      {% else %}
+        <span class="et-status-pill is-pending">{{ status_label|default:"Results Pending" }}</span>
+      {% endif %}
+    {% endif %}
+    <div class="et-user-chip">
+      <div class="avatar">{{ user_initials }}</div>
+      <span>
+        <strong>{{ user_display }}</strong>
+        <small>Tabulator</small>
+      </span>
+    </div>
+  </div>
+</header>

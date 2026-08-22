@@ -39,17 +39,19 @@ from events.mobile_sync import (
 ROLE_CHOICES = {
     'super-admin': 'Super Admin',
     'admin': 'Admin',
+    'faculty': 'Faculty',
     'tabulator': 'Tabulator',
 }
 
-ASSIGNMENT_ROLE_LABELS = {'Tabulator', 'Judge', 'Scorer'}
+ASSIGNMENT_ROLE_LABELS = {'Faculty', 'Tabulator', 'Judge', 'Scorer'}
 ASSIGNMENT_GROUP_ALIASES = {
+    'faculty': 'Faculty',
     'tabulator': 'Tabulator',
     'judge': 'Judge',
     'judges': 'Judge',
     'scorer': 'Scorer',
 }
-RESERVED_DEPARTMENT_NAMES = {'admin', 'tabulator', 'judge', 'judges', 'viewers', 'scorer'}
+RESERVED_DEPARTMENT_NAMES = {'admin', 'faculty', 'tabulator', 'judge', 'judges', 'viewers', 'scorer'}
 
 
 def normalize_event_availability_status(status):
@@ -644,7 +646,8 @@ def get_assignment_account_rows(account_type='all'):
     assignment_users = (
         User.objects
         .filter(
-            Q(groups__name__iexact='Tabulator')
+            Q(groups__name__iexact='Faculty')
+            | Q(groups__name__iexact='Tabulator')
             | Q(groups__name__iexact='Judge')
             | Q(groups__name__iexact='Judges')
             | Q(groups__name__iexact='Scorer')
@@ -667,6 +670,8 @@ def get_assignment_account_rows(account_type='all'):
         if role is None:
             continue
 
+        if account_type == 'faculty_tabulator' and role not in ('Faculty', 'Tabulator'):
+            continue
         if account_type == 'tabulator' and role != 'Tabulator':
             continue
         if account_type == 'judge_scorer' and role not in ('Judge', 'Scorer'):
@@ -1050,6 +1055,8 @@ def _detect_user_role(user):
         return 'admin'
     if user.groups.filter(name__iexact='Tabulator').exists():
         return 'tabulator'
+    if user.groups.filter(name__iexact='Faculty').exists():
+        return 'faculty'
     if (
         user.groups.filter(name__iexact='Judge').exists()
         or user.groups.filter(name__iexact='Judges').exists()
@@ -1061,13 +1068,15 @@ def _detect_user_role(user):
 _ROLE_REDIRECTS = {
     'super-admin': 'superadmin_dashboard',
     'admin': 'admin_dashboard',
-    'tabulator': 'faculty_dashboard',
+    'faculty': 'faculty_dashboard',
+    'tabulator': 'tabulator_dashboard',
 }
 
 _ROLE_LABELS = {
     'super-admin': 'Super Admin',
     'admin': 'Admin',
-    'tabulator': 'Faculty',
+    'faculty': 'Faculty',
+    'tabulator': 'Tabulator',
     'judge': 'Judge',
 }
 
@@ -1287,7 +1296,7 @@ def admin_manage_account(request):
 @login_required(login_url='login')
 @user_passes_test(lambda user: user.is_staff, login_url='login')
 def admin_tabulator_accounts(request):
-    ctx = get_assignment_account_context(request, account_type='tabulator')
+    ctx = get_assignment_account_context(request, account_type='faculty_tabulator')
     return render(request, 'admindash/facultyaccount.html', ctx)
 
 
@@ -1922,10 +1931,11 @@ def _normalize_assignment_role(role):
 def _apply_assignment_role(user, role, is_active):
     role_label = _normalize_assignment_role(role)
     if role_label is None:
-        raise ValueError('Select Tabulator, Judge, or Scorer as the account role.')
+        raise ValueError('Select Faculty, Tabulator, Judge, or Scorer as the account role.')
 
     assignment_groups = Group.objects.filter(
-        Q(name__iexact='Tabulator')
+        Q(name__iexact='Faculty')
+        | Q(name__iexact='Tabulator')
         | Q(name__iexact='Judge')
         | Q(name__iexact='Judges')
         | Q(name__iexact='Scorer')
@@ -3260,8 +3270,8 @@ def _criteria_event_queryset():
 def admin_criteria_events(request, event_id=None):
     from events.criteria_event_service import (
         CriteriaEventValidationError,
-        models_q_for_faculty,
         models_q_for_judges,
+        models_q_for_tabulator,
         save_criteria_event,
         serialize_criteria_event,
     )
@@ -3293,13 +3303,19 @@ def admin_criteria_events(request, event_id=None):
                 start_date = request.POST.get('start_date', '').strip()
                 if not all([name, classification, participation, venue, start_date]):
                     return workflow_error('Complete Event Name, classification, participation type, venue, and date first.')
+                category = request.POST.get('event_category', '').strip()
+                if category not in {
+                    'SOCIO-CULTURAL & LITERARY ARTS COMPETITION',
+                    'Special Event',
+                }:
+                    return workflow_error('Select a valid Category Name (category type).')
                 try:
                     from datetime import date
                     event_date = date.fromisoformat(start_date)
                 except ValueError:
                     return workflow_error('Enter a valid event date.')
                 draft.name = name[:200]
-                draft.category = request.POST.get('event_category', 'Special Event').strip() or 'Special Event'
+                draft.category = category
                 draft.event_classification = classification
                 draft.participation_type = participation
                 draft.venue = venue[:200]
@@ -3307,9 +3323,10 @@ def admin_criteria_events(request, event_id=None):
                 draft.end_date = event_date
                 draft.event_time = request.POST.get('event_time') or None
                 draft.scoring_method = 'criteria'
-                draft.publication_status = Event.PUBLICATION_DRAFT
-                draft.status = Event.STATUS_UPCOMING
+                # Creating a draft only; editing an existing event must keep its publication status.
                 if not draft.pk:
+                    draft.publication_status = Event.PUBLICATION_DRAFT
+                    draft.status = Event.STATUS_UPCOMING
                     draft.created_by = request.user
                 draft.save()
                 return JsonResponse({'success': True, 'event': {'id': draft.id, 'name': draft.name}})
@@ -3320,10 +3337,19 @@ def admin_criteria_events(request, event_id=None):
                 return workflow_error('Create the Event details in Step 1 first.', 404)
             if workflow_action == 'list_categories':
                 categories = [{
-                    'id': category.id, 'name': category.name, 'judge_mode': category.judge_mode,
+                    'id': category.id,
+                    'name': category.name,
+                    'judge_mode': category.judge_mode,
                     'display_order': category.display_order,
                     'overall_weight_percent': float(category.overall_weight_percent),
-                } for category in event.scoring_categories.all()]
+                    'criteria': [{
+                        'id': criterion.id,
+                        'name': criterion.name,
+                        'weight_percent': float(criterion.weight_percent),
+                        'max_score': float(criterion.max_score) if criterion.max_score is not None else None,
+                        'display_order': criterion.display_order,
+                    } for criterion in category.criteria.all()],
+                } for category in event.scoring_categories.prefetch_related('criteria').all()]
                 return JsonResponse({'success': True, 'categories': categories})
             if workflow_action == 'create_category':
                 name = request.POST.get('category_name', '').strip()
@@ -3333,8 +3359,11 @@ def admin_criteria_events(request, event_id=None):
                     weight = Decimal(request.POST.get('overall_weight_percent', ''))
                 except (ValueError, InvalidOperation):
                     return workflow_error('Display Order and Overall Category Weighted % must be numeric.')
-                if not name or mode not in {'scoring', 'ranking'} or order < 1 or not Decimal('0') < weight <= Decimal('100'):
-                    return workflow_error('Enter a unique category name, judge mode, positive order, and a weight from 0 to 100.')
+                if not name or mode not in {'scoring', 'ranking'} or order < 1 or not Decimal('0') <= weight <= Decimal('100'):
+                    return workflow_error(
+                        'Enter a unique category name, judge mode, positive order, and a weight from 0 to 100 '
+                        '(0 = simple average).'
+                    )
                 if event.scoring_categories.filter(name__iexact=name).exists():
                     return workflow_error('A category with this name already exists for the Event.')
                 if event.scoring_categories.filter(display_order=order).exists():
@@ -3359,8 +3388,11 @@ def admin_criteria_events(request, event_id=None):
                     weight = Decimal(request.POST.get('overall_weight_percent', ''))
                 except (ValueError, InvalidOperation):
                     return workflow_error('Display Order and Overall Category Weighted % must be numeric.')
-                if not name or mode not in {'scoring', 'ranking'} or order < 1 or not Decimal('0') < weight <= Decimal('100'):
-                    return workflow_error('Enter a category name, judge mode, positive order, and a weight from 0 to 100.')
+                if not name or mode not in {'scoring', 'ranking'} or order < 1 or not Decimal('0') <= weight <= Decimal('100'):
+                    return workflow_error(
+                        'Enter a category name, judge mode, positive order, and a weight from 0 to 100 '
+                        '(0 = simple average).'
+                    )
                 if event.scoring_categories.exclude(pk=category.pk).filter(name__iexact=name).exists():
                     return workflow_error('A category with this name already exists for the Event.')
                 if event.scoring_categories.exclude(pk=category.pk).filter(display_order=order).exists():
@@ -3387,6 +3419,7 @@ def admin_criteria_events(request, event_id=None):
                 } for criterion in category.criteria.all()]
                 return JsonResponse({'success': True, 'category': {
                     'id': category.id, 'name': category.name, 'judge_mode': category.judge_mode,
+                    'overall_weight_percent': float(category.overall_weight_percent),
                 }, 'criteria': criteria})
             if workflow_action == 'create_criterion':
                 category = event.scoring_categories.filter(pk=request.POST.get('category_id')).first()
@@ -3399,15 +3432,28 @@ def admin_criteria_events(request, event_id=None):
                     max_score = Decimal(request.POST.get('max_score', '')) if category.judge_mode == 'scoring' else None
                 except (ValueError, InvalidOperation):
                     return workflow_error('Criterion Weight, Max Score, and Order must be numeric.')
-                if not name or order < 1 or not Decimal('0') < weight <= Decimal('100'):
-                    return workflow_error('Enter a criterion name, positive order, and a weight from 0 to 100.')
+                if not name or order < 1 or weight < 0 or weight > Decimal('100'):
+                    return workflow_error(
+                        'Enter a criterion name, positive order, and an Event Weight % from 0 to 100.'
+                    )
                 if category.judge_mode == 'scoring' and (max_score is None or max_score <= 0):
                     return workflow_error('Max Score must be greater than zero for Scoring Mode.')
                 if category.criteria.filter(name__iexact=name).exists() or category.criteria.filter(display_order=order).exists():
                     return workflow_error('Criterion name and order must be unique within this category.')
                 total = sum((row.weight_percent for row in category.criteria.all()), Decimal('0')) + weight
-                if total > Decimal('100'):
-                    return workflow_error('Criterion weights cannot exceed 100% within a category.')
+                category_weight = Decimal(category.overall_weight_percent)
+                # Absolute event weights: criteria under a category must not exceed that category's event %.
+                limit = Decimal('100') if category_weight == 0 else category_weight
+                if total > limit:
+                    if category_weight == 0:
+                        return workflow_error(
+                            'This category uses simple average (0%). Keep criterion Event Weight % at 0, '
+                            'or set a category weight first.'
+                        )
+                    return workflow_error(
+                        f'Criteria weights for "{category.name}" cannot exceed the category weight '
+                        f'({float(category_weight)}%). Current total would be {float(total)}%.'
+                    )
                 criterion = EventScoringCriterion.objects.create(
                     category=category, name=name[:120], weight_percent=weight,
                     max_score=max_score, display_order=order,
@@ -3429,15 +3475,27 @@ def admin_criteria_events(request, event_id=None):
                     max_score = Decimal(request.POST.get('max_score', '')) if category.judge_mode == 'scoring' else None
                 except (ValueError, InvalidOperation):
                     return workflow_error('Criterion Weight, Max Score, and Order must be numeric.')
-                if not name or order < 1 or not Decimal('0') < weight <= Decimal('100'):
-                    return workflow_error('Enter a criterion name, positive order, and a weight from 0 to 100.')
+                if not name or order < 1 or weight < 0 or weight > Decimal('100'):
+                    return workflow_error(
+                        'Enter a criterion name, positive order, and an Event Weight % from 0 to 100.'
+                    )
                 if category.judge_mode == 'scoring' and (max_score is None or max_score <= 0):
                     return workflow_error('Max Score must be greater than zero for Scoring Mode.')
                 if category.criteria.exclude(pk=criterion.pk).filter(name__iexact=name).exists() or category.criteria.exclude(pk=criterion.pk).filter(display_order=order).exists():
                     return workflow_error('Criterion name and order must be unique within this category.')
                 total = sum((row.weight_percent for row in category.criteria.exclude(pk=criterion.pk)), Decimal('0')) + weight
-                if total > Decimal('100'):
-                    return workflow_error('Criterion weights cannot exceed 100% within a category.')
+                category_weight = Decimal(category.overall_weight_percent)
+                limit = Decimal('100') if category_weight == 0 else category_weight
+                if total > limit:
+                    if category_weight == 0:
+                        return workflow_error(
+                            'This category uses simple average (0%). Keep criterion Event Weight % at 0, '
+                            'or set a category weight first.'
+                        )
+                    return workflow_error(
+                        f'Criteria weights for "{category.name}" cannot exceed the category weight '
+                        f'({float(category_weight)}%). Current total would be {float(total)}%.'
+                    )
                 criterion.name, criterion.weight_percent = name[:120], weight
                 criterion.max_score, criterion.display_order = max_score, order
                 criterion.save()
@@ -3482,7 +3540,7 @@ def admin_criteria_events(request, event_id=None):
     queryset = (
         _criteria_event_queryset()
         .select_related('faculty_account', 'chief_judge')
-        .prefetch_related('assigned_judges')
+        .prefetch_related('assigned_judges', 'scoring_categories__criteria')
         .order_by(sort)
     )
     if search_query:
@@ -3504,14 +3562,15 @@ def admin_criteria_events(request, event_id=None):
     judge_options = User.objects.filter(is_active=True).filter(models_q_for_judges()).distinct().order_by(
         'first_name', 'last_name', 'username'
     )
-    faculty_options = User.objects.filter(is_active=True).filter(models_q_for_faculty()).distinct().order_by(
-        'first_name', 'last_name', 'username'
+    # Tabulator in Charge options = active Tabulator-role accounts from Users → Faculty.
+    tabulator_options = (
+        User.objects.filter(is_active=True)
+        .filter(models_q_for_tabulator())
+        .exclude(is_staff=True)
+        .exclude(is_superuser=True)
+        .distinct()
+        .order_by('first_name', 'last_name', 'username')
     )
-    from events.models import ScoresheetTemplate
-    criteria_templates = ScoresheetTemplate.objects.filter(
-        event_type=ScoresheetTemplate.EVENT_CRITERIA,
-        status=ScoresheetTemplate.STATUS_ACTIVE,
-    ).order_by('name')
     all_events = _criteria_event_queryset()
     return render(request, 'admindash/criteriabasedevent.html', {
         'event_rows': rows,
@@ -3522,8 +3581,8 @@ def admin_criteria_events(request, event_id=None):
             status=RegistryCandidate.STATUS_ACTIVE
         ).select_related('department').order_by('number', 'name'),
         'judge_options': judge_options,
-        'faculty_options': faculty_options,
-        'scoresheet_templates': criteria_templates,
+        'tabulator_options': tabulator_options,
+        'faculty_options': tabulator_options,
         'total_count': all_events.count(),
         'draft_count': all_events.filter(publication_status=Event.PUBLICATION_DRAFT).count(),
         'published_count': all_events.filter(publication_status=Event.PUBLICATION_PUBLISHED).count(),
@@ -4369,10 +4428,14 @@ def _get_tab_event_rows(request):
 
 
 @login_required(login_url='login')
-@user_passes_test(lambda u: user_has_role(u, 'tabulator'), login_url='login')
+@user_passes_test(
+    lambda u: user_has_role(u, 'tabulator') or u.groups.filter(name__iexact='Tabulator').exists() or u.is_staff,
+    login_url='login',
+)
 def tabulator_dashboard(request):
-    """Legacy tabulator home — redirect to Faculty portal."""
-    return redirect('faculty_dashboard')
+    """Legacy entrypoint — portal dashboard lives in faculty_views.tabulator_dashboard."""
+    from .faculty_views import tabulator_dashboard as _portal_dashboard
+    return _portal_dashboard(request)
 
 
 

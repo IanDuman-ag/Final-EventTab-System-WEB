@@ -481,11 +481,16 @@ def models_q_for_judges():
 
 
 def models_q_for_faculty():
-    """Active Faculty portal accounts only (Tabulator / Faculty groups)."""
+    """Accounts allowed for event in-charge assignment (Faculty / Tabulator)."""
     return (
         Q(groups__name__iexact='Tabulator')
         | Q(groups__name__iexact='Faculty')
     )
+
+
+def models_q_for_tabulator():
+    """Criteria-based events are assigned to Tabulator accounts only."""
+    return Q(groups__name__iexact='Tabulator')
 
 
 def _required(data, key, label):
@@ -787,10 +792,19 @@ def _validated_users(data, user_model):
         raise CriteriaEventValidationError('The selected Chief Judge is not authorized.')
 
     if not faculty_raw.isdigit():
-        raise CriteriaEventValidationError('Faculty In Charge is required.')
-    faculty = user_model.objects.filter(pk=int(faculty_raw), is_active=True).filter(models_q_for_faculty()).distinct().first()
+        raise CriteriaEventValidationError('Tabulator in Charge is required.')
+    faculty = (
+        user_model.objects.filter(pk=int(faculty_raw), is_active=True)
+        .filter(models_q_for_tabulator())
+        .exclude(is_staff=True)
+        .exclude(is_superuser=True)
+        .distinct()
+        .first()
+    )
     if not faculty:
-        raise CriteriaEventValidationError('The selected Faculty In Charge is not authorized.')
+        raise CriteriaEventValidationError(
+            'Select a Tabulator account created under Users → Faculty.'
+        )
     return chief, ordered_judges, faculty
 
 
@@ -1053,6 +1067,7 @@ def _save_pageant_event(data, user, files=None, instance=None):
         event.assigned_judges.set(judges)
     elif creating:
         event.assigned_judges.clear()
+    event.assigned_tabulators.set([faculty] if faculty else [])
 
     LogEntry.objects.create(
         user=user,
@@ -1214,6 +1229,8 @@ def save_criteria_event(data, user, files=None, instance=None):
         event.created_by = user
     event.save()
     event.assigned_judges.set(judges)
+    # Criteria events are operated by the assigned Tabulator account.
+    event.assigned_tabulators.set([faculty] if faculty else [])
 
     LogEntry.objects.create(
         user=user,
@@ -1237,7 +1254,10 @@ def save_criteria_event(data, user, files=None, instance=None):
 
 
 def can_delete_criteria_event(event, user):
-    if event.results_finalized and not user.is_superuser:
+    if event.results_finalized and not (
+        getattr(user, 'is_superuser', False)
+        or getattr(user, 'is_staff', False)
+    ):
         return False, 'Events with finalized results can only be deleted by an administrator.'
     return True, ''
 
@@ -1284,6 +1304,13 @@ def serialize_criteria_event(event):
         'id': event.id,
         'name': event.name,
         'category': event.category,
+        'category_label': (
+            'Socio-Cultural & Literary Arts Competition'
+            if event.category == 'SOCIO-CULTURAL & LITERARY ARTS COMPETITION'
+            else 'Special Events & Competitions'
+            if event.category == 'Special Event'
+            else (event.category or '—')
+        ),
         'special_event_type': event.special_event_type or '',
         'is_pageant': is_pageant,
         'pageant_config': pageant_config,
