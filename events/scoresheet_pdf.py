@@ -493,30 +493,44 @@ def pack_template_layout(
     event_type: str = 'match',
     order: list[str] | None = None,
     orientation: str = 'portrait',
+    builder: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     normalized_fields = {**default_fields_for(event_type), **(fields or {})}
     normalized_order = normalize_order(order, event_type, normalized_fields)
-    return {
+    packed = {
         'version': CURRENT_LAYOUT_VERSION,
         'event_type': event_type,
         'fields': normalized_fields,
         'order': normalized_order,
         'elements': layout_from_fields(normalized_fields, event_type, normalized_order, orientation),
     }
+    if isinstance(builder, dict) and builder:
+        packed['builder'] = builder
+    return packed
+
+
+def extract_builder(layout: Any) -> dict[str, Any]:
+    if isinstance(layout, dict) and isinstance(layout.get('builder'), dict):
+        return dict(layout.get('builder') or {})
+    return {}
 
 
 def upgrade_layout(layout: Any, event_type: str = 'match') -> dict[str, Any]:
+    builder = extract_builder(layout)
     if isinstance(layout, dict) and int(layout.get('version') or 0) >= CURRENT_LAYOUT_VERSION:
         et = layout.get('event_type') or event_type
         fields = extract_fields(layout, et)
         order = extract_order(layout, et)
-        return {
+        packed = {
             'version': CURRENT_LAYOUT_VERSION,
             'event_type': et,
             'fields': fields,
             'order': order,
             'elements': layout_from_fields(fields, et, order, 'portrait'),
         }
+        if builder:
+            packed['builder'] = builder
+        return packed
     et = event_type
     if isinstance(layout, dict):
         et = layout.get('event_type') or event_type
@@ -533,8 +547,8 @@ def upgrade_layout(layout: Any, event_type: str = 'match') -> dict[str, Any]:
             if alias in fields:
                 fields[alias] = bool(v)
         order = extract_order(layout, et)
-        return pack_template_layout(fields, et, order)
-    return pack_template_layout(default_fields_for(et), et)
+        return pack_template_layout(fields, et, order, builder=builder)
+    return pack_template_layout(default_fields_for(et), et, builder=builder)
 
 
 def extract_fields(layout: Any, event_type: str = 'match') -> dict[str, bool]:

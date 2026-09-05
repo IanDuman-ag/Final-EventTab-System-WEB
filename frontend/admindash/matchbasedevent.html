@@ -216,7 +216,7 @@
         </section>
 
         <section class="wizard-panel" data-step="4">
-          <div class="wizard-section-title"><span>04</span><div><h3>Configuration</h3><p>Assign faculty, scoresheet, and championship points.</p></div></div>
+          <div class="wizard-section-title"><span>04</span><div><h3>Configuration</h3><p>Assign faculty, tabulator, scoresheet, and championship points.</p></div></div>
 
           <fieldset>
             <legend>Faculty and Personnel</legend>
@@ -231,6 +231,19 @@
               </select>
               <small class="field-hint">Can view assigned events and confirm winners from paper scoresheets.</small>
             </label>
+            <label class="field-block">Tabulator In Charge
+              <select name="tabulator_account" required>
+                <option value="">Select a tabulator account</option>
+                {% for user in tabulator_options %}
+                <option value="{{ user.id }}">
+                  {% if user.get_full_name %}{{ user.get_full_name }} · {% endif %}{{ user.username }}
+                </option>
+                {% empty %}
+                <option value="" disabled>No Tabulator accounts yet — create one under Users → Faculty</option>
+                {% endfor %}
+              </select>
+              <small class="field-hint">Uses Tabulator accounts created under Users → Faculty. This account opens the event in the Tabulator portal.</small>
+            </label>
           </fieldset>
 
           <input type="hidden" name="assigned_scorer" value="">
@@ -239,12 +252,6 @@
 
           <fieldset>
             <legend>Scoresheet Template</legend>
-            <label class="field-block">Template source
-              <select name="scoresheet_template_mode" id="scoresheet-template-mode">
-                <option value="auto">Automatically select based on Sport/Game Type</option>
-                <option value="existing">Select existing template</option>
-              </select>
-            </label>
             <label class="field-block" id="scoresheet-template-wrap">
               Select Existing Template
               <select name="scoresheet_template" id="scoresheet-template">
@@ -253,7 +260,7 @@
                 <option value="{{ tpl.id }}" data-category="{{ tpl.category }}">{{ tpl.name }}{% if tpl.category %} · {{ tpl.category }}{% endif %}</option>
                 {% endfor %}
               </select>
-              <small class="field-hint">Recommendation uses Sport/Game Type, not Category (all match events are Sports).</small>
+              <small class="field-hint">Leave blank to auto-match by Sport/Game Type, or pick a saved template.</small>
             </label>
           </fieldset>
 
@@ -329,6 +336,6 @@
     window.MATCH_EVENT_ACADEMIC_YEAR = "{{ academic_year|escapejs }}";
     window.MATCH_EVENT_SEASON_NAMES = {{ season_event_names_json|safe }};
   </script>
-  <script src="{% static 'admindash/matchbasedevent.js' %}?v=20260806h"></script>
+  <script src="{% static 'admindash/matchbasedevent.js' %}?v=20260829a"></script>
 </body>
 </html>

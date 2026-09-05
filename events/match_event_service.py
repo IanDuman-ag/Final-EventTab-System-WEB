@@ -985,6 +985,28 @@ def models_q_for_faculty():
     )
 
 
+def models_q_for_tabulator():
+    """Match-based Tabulator In Charge must be a Tabulator account."""
+    from django.db.models import Q
+    return Q(groups__name__iexact='Tabulator')
+
+
+def _validated_tabulator(data, user_model, required=True):
+    raw_id = (data.get('tabulator_account') or '').strip()
+    if not raw_id:
+        if required:
+            raise MatchEventValidationError('Tabulator In Charge is required.')
+        return None
+    if not raw_id.isdigit():
+        raise MatchEventValidationError('Tabulator In Charge is invalid.')
+    tabulator = user_model.objects.filter(pk=int(raw_id), is_active=True).filter(
+        models_q_for_tabulator()
+    ).distinct().first()
+    if not tabulator:
+        raise MatchEventValidationError('The selected Tabulator In Charge is not authorized.')
+    return tabulator
+
+
 def build_match_blueprint(
     team_ids,
     tournament_type,
@@ -1480,6 +1502,7 @@ def save_match_event(data, actor, instance=None):
         else [team.id for team in teams]
     )
     faculty = _validated_faculty(data, get_user_model(), required=publishing)
+    tabulator = _validated_tabulator(data, get_user_model(), required=publishing)
     points = _validated_points(data)
     tie_break_rules = _json_list(data.get('tie_break_rules'), 'Tie-breaking rules')
     if not tie_break_rules:
@@ -1577,6 +1600,8 @@ def save_match_event(data, actor, instance=None):
             raise MatchEventValidationError('Result Entry Format is required to publish.')
         if not faculty:
             raise MatchEventValidationError('Faculty In Charge is required to publish.')
+        if not tabulator:
+            raise MatchEventValidationError('Tabulator In Charge is required to publish.')
         if event.apply_championship_points and not points:
             raise MatchEventValidationError('Championship points are required to publish.')
         if len(teams) < min_participants:
@@ -1591,6 +1616,7 @@ def save_match_event(data, actor, instance=None):
             faculty_in_charge=faculty.get_full_name().strip() or faculty.username,
         )
         event.faculty_account = faculty
+    event.assigned_tabulators.set([tabulator] if tabulator else [])
 
     if len(teams) < 2:
         return event

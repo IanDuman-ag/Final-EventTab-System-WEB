@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Scoresheet Templates · EventTab</title>
-  <link rel="stylesheet" href="{% static 'admindash/scoresheet.css' %}?v=20260806a">
+  <link rel="stylesheet" href="{% static 'admindash/scoresheet.css' %}?v=20260822h">
 </head>
 <body class="admin-dashboard-page admin-dashboard-v2 ss-page">
   <div class="dashboard-shell">
@@ -19,10 +19,11 @@
             <strong>Scoresheet Templates</strong>
           </nav>
           <h2 class="v2-welcome">Scoresheet Templates</h2>
-          <p class="ss-lead">Create and maintain reusable official scoresheet layouts for Faculty use.</p>
+          <p class="ss-lead">Create scoresheets from Match-Based Events, then customize header, event details, and participants.</p>
         </div>
         <div class="ss-topbar-actions">
-          <button type="button" class="ss-btn ss-btn-primary" id="btn-create-template">+ Create Template</button>
+          <a class="ss-btn ss-btn-secondary" href="{% url 'admin_match_events' %}">+ New Match Event</a>
+          <button type="button" class="ss-btn ss-btn-primary" id="btn-create-template">+ Blank Template</button>
         </div>
       </header>
 
@@ -30,10 +31,42 @@
         <!-- LIST -->
         <section class="ss-panel is-active" data-panel="list" aria-label="Scoresheet Template List">
           <article class="ss-card">
+            <header class="ss-card-head">
+              <div>
+                <h3>Match-Based Events</h3>
+                <p class="ss-card-sub">Events created under Match-Based Event appear here. Create or edit their scoresheet.</p>
+              </div>
+            </header>
+            <form class="ss-toolbar" method="get" id="event-list-filters" onsubmit="return false;">
+              <input type="search" id="event-search" placeholder="Search event name, venue, division…" aria-label="Search events">
+            </form>
+            <div class="ss-table-wrap">
+              <table class="ss-table" id="events-table">
+                <thead>
+                  <tr>
+                    <th>Event Name</th>
+                    <th>Date</th>
+                    <th>Time</th>
+                    <th>Category</th>
+                    <th>Venue</th>
+                    <th>Division</th>
+                    <th>Format</th>
+                    <th>Scoresheet</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="events-tbody">
+                  <tr class="ss-empty-row"><td colspan="9" class="ss-empty">Loading events…</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
+
+          <article class="ss-card ss-card--templates">
             <header class="ss-card-head ss-card-head--row">
               <div>
-                <h3>Scoresheet Template List</h3>
-                <p class="ss-card-sub">Search, filter, and manage official scoresheet layouts.</p>
+                <h3>Saved Templates</h3>
+                <p class="ss-card-sub">Reusable layouts not tied to a single event create flow.</p>
               </div>
               <div class="ss-bulk-bar" id="ss-bulk-bar" hidden>
                 <span id="ss-bulk-count">0 selected</span>
@@ -41,7 +74,7 @@
               </div>
             </header>
             <form class="ss-toolbar" method="get" id="list-filters">
-              <input type="search" name="q" value="{{ filters.q }}" placeholder="Search name or category…" aria-label="Search">
+              <input type="search" name="q" value="{{ filters.q }}" placeholder="Search template name…" aria-label="Search">
               <select name="event_type" aria-label="Event type">
                 <option value="">All event types</option>
                 <option value="match" {% if filters.event_type == 'match' %}selected{% endif %}>Match-Based</option>
@@ -57,8 +90,6 @@
                 <option value="updated_at" {% if filters.sort == 'updated_at' %}selected{% endif %}>Oldest updated</option>
                 <option value="name" {% if filters.sort == 'name' %}selected{% endif %}>Name A–Z</option>
                 <option value="-name" {% if filters.sort == '-name' %}selected{% endif %}>Name Z–A</option>
-                <option value="event_type" {% if filters.sort == 'event_type' %}selected{% endif %}>Event type</option>
-                <option value="status" {% if filters.sort == 'status' %}selected{% endif %}>Status</option>
               </select>
               <button type="submit" class="ss-btn ss-btn-secondary">Apply</button>
             </form>
@@ -70,10 +101,9 @@
                       <input type="checkbox" id="ss-select-all" aria-label="Select all templates">
                     </th>
                     <th>Template Name</th>
+                    <th>Linked Event</th>
                     <th>Event Type</th>
-                    <th>Category</th>
                     <th>Last Updated</th>
-                    <th>Status</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
@@ -84,10 +114,9 @@
                       <input type="checkbox" class="ss-row-check" value="{{ t.id }}" data-name="{{ t.name }}" data-assigned="{{ t.assigned_event_count }}" aria-label="Select {{ t.name }}">
                     </td>
                     <td><strong>{{ t.name }}</strong></td>
+                    <td>{{ t.bound_event_name|default:"—" }}</td>
                     <td>{{ t.event_type_label }}</td>
-                    <td>{{ t.category }}</td>
                     <td>{{ t.updated_at }}</td>
-                    <td><span class="ss-badge ss-badge--{{ t.status }}">{{ t.status_label }}</span></td>
                     <td>
                       <div class="ss-row-actions">
                         <button type="button" class="ss-link-btn" data-view-template="{{ t.id }}">View</button>
@@ -98,7 +127,7 @@
                     </td>
                   </tr>
                   {% empty %}
-                  <tr class="ss-empty-row"><td colspan="7" class="ss-empty">No templates found.</td></tr>
+                  <tr class="ss-empty-row"><td colspan="6" class="ss-empty">No saved templates yet.</td></tr>
                   {% endfor %}
                 </tbody>
               </table>
@@ -117,116 +146,86 @@
           </article>
         </section>
 
-        <!-- WIZARD -->
+        <!-- WIZARD / TEMPLATE EDITOR -->
         <section class="ss-panel" data-panel="wizard" aria-label="Create or edit template" hidden>
-          <div class="ss-wizard-head">
-            <button type="button" class="ss-btn ss-btn-secondary" id="btn-cancel-wizard">Cancel</button>
-            <div class="ss-wizard-titles">
-              <h3 id="wizard-title">Create Template</h3>
-              <ol class="ss-steps" id="wizard-steps">
-                <li class="is-active" data-step-indicator="1">1. Basic Information</li>
-                <li data-step-indicator="2">2. Template Builder</li>
-                <li data-step-indicator="3">3. Template Preview</li>
-              </ol>
-            </div>
-          </div>
+          <form id="template-form" class="ss-editor-shell" novalidate>
+            <input type="hidden" id="tpl-id" value="">
+            <input type="hidden" id="tpl-event-id" value="">
 
-          <!-- Step 1 -->
-          <div class="ss-step" data-step="1">
-            <article class="ss-card ss-card-narrow">
-              <header class="ss-card-head"><h3>Basic Information</h3></header>
-              <form id="template-form" class="ss-form" novalidate>
-                <input type="hidden" id="tpl-id" value="">
-                <label class="ss-field">Template Name
-                  <input type="text" id="tpl-name" maxlength="200" required placeholder="e.g. Basketball Official Scoresheet">
+            <header class="ss-editor-topbar">
+              <div class="ss-editor-top-left">
+                <button type="button" class="ss-btn ss-btn-secondary" id="btn-cancel-wizard">← Back</button>
+                <div>
+                  <h3 id="wizard-title">Edit Template</h3>
+                  <p class="ss-editor-subtitle" id="wizard-subtitle">Configure sections, columns, and live preview.</p>
+                </div>
+              </div>
+              <div class="ss-editor-top-actions">
+                <label class="ss-inline-field">Template Name
+                  <input type="text" id="tpl-name" maxlength="200" required placeholder="Scoresheet name">
                 </label>
-                <fieldset class="ss-fieldset">
-                  <legend>Event Type</legend>
-                  <label class="ss-radio"><input type="radio" name="event_type" value="match" checked> Match-Based</label>
-                  <label class="ss-radio"><input type="radio" name="event_type" value="criteria"> Criteria-Based</label>
+                <fieldset class="ss-inline-type">
+                  <legend class="sr-only">Event Type</legend>
+                  <label><input type="radio" name="event_type" value="match" checked> Match</label>
+                  <label><input type="radio" name="event_type" value="criteria"> Criteria</label>
                 </fieldset>
-                <label class="ss-field">Category
-                  <input type="text" id="tpl-category" maxlength="100" placeholder="e.g. Basketball, Singing" list="category-suggestions">
-                  <datalist id="category-suggestions">
-                    {% for c in categories %}<option value="{{ c }}"></option>{% endfor %}
-                  </datalist>
-                </label>
-                <div class="ss-form-row">
-                  <label class="ss-field">Paper Size
-                    <select id="tpl-paper">
-                      <option value="a4">A4</option>
-                      <option value="letter">Letter</option>
-                    </select>
-                  </label>
-                  <label class="ss-field">Orientation
-                    <select id="tpl-orientation">
-                      <option value="portrait">Portrait</option>
-                      <option value="landscape">Landscape</option>
-                    </select>
-                  </label>
-                  <label class="ss-field">Status
-                    <select id="tpl-status">
-                      <option value="active">Active</option>
-                      <option value="archived">Archived</option>
-                    </select>
-                  </label>
-                </div>
-                <label class="ss-field">Description
-                  <textarea id="tpl-description" rows="3" placeholder="Optional notes about when to use this template"></textarea>
-                </label>
-              </form>
-              <footer class="ss-step-actions">
-                <button type="button" class="ss-btn ss-btn-secondary" data-cancel-step>Cancel</button>
-                <button type="button" class="ss-btn ss-btn-primary" id="btn-step1-next">Next</button>
-              </footer>
-            </article>
-          </div>
+                <select id="tpl-paper" aria-label="Paper size" hidden>
+                  <option value="a4" selected>A4</option>
+                  <option value="letter">Letter</option>
+                </select>
+                <select id="tpl-orientation" aria-label="Orientation" hidden>
+                  <option value="portrait" selected>Portrait</option>
+                  <option value="landscape">Landscape</option>
+                </select>
+                <button type="button" class="ss-btn ss-btn-secondary" id="btn-preview-jump">
+                  <span aria-hidden="true">👁</span> Preview
+                </button>
+                <button type="button" class="ss-btn ss-btn-secondary" id="btn-download-sample">
+                  <span aria-hidden="true">📄</span> PDF Preview
+                </button>
+                <button type="button" class="ss-btn ss-btn-primary" id="btn-save-template">
+                  <span aria-hidden="true">💾</span> Save Template
+                </button>
+              </div>
+            </header>
 
-          <!-- Step 2 -->
-          <div class="ss-step" data-step="2" hidden>
-            <div class="ss-builder-grid">
-              <article class="ss-card">
-                <header class="ss-card-head">
-                  <h3 id="builder-title">Match-Based Template</h3>
-                  <p class="ss-card-sub">Enable, disable, and reorder fields. You are defining the layout, not filling values.</p>
+            <div class="ss-editor-grid">
+              <!-- LEFT: Template Structure -->
+              <aside class="ss-editor-col ss-structure-col">
+                <header class="ss-col-head">
+                  <h4>Template Structure</h4>
+                  <p>Drag to reorder. Use edit or remove on each section.</p>
                 </header>
-                <div class="ss-field-bulk">
-                  <button type="button" class="ss-link-btn" id="btn-select-all-fields">Select all</button>
-                  <button type="button" class="ss-link-btn" id="btn-clear-fields">Clear all</button>
+                <ol class="ss-section-list" id="section-list" aria-label="Template sections"></ol>
+                <button type="button" class="ss-btn ss-btn-secondary ss-add-section" id="btn-add-section">+ Add Section</button>
+              </aside>
+
+              <!-- MIDDLE: Edit Component -->
+              <section class="ss-editor-col ss-edit-col">
+                <header class="ss-col-head">
+                  <h4 id="edit-component-title">Edit Component</h4>
+                  <p id="edit-component-sub">Select a section from the left to configure it.</p>
+                </header>
+                <div id="edit-component-body" class="ss-edit-body">
+                  <p class="ss-empty-hint">Choose a section to edit its fields or columns.</p>
                 </div>
-                <ul class="ss-field-list" id="field-list" aria-label="Template fields"></ul>
-                <footer class="ss-step-actions">
-                  <button type="button" class="ss-btn ss-btn-secondary" id="btn-step2-back">Back</button>
-                  <button type="button" class="ss-btn ss-btn-primary" id="btn-step2-next">Next</button>
-                </footer>
-              </article>
-              <aside class="ss-card ss-preview-card">
-                <header class="ss-card-head"><h3>Live Preview</h3></header>
-                <div class="ss-preview-frame">
-                  <div class="ss-preview-page" id="live-preview-step2"></div>
+              </section>
+
+              <!-- RIGHT: Live Preview -->
+              <aside class="ss-editor-col ss-preview-col" id="preview-pane">
+                <header class="ss-col-head ss-col-head--preview">
+                  <div>
+                    <h4>Template Preview</h4>
+                    <p id="preview-event-label">Select an event from the table to fill header and event information.</p>
+                  </div>
+                  <div class="ss-preview-event-badge" id="preview-event-badge" hidden></div>
+                </header>
+                <div class="ss-rich-preview-frame">
+                  <div class="ss-rich-preview" id="rich-preview" aria-live="polite"></div>
                 </div>
               </aside>
             </div>
-          </div>
-
-          <!-- Step 3 -->
-          <div class="ss-step" data-step="3" hidden>
-            <article class="ss-card">
-              <header class="ss-card-head">
-                <h3>Template Preview</h3>
-                <p class="ss-card-sub">Review the scoresheet before saving. After save it becomes available for Faculty.</p>
-              </header>
-              <div class="ss-preview-frame ss-preview-frame--wide">
-                <div class="ss-preview-page" id="live-preview-step3"></div>
-              </div>
-              <footer class="ss-step-actions">
-                <button type="button" class="ss-btn ss-btn-secondary" id="btn-step3-back">Back</button>
-                <button type="button" class="ss-btn ss-btn-secondary" id="btn-print-sample">Print Sample</button>
-                <button type="button" class="ss-btn ss-btn-secondary" id="btn-download-sample">Download Sample PDF</button>
-                <button type="button" class="ss-btn ss-btn-primary" id="btn-save-template">Save Template</button>
-              </footer>
-            </article>
-          </div>
+          </form>
         </section>
       </main>
     </div>
@@ -252,6 +251,8 @@
   {{ templates_json|json_script:"ss-templates-data" }}
   {{ field_defs_json|json_script:"ss-field-defs" }}
   {{ default_order_json|json_script:"ss-default-order" }}
+  {{ match_preview_events_json|json_script:"ss-match-preview-events" }}
+  {{ school_branding_json|json_script:"ss-school-branding" }}
   <script>
     window.SS_CSRF = "{{ csrf_token }}";
     window.SS_URLS = {
@@ -263,6 +264,6 @@
       duplicateBase: "/admin/scoresheets/templates/"
     };
   </script>
-  <script src="{% static 'admindash/scoresheet.js' %}?v=20260806a"></script>
+  <script src="{% static 'admindash/scoresheet.js' %}?v=20260822h"></script>
 </body>
 </html>

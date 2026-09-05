@@ -12,6 +12,10 @@
   var deductions = [];
   var points = [];
   var stages = [];
+  var mobileApprovalRequired = true;
+  var expandedRoundId = null;
+  var roundDragId = null;
+  var roundAdjustmentWarning = '';
   var events = [];
   var scoringWorkflow = {
     eventId: null, eventName: '', categories: [], selectedCategoryId: null,
@@ -52,8 +56,12 @@
     if (el) el.textContent = msg || '';
   }
 
+  function maxWizardStep() {
+    return mode === 'pageant' ? 5 : 7;
+  }
+
   function setStep(next) {
-    activeStep = Math.max(1, Math.min(6, Number(next) || 1));
+    activeStep = Math.max(1, Math.min(maxWizardStep(), Number(next) || 1));
     $$('.wizard-panel').forEach(function (panel) {
       var pageantPanel = panel.hasAttribute('data-pageant');
       var visible = mode === 'pageant'
@@ -69,26 +77,29 @@
     });
     var activeMarker = $('[data-step-marker="' + activeStep + '"]');
     if (activeMarker) {
-      $('#wizard-steps').dataset.mobileStep = 'Step ' + activeStep + ' of 6 — ' + $('small', activeMarker).textContent;
-      $('#wizard-steps').style.setProperty('--pageant-progress', (activeStep / 6 * 100) + '%');
+      $('#wizard-steps').dataset.mobileStep = 'Step ' + activeStep + ' of ' + maxWizardStep() + ' — ' + $('small', activeMarker).textContent;
+      $('#wizard-steps').style.setProperty('--pageant-progress', (activeStep / maxWizardStep() * 100) + '%');
     }
-    wizard.classList.toggle('at-review', activeStep === 6);
+    wizard.classList.toggle('at-review', activeStep === maxWizardStep());
     $('#wizard-back').style.display = activeStep === 1 ? 'none' : '';
     showError('');
     if (mode === 'pageant' && window.PageantWizard) window.PageantWizard.render(activeStep);
-    if (mode === 'standard' && activeStep === 6) {
+    if (mode === 'standard' && activeStep === 7) {
       syncCriteriaFromScoringWorkflow();
       buildReview();
     }
     if (mode === 'standard' && activeStep === 3) {
-      loadCategories().then(function () {
-        renderScoringCategories();
-      }).catch(function (error) { showError(error.message); });
+      syncEventFormatFromRounds();
+      renderRoundSetup();
     }
     if (mode === 'standard' && activeStep === 4) {
       loadCategories().then(function () {
+        renderScoringCategories();
         renderScoringCriteria();
       }).catch(function (error) { showError(error.message); });
+    }
+    if (mode === 'standard' && activeStep === 5) {
+      renderJudgeAssignmentDashboard();
     }
     var body = $('.wizard-body');
     if (body) body.scrollTop = 0;
@@ -105,249 +116,568 @@
     $('#wizard-steps').setAttribute('aria-label', mode === 'pageant' ? 'Pageant setup progress' : 'Creation progress');
     var labels = mode === 'pageant'
       ? ['Details', 'Candidates', 'Segments & Scoring', 'Judges, Advancement & Awards', 'Review & Publish']
-      : ['Basics', 'Participants', 'Category', 'Criteria', 'Judges', 'Review'];
+      : ['Event Details', 'Participants', 'Rounds', 'Scoring Structure', 'Score Collection', 'Awards', 'Review & Publish'];
     $$('[data-step-marker]').forEach(function (marker, index) {
-      $('small', marker).textContent = labels[index];
+      var label = labels[index];
+      marker.hidden = !label;
+      if (label) $('small', marker).textContent = label;
     });
     activeStep = 1;
     setStep(activeStep);
   }
 
   function participationType() {
-    return ($('#participation-type') && $('#participation-type').value) || 'team';
+    return ($('#participation-type') && $('#participation-type').value) || 'group';
+  }
+
+  function isIndividualParticipation() {
+    return participationType() === 'individual';
   }
 
   function eventFormat() {
-    var checked = $('input[name="event_format"]:checked');
-    return checked ? checked.value : 'single_performance';
+    var picker = $('#event-format-select');
+    if (picker) return picker.value || 'single_performance';
+    return stages.length >= 2 ? 'multiple_stage' : 'single_performance';
   }
 
-  function syncParticipantPanels() {
-    var kind = participationType();
-    $('#team-options').classList.toggle('criteria-hidden', kind !== 'team');
-    $('#candidate-options').classList.toggle('criteria-hidden', kind !== 'individual');
-    var legend = $('#participant-legend-label');
-    if (legend) {
-      legend.textContent = kind === 'individual' ? 'Participating Individuals' : 'Participating Teams';
-    }
-    $$('#team-options .participant-check').forEach(function (box) {
-      if (kind !== 'team') box.checked = false;
+  function syncEventFormatFromRounds() {
+    var picker = $('#event-format-select');
+    var fmt = stages.length >= 2 ? 'multiple_stage' : (picker ? picker.value : 'single_performance');
+    if (picker) picker.value = fmt;
+    if ($('#stage-count')) $('#stage-count').value = String(stages.length);
+    var lastTie = '';
+    stages.forEach(function (row) {
+      if (row.tie_handling) lastTie = row.tie_handling;
     });
-    $$('#candidate-options .participant-check').forEach(function (box) {
-      if (kind !== 'individual') box.checked = false;
-    });
-    updateParticipantCount();
-  }
-
-  function updateParticipantCount() {
-    var count = $$('.participant-check:checked').filter(function (box) {
-      return box.offsetParent !== null || !box.closest('.criteria-hidden');
-    }).length;
-    // count only visible panel
-    var panel = participationType() === 'team' ? '#team-options' : '#candidate-options';
-    count = $$(panel + ' .participant-check:checked').length;
-    $('#selected-participant-count').textContent = count + ' selected';
+    if (lastTie && $('#stage-tiebreak-method')) $('#stage-tiebreak-method').value = lastTie;
   }
 
   function syncFormatPanels() {
-    var fmt = eventFormat();
-    $('#multiple-stage-panel').classList.toggle('criteria-hidden', fmt !== 'multiple_stage');
-    if (fmt === 'multiple_stage') {
-      if (!stages.length) stages = defaultStages(Number($('#stage-count').value) || 2);
-      $('#stage-count').value = String(stages.length);
-      renderStagesTable();
+    if (eventFormat() === 'single_performance' && stages.length !== 1) {
+      stages = defaultStages(1);
+      expandedRoundId = stages[0].id;
+    }
+    syncEventFormatFromRounds();
+    renderRoundSetup();
+  }
+
+  function participantCount() {
+    return collectParticipants().length;
+  }
+
+  function participantNoun() {
+    return isIndividualParticipation() ? 'participants' : 'groups';
+  }
+
+  function participantNounLower() {
+    return isIndividualParticipation() ? 'participants' : 'groups';
+  }
+
+  function isFinalRoundAt(round, index, total) {
+    return round.round_type === 'final' || (!!round.is_final && round.round_type !== 'elimination');
+  }
+
+  function isAdvanceAllRound(round, isFinal) {
+    var method = (round.qualification_method || round.advancement_rule || '').toLowerCase();
+    return !isFinal && (method === 'advance_all' || method === 'no_elimination');
+  }
+
+  function hasQualifierAdvancement(round) {
+    var method = (round.qualification_method || round.advancement_rule || '').toLowerCase();
+    return Number(round.qualifiers) > 0 && ['top_ranking', 'minimum_score', 'manual_selection', 'highest_total'].indexOf(method) !== -1;
+  }
+
+  function roundParticipantCount(index, list) {
+    var rows = list || stages;
+    var count = participantCount();
+    for (var i = 0; i < index && i < rows.length; i++) {
+      var round = rows[i] || {};
+      var isFinal = isFinalRoundAt(round, i, rows.length);
+      if (isFinal) break;
+      if (isAdvanceAllRound(round, isFinal)) continue;
+      var qualifiers = Number(round.qualifiers) || 0;
+      if (qualifiers > 0) count = Math.min(count, qualifiers);
+    }
+    return count;
+  }
+
+  function qualifierWarning(from, to) {
+    return 'Only ' + to + ' ' + participantNounLower() + ' are available. The qualifier count has been adjusted from ' + from + ' to ' + to + '.';
+  }
+
+  function renderRoundWarning() {
+    var el = $('#round-adjustment-warning');
+    if (!el) return;
+    el.hidden = !roundAdjustmentWarning;
+    el.textContent = roundAdjustmentWarning || '';
+  }
+
+  function roundFormIndex() {
+    var editId = $('#round-edit-id').value;
+    if (editId) {
+      var existing = stages.findIndex(function (row) { return String(row.id) === String(editId); });
+      if (existing >= 0) return existing;
+    }
+    var requested = Number($('#round-order').value) || (stages.length + 1);
+    return Math.max(0, Math.min(stages.length, requested - 1));
+  }
+
+  function syncRoundQualifierLimits() {
+    var input = $('#round-qualifiers');
+    if (!input) return;
+    var max = roundParticipantCount(roundFormIndex());
+    input.max = String(max);
+    var isFinal = formRoundEndsEvent();
+    var method = ($('#round-advancement') && $('#round-advancement').value) || 'top_ranking';
+    if (isFinal) return;
+    if (method === 'advance_all' || $('#round-type').value === 'scoring') {
+      input.value = max ? String(max) : '';
+      return;
+    }
+    var current = Number(input.value) || 0;
+    if (max > 0 && current > max) {
+      roundAdjustmentWarning = qualifierWarning(current, max);
+      input.value = String(max);
+    } else if (max > 0 && current < 1) {
+      input.value = '1';
+    } else if (max < 1) {
+      input.value = '';
     }
   }
 
+  function revalidateRoundQualifiers() {
+    var count = participantCount();
+    var firstWarning = '';
+    stages = stages.map(function (round, index) {
+      var copy = Object.assign({}, round);
+      var isFinal = isFinalRoundAt(copy, index, stages.length);
+      if (!isFinal) {
+        if (isAdvanceAllRound(copy, isFinal)) {
+          copy.qualification_method = 'advance_all';
+          copy.advancement_rule = 'advance_all';
+          copy.qualifiers = count;
+        } else {
+          var configured = Number(copy.qualifiers) || 0;
+          if (count > 0 && configured > count) {
+            copy.qualifiers = count;
+            if (!firstWarning) firstWarning = qualifierWarning(configured, count);
+          }
+          if (copy.qualifiers > 0) count = Math.min(count, Number(copy.qualifiers) || count);
+        }
+      }
+      return copy;
+    });
+    if (firstWarning) roundAdjustmentWarning = firstWarning;
+    renderRoundWarning();
+  }
+
   function defaultStages(count) {
-    count = Math.max(2, Math.min(20, Number(count) || 2));
+    count = Math.max(1, Math.min(20, Number(count) || 1));
+    if (count === 1) {
+      return [normalizeRound({
+        name: 'Main Scoring Round',
+        round_type: 'main',
+        weight: 100,
+        is_final: true,
+        advancement_rule: 'no_advancement',
+      }, 0, 1)];
+    }
     var weight = Math.floor(100 / count);
     var rows = [];
     for (var i = 0; i < count; i++) {
       var isFinal = i === count - 1;
-      rows.push({
-        id: uid('s'),
-        name: STAGE_NAME_HINTS[i] || ('Stage ' + (i + 1) + ' Portion'),
+      rows.push(normalizeRound({
+        name: i === 0 ? 'Preliminary Round' : (isFinal ? 'Final Round' : ('Top ' + Math.max(1, count - i) + ' Round')),
+        round_type: isFinal ? 'final' : 'elimination',
         weight: isFinal ? (100 - weight * (count - 1)) : weight,
         qualification_method: isFinal ? null : 'top_ranking',
-        qualifiers: isFinal ? null : Math.max(1, count - i),
-        minimum_score: null,
+        qualifiers: isFinal ? null : Math.max(1, 10 - i * 2),
         carry_previous_scores: i > 0,
         require_faculty_confirmation: !isFinal,
         is_final: isFinal,
-      });
+      }, i, count));
     }
     return rows;
   }
 
-  function syncStagesFromDom() {
-    var rows = $$('#stages-table tbody tr');
-    if (!rows.length) return;
-    stages = rows.map(function (tr, index) {
-      var isFinal = index === rows.length - 1;
-      var methodEl = $('[data-stage-method]', tr);
-      var qualEl = $('[data-stage-qualifiers]', tr);
-      var minEl = $('[data-stage-min-score]', tr);
-      var carryEl = $('[data-stage-carry]', tr);
-      var confirmEl = $('[data-stage-confirm]', tr);
-      return {
-        id: tr.dataset.id || uid('s'),
-        name: ($('[data-stage-name]', tr).value || '').trim(),
-        weight: Number($('[data-stage-weight]', tr).value) || 0,
-        qualification_method: isFinal ? null : ((methodEl && methodEl.value) || 'top_ranking'),
-        qualifiers: isFinal ? null : (Number(qualEl && qualEl.value) || 0),
-        minimum_score: (!isFinal && methodEl && methodEl.value === 'minimum_score')
-          ? (Number(minEl && minEl.value) || 0)
-          : null,
-        carry_previous_scores: index === 0 ? false : !!(carryEl && carryEl.value === 'yes'),
-        require_faculty_confirmation: isFinal ? false : !!(confirmEl && confirmEl.checked),
-        is_final: isFinal,
-      };
+  function normalizeRound(row, index, total) {
+    row = row || {};
+    var count = total || stages.length || 1;
+    var isLast = index === count - 1;
+    // Preserve qualifier-based rounds while editing; simple scoring-only rounds
+    // still end the event when they are the only/current last round.
+    var roundType = row.round_type || (isLast ? (count > 1 ? 'final' : 'scoring') : 'elimination');
+    if (roundType === 'scoring' && hasQualifierAdvancement(row)) roundType = 'elimination';
+    var isFinal = roundType === 'final' || (!hasQualifierAdvancement(row) && isLast && roundType !== 'elimination');
+    if (!isLast && roundType === 'final') roundType = 'elimination';
+    var method = isFinal ? null : (row.qualification_method || row.advancement_rule || 'top_ranking');
+    if (method === 'highest_total') method = 'top_ranking';
+    var handling = row.score_handling || (row.carry_previous_scores ? 'carry' : 'start_zero');
+    return {
+      id: row.id || uid('s'),
+      name: row.name || '',
+      round_type: roundType,
+      scoring_method: row.scoring_method || 'numerical',
+      score_handling: handling,
+      weight: Number(row.weight) || 0,
+      weight_locked: handling === 'carry' && !!row.weight_locked,
+      qualification_method: isFinal ? null : method,
+      advancement_rule: isFinal ? null : (row.advancement_rule || method || 'top_ranking'),
+      qualifiers: row.qualifiers != null ? Number(row.qualifiers) : 10,
+      minimum_score: (!isFinal && method === 'minimum_score') ? (Number(row.minimum_score) || 0) : null,
+      carry_previous_scores: index === 0 ? false : (row.score_handling === 'carry' || !!row.carry_previous_scores),
+      require_faculty_confirmation: isFinal ? false : !!row.require_faculty_confirmation,
+      require_all_judges: row.require_all_judges !== false,
+      hide_standings: !!row.hide_standings,
+      allow_reopen: !!row.allow_reopen,
+      performance_order: row.performance_order || 'event',
+      tie_handling: row.tie_handling || 'manual_decision',
+      is_final: isFinal,
+    };
+  }
+
+  // Final rounds do not advance anyone; qualifier-based rounds keep their controls
+  // visible even while they are being edited as the current last configured round.
+  function formRoundEndsEvent() {
+    if ($('#round-type').value === 'final') return true;
+    var editId = $('#round-edit-id').value;
+    if (!editId) return false;
+    var round = stages.find(function (row) { return String(row.id) === String(editId); });
+    return !!(round && round.is_final && !hasQualifierAdvancement(round));
+  }
+
+  function syncRoundFormVisibility() {
+    var isFinal = formRoundEndsEvent();
+    var method = ($('#round-advancement') && $('#round-advancement').value) || 'top_ranking';
+    var advanceAll = !isFinal && (method === 'advance_all' || $('#round-type').value === 'scoring');
+    $('#round-qualifiers-wrap').hidden = isFinal || advanceAll;
+    $('#round-advancement-wrap').hidden = isFinal;
+    var showMin = !isFinal && method === 'minimum_score';
+    $('#round-min-score-wrap').hidden = !showMin;
+    var carries = $('#round-score-handling').value === 'carry';
+    $('#round-weight-wrap').hidden = !carries;
+    $('#round-weight').disabled = !carries;
+    $('#round-weight-auto-hint').hidden = carries;
+    $('#round-weight-manual-hint').hidden = !carries;
+    syncRoundQualifierLimits();
+  }
+
+  // Rounds without a weight of their own -- those that start from zero, plus any
+  // carry-forward round left blank -- split whatever weight the rest leave behind.
+  // The flag matters because auto shares are written back into row.weight, so the
+  // number alone cannot tell an auto share apart from one the user typed.
+  function hasOwnRoundWeight(row) {
+    return !!row.weight_locked && (Number(row.weight) || 0) > 0;
+  }
+
+  function applyAutoRoundWeights() {
+    var auto = stages.filter(function (row) { return !hasOwnRoundWeight(row); });
+    if (!auto.length) return;
+    var manual = stages.reduce(function (sum, row) {
+      return hasOwnRoundWeight(row) ? sum + (Number(row.weight) || 0) : sum;
+    }, 0);
+    var remaining = Math.max(0, round2(100 - manual));
+    var share = round2(remaining / auto.length);
+    auto.forEach(function (row, index) {
+      row.weight = index === auto.length - 1
+        ? round2(remaining - share * (auto.length - 1))
+        : share;
     });
-    updateStagesMeter();
-    renderStageFlow();
+  }
+
+  function resetRoundForm(preset) {
+    $('#round-edit-id').value = '';
+    $('#round-form-title').textContent = 'Add Round';
+    $('#save-round-btn').textContent = '+ Add Round';
+    $('#cancel-round-edit').hidden = true;
+    $('#round-name').value = (preset && preset.name) || '';
+    $('#round-type').value = (preset && preset.round_type) || (stages.length ? 'elimination' : 'scoring');
+    $('#round-order').value = String(stages.length + 1);
+    $('#round-scoring-method').value = 'numerical';
+    $('#round-score-handling').value = stages.length ? 'start_zero' : 'start_zero';
+    $('#round-weight').value = '';
+    var available = roundParticipantCount(stages.length);
+    $('#round-qualifiers').value = available ? String(Math.min(10, available)) : '';
+    $('#round-advancement').value = 'top_ranking';
+    $('#round-min-score').value = '';
+    $('#round-performance-order').value = 'event';
+    $('#round-tie-handling').value = 'manual_decision';
+    $('#round-require-judges').checked = true;
+    $('#round-require-faculty').checked = !!stages.length;
+    $('#round-hide-standings').checked = false;
+    $('#round-allow-reopen').checked = false;
+    syncRoundFormVisibility();
+    renderRoundWarning();
+  }
+
+  function fillRoundForm(round) {
+    $('#round-edit-id').value = round.id;
+    $('#round-form-title').textContent = 'Edit Round';
+    $('#save-round-btn').textContent = 'Save Round';
+    $('#cancel-round-edit').hidden = false;
+    $('#round-name').value = round.name || '';
+    $('#round-type').value = hasQualifierAdvancement(round)
+      ? 'elimination'
+      : (round.round_type || (round.is_final ? 'final' : 'elimination'));
+    var index = stages.findIndex(function (row) { return row.id === round.id; });
+    $('#round-order').value = String(index >= 0 ? index + 1 : stages.length + 1);
+    $('#round-scoring-method').value = round.scoring_method || 'numerical';
+    $('#round-score-handling').value = round.score_handling || (round.carry_previous_scores ? 'carry' : 'start_zero');
+    $('#round-weight').value = round.weight_locked ? String(Number(round.weight) || 0) : '';
+    $('#round-qualifiers').value = String(round.qualifiers || 1);
+    $('#round-advancement').value = round.qualification_method || round.advancement_rule || 'top_ranking';
+    $('#round-min-score').value = round.minimum_score != null ? round.minimum_score : '';
+    $('#round-performance-order').value = round.performance_order || 'event';
+    $('#round-tie-handling').value = round.tie_handling || 'manual_decision';
+    $('#round-require-judges').checked = round.require_all_judges !== false;
+    $('#round-require-faculty').checked = !!round.require_faculty_confirmation;
+    $('#round-hide-standings').checked = !!round.hide_standings;
+    $('#round-allow-reopen').checked = !!round.allow_reopen;
+    syncRoundFormVisibility();
+    renderRoundWarning();
+  }
+
+  function readRoundForm() {
+    var editId = $('#round-edit-id').value;
+    var roundType = $('#round-type').value;
+    var isFinal = formRoundEndsEvent();
+    var method = isFinal ? null : ($('#round-advancement').value || 'top_ranking');
+    var carries = $('#round-score-handling').value === 'carry';
+    var typedWeight = carries ? Number(($('#round-weight').value || '').trim()) : 0;
+    var locked = carries && typedWeight > 0;
+    var draft = normalizeRound({
+      id: editId || uid('s'),
+      name: ($('#round-name').value || '').trim(),
+      round_type: roundType,
+      scoring_method: $('#round-scoring-method').value,
+      score_handling: $('#round-score-handling').value,
+      weight: locked ? typedWeight : 0,
+      weight_locked: locked,
+      qualification_method: method,
+      advancement_rule: method,
+      qualifiers: isFinal ? null : (Number($('#round-qualifiers').value) || 0),
+      minimum_score: (!isFinal && method === 'minimum_score') ? (Number($('#round-min-score').value) || 0) : null,
+      carry_previous_scores: $('#round-score-handling').value === 'carry',
+      require_faculty_confirmation: $('#round-require-faculty').checked,
+      require_all_judges: $('#round-require-judges').checked,
+      hide_standings: $('#round-hide-standings').checked,
+      allow_reopen: $('#round-allow-reopen').checked,
+      performance_order: $('#round-performance-order').value,
+      tie_handling: $('#round-tie-handling').value,
+      is_final: isFinal,
+    }, 0, 2); // never treat the draft as the last round; renderRoundSetup re-normalizes by real position
+    draft.round_type = roundType;
+    draft.is_final = isFinal;
+    if (!isFinal && isAdvanceAllRound(draft, isFinal)) {
+      draft.qualification_method = 'advance_all';
+      draft.advancement_rule = 'advance_all';
+      draft.qualifiers = roundParticipantCount(roundFormIndex());
+    }
+    return draft;
+  }
+
+  function validateRoundDraft(draft, exceptId) {
+    if (!draft.name) return 'Round Name is required.';
+    if (/^round\s*\d+$/i.test(draft.name)) return 'Use a descriptive name instead of generic Round labels.';
+    var clash = stages.some(function (row) {
+      return String(row.id) !== String(exceptId || '') && (row.name || '').trim().toLowerCase() === draft.name.toLowerCase();
+    });
+    if (clash) return 'Each round name must be unique.';
+    if (!draft.is_final && draft.round_type !== 'final') {
+      var count = roundParticipantCount(roundFormIndex());
+      if (count < 1) {
+        return participationType() === 'individual' ? 'Select at least one candidate.' : 'Select at least one participant or team.';
+      }
+      if (isAdvanceAllRound(draft, false)) {
+        draft.qualifiers = count;
+      } else {
+        if (!Number.isInteger(draft.qualifiers) || draft.qualifiers < 1) {
+          return 'Number of Qualifiers must be a whole number of at least 1.';
+        }
+        if (draft.qualifiers > count) {
+          return 'Number of Qualifiers cannot exceed ' + count + ' eligible participants.';
+        }
+      }
+    }
+    return '';
+  }
+
+  function applyRoundOrder() {
+    var requested = Number($('#round-order').value) || (stages.length + 1);
+    var editId = $('#round-edit-id').value;
+    var index = stages.findIndex(function (row) { return String(row.id) === String(editId); });
+    if (index < 0) return;
+    var next = Math.max(0, Math.min(stages.length - 1, requested - 1));
+    if (next === index) return;
+    var copy = stages.slice();
+    var item = copy.splice(index, 1)[0];
+    copy.splice(next, 0, item);
+    stages = copy;
+  }
+
+  function saveRoundFromForm() {
+    var draft = readRoundForm();
+    var error = validateRoundDraft(draft, $('#round-edit-id').value);
+    if (error) {
+      showError(error);
+      return;
+    }
+    var editId = $('#round-edit-id').value;
+    var requested = Math.max(1, Number($('#round-order').value) || (stages.length + 1));
+    if (editId) {
+      stages = stages.map(function (row) {
+        return String(row.id) === String(editId) ? Object.assign({}, row, draft, { id: editId }) : row;
+      });
+      var index = stages.findIndex(function (row) { return String(row.id) === String(editId); });
+      if (index >= 0) {
+        var next = Math.max(0, Math.min(stages.length - 1, requested - 1));
+        if (next !== index) {
+          var copy = stages.slice();
+          var item = copy.splice(index, 1)[0];
+          copy.splice(next, 0, item);
+          stages = copy;
+        }
+      }
+    } else {
+      var insertAt = Math.max(0, Math.min(stages.length, requested - 1));
+      stages.splice(insertAt, 0, draft);
+    }
+    expandedRoundId = draft.id;
+    showError('');
+    resetRoundForm();
+    renderRoundSetup();
+  }
+
+  function duplicateRound(id) {
+    var source = stages.find(function (row) { return String(row.id) === String(id); });
+    if (!source) return;
+    var copy = normalizeRound(Object.assign({}, source, {
+      id: uid('s'),
+      name: (source.name || 'Round') + ' copy',
+    }), stages.length, stages.length + 1);
+    stages.push(copy);
+    expandedRoundId = copy.id;
+    renderRoundSetup();
+  }
+
+  function deleteRound(id) {
+    stages = stages.filter(function (row) { return String(row.id) !== String(id); });
+    if (expandedRoundId && String(expandedRoundId) === String(id)) expandedRoundId = null;
+    if ($('#round-edit-id').value === String(id)) resetRoundForm();
+    renderRoundSetup();
+  }
+
+  function renderRoundSummary() {
+    var host = $('#round-setup-summary');
+    if (!host) return;
+    var name = (form.event_name && form.event_name.value.trim()) || 'Untitled event';
+    var typeLabel = form.category && form.category.selectedIndex >= 0
+      ? form.category.options[form.category.selectedIndex].text
+      : 'Criteria-Based';
+    if (typeLabel === 'Select category type') typeLabel = 'Criteria-Based';
+    var status = ($('#publication-status') && $('#publication-status').value) || 'draft';
+    var count = participantCount();
+    host.innerHTML =
+      '<strong>' + escapeHtml(name) + '</strong>' +
+      '<span>' + escapeHtml(typeLabel) + '</span>' +
+      '<span>' + (isIndividualParticipation() ? 'Individual' : 'Group') + '</span>' +
+      '<span>' + count + ' ' + participantNoun() + '</span>' +
+      '<em class="rs-status rs-status--' + escapeAttr(status) + '">' + (status === 'published' ? 'Published' : 'Draft') + '</em>';
+  }
+
+  function roundTypeLabel(type) {
+    if (type === 'final') return 'Final';
+    if (type === 'scoring') return 'Scoring';
+    return 'Elimination';
+  }
+
+  function roundMetaLine(round, index) {
+    var bits = [];
+    bits.push(round.scoring_method === 'ranking' ? 'Ranking' : 'Numerical Scoring');
+    bits.push(round.score_handling === 'carry' ? 'Carry previous scores' : 'Start from zero');
+    if (round.require_faculty_confirmation) bits.push('Faculty confirmation required');
+    var isFinal = isFinalRoundAt(round, index, stages.length);
+    var available = roundParticipantCount(index);
+    if (isFinal) bits.push('No advancement');
+    else if (isAdvanceAllRound(round, isFinal)) bits.push('Advance all ' + available);
+    else if (round.qualifiers) bits.push('Top ' + Math.min(Number(round.qualifiers) || 0, available) + ' advance');
+    return bits.join(' · ');
+  }
+
+  function renderConfiguredRounds() {
+    var host = $('#configured-rounds-list');
+    if (!host) return;
+    if (!stages.length) {
+      host.innerHTML = '<p class="pageant-empty-state">No rounds yet. Use Add Round above, or create one Main Scoring round for simple events.</p>';
+      return;
+    }
+    host.innerHTML = stages.map(function (round, index) {
+      var expanded = String(expandedRoundId || stages[0].id) === String(round.id);
+      var isFinal = isFinalRoundAt(round, index, stages.length);
+      var available = roundParticipantCount(index);
+      var qualBadge = isFinal
+        ? 'No advancement'
+        : (isAdvanceAllRound(round, isFinal)
+          ? 'Advance All ' + available
+          : ('Top ' + Math.min(Number(round.qualifiers) || 0, available) + ' Advance'));
+      return (
+        '<article class="rs-round' + (expanded ? ' is-open' : '') + '" data-round-id="' + escapeAttr(round.id) + '" draggable="true">' +
+          '<div class="rs-round-row">' +
+            '<button type="button" class="rs-drag" title="Drag to reorder" aria-label="Reorder">⠿</button>' +
+            '<button type="button" class="rs-round-main" data-toggle-round="' + escapeAttr(round.id) + '">' +
+              '<span class="rs-round-num">' + (index < 9 ? '0' : '') + (index + 1) + '</span>' +
+              '<span class="rs-round-copy">' +
+                '<strong>' + escapeHtml(round.name || 'Untitled round') + '</strong>' +
+                '<span class="rs-badges">' +
+                  '<em>' + escapeHtml(roundTypeLabel(round.round_type)) + '</em>' +
+                  '<em>' + available + ' ' + participantNoun() + '</em>' +
+                  '<em>' + escapeHtml(qualBadge) + '</em>' +
+                '</span>' +
+              '</span>' +
+              '<span class="rs-configured">Configured</span>' +
+            '</button>' +
+            '<span class="rs-round-actions">' +
+              '<button type="button" class="ss-link-btn" data-edit-round="' + escapeAttr(round.id) + '">Edit</button>' +
+              '<button type="button" class="ss-link-btn" data-duplicate-round="' + escapeAttr(round.id) + '">Duplicate</button>' +
+              '<button type="button" class="ss-link-btn danger" data-delete-round="' + escapeAttr(round.id) + '">Delete</button>' +
+            '</span>' +
+          '</div>' +
+          (expanded ? '<p class="rs-round-details">' + escapeHtml(roundMetaLine(round, index)) + '</p>' : '') +
+        '</article>'
+      );
+    }).join('');
   }
 
   function updateStagesMeter() {
-    var total = stages.reduce(function (sum, row) { return sum + (Number(row.weight) || 0); }, 0);
     var meter = $('#stages-weight-meter');
     if (!meter) return;
-    meter.textContent = 'Stage total: ' + round2(total) + '%';
+    var total = stages.reduce(function (sum, row) { return sum + (Number(row.weight) || 0); }, 0);
+    meter.textContent = 'Round total: ' + round2(total) + '%';
     meter.classList.toggle('is-ok', Math.abs(total - 100) < 0.01);
-    meter.classList.toggle('is-bad', Math.abs(total - 100) >= 0.01);
+    meter.classList.toggle('is-warn', Math.abs(total - 100) >= 0.01);
   }
 
-  function renderStageFlow() {
-    var flow = $('#stage-flow');
-    if (!flow) return;
-    if (!stages.length) {
-      flow.innerHTML = '';
-      return;
-    }
-    flow.innerHTML = stages.map(function (stage, index) {
-      var chip =
-        '<span class="stage-flow-chip' + (stage.is_final ? ' is-final' : '') + '">' +
-        '<em>Stage ' + (index + 1) + '</em>' +
-        '<strong>' + escapeHtml(stage.name || 'Untitled') + '</strong>' +
-        '<span>' + escapeHtml(String(stage.weight || 0)) + '%</span>' +
-        '</span>';
-      return chip + (index < stages.length - 1 ? '<span class="stage-flow-arrow">→</span>' : '');
-    }).join('');
-  }
-
-  function methodOptionsHtml(selected) {
-    return QUALIFICATION_METHODS.map(function (method) {
-      return '<option value="' + method.value + '"' +
-        (selected === method.value ? ' selected' : '') + '>' +
-        method.label + '</option>';
-    }).join('');
+  function renderRoundSetup() {
+    stages = stages.map(function (row, index) {
+      return normalizeRound(row, index, stages.length);
+    });
+    revalidateRoundQualifiers();
+    applyAutoRoundWeights();
+    syncEventFormatFromRounds();
+    renderRoundSummary();
+    renderConfiguredRounds();
+    updateStagesMeter();
+    syncRoundQualifierLimits();
+    renderRoundWarning();
+    if (!$('#round-edit-id').value) $('#round-order').value = String(stages.length + 1);
   }
 
   function renderStagesTable() {
-    var tbody = $('#stages-table tbody');
-    if (!tbody) return;
-    tbody.innerHTML = '';
-    stages.forEach(function (stage, index) {
-      var isFinal = index === stages.length - 1;
-      stage.is_final = isFinal;
-      if (isFinal) {
-        stage.qualification_method = null;
-        stage.qualifiers = null;
-        stage.require_faculty_confirmation = false;
-      }
-      var tr = document.createElement('tr');
-      tr.dataset.id = stage.id;
-      var methodCell = isFinal
-        ? '<span class="stage-final-label">Final Stage · No Further Qualification</span>'
-        : '<select data-stage-method>' + methodOptionsHtml(stage.qualification_method || 'top_ranking') + '</select>' +
-          ((stage.qualification_method || 'top_ranking') === 'minimum_score'
-            ? '<input type="number" min="0" step="0.1" data-stage-min-score placeholder="Min score" value="' +
-              escapeAttr(stage.minimum_score != null ? stage.minimum_score : '') + '">'
-            : '<input type="hidden" data-stage-min-score value="">');
-      var qualifiersCell = isFinal
-        ? '<span class="stage-final-label">—</span>'
-        : '<input type="number" min="1" data-stage-qualifiers value="' +
-          escapeAttr(stage.qualifiers != null ? stage.qualifiers : 1) + '">';
-      var carryCell = index === 0
-        ? '<span class="stage-final-label">N/A</span>'
-        : '<select data-stage-carry>' +
-          '<option value="yes"' + (stage.carry_previous_scores ? ' selected' : '') + '>Yes</option>' +
-          '<option value="no"' + (!stage.carry_previous_scores ? ' selected' : '') + '>No</option>' +
-          '</select>';
-      var confirmCell = isFinal
-        ? '<span class="stage-final-label">Final review on publish</span>'
-        : '<label class="inline-check"><input type="checkbox" data-stage-confirm' +
-          (stage.require_faculty_confirmation ? ' checked' : '') + '> Required</label>';
-      tr.innerHTML =
-        '<td>' + (index + 1) + '</td>' +
-        '<td><input data-stage-name list="stage-name-suggestions" placeholder="e.g. Talent Competition" value="' +
-          escapeAttr(stage.name) + '"></td>' +
-        '<td><input type="number" min="0" max="100" step="0.1" data-stage-weight value="' +
-          escapeAttr(stage.weight) + '"></td>' +
-        '<td>' + methodCell + '</td>' +
-        '<td>' + qualifiersCell + '</td>' +
-        '<td>' + carryCell + '</td>' +
-        '<td>' + confirmCell + '</td>' +
-        '<td><div class="criteria-editor-actions">' +
-        '<button type="button" data-stage-up' + (index === 0 ? ' disabled' : '') + '>Up</button>' +
-        '<button type="button" data-stage-down' + (index === stages.length - 1 ? ' disabled' : '') + '>Down</button>' +
-        '<button type="button" data-stage-del' + (stages.length <= 2 ? ' disabled' : '') + '>Delete</button>' +
-        '</div></td>';
-      tbody.appendChild(tr);
-    });
-
-    if (!$('#stage-name-suggestions')) {
-      var datalist = document.createElement('datalist');
-      datalist.id = 'stage-name-suggestions';
-      datalist.innerHTML = STAGE_NAME_HINTS.map(function (name) {
-        return '<option value="' + escapeAttr(name) + '"></option>';
-      }).join('');
-      form.appendChild(datalist);
-    }
-
-    bindStageRowEvents();
-    updateStagesMeter();
-    renderStageFlow();
-  }
-
-  function bindStageRowEvents() {
-    $$('#stages-table tbody tr').forEach(function (tr) {
-      $$('input,select', tr).forEach(function (input) {
-        input.addEventListener('input', function () {
-          if (input.hasAttribute('data-stage-method')) {
-            syncStagesFromDom();
-            renderStagesTable();
-            return;
-          }
-          syncStagesFromDom();
-        });
-        input.addEventListener('change', function () {
-          if (input.hasAttribute('data-stage-method')) {
-            syncStagesFromDom();
-            renderStagesTable();
-            return;
-          }
-          syncStagesFromDom();
-        });
-      });
-      var up = $('[data-stage-up]', tr);
-      var down = $('[data-stage-down]', tr);
-      var del = $('[data-stage-del]', tr);
-      if (up) up.addEventListener('click', function () { moveStage(tr.dataset.id, -1); });
-      if (down) down.addEventListener('click', function () { moveStage(tr.dataset.id, 1); });
-      if (del) del.addEventListener('click', function () {
-        if (stages.length <= 2) return;
-        syncStagesFromDom();
-        stages = stages.filter(function (row) { return row.id !== tr.dataset.id; });
-        $('#stage-count').value = String(stages.length);
-        renderStagesTable();
-      });
-    });
+    renderRoundSetup();
   }
 
   function moveStage(id, delta) {
-    syncStagesFromDom();
-    var index = stages.findIndex(function (row) { return row.id === id; });
+    var index = stages.findIndex(function (row) { return String(row.id) === String(id); });
     var next = index + delta;
     if (index < 0 || next < 0 || next >= stages.length) return;
     var copy = stages.slice();
@@ -355,47 +685,94 @@
     copy[index] = copy[next];
     copy[next] = tmp;
     stages = copy;
-    renderStagesTable();
+    renderRoundSetup();
   }
 
-  function resizeStages(count) {
-    syncStagesFromDom();
-    count = Math.max(2, Math.min(20, Number(count) || 2));
-    if (count === stages.length) {
-      renderStagesTable();
-      return;
+  function syncParticipantPanels() {
+    var kind = participationType();
+    $('#team-options').classList.toggle('criteria-hidden', kind === 'individual');
+    $('#candidate-options').classList.toggle('criteria-hidden', kind !== 'individual');
+    var legend = $('#participant-legend-label');
+    if (legend) {
+      legend.textContent = kind === 'individual' ? 'Participating Individuals' : 'Participating Groups';
     }
-    if (count > stages.length) {
-      while (stages.length < count) {
-        stages.push({
-          id: uid('s'),
-          name: STAGE_NAME_HINTS[stages.length] || ('Stage ' + (stages.length + 1) + ' Portion'),
-          weight: 0,
-          qualification_method: 'top_ranking',
-          qualifiers: 3,
-          minimum_score: null,
-          carry_previous_scores: true,
-          require_faculty_confirmation: true,
-          is_final: false,
-        });
-      }
-    } else {
-      stages = stages.slice(0, count);
-    }
-    stages.forEach(function (stage, index) {
-      stage.is_final = index === stages.length - 1;
-      if (stage.is_final) {
-        stage.qualification_method = null;
-        stage.qualifiers = null;
-        stage.require_faculty_confirmation = false;
-      } else if (!stage.qualification_method) {
-        stage.qualification_method = 'top_ranking';
-        stage.qualifiers = stage.qualifiers || 3;
-        stage.require_faculty_confirmation = true;
-      }
+    $$('#team-options .participant-check').forEach(function (box) {
+      if (kind === 'individual') box.checked = false;
     });
-    $('#stage-count').value = String(stages.length);
-    renderStagesTable();
+    $$('#candidate-options .participant-check').forEach(function (box) {
+      if (kind !== 'individual') box.checked = false;
+    });
+    updateParticipantCount();
+    refreshParticipantFilters();
+  }
+
+  function visibleParticipantBoxes() {
+    var panel = isIndividualParticipation() ? '#candidate-options' : '#team-options';
+    return $$(panel + ' .participant-check').filter(function (box) {
+      var label = box.closest('label');
+      return !label || !label.hidden;
+    });
+  }
+
+  function setAllVisibleParticipants(checked) {
+    visibleParticipantBoxes().forEach(function (box) {
+      box.checked = !!checked;
+    });
+    updateParticipantCount();
+    renderRoundSetup();
+    showError('');
+  }
+
+  function refreshParticipantFilters() {
+    var panel = isIndividualParticipation() ? '#candidate-options' : '#team-options';
+    var deptFilter = $('#participant-department-filter');
+    var courseFilter = $('#participant-course-filter');
+    var departments = {};
+    var courses = {};
+    $$(panel + ' label[data-search]').forEach(function (label) {
+      var dept = label.dataset.department || '';
+      var course = label.dataset.course || '';
+      if (dept) departments[dept] = true;
+      if (course) courses[course] = true;
+    });
+    if (deptFilter) {
+      var current = deptFilter.value;
+      deptFilter.innerHTML = '<option value="">All departments</option>' +
+        Object.keys(departments).sort().map(function (name) {
+          return '<option value="' + escapeAttr(name) + '">' + escapeHtml(name) + '</option>';
+        }).join('');
+      deptFilter.value = departments[current] ? current : '';
+    }
+    if (courseFilter) {
+      var selected = courseFilter.value;
+      courseFilter.innerHTML = '<option value="">All courses/programs</option>' +
+        Object.keys(courses).sort().map(function (name) {
+          return '<option value="' + escapeAttr(name) + '">' + escapeHtml(name) + '</option>';
+        }).join('');
+      courseFilter.value = courses[selected] ? selected : '';
+      courseFilter.disabled = !Object.keys(courses).length;
+    }
+    filterParticipants();
+  }
+
+  function filterParticipants() {
+    var q = ($('#participant-search') || {}).value || '';
+    q = q.trim().toLowerCase();
+    var dept = ($('#participant-department-filter') || {}).value || '';
+    var course = ($('#participant-course-filter') || {}).value || '';
+    var panel = isIndividualParticipation() ? '#candidate-options' : '#team-options';
+    $$(panel + ' label[data-search]').forEach(function (label) {
+      var textMatch = !q || (label.dataset.search || '').indexOf(q) !== -1;
+      var deptMatch = !dept || (label.dataset.department || '') === dept;
+      var courseMatch = !course || (label.dataset.course || '') === course;
+      label.hidden = !(textMatch && deptMatch && courseMatch);
+    });
+  }
+
+  function updateParticipantCount() {
+    var panel = isIndividualParticipation() ? '#candidate-options' : '#team-options';
+    var count = $$(panel + ' .participant-check:checked').length;
+    $('#selected-participant-count').textContent = count + ' participants selected';
   }
 
   function round2(n) { return Math.round(n * 100) / 100; }
@@ -639,29 +1016,42 @@
   }
 
   function collectParticipants() {
-    var panel = participationType() === 'team' ? '#team-options' : '#candidate-options';
+    var panel = isIndividualParticipation() ? '#candidate-options' : '#team-options';
     return $$(panel + ' .participant-check:checked').map(function (box) {
       return Number(box.value);
     });
   }
 
   function collectRounds() {
-    var fmt = eventFormat();
-    if (fmt === 'single_performance') return [];
-    syncStagesFromDom();
+    revalidateRoundQualifiers();
+    syncEventFormatFromRounds();
     return stages.map(function (stage, index) {
-      var isFinal = index === stages.length - 1;
+      var isFinal = isFinalRoundAt(stage, index, stages.length);
+      var advanceAll = isAdvanceAllRound(stage, isFinal);
+      var available = roundParticipantCount(index);
+      var qualifiers = isFinal ? null : (advanceAll ? available : Math.min(Number(stage.qualifiers) || 0, available));
       return {
         stage_number: index + 1,
+        id: stage.id,
         name: stage.name,
         weight: Number(stage.weight) || 0,
-        qualification_method: isFinal ? null : (stage.qualification_method || 'top_ranking'),
-        qualifiers: isFinal ? null : (Number(stage.qualifiers) || 0),
-        minimum_score: (!isFinal && stage.qualification_method === 'minimum_score')
+        weight_locked: !!stage.weight_locked,
+        qualification_method: isFinal ? null : (advanceAll ? 'advance_all' : (stage.qualification_method || 'top_ranking')),
+        qualifiers: qualifiers,
+        minimum_score: (!isFinal && !advanceAll && stage.qualification_method === 'minimum_score')
           ? (Number(stage.minimum_score) || 0)
           : null,
         carry_previous_scores: index === 0 ? false : !!stage.carry_previous_scores,
         require_faculty_confirmation: isFinal ? false : !!stage.require_faculty_confirmation,
+        require_all_judges: stage.require_all_judges !== false,
+        hide_standings: !!stage.hide_standings,
+        allow_reopen: !!stage.allow_reopen,
+        scoring_method: stage.scoring_method || 'numerical',
+        score_handling: stage.score_handling || 'start_zero',
+        round_type: stage.round_type || (isFinal ? 'final' : 'elimination'),
+        advancement_rule: isFinal ? null : (advanceAll ? 'advance_all' : (stage.advancement_rule || stage.qualification_method || 'top_ranking')),
+        performance_order: stage.performance_order || 'event',
+        tie_handling: stage.tie_handling || 'manual_decision',
         is_final: isFinal,
         status: index === 0 ? 'open' : 'locked',
       };
@@ -680,17 +1070,25 @@
 
   function collectResultProcessing() {
     var out = {};
+    out.final_result_basis = $('#final-result-basis').value;
+    out.placements_count = Number($('#placements-count').value);
     $$('[data-rp]').forEach(function (input) {
       out[input.dataset.rp] = input.checked;
     });
     if (eventFormat() === 'multiple_stage') {
-      out.stage_tiebreak_method = $('#stage-tiebreak-method').value || 'highest_selected_criterion';
+      var tieEl = $('#stage-tiebreak-method');
+      out.stage_tiebreak_method = (tieEl && tieEl.value) || 'manual_decision';
     }
     return out;
   }
 
   function collectJudgeSettings() {
     var out = {};
+    out.allowed_submission_methods = [];
+    if ($('#method-mobile').checked || $('#method-hybrid').checked) out.allowed_submission_methods.push('MOBILE');
+    if ($('#method-ocr').checked || $('#method-hybrid').checked) out.allowed_submission_methods.push('OCR');
+    out.default_submission_method = $('#default-submission-method').value;
+    out.mobile_approval_required = mobileApprovalRequired;
     $$('[data-js]').forEach(function (input) {
       out[input.dataset.js] = input.checked;
     });
@@ -714,12 +1112,47 @@
 
   function updateJudgeCount() {
     $('#selected-judge-count').textContent = collectJudges().length + ' selected';
+    renderJudgeAssignmentDashboard();
+  }
+
+  function renderJudgeAssignmentDashboard() {
+    var host = $('#judge-assignment-dashboard');
+    if (!host) return;
+    var judges = $$('.judge-check:checked');
+    host.innerHTML = judges.map(function (box) {
+      return '<p><strong>' + escapeHtml(box.dataset.name) + '</strong> - All rounds</p>';
+    }).join('') || '<p>No judges selected.</p>';
+  }
+
+  function updateOfficialCategoryTotal() {
+    var key = $('#scoring-category-round').value;
+    var total = officialWeightTotalForRound(key);
+    $('#official-category-total').textContent = 'Official categories: ' + total + '% of 100% configured.';
   }
 
   function categoryOverallWeightTotal() {
-    return scoringWorkflow.categories.reduce(function (sum, row) {
+    return scoringWorkflow.categories.filter(function (row) {
+      return (row.purpose || 'official') === 'official';
+    }).reduce(function (sum, row) {
       return sum + (Number(row.overall_weight_percent) || 0);
     }, 0);
+  }
+
+  function roundKeyFor(row, index) {
+    return String((row && (row.id || row.stage_number || row.name)) || (index + 1));
+  }
+
+  function categoryRoundKey(category) {
+    if (category && category.assigned_round_id) return String(category.assigned_round_id);
+    return stages.length ? roundKeyFor(stages[0], 0) : 'main';
+  }
+
+  function officialWeightTotalForRound(roundKey) {
+    return roundWeight(scoringWorkflow.categories.reduce(function (sum, row) {
+      if ((row.purpose || 'official') !== 'official') return sum;
+      if (categoryRoundKey(row) !== String(roundKey)) return sum;
+      return sum + (Number(row.overall_weight_percent) || 0);
+    }, 0));
   }
 
   function roundWeight(value) {
@@ -727,27 +1160,17 @@
   }
 
   function validateCategoryOverallWeights() {
-    var total = roundWeight(categoryOverallWeightTotal());
-    // Preserve existing simple-average mode: all category weights 0.
-    if (Math.abs(total) < 0.01) return '';
-    if (total < 100) {
-      return (
-        'Event category weights must total 100%. Current total: ' + total + '%. ' +
-        roundWeight(100 - total) + '% remaining.'
-      );
-    }
-    if (total > 100) {
-      return 'Event category weights exceed 100% by ' + roundWeight(total - 100) + '%.';
+    var roundIds = (stages.length ? stages : [{ id: 'main', name: 'Main Scoring Round' }]).map(roundKeyFor);
+    for (var i = 0; i < roundIds.length; i++) {
+      var total = officialWeightTotalForRound(roundIds[i]);
+      if (total < 100) return 'Official categories in this round must total 100%. Current total: ' + total + '%.';
+      if (total > 100) return 'Official categories in this round exceed 100% by ' + roundWeight(total - 100) + '%.';
     }
     return '';
   }
 
   function categoryTargetWeight(category, categoryCount, eventWeightTotal) {
-    var raw = Number(category.overall_weight_percent) || 0;
-    if (Math.abs(eventWeightTotal) < 0.01) {
-      return categoryCount ? roundWeight(100 / categoryCount) : 0;
-    }
-    return raw;
+    return Number(category.overall_weight_percent) || 0;
   }
 
   function criteriaWeightTotal(categoryRow) {
@@ -768,26 +1191,15 @@
     for (var i = 0; i < rows.length; i++) {
       var raw = rows[i].weight_percent;
       if (raw === '' || raw == null || Number.isNaN(Number(raw))) {
-        return 'Criterion "' + (rows[i].name || 'Untitled') + '" in "' + categoryRow.name + '" needs a valid Event Weight %.';
+        return 'Criterion "' + (rows[i].name || 'Untitled') + '" in "' + categoryRow.name + '" needs a valid Criterion Weight Within Category.';
       }
       if (Number(raw) < 0) {
         return 'Criterion weights cannot be negative in "' + categoryRow.name + '".';
       }
     }
 
-    var eventWeightTotal = categoryOverallWeightTotal();
-    var categoryWeight = categoryTargetWeight(
-      categoryRow,
-      scoringWorkflow.categories.length,
-      eventWeightTotal
-    );
+    var categoryWeight = 100;
     var weightTotal = criteriaWeightTotal(categoryRow);
-
-    // Preserve simple-average mode within a category when all criteria are 0
-    // and the category itself is in average mode (category weight effectively shared).
-    if (Math.abs(weightTotal) < 0.01 && Math.abs(Number(categoryRow.overall_weight_percent) || 0) < 0.01) {
-      return '';
-    }
 
     if (Math.abs(weightTotal - categoryWeight) < 0.01) return '';
     if (weightTotal > categoryWeight) {
@@ -798,27 +1210,24 @@
     }
     return (
       'Criteria weights for "' + categoryRow.name + '" must total ' + categoryWeight +
-      '%. Current total: ' + weightTotal + '%.'
+      '% of category. Current total: ' + weightTotal + '%.'
     );
   }
 
   function absoluteCriterionEventWeight(criterion, criteriaCount, localSum, categoryWeight) {
     var local = Number(criterion.weight_percent) || 0;
-    // Absolute event weight: 10 means 10% of the final score.
-    // If all criteria are 0 (simple average), split the category weight equally.
-    if (Math.abs(localSum) < 0.01) {
-      return criteriaCount ? roundWeight(categoryWeight / criteriaCount) : 0;
-    }
-    return roundWeight(local);
+    if (Math.abs(localSum) < 0.01) return 0;
+    return roundWeight((local / localSum) * categoryWeight);
   }
 
   function syncCriteriaFromScoringWorkflow() {
-    // Criterion weight_percent is an absolute % of the overall event.
-    // Category overall_weight_percent is the target sum for its criteria (and event categories sum to 100%).
+    // Adapt category-local weights for the legacy flat mobile payload.
     var flat = [];
     var cats = scoringWorkflow.categories;
     var eventWeightTotal = categoryOverallWeightTotal();
-    cats.forEach(function (category) {
+    cats.filter(function (category) {
+      return (category.purpose || 'official') === 'official';
+    }).forEach(function (category) {
       var categoryWeight = categoryTargetWeight(category, cats.length, eventWeightTotal);
       var rows = category.criteria || [];
       var localSum = criteriaWeightTotal(category);
@@ -846,9 +1255,7 @@
     var meter = $('#scoring-criterion-total');
     if (!meter) return;
     var eventWeightTotal = categoryOverallWeightTotal();
-    var categoryWeight = category
-      ? categoryTargetWeight(category, scoringWorkflow.categories.length, eventWeightTotal)
-      : 0;
+    var categoryWeight = category ? 100 : 0;
     var total = roundWeight((criteriaRows || []).reduce(function (sum, row) {
       return sum + (Number(row.weight_percent) || 0);
     }, 0));
@@ -904,40 +1311,48 @@
       if (form.end_date.value < form.start_date.value) return 'End Date cannot precede Start Date.';
     }
     if (current === 2) {
-      if (collectParticipants().length < 1) return 'Select at least one participant or team.';
-      var fmt = eventFormat();
-      if (fmt === 'multiple_stage') {
-        syncStagesFromDom();
-        if (stages.length < 2) return 'Multiple Stage Competition requires at least two stages.';
-        var names = {};
-        var participantCount = collectParticipants().length;
-        for (var i = 0; i < stages.length; i++) {
-          var stage = stages[i];
-          var nameKey = (stage.name || '').trim().toLowerCase();
-          if (!nameKey) return 'Each stage needs a unique custom name.';
-          if (/^round\s*\d+$/i.test(stage.name.trim())) {
-            return 'Use a descriptive stage name instead of generic Round labels.';
-          }
-          if (names[nameKey]) return 'Each stage name must be unique.';
-          names[nameKey] = true;
-          if ((Number(stage.weight) || 0) <= 0) return 'Every stage weight must be greater than zero.';
-          if (!stage.is_final) {
-            if (!stage.qualification_method) return 'Select a qualification method for every non-final stage.';
-            var quals = Number(stage.qualifiers) || 0;
-            if (quals < 1) return 'Each qualification stage needs at least one qualifier.';
-            if (quals > participantCount) {
-              return 'Number of qualifiers cannot exceed the number of selected contestants.';
-            }
-            if (stage.qualification_method === 'minimum_score' && (Number(stage.minimum_score) || 0) < 0) {
-              return 'Minimum score must be zero or greater.';
-            }
-          }
-        }
-        var total = stages.reduce(function (sum, row) { return sum + (Number(row.weight) || 0); }, 0);
-        if (Math.abs(total - 100) >= 0.01) return 'Total stage weight must equal 100%.';
+      if (collectParticipants().length < 1) {
+        return participationType() === 'individual' ? 'Select at least one candidate.' : 'Select at least one participant or team.';
       }
     }
     if (current === 3) {
+      revalidateRoundQualifiers();
+      if (!stages.length) return 'Add at least one round. For simple events, create one Main Scoring round.';
+      var names = {};
+      for (var i = 0; i < stages.length; i++) {
+        var stage = stages[i];
+        var nameKey = (stage.name || '').trim().toLowerCase();
+        if (!nameKey) return 'Each round needs a name.';
+        if (/^round\s*\d+$/i.test(stage.name.trim())) {
+          return 'Use a descriptive round name instead of generic Round labels.';
+        }
+        if (names[nameKey]) return 'Each round name must be unique.';
+        names[nameKey] = true;
+        var isFinal = isFinalRoundAt(stage, i, stages.length);
+        if (!isFinal) {
+          var stageCount = roundParticipantCount(i);
+          if (stageCount < 1) {
+            return participationType() === 'individual' ? 'Select at least one candidate.' : 'Select at least one participant or team.';
+          }
+          if (isAdvanceAllRound(stage, isFinal)) continue;
+          var quals = Number(stage.qualifiers) || 0;
+          if (quals < 1) return 'Each elimination round needs at least one qualifier.';
+        }
+      }
+      if (stages.length === 1) {
+        stages[0].weight = 100;
+        stages[0].is_final = true;
+        stages[0].round_type = stages[0].round_type || 'scoring';
+      } else {
+        var total = stages.reduce(function (sum, row) { return sum + (Number(row.weight) || 0); }, 0);
+        if (Math.abs(total - 100) >= 0.01) return 'Total round weight must equal 100%. Currently ' + round2(total) + '%.';
+        for (var w = 0; w < stages.length; w++) {
+          if ((Number(stages[w].weight) || 0) <= 0) return 'Every round weight must be greater than zero.';
+        }
+      }
+      syncEventFormatFromRounds();
+    }
+    if (current === 4) {
       if (!scoringWorkflow.eventId) return 'Complete Step 1 so categories can be saved to this event.';
       if (!scoringWorkflow.categories.length) return 'Save at least one scoring category.';
       var categoryWeightError = validateCategoryOverallWeights();
@@ -985,7 +1400,7 @@
 
   function buildReview() {
     syncHiddenFields();
-    var panel = participationType() === 'team' ? '#team-options' : '#candidate-options';
+    var panel = isIndividualParticipation() ? '#candidate-options' : '#team-options';
     var names = $$(panel + ' .participant-check:checked').map(function (box) { return box.dataset.name; });
     var judgeNames = $$('.judge-check:checked').map(function (box) { return box.dataset.name; });
     var chief = $('#chief-judge');
@@ -1003,10 +1418,13 @@
       ['Event Name', form.event_name.value],
       ['Category Name', form.category.options[form.category.selectedIndex] ? form.category.options[form.category.selectedIndex].text : '—'],
       ['Event Classification', form.event_classification.options[form.event_classification.selectedIndex].text],
-      ['Participation Type', participationType() === 'team' ? 'Team' : 'Individual'],
+      ['Participation Type', isIndividualParticipation() ? 'Individual' : 'Group'],
       ['Venue', form.venue.value],
       ['Date & Time', form.start_date.value + (($('#event-time') || {}).value ? ' · ' + $('#event-time').value : '')],
       ['Participants', names.join(', ') || '—'],
+      ['Rounds', stages.map(function (row, index) {
+        return (index + 1) + '. ' + (row.name || 'Untitled') + ' (' + (row.weight || 0) + '%)';
+      }).join(' · ') || '—'],
       ['Scoring Categories & Criteria', categories],
       ['Chief Judge', chief.options[chief.selectedIndex] ? chief.options[chief.selectedIndex].text : '—'],
       ['Assigned Judges', judgeNames.join(', ') || '—'],
@@ -1039,6 +1457,9 @@
       return {
         id: category.id,
         name: category.name,
+        assigned_round_id: category.assigned_round_id || '',
+        purpose: category.purpose || 'official',
+        category_purpose: category.category_purpose || '',
         judge_mode: category.judge_mode,
         display_order: category.display_order,
         overall_weight_percent: category.overall_weight_percent,
@@ -1062,6 +1483,7 @@
   }
 
   function resetWizard() {
+    mobileApprovalRequired = true;
     form.reset();
     form.action = '/admin/events/criteria/';
     $('#publication-status').value = 'draft';
@@ -1069,14 +1491,15 @@
     criteria = defaultCriteria();
     deductions = [];
     points = defaultPoints('major');
-    stages = defaultStages(2);
+    stages = [];
     resetScoringWorkflow();
-    $('#stage-count').value = '2';
-    $('#stage-tiebreak-method').value = 'highest_selected_criterion';
+    if ($('#stage-count')) $('#stage-count').value = '0';
+    $('#stage-tiebreak-method').value = 'manual_decision';
     renderCriteria();
     renderDeductions();
     renderPoints();
-    renderStagesTable();
+    resetRoundForm();
+    renderRoundSetup();
     syncParticipantPanels();
     syncFormatPanels();
     updateJudgeCount();
@@ -1121,6 +1544,9 @@
           qualifiers: null,
           minimum_score: null,
           carry_previous_scores: !!cfg.carry_prelim_scores,
+          // Carrying keeps the saved split; the preliminary round then takes the rest.
+          score_handling: 'carry',
+          weight_locked: true,
           require_faculty_confirmation: false,
           is_final: true,
         },
@@ -1128,21 +1554,15 @@
     }
     if (Array.isArray(config) && config.length) {
       return config.map(function (row, index) {
-        var isFinal = index === config.length - 1 || !!row.is_final;
-        return {
-          id: uid('s'),
-          name: row.name || STAGE_NAME_HINTS[index] || ('Stage ' + (index + 1) + ' Portion'),
-          weight: Number(row.weight) || 0,
-          qualification_method: isFinal ? null : (row.qualification_method || 'top_ranking'),
-          qualifiers: isFinal ? null : (row.qualifiers != null ? row.qualifiers : 3),
-          minimum_score: row.minimum_score != null ? row.minimum_score : null,
-          carry_previous_scores: index === 0 ? false : (row.carry_previous_scores !== false),
-          require_faculty_confirmation: isFinal ? false : (row.require_faculty_confirmation !== false),
-          is_final: isFinal,
-        };
+        // Events saved before weights could be auto-shared have no flag, so keep
+        // their stored split rather than redistributing it on load.
+        var locked = row.weight_locked != null
+          ? !!row.weight_locked
+          : (config.length > 1 && (Number(row.weight) || 0) > 0);
+        return normalizeRound(Object.assign({ id: uid('s') }, row, { weight_locked: locked }), index, config.length);
       });
     }
-    return defaultStages(2);
+    return [];
   }
 
   function fillEditor(event) {
@@ -1151,7 +1571,7 @@
     form.event_name.value = event.name || '';
     form.category.value = event.category || '';
     form.event_classification.value = event.classification || '';
-    form.participation_type.value = event.participation_type || 'team';
+    form.participation_type.value = event.participation_type === 'team' ? 'group' : (event.participation_type || 'individual');
     form.division.value = event.division === '—' ? '' : (event.division || '');
     form.venue.value = event.venue || '';
     form.start_date.value = event.start_date || '';
@@ -1174,9 +1594,11 @@
     });
     updateParticipantCount();
     stages = stagesFromLegacyConfig(event);
-    $('#stage-count').value = String(Math.max(2, stages.length));
-    var stageTie = ((event.result_processing_config || {}).stage_tiebreak_method) || 'highest_selected_criterion';
+    $('#event-format-select').value = normalizeLoadedFormat(event.event_format);
+    if ($('#stage-count')) $('#stage-count').value = String(stages.length);
+    var stageTie = ((event.result_processing_config || {}).stage_tiebreak_method) || 'manual_decision';
     $('#stage-tiebreak-method').value = stageTie;
+    resetRoundForm();
     syncFormatPanels();
     syncCriteriaFromScoringWorkflow();
     if (!criteria.length) {
@@ -1210,10 +1632,18 @@
     });
     updateJudgeCount();
     var rp = event.result_processing_config || {};
+    $('#final-result-basis').value = rp.final_result_basis || 'main_round';
+    $('#placements-count').value = rp.placements_count || 3;
     $$('[data-rp]').forEach(function (input) {
       input.checked = !!rp[input.dataset.rp];
     });
     var js = event.judge_settings || {};
+    var allowed = js.allowed_submission_methods || ['MOBILE'];
+    $('#method-mobile').checked = allowed.indexOf('MOBILE') !== -1;
+    $('#method-ocr').checked = allowed.indexOf('OCR') !== -1;
+    $('#method-hybrid').checked = allowed.length > 1;
+    $('#default-submission-method').value = js.default_submission_method || 'MOBILE';
+    mobileApprovalRequired = js.mobile_approval_required !== false;
     $$('[data-js]').forEach(function (input) {
       input.checked = !!js[input.dataset.js];
     });
@@ -1292,21 +1722,18 @@
     });
   }
 
-  function judgeModeExplanation() {
-    var modeField = $('#scoring-category-mode');
-    var host = $('#judge-mode-explanation');
-    if (!modeField || !host) return;
-    host.textContent = modeField.value === 'ranking'
-      ? 'Ranking Mode: judges rank candidates from first to last. The system assigns inverse points using the live candidate count, then averages those points across judges.'
-      : 'Scoring Mode: judges enter numerical criterion scores. Scores are weighted and averaged across judges to produce the final tally.';
-  }
-
   function renderScoringCategories() {
+    var roundPicker = $('#scoring-category-round');
+    var selectedRound = roundPicker.value;
+    roundPicker.innerHTML = stages.map(function (round, index) {
+      return '<option value="' + escapeAttr(roundKeyFor(round, index)) + '">' + escapeHtml(round.name) + '</option>';
+    }).join('');
+    if (stages.some(function (round, index) { return roundKeyFor(round, index) === selectedRound; })) roundPicker.value = selectedRound;
+    updateOfficialCategoryTotal();
     var eventSelect = $('#scoring-category-event');
     if (eventSelect) eventSelect.innerHTML = scoringWorkflow.eventId
       ? '<option value="' + scoringWorkflow.eventId + '">' + escapeHtml(scoringWorkflow.eventName) + '</option>'
       : '<option value="">Complete Step 1 first</option>';
-    judgeModeExplanation();
     var host = $('#scoring-category-list');
     if (host) host.innerHTML = scoringWorkflow.categories.map(function (category) {
       var weightLabel = Number(category.overall_weight_percent)
@@ -1329,6 +1756,9 @@
         return {
           id: category.id,
           name: category.name,
+          assigned_round_id: category.assigned_round_id || '',
+          purpose: category.purpose || 'official',
+          category_purpose: category.category_purpose || '',
           judge_mode: category.judge_mode,
           display_order: category.display_order,
           overall_weight_percent: category.overall_weight_percent,
@@ -1476,7 +1906,7 @@
       });
       return;
     }
-    if (activeStep < 6) setStep(activeStep + 1);
+    if (activeStep < maxWizardStep()) setStep(activeStep + 1);
   });
   $$('.final-action').forEach(function (btn) {
     btn.addEventListener('click', function () {
@@ -1496,7 +1926,8 @@
       }
       return;
     }
-    var error = validateStep(1) || validateStep(2) || validateStep(3) || validateStep(4) || validateStep(5);
+    var publishing = $('#publication-status').value === 'published';
+    var error = publishing ? (validateStep(1) || validateStep(2) || validateStep(3) || validateStep(4) || validateStep(5) || validateStep(6)) : validateStep(1);
     if (error) {
       e.preventDefault();
       showError(error);
@@ -1505,25 +1936,102 @@
     syncHiddenFields();
   });
 
-  $('#participation-type').addEventListener('change', syncParticipantPanels);
-  $$('input[name="event_format"]').forEach(function (input) {
-    input.addEventListener('change', syncFormatPanels);
+  $('#participation-type').addEventListener('change', function () {
+    syncParticipantPanels();
+    renderRoundSetup();
   });
-  $('#stage-count').addEventListener('change', function () {
-    resizeStages($('#stage-count').value);
+  $('#event-format-select')?.addEventListener('change', syncFormatPanels);
+  $('#round-type')?.addEventListener('change', function () {
+    // A final round following earlier rounds normally continues from their scores,
+    // but the picker stays editable afterwards.
+    if ($('#round-type').value === 'final' && stages.length) {
+      $('#round-score-handling').value = 'carry';
+    }
+    syncRoundFormVisibility();
   });
-  $('#add-stage').addEventListener('click', function () {
-    resizeStages((stages.length || 2) + 1);
+  $('#round-advancement')?.addEventListener('change', syncRoundFormVisibility);
+  $('#round-score-handling')?.addEventListener('change', syncRoundFormVisibility);
+  $('#save-round-btn')?.addEventListener('click', saveRoundFromForm);
+  $('#cancel-round-edit')?.addEventListener('click', function () {
+    resetRoundForm();
+    showError('');
   });
-  $('#participant-search').addEventListener('input', function () {
-    var q = $('#participant-search').value.trim().toLowerCase();
-    var panel = participationType() === 'team' ? '#team-options' : '#candidate-options';
-    $$(panel + ' label[data-search]').forEach(function (label) {
-      label.hidden = q && label.dataset.search.indexOf(q) === -1;
-    });
+  $('#add-another-round')?.addEventListener('click', function () {
+    resetRoundForm();
+    $('#round-name').focus();
+    document.getElementById('round-form-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+  $('#configured-rounds-list')?.addEventListener('click', function (e) {
+    var toggle = e.target.closest('[data-toggle-round]');
+    var edit = e.target.closest('[data-edit-round]');
+    var dup = e.target.closest('[data-duplicate-round]');
+    var del = e.target.closest('[data-delete-round]');
+    if (toggle) {
+      expandedRoundId = toggle.getAttribute('data-toggle-round');
+      renderConfiguredRounds();
+      return;
+    }
+    if (edit) {
+      var round = stages.find(function (row) { return String(row.id) === edit.getAttribute('data-edit-round'); });
+      if (round) fillRoundForm(round);
+      document.getElementById('round-form-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+    if (dup) {
+      duplicateRound(dup.getAttribute('data-duplicate-round'));
+      return;
+    }
+    if (del) {
+      if (!window.confirm('Remove this round from the scoresheet setup?')) return;
+      deleteRound(del.getAttribute('data-delete-round'));
+    }
+  });
+  $('#configured-rounds-list')?.addEventListener('dragstart', function (e) {
+    var card = e.target.closest('[data-round-id]');
+    if (!card) return;
+    roundDragId = card.getAttribute('data-round-id');
+    card.classList.add('is-dragging');
+  });
+  $('#configured-rounds-list')?.addEventListener('dragend', function (e) {
+    e.target.closest('[data-round-id]')?.classList.remove('is-dragging');
+    roundDragId = null;
+  });
+  $('#configured-rounds-list')?.addEventListener('dragover', function (e) {
+    e.preventDefault();
+    var card = e.target.closest('[data-round-id]');
+    if (card) card.classList.add('is-drop');
+  });
+  $('#configured-rounds-list')?.addEventListener('dragleave', function (e) {
+    e.target.closest('[data-round-id]')?.classList.remove('is-drop');
+  });
+  $('#configured-rounds-list')?.addEventListener('drop', function (e) {
+    e.preventDefault();
+    var card = e.target.closest('[data-round-id]');
+    card?.classList.remove('is-drop');
+    if (!roundDragId || !card || roundDragId === card.getAttribute('data-round-id')) return;
+    var from = stages.findIndex(function (row) { return String(row.id) === String(roundDragId); });
+    var to = stages.findIndex(function (row) { return String(row.id) === card.getAttribute('data-round-id'); });
+    if (from < 0 || to < 0) return;
+    var copy = stages.slice();
+    var moved = copy.splice(from, 1)[0];
+    copy.splice(to, 0, moved);
+    stages = copy;
+    renderRoundSetup();
+  });
+  $('#participant-search').addEventListener('input', filterParticipants);
+  $('#participant-department-filter')?.addEventListener('change', filterParticipants);
+  $('#participant-course-filter')?.addEventListener('change', filterParticipants);
+  $('#select-all-participants').addEventListener('click', function () {
+    setAllVisibleParticipants(true);
+  });
+  $('#clear-participants').addEventListener('click', function () {
+    setAllVisibleParticipants(false);
   });
   document.addEventListener('change', function (e) {
-    if (e.target.classList.contains('participant-check')) updateParticipantCount();
+    if (e.target.classList.contains('participant-check')) {
+      updateParticipantCount();
+      renderRoundSetup();
+    }
     if (e.target.classList.contains('judge-check')) updateJudgeCount();
   });
   $('#add-criterion').addEventListener('click', function () {
@@ -1558,7 +2066,6 @@
     var pageantTime = $('#pageant-start-time');
     if (pageantTime) pageantTime.value = $('#event-time').value;
   });
-  $('#scoring-category-mode').addEventListener('change', judgeModeExplanation);
   $('#save-scoring-category').addEventListener('click', function () {
     if (!scoringWorkflow.eventId) {
       showError('Complete Step 1 first.');
@@ -1570,6 +2077,8 @@
       event_id: scoringWorkflow.eventId,
       category_id: scoringWorkflow.editingCategoryId || '',
       category_name: $('#scoring-category-name').value.trim(),
+      assigned_round_id: $('#scoring-category-round').value,
+      purpose: $('#scoring-category-purpose').value,
       judge_mode: $('#scoring-category-mode').value,
       display_order: $('#scoring-category-order').value,
       overall_weight_percent: overallWeight,
@@ -1586,11 +2095,17 @@
     }).catch(function (workflowError) { showError(workflowError.message); });
   });
   $('#scoring-criterion-category').addEventListener('change', loadScoringCriteria);
+  $('#scoring-category-round').addEventListener('change', updateOfficialCategoryTotal);
+  $('#scoring-category-purpose').addEventListener('change', function () {
+    var special = this.value === 'special_award';
+    $('#scoring-category-weight').disabled = special;
+    if (special) $('#scoring-category-weight').value = '0';
+  });
   $('#save-scoring-criterion').addEventListener('click', function () {
     var categoryId = $('#scoring-criterion-category').value;
     var weightPercent = $('#scoring-criterion-weight').value;
     if (weightPercent === '' || weightPercent == null) {
-      showError('Event Weight % is required for each criterion.');
+      showError('Criterion Weight Within Category is required.');
       return;
     }
     if (Number(weightPercent) < 0) {
@@ -1603,6 +2118,8 @@
       criterion_id: scoringWorkflow.editingCriterionId || '',
       criterion_name: $('#scoring-criterion-name').value.trim(),
       weight_percent: weightPercent,
+      min_score: $('#scoring-criterion-min-score').value,
+      tie_breaker_priority: $('#scoring-criterion-tie-priority').value,
       max_score: $('#scoring-criterion-max-score').value,
       display_order: $('#scoring-criterion-order').value,
     }).then(function () {
@@ -1625,11 +2142,12 @@
       if (!category) return;
       scoringWorkflow.editingCategoryId = category.id;
       $('#scoring-category-name').value = category.name;
+      $('#scoring-category-round').value = category.assigned_round_id || (stages[0] ? roundKeyFor(stages[0], 0) : '');
+      $('#scoring-category-purpose').value = category.purpose || 'official';
       $('#scoring-category-mode').value = category.judge_mode;
       $('#scoring-category-order').value = category.display_order;
       $('#scoring-category-weight').value = category.overall_weight_percent;
       $('#save-scoring-category').textContent = 'Update Category';
-      judgeModeExplanation();
     } else if (categoryDelete) {
       workflowRequest('delete_category', { event_id: scoringWorkflow.eventId, category_id: categoryDelete.dataset.categoryDelete })
         .then(loadCategories).then(function () { renderScoringCategories(); renderScoringCriteria(); })
@@ -1639,6 +2157,8 @@
       if (!criterion) return;
       scoringWorkflow.editingCriterionId = criterion.id;
       $('#scoring-criterion-name').value = criterion.name;
+      $('#scoring-criterion-min-score').value = criterion.min_score == null ? 0 : criterion.min_score;
+      $('#scoring-criterion-tie-priority').value = criterion.tie_breaker_priority || '';
       $('#scoring-criterion-weight').value = criterion.weight_percent;
       $('#scoring-criterion-max-score').value = criterion.max_score || '';
       $('#scoring-criterion-order').value = criterion.display_order;

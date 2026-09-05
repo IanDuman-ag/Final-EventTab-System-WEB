@@ -34,6 +34,13 @@ class MatchEventWorkflowTests(TestCase):
         )
         faculty_group, _ = Group.objects.get_or_create(name='Faculty')
         self.faculty.groups.add(faculty_group)
+        self.tabulator = User.objects.create_user(
+            username='tabulator-test',
+            password='test-password',
+            email='tabulator@example.com',
+        )
+        tabulator_group, _ = Group.objects.get_or_create(name='Tabulator')
+        self.tabulator.groups.add(tabulator_group)
         department = Department.objects.create(name='Engineering', code='ENG')
         self.team_a = Team.objects.create(name='Blue Falcons', code='BF', department=department)
         self.team_b = Team.objects.create(name='Gold Hawks', code='GH', department=department)
@@ -65,6 +72,7 @@ class MatchEventWorkflowTests(TestCase):
             'playing_areas': json.dumps(['Court 1']),
             'tie_break_rules': json.dumps(['head_to_head', 'score_difference']),
             'faculty_account': str(self.faculty.id),
+            'tabulator_account': str(self.tabulator.id),
             'auto_update_bracket': 'on',
             'allow_result_editing': 'on',
             'apply_championship_points': 'on',
@@ -86,6 +94,7 @@ class MatchEventWorkflowTests(TestCase):
         match = BracketMatch.objects.get(event=event)
         self.assertEqual(match.match_date.isoformat(), '2026-08-10')
         self.assertEqual(match.match_time.strftime('%H:%M'), '08:00')
+        self.assertEqual(list(event.assigned_tabulators.values_list('id', flat=True)), [self.tabulator.id])
 
     def test_publish_persists_published_status(self):
         self.client.post(
@@ -997,6 +1006,160 @@ class PageantCriteriaEventTests(TestCase):
                 publication='published',
                 rounds_config=json.dumps(bad_segments),
             ), self.admin)
+
+
+class CriteriaRoundAdvancementValidationTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.admin = User.objects.create_user(
+            username='criteria-admin', password='test-password', is_staff=True,
+        )
+        self.tabulator = User.objects.create_user(
+            username='criteria-tabulator', password='test-password',
+        )
+        self.judge = User.objects.create_user(
+            username='criteria-judge', password='test-password',
+        )
+        tabulator_group, _ = Group.objects.get_or_create(name='Tabulator')
+        judge_group, _ = Group.objects.get_or_create(name='Judge')
+        self.tabulator.groups.add(tabulator_group)
+        self.judge.groups.add(judge_group)
+        from .models import RegistryCandidate
+        self.candidates = [
+            RegistryCandidate.objects.create(number=f'CRV-{idx}', name=f'Candidate {idx}')
+            for idx in range(1, 11)
+        ]
+
+    def _rounds(self, qualifiers, first_method='top_ranking'):
+        return [
+            {
+                'id': 'r1',
+                'name': 'Preliminary Round',
+                'round_type': 'elimination',
+                'scoring_method': 'numerical',
+                'score_handling': 'start_zero',
+                'weight': 40,
+                'qualification_method': first_method,
+                'advancement_rule': first_method,
+                'qualifiers': qualifiers,
+                'minimum_score': None,
+                'carry_previous_scores': False,
+                'require_faculty_confirmation': True,
+                'is_final': False,
+            },
+            {
+                'id': 'r2',
+                'name': 'Final Round',
+                'round_type': 'final',
+                'scoring_method': 'numerical',
+                'score_handling': 'carry',
+                'weight': 60,
+                'qualification_method': None,
+                'advancement_rule': None,
+                'qualifiers': None,
+                'minimum_score': None,
+                'carry_previous_scores': True,
+                'require_faculty_confirmation': False,
+                'is_final': True,
+            },
+        ]
+
+    def _payload(self, candidate_count, qualifiers=10, **overrides):
+        payload = {
+            'event_name': 'Criteria Advancement Event',
+            'category': 'SOCIO-CULTURAL & LITERARY ARTS COMPETITION',
+            'event_classification': 'major',
+            'division': 'Open',
+            'participation_type': 'individual',
+            'venue': 'Main Hall',
+            'start_date': '2026-09-01',
+            'end_date': '2026-09-01',
+            'event_format': 'multiple_stage',
+            'criteria_score_method': 'weighted_percentage',
+            'publication_status': 'draft',
+            'participant_ids': json.dumps([c.id for c in self.candidates[:candidate_count]]),
+            'rounds_config': json.dumps(self._rounds(qualifiers)),
+            'judging_criteria_config': json.dumps([
+                {'id': 'c1', 'name': 'Overall Performance', 'description': '', 'weight': 100, 'max_score': 100},
+            ]),
+            'score_settings': json.dumps({'min_score': 0, 'max_score': 100, 'allow_decimal': True, 'decimal_places': 2}),
+            'deductions_config': json.dumps([]),
+            'result_processing_config': json.dumps({}),
+            'judge_settings': json.dumps({'require_all_judges': True, 'allow_edit_before_submit': True, 'remove_high_low': False}),
+            'tie_break_rules': json.dumps([{'method': 'manual_decision'}]),
+            'judge_ids': json.dumps([self.judge.id]),
+            'faculty_account': str(self.tabulator.id),
+            'chief_judge': str(self.judge.id),
+            'points_config': json.dumps([]),
+            'apply_championship_points': '1',
+        }
+        payload.update(overrides)
+        return payload
+
+    def test_four_candidates_top_ten_adjusts_to_top_four(self):
+        from events.criteria_event_service import save_criteria_event
+        event = save_criteria_event(self._payload(4, qualifiers=10), self.admin)
+        self.assertEqual(event.rounds_config[0]['qualifiers'], 4)
+        self.assertEqual(event.rounds_config[0]['qualification_method'], 'top_ranking')
+
+    def test_four_candidates_top_three_stays_top_three(self):
+        from events.criteria_event_service import save_criteria_event
+        event = save_criteria_event(self._payload(4, qualifiers=3), self.admin)
+        self.assertEqual(event.rounds_config[0]['qualifiers'], 3)
+
+    def test_ten_candidates_top_ten_is_valid(self):
+        from events.criteria_event_service import save_criteria_event
+        event = save_criteria_event(self._payload(10, qualifiers=10), self.admin)
+        self.assertEqual(event.rounds_config[0]['qualifiers'], 10)
+
+    def test_zero_candidates_is_blocked(self):
+        from events.criteria_event_service import CriteriaEventValidationError, save_criteria_event
+        with self.assertRaisesMessage(CriteriaEventValidationError, 'Select at least one candidate.'):
+            save_criteria_event(self._payload(0, qualifiers=10, publication_status='published'), self.admin)
+
+    def test_zero_candidates_can_be_saved_as_draft(self):
+        from events.criteria_event_service import save_criteria_event
+        event = save_criteria_event(self._payload(0, qualifiers=10), self.admin)
+        self.assertEqual(event.participant_ids, [])
+        self.assertEqual(event.publication_status, Event.PUBLICATION_DRAFT)
+
+    def test_final_round_without_advancement_is_valid(self):
+        from events.criteria_event_service import save_criteria_event
+        event = save_criteria_event(self._payload(4, qualifiers=4), self.admin)
+        final_round = event.rounds_config[1]
+        self.assertTrue(final_round['is_final'])
+        self.assertIsNone(final_round['qualifiers'])
+        self.assertIsNone(final_round['qualification_method'])
+
+    def test_candidate_count_reduction_revalidates_saved_rounds(self):
+        from events.criteria_event_service import save_criteria_event
+        event = save_criteria_event(self._payload(10, qualifiers=10), self.admin)
+        updated = save_criteria_event(self._payload(4, qualifiers=10), self.admin, instance=event)
+        self.assertEqual(updated.rounds_config[0]['qualifiers'], 4)
+        self.assertEqual(updated.participant_ids, [c.id for c in self.candidates[:4]])
+
+    def test_stage_confirmation_rejects_duplicate_qualifiers(self):
+        from events.criteria_event_service import save_criteria_event
+        from events.faculty_service import FacultyServiceError, confirm_stage_advancement
+        event = save_criteria_event(self._payload(4, qualifiers=4), self.admin)
+        first_id = self.candidates[0].id
+        with self.assertRaisesMessage(FacultyServiceError, 'Duplicate qualifier selections are not allowed.'):
+            confirm_stage_advancement(
+                event,
+                self.tabulator,
+                0,
+                [first_id, first_id, self.candidates[1].id, self.candidates[2].id],
+            )
+
+    def test_stage_confirmation_advances_adjusted_four_candidates(self):
+        from events.criteria_event_service import save_criteria_event
+        from events.faculty_service import confirm_stage_advancement
+        event = save_criteria_event(self._payload(4, qualifiers=10), self.admin)
+        ids = [c.id for c in self.candidates[:4]]
+        result = confirm_stage_advancement(event, self.tabulator, 0, ids)
+        event.refresh_from_db()
+        self.assertEqual(result['qualifier_ids'], ids)
+        self.assertEqual(event.result_processing_config['qualified_participant_ids']['1'], ids)
 
 
 class EventScoringCategoryTests(TestCase):

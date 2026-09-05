@@ -771,15 +771,38 @@ def confirm_stage_advancement(event, user, stage_index, qualifier_ids):
     if stage.get('is_final') or stage_index == len(stages) - 1:
         raise FacultyServiceError('The final stage does not generate another qualification list.')
 
-    expected = int(stage.get('qualifiers') or 0)
+    cfg = dict(event.result_processing_config or {})
+    qualified_map = dict(cfg.get('qualified_participant_ids') or {})
+    current_ids = qualified_map.get(str(stage_index)) or event.participant_ids or []
+    eligible_ids = []
+    for value in current_ids:
+        try:
+            eligible_ids.append(int(value))
+        except (TypeError, ValueError):
+            continue
+    eligible_ids = list(dict.fromkeys(eligible_ids))
+    method = (stage.get('qualification_method') or 'top_ranking').lower()
+    try:
+        configured_expected = int(stage.get('qualifiers') or 0)
+    except (TypeError, ValueError) as exc:
+        raise FacultyServiceError('Stage qualifier count is invalid.') from exc
+    if method in {'advance_all', 'no_elimination'}:
+        expected = len(eligible_ids)
+    else:
+        expected = min(configured_expected, len(eligible_ids)) if eligible_ids else configured_expected
+
     cleaned_ids = []
     for value in qualifier_ids or []:
         try:
             cleaned_ids.append(int(value))
         except (TypeError, ValueError) as exc:
             raise FacultyServiceError('Qualifier selection is invalid.') from exc
-    cleaned_ids = list(dict.fromkeys(cleaned_ids))
-    method = (stage.get('qualification_method') or 'top_ranking').lower()
+    if len(cleaned_ids) != len(set(cleaned_ids)):
+        raise FacultyServiceError('Duplicate qualifier selections are not allowed.')
+    if eligible_ids:
+        invalid_ids = [value for value in cleaned_ids if value not in eligible_ids]
+        if invalid_ids:
+            raise FacultyServiceError('Qualifier selection includes candidates outside this stage.')
     if method != 'manual_selection' and expected and len(cleaned_ids) != expected:
         raise FacultyServiceError(f'Select exactly {expected} qualifiers for this stage.')
     if method == 'manual_selection' and expected and len(cleaned_ids) > expected:
@@ -787,14 +810,12 @@ def confirm_stage_advancement(event, user, stage_index, qualifier_ids):
     if not cleaned_ids:
         raise FacultyServiceError('Select at least one qualifier.')
 
-    cfg = dict(event.result_processing_config or {})
     confirmed = dict(cfg.get('confirmed_stages') or {})
     confirmed[str(stage_index)] = {
         'qualifier_ids': cleaned_ids,
         'confirmed_at': timezone.now().isoformat(),
         'confirmed_by': user.id,
     }
-    qualified_map = dict(cfg.get('qualified_participant_ids') or {})
     qualified_map[str(stage_index + 1)] = cleaned_ids
     cfg['confirmed_stages'] = confirmed
     cfg['qualified_participant_ids'] = qualified_map

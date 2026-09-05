@@ -798,9 +798,6 @@
     $('#points-config').value = JSON.stringify(pointsRows);
     syncTieBreakHidden();
     syncPlayingAreas();
-    if (form.elements.scoresheet_template_mode?.value === 'auto') {
-      form.elements.scoresheet_template.value = '';
-    }
     if (form.elements.pairing_method) form.elements.pairing_method.value = 'random_draw';
     $('#schedule-rows').value = JSON.stringify(
       $$('#schedule-preview tbody tr').filter(row => row.dataset.advance !== '1').map(row => ({
@@ -993,6 +990,7 @@
     if (!matchPreview.length) gaps.push('Generated bracket');
     if (!$('#schedule-preview tbody')) gaps.push('Generated schedule');
     if (!form.elements.faculty_account.value) gaps.push('Faculty In Charge');
+    if (!form.elements.tabulator_account.value) gaps.push('Tabulator In Charge');
     syncPointsFromDom();
     if (form.elements.apply_championship_points.checked && !pointsRows.length) gaps.push('Championship points');
     return gaps;
@@ -1030,7 +1028,8 @@
       ['Unresolved / Pending Matchups', unresolved.length ? unresolved.map(match => matchDisplayLabel(match)).join(' · ') : 'None'],
       ['Schedule', $('#schedule-preview tbody') ? `${actual.length} scheduled actual matches · ${valueText('schedule_mode')}` : 'Not generated'],
       ['Faculty In Charge', valueText('faculty_account')],
-      ['Scoresheet Template', form.elements.scoresheet_template_mode?.value === 'auto' ? 'Auto by Sport/Game Type' : valueText('scoresheet_template')],
+      ['Tabulator In Charge', valueText('tabulator_account')],
+      ['Scoresheet Template', valueText('scoresheet_template') || 'Auto by Sport/Game Type'],
       ['Championship Points', form.elements.apply_championship_points.checked
         ? pointsRows.map(point => `${point.label}: ${point.points}`).join(' · ')
         : 'Disabled']
@@ -1089,6 +1088,11 @@
       if (!form.elements.faculty_account.value) {
         form.elements.faculty_account.focus();
         error.textContent = 'Select a Faculty In Charge.';
+        return false;
+      }
+      if (!form.elements.tabulator_account.value) {
+        form.elements.tabulator_account.focus();
+        error.textContent = 'Select a Tabulator In Charge.';
         return false;
       }
       syncPointsFromDom();
@@ -1195,6 +1199,9 @@
     if (form.elements.first_match_date) form.elements.first_match_date.value = cfg.first_match_date || event.start_date;
     syncPlayingAreas();
     form.elements.faculty_account.value = event.faculty_account_id || '';
+    if (form.elements.tabulator_account) {
+      form.elements.tabulator_account.value = event.tabulator_account_id || '';
+    }
     recommendResultFormat();
     if (form.elements.result_entry_format && event.result_entry_format) {
       form.elements.result_entry_format.value = event.result_entry_format;
@@ -1202,9 +1209,6 @@
     syncTieBreakHidden();
     if (form.elements.scoresheet_template) {
       form.elements.scoresheet_template.value = event.scoresheet_template_id || '';
-      if (form.elements.scoresheet_template_mode) {
-        form.elements.scoresheet_template_mode.value = event.scoresheet_template_id ? 'existing' : 'auto';
-      }
     }
     form.elements.apply_championship_points.checked = event.apply_championship_points;
     $$('.team-check').forEach(input => { input.checked = event.team_ids.includes(Number(input.value)); });
@@ -1281,6 +1285,7 @@
       ['Actual Matches', String(event.actual_match_count ?? event.schedule_rows.length)],
       ['Automatic Advances', String(event.automatic_advance_count ?? 0)],
       ['Faculty In Charge', event.faculty_name || '—'],
+      ['Tabulator In Charge', event.tabulator_name || '—'],
       ['Schedule', `${event.actual_match_count ?? event.schedule_rows.length} actual matches · ${event.schedule_mode}`]
     ];
     $('#view-summary').className = 'review-summary';

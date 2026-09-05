@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Criteria-Based Events · EventTab</title>
-  <link rel="stylesheet" href="{% static 'admindash/criteriabasedevent.css' %}?v=20260822b">
+  <link rel="stylesheet" href="{% static 'admindash/criteriabasedevent.css' %}?v=20260901g">
 </head>
 <body class="admin-dashboard-page admin-dashboard-v2 criteria-page match-events-page">
   <div class="dashboard-shell">
@@ -30,7 +30,7 @@
             <h1>Criteria-Based Events</h1>
             <p>Configure participants, judging criteria, score settings, and championship points.</p>
           </div>
-          <button class="match-primary" type="button" id="open-wizard">+ Create Event</button>
+          <button class="match-primary" type="button" id="open-wizard">+ Create Criteria-Based Event</button>
         </section>
 
         <section class="match-stats" aria-label="Event status overview">
@@ -145,7 +145,7 @@
         <div>
           <span class="wizard-kicker">JUDGING BLUEPRINT</span>
           <h2 id="wizard-title">Create criteria event</h2>
-          <p id="wizard-subtitle" class="wizard-subtitle">Configure participants, judging criteria, score settings, and championship points.</p>
+          <p id="wizard-subtitle" class="wizard-subtitle">Create single-round or multi-round non-sports events with Judge Mobile, OCR, or hybrid score collection.</p>
           <div class="pageant-head-meta" hidden>
             <span class="pageant-head-icon" aria-hidden="true">♛</span>
             <span class="pageant-badge">Special Event</span>
@@ -155,25 +155,26 @@
         <button type="button" id="close-wizard" class="wizard-close" aria-label="Close wizard">×</button>
       </header>
       <ol class="wizard-steps" id="wizard-steps" aria-label="Creation progress">
-        <li class="active" data-step-marker="1"><span>1</span><small>Basics</small></li>
+        <li class="active" data-step-marker="1"><span>1</span><small>Event Details</small></li>
         <li data-step-marker="2"><span>2</span><small>Participants</small></li>
-        <li data-step-marker="3"><span>3</span><small>Category</small></li>
-        <li data-step-marker="4"><span>4</span><small>Criteria</small></li>
-        <li data-step-marker="5"><span>5</span><small>Judges</small></li>
-        <li data-step-marker="6"><span>6</span><small>Review</small></li>
+        <li data-step-marker="3"><span>3</span><small>Rounds</small></li>
+        <li data-step-marker="4"><span>4</span><small>Scoring Structure</small></li>
+        <li data-step-marker="5"><span>5</span><small>Score Collection</small></li>
+        <li data-step-marker="6"><span>6</span><small>Awards</small></li>
+        <li data-step-marker="7"><span>7</span><small>Review & Publish</small></li>
       </ol>
       <div class="wizard-body">
         <section class="wizard-panel active" data-step="1">
-          <div class="wizard-section-title"><span>01</span><div><h3>Basic information</h3><p>Define the event identity, classification, and schedule.</p></div></div>
+          <div class="wizard-section-title"><span>01</span><div><h3>Event Details</h3><p>Define the event identity, classification, format, and schedule.</p></div></div>
           <div class="wizard-grid">
             <label class="wide">Event Name <input name="event_name" required maxlength="200"></label>
-            <label class="wide">Category Name
+            <label class="wide">Event Type
               <select name="category" id="event-category" required>
-                <option value="">Select category type</option>
+                <option value="">Select event type</option>
                 <option value="SOCIO-CULTURAL & LITERARY ARTS COMPETITION">Socio-Cultural &amp; Literary Arts Competition</option>
                 <option value="Special Event">Special Events &amp; Competitions</option>
               </select>
-              <small class="field-hint"> </small>
+              <small class="field-hint">This describes the event group, not a scoring category.</small>
             </label>
             <label>Event Classification
               <select name="event_classification" required id="event-classification">
@@ -184,8 +185,14 @@
             </label>
             <label>Participation Type
               <select name="participation_type" id="participation-type" required>
-                <option value="team">Team</option>
                 <option value="individual">Individual</option>
+                <option value="group">Group</option>
+              </select>
+            </label>
+            <label>Event Format
+              <select name="event_format" id="event-format-select" required>
+                <option value="single_performance">Single Round</option>
+                <option value="multiple_stage">Multiple Rounds</option>
               </select>
             </label>
             <input type="hidden" name="division" value="">
@@ -198,13 +205,26 @@
         </section>
 
         <section class="wizard-panel" data-step="2">
-          <div class="wizard-section-title"><span>02</span><div><h3>Participants & event format</h3><p>Select competitors and configure performance rounds.</p></div></div>
+          <div class="wizard-section-title"><span>02</span><div><h3>Participants</h3><p>Select the teams or individuals who will compete in this event.</p></div></div>
           <fieldset class="team-picker" id="team-picker">
-            <legend><span id="participant-legend-label">Participating Teams</span> <span id="selected-participant-count" class="selected-count">0 selected</span></legend>
-            <input type="search" id="participant-search" placeholder="Search participants">
+            <legend>
+              <span id="participant-legend-label">Participating Groups</span>
+              <span id="selected-participant-count" class="selected-count">0 selected</span>
+            </legend>
+            <div class="participant-toolbar">
+              <input type="search" id="participant-search" placeholder="Search participants">
+              <select id="participant-department-filter" aria-label="Department filter">
+                <option value="">All departments</option>
+              </select>
+              <select id="participant-course-filter" aria-label="Course or program filter">
+                <option value="">All courses/programs</option>
+              </select>
+              <button type="button" class="match-secondary" id="select-all-participants">Select All</button>
+              <button type="button" class="match-secondary" id="clear-participants">Clear</button>
+            </div>
             <div class="team-options" id="team-options">
               {% for team in teams %}
-              <label data-kind="team" data-search="{{ team.name|lower }} {{ team.code|lower }}">
+              <label data-kind="group" data-department="{% if team.department %}{{ team.department.name }}{% endif %}" data-course="" data-search="{{ team.name|lower }} {{ team.code|lower }} {% if team.department %}{{ team.department.name|lower }}{% endif %}">
                 <input type="checkbox" class="participant-check" value="{{ team.id }}" data-name="{{ team.name }}">
                 <span><strong>{{ team.name }}</strong><small>{{ team.code }}{% if team.department %} · {{ team.department.name }}{% endif %}</small></span>
               </label>
@@ -212,7 +232,7 @@
             </div>
             <div class="team-options criteria-hidden" id="candidate-options">
               {% for cand in candidates %}
-              <label data-kind="individual" data-search="{{ cand.name|lower }} {{ cand.number|lower }}">
+              <label data-kind="individual" data-department="{% if cand.department %}{{ cand.department.name }}{% endif %}" data-course="" data-search="{{ cand.name|lower }} {{ cand.number|lower }} {% if cand.department %}{{ cand.department.name|lower }}{% endif %}">
                 <input type="checkbox" class="participant-check" value="{{ cand.id }}" data-name="#{{ cand.number }} {{ cand.name }}">
                 <span><strong>#{{ cand.number }} {{ cand.name }}</strong><small>{% if cand.department %}{{ cand.department.name }}{% else %}Candidate{% endif %}</small></span>
               </label>
@@ -223,14 +243,14 @@
             <legend>Event Format</legend>
             <div class="format-cards format-cards-two">
               <label>
-                <input type="radio" name="event_format" value="single_performance" checked>
+                <input type="radio" value="single_performance" checked>
                 <span>
                   <strong>Single Performance</strong>
                   <small>Each participant performs once. Judges score using the configured criteria, then the system ranks contestants for Faculty review and publication.</small>
                 </span>
               </label>
               <label>
-                <input type="radio" name="event_format" value="multiple_stage">
+                <input type="radio" value="multiple_stage">
                 <span>
                   <strong>Multiple Stage Competition</strong>
                   <small>Build two or more elimination stages (pageants, debates, quizzes, talent, speech, and similar formats) with weights totaling 100%.</small>
@@ -239,91 +259,156 @@
             </div>
           </fieldset>
 
-          <div id="multiple-stage-panel" class="criteria-hidden" hidden>
-            <div class="stage-builder-head">
-              <div>
-                <strong>Competition Structure Builder</strong>
-                <p>Configure every stage of the competition. Stage names should describe the portion (for example Talent Competition or Evening Gown), not generic Round 1 labels.</p>
-              </div>
-              <label class="stage-count-field">Number of Stages
-                <input type="number" id="stage-count" min="2" max="20" value="2">
-              </label>
-            </div>
-
-            <div class="stage-flow" id="stage-flow" aria-live="polite"></div>
-
-            <div class="criteria-editor-actions stage-builder-actions">
-              <button type="button" id="add-stage">+ Add Stage</button>
-            </div>
-
-            <div class="stage-table-wrap">
-              <table class="criteria-editor-table stage-builder-table" id="stages-table">
-                <thead>
-                  <tr>
-                    <th>Stage #</th>
-                    <th>Stage Name</th>
-                    <th>Weight (%)</th>
-                    <th>Qualification Method</th>
-                    <th>Qualifiers</th>
-                    <th>Carry Previous Scores</th>
-                    <th>Faculty Confirmation</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody></tbody>
-              </table>
-            </div>
-            <p class="criteria-weight-meter" id="stages-weight-meter">Stage total: 0%</p>
-            <p class="stage-builder-note">The final stage does not require qualifiers. Only one stage is active at a time; later stages stay locked until Faculty confirms advancement.</p>
-
-            <fieldset class="stage-tiebreak-fieldset">
-              <legend>Tie-Breaking Rules</legend>
-              <p class="stage-builder-note">Applied only when contestants are tied for the last qualifying position.</p>
-              <label class="field-block">Primary Tie-Break Method
-                <select id="stage-tiebreak-method">
-                  <option value="highest_selected_criterion">Highest Score in Priority Criterion</option>
-                  <option value="highest_chief_judge">Highest Chief Judge Score</option>
-                  <option value="lowest_deduction">Lowest Deduction</option>
-                  <option value="manual_decision">Manual Faculty Decision</option>
-                </select>
-              </label>
-            </fieldset>
-          </div>
+          <input type="hidden" id="stage-count" value="0">
+          <input type="hidden" id="stage-tiebreak-method" value="highest_selected_criterion">
         </section>
 
         <section class="wizard-panel" data-step="3">
-          <div class="wizard-section-title"><span>03</span><div><h3>Category setup</h3><p>Create scoring categories for the Event from Step 1.</p></div></div>
+          <div class="round-setup">
+            <div class="wizard-section-title"><span>03</span><div>
+              <h3>Round Setup</h3>
+              <p>Define elimination, scoring, and final rounds. Categories and criteria come next.</p>
+            </div></div>
+
+            <div class="rs-summary" id="round-setup-summary" aria-live="polite"></div>
+            <div class="rs-warning" id="round-adjustment-warning" aria-live="polite" hidden></div>
+
+            <article class="rs-card" id="round-form-card">
+              <header class="rs-card-head">
+                <h4 id="round-form-title">Add Round</h4>
+                <p>Set the round rules, then add it to the event.</p>
+              </header>
+              <input type="hidden" id="round-edit-id" value="">
+              <div class="rs-form-grid">
+                <label>Round Name
+                  <input id="round-name" maxlength="80" placeholder="Preliminary Round" list="stage-name-suggestions">
+                </label>
+                <label>Round Type
+                  <select id="round-type">
+                    <option value="elimination">Elimination</option>
+                    <option value="scoring">Scoring</option>
+                    <option value="final">Final</option>
+                  </select>
+                </label>
+                <label>Display Order
+                  <input id="round-order" type="number" min="1" step="1" value="1">
+                </label>
+                <label>Scoring Method
+                  <select id="round-scoring-method">
+                    <option value="numerical">Numerical Scoring</option>
+                    <option value="ranking">Ranking</option>
+                  </select>
+                </label>
+                <label>Score Handling
+                  <select id="round-score-handling">
+                    <option value="start_zero">Start from zero</option>
+                    <option value="carry">Carry previous scores</option>
+                  </select>
+                </label>
+                <label id="round-weight-wrap">Round Weight %
+                  <input id="round-weight" type="number" min="0" max="100" step="0.01" placeholder="Auto">
+                </label>
+                <label id="round-qualifiers-wrap">Number of Qualifiers
+                  <input id="round-qualifiers" type="number" min="1" step="1" value="10">
+                </label>
+                <label id="round-advancement-wrap">Advancement Rule
+                  <select id="round-advancement">
+                    <option value="top_ranking">Highest total score</option>
+                    <option value="minimum_score">Minimum score</option>
+                    <option value="manual_selection">Manual selection by Faculty</option>
+                    <option value="advance_all">Advance all candidates</option>
+                  </select>
+                </label>
+                <label id="round-min-score-wrap" hidden>Minimum Score
+                  <input id="round-min-score" type="number" min="0" step="0.1" value="">
+                </label>
+                <label>Performance Order
+                  <select id="round-performance-order">
+                    <option value="event">Use event performance order</option>
+                    <option value="random">Random draw</option>
+                    <option value="reverse">Reverse previous ranking</option>
+                  </select>
+                </label>
+                <label>Tie Handling
+                  <select id="round-tie-handling">
+                    <option value="manual_decision">Faculty resolves ties</option>
+                    <option value="highest_selected_criterion">Highest score in priority criterion</option>
+                    <option value="highest_chief_judge">Highest Chief Judge score</option>
+                    <option value="lowest_deduction">Lowest deduction</option>
+                  </select>
+                </label>
+              </div>
+              <p class="field-hint" id="round-weight-auto-hint" hidden>Round Weight % applies only to rounds that carry previous scores. Rounds that start from zero share the remaining weight evenly.</p>
+              <p class="field-hint" id="round-weight-manual-hint" hidden>Leave Round Weight % blank to let this round share the weight left over by the rounds you set manually.</p>
+              <div class="rs-toggles">
+                <label class="rs-switch"><input type="checkbox" id="round-require-judges" checked><span>Require all judges to finish</span></label>
+                <label class="rs-switch"><input type="checkbox" id="round-require-faculty"><span>Require Faculty confirmation</span></label>
+                <label class="rs-switch"><input type="checkbox" id="round-hide-standings"><span>Hide standings from judges</span></label>
+                <label class="rs-switch"><input type="checkbox" id="round-allow-reopen"><span>Allow score reopening</span></label>
+              </div>
+              <aside class="rs-note">Categories and criteria will be configured in the next steps.</aside>
+              <div class="rs-form-actions">
+                <button type="button" class="match-secondary" id="cancel-round-edit" hidden>Cancel</button>
+                <button type="button" class="match-primary" id="save-round-btn">+ Add Round</button>
+              </div>
+            </article>
+
+            <section class="rs-list-block">
+              <header class="rs-card-head">
+                <h4>Configured Rounds</h4>
+                <p>Drag to reorder. Expand a round to review its rules.</p>
+              </header>
+              <p class="criteria-weight-meter" id="stages-weight-meter">Round total: 0%</p>
+              <div id="configured-rounds-list" class="rs-round-list"></div>
+              <button type="button" class="rs-add-another" id="add-another-round">+ Add Another Round</button>
+            </section>
+
+            <p class="rs-tip">For simple events such as dance or singing, create only one Main Scoring round.</p>
+          </div>
+        </section>
+
+        <section class="wizard-panel" data-step="4">
+          <div class="wizard-section-title"><span>04</span><div><h3>Scoring Structure</h3><p>Build Round -> Category -> Criterion weights for official results and special awards.</p></div></div>
           <div class="wizard-grid">
             <label class="wide">Event Name
               <select id="scoring-category-event" disabled></select>
               <small class="field-hint">This Event is created from the details entered in Step 1.</small>
             </label>
+            <label>Assigned Round <select id="scoring-category-round"></select></label>
             <label>Category Name <input id="scoring-category-name" maxlength="120"></label>
+            <label>Category Purpose
+              <select id="scoring-category-purpose">
+                <option value="official">Official Scoring Category</option>
+                <option value="special_award">Special Award Only</option>
+              </select>
+            </label>
             <label>Judge Mode <select id="scoring-category-mode"><option value="scoring">Scoring Mode</option><option value="ranking">Ranking Mode</option></select></label>
             <label>Display Order <input id="scoring-category-order" type="number" min="1" step="1"></label>
-            <label>Overall Category Weighted %
+            <label>Category Weight Within Round (%)
               <input id="scoring-category-weight" type="number" min="0" max="100" step="0.01" placeholder="0">
-              <small class="field-hint">This category’s share of the event. All category weights must total 100%. Enter 0 on every category to use a simple average.</small>
+              <small class="field-hint">Official categories within a round must total 100%. Special awards contribute 0%.</small>
             </label>
           </div>
-          <p class="pageant-weight-meter is-amber" id="judge-mode-explanation" role="status"></p>
+          <p class="criteria-weight-meter" id="official-category-total">Official categories: 0% of 100% configured.</p>
           <div class="criteria-editor-actions"><button type="button" class="match-primary" id="save-scoring-category">Save Category</button></div>
           <div id="scoring-category-list" class="pageant-review-cards"></div>
         </section>
 
         <section class="wizard-panel" data-step="4">
-          <div class="wizard-section-title"><span>04</span><div><h3>Criteria setup</h3><p>Add criteria to one saved Event category at a time.</p></div></div>
+          <div class="wizard-section-title"><span>04</span><div><h3>Criteria</h3><p>Add criteria to one saved category at a time. Criterion weights are within the selected category.</p></div></div>
           <div class="wizard-grid">
             <label class="wide">Category <select id="scoring-criterion-category"></select></label>
             <label>Criterion Name <input id="scoring-criterion-name" maxlength="120"></label>
-            <label>Event Weight %
+            <label>Criterion Weight Within Category (%)
               <input id="scoring-criterion-weight" type="number" min="0" max="100" step="0.01" placeholder="10" required>
-              <small class="field-hint">Enter the percentage this criterion contributes to the overall event. All criteria under this category must total the category weight.</small>
+              <small class="field-hint">Enter the percentage this criterion contributes inside its category.</small>
             </label>
+            <label>Minimum Score <input id="scoring-criterion-min-score" type="number" min="0" step="0.01" value="0"></label>
             <label id="scoring-criterion-max-score-wrap">Max Score <input id="scoring-criterion-max-score" type="number" min="0.01" step="0.01"></label>
+            <label>Tie-Breaker Priority <input id="scoring-criterion-tie-priority" type="number" min="1" step="1"></label>
             <label>Order <input id="scoring-criterion-order" type="number" min="1" step="1"></label>
           </div>
-          <p class="criteria-weight-meter" id="scoring-criterion-total">Category criteria total: 0% / 0%</p>
+          <p class="criteria-weight-meter" id="scoring-criterion-total">Criteria total: 0% of category.</p>
           <div class="criteria-editor-actions"><button type="button" class="match-primary" id="save-scoring-criterion">Save Criterion</button></div>
           <div id="scoring-criterion-list" class="pageant-review-cards"></div>
           <fieldset hidden>
@@ -374,7 +459,7 @@
         </section>
 
         <section class="wizard-panel" data-step="5">
-          <div class="wizard-section-title"><span>05</span><div><h3>Judges, results & points</h3><p>Assign officials and finalize processing rules.</p></div></div>
+          <div class="wizard-section-title"><span>05</span><div><h3>Judges and Score Collection</h3><p>Assign officials and configure Judge Mobile, OCR, or hybrid scoring.</p></div></div>
           <label class="field-block">Chief Judge
             <select name="chief_judge" id="chief-judge" required>
               <option value="">Select chief judge</option>
@@ -406,6 +491,24 @@
             <small class="field-hint">Uses Tabulator accounts created under Users → Faculty. This account opens the event in the Tabulator portal.</small>
           </label>
           <input type="hidden" name="scoresheet_template" value="">
+          <fieldset class="collection-panel">
+            <legend>Allowed Score Submission Methods</legend>
+            <div class="format-cards format-cards-three">
+              <label><input type="checkbox" id="method-mobile" checked><span><strong>Judge Mobile</strong><small>Judges enter scores digitally from their assigned mobile portal.</small></span></label>
+              <label><input type="checkbox" id="method-ocr"><span><strong>Physical Scoresheet with OCR</strong><small>Printed scoresheets are uploaded, reviewed, verified, and approved.</small></span></label>
+              <label><input type="checkbox" id="method-hybrid"><span><strong>Hybrid Scoring</strong><small>Each judge assignment can use either mobile or physical scoresheet.</small></span></label>
+            </div>
+            <div class="wizard-grid">
+              <label class="wide">Default Submission Method
+                <select id="default-submission-method">
+                  <option value="MOBILE">Judge Mobile</option>
+                  <option value="OCR">Physical Scoresheet with OCR</option>
+                  <option value="HYBRID">Hybrid Scoring</option>
+                </select>
+              </label>
+            </div>
+            <div id="judge-assignment-dashboard" class="assignment-dashboard" aria-live="polite"></div>
+          </fieldset>
           <fieldset hidden>
             <legend>Result Processing</legend>
             <div class="toggle-list" id="result-processing-list">
@@ -429,6 +532,22 @@
             <p class="stage-builder-note">Used for final rankings when contestants share the same score. For multi-stage qualification ties, the method chosen in the Competition Structure Builder takes priority.</p>
             <div class="tie-break-list" id="tie-break-list"></div>
           </fieldset>
+        </section>
+
+        <section class="wizard-panel" data-step="6">
+          <div class="wizard-section-title"><span>06</span><div><h3>Awards and Result Rules</h3><p>Configure placements, special awards, optional points, approval, and publication rules.</p></div></div>
+          <div class="wizard-grid">
+            <label>Final Result Basis
+              <select id="final-result-basis">
+                <option value="main_round">Main Round Result</option>
+                <option value="final_round_only">Final Round Only</option>
+                <option value="cumulative_rounds">Cumulative Rounds</option>
+                <option value="weighted_rounds">Weighted Rounds</option>
+                <option value="manual_authorized">Manual Authorized Result</option>
+              </select>
+            </label>
+            <label>Placements to Publish <input id="placements-count" type="number" min="1" max="20" step="1" value="3"></label>
+          </div>
           <fieldset id="points-fieldset">
             <legend>Championship Points</legend>
             <label class="inline-check"><input type="checkbox" name="apply_championship_points" checked> Apply Championship Points Automatically</label>
@@ -601,8 +720,8 @@
           <div id="pageant-review"></div>
         </section>
 
-        <section class="wizard-panel" data-step="6">
-          <div class="wizard-section-title"><span>06</span><div><h3>Review & publish</h3><p>Confirm the full configuration before saving.</p></div></div>
+        <section class="wizard-panel" data-step="7">
+          <div class="wizard-section-title"><span>07</span><div><h3>Review & publish</h3><p>Confirm the full configuration before saving.</p></div></div>
           <div id="review-summary" class="review-summary"></div>
         </section>
       </div>
@@ -715,6 +834,16 @@
     window.CRITERIA_IS_SUPERUSER = {{ request.user.is_superuser|yesno:"true,false" }};
     window.CRITERIA_CAN_DELETE_FINALIZED = {% if request.user.is_superuser or request.user.is_staff %}true{% else %}false{% endif %};
   </script>
-  <script src="{% static 'admindash/criteriabasedevent.js' %}?v=20260822c"></script>
+  <datalist id="stage-name-suggestions">
+    <option value="Preliminary Round"></option>
+    <option value="Top 10 Round"></option>
+    <option value="Final Round"></option>
+    <option value="Main Scoring"></option>
+    <option value="Talent Competition"></option>
+    <option value="Production Number"></option>
+    <option value="Question and Answer"></option>
+  </datalist>
+  <script src="{% static 'admindash/criteriabasedevent-pageant.js' %}?v=20260901j"></script>
+  <script src="{% static 'admindash/criteriabasedevent.js' %}?v=20260905-simplified-fields"></script>
 </body>
 </html>

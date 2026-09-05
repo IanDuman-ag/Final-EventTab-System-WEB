@@ -311,6 +311,7 @@
         (fmt === 'pairs' ? '<span><strong>' + pairs + '</strong> Pair Entries</span>' : '');
     }
     syncPairFormVisibility();
+    syncAdvancementLimit();
   }
 
   function syncPairFormVisibility() {
@@ -382,10 +383,35 @@
   function syncAdvancementPanel() {
     var panel = $('#pageant-advancement-fields');
     if (panel) panel.hidden = !advancementEnabled;
+    syncAdvancementLimit();
+  }
+
+  function pageantCandidateCount() {
+    return pendingCandidates.length + $$('#pageant-existing-candidates .participant-check:checked').length;
+  }
+
+  function syncAdvancementLimit() {
+    var input = $('#pageant-adv-topn');
+    if (!input) return;
+    var count = pageantCandidateCount();
+    input.max = String(count);
+    if (!advancementEnabled) return;
+    var current = Number(input.value) || 0;
+    if (count > 0 && current > count) {
+      showError('Only ' + count + ' candidates are available. The qualifier count has been adjusted from ' + current + ' to ' + count + '.');
+      input.value = String(count);
+    } else if (count > 0 && current < 1) {
+      input.value = '1';
+    } else if (count < 1) {
+      input.value = '';
+    }
   }
 
   function collectPageantConfig() {
     var fmt = pageantFormat() || 'individual';
+    syncAdvancementLimit();
+    var candidateCount = pageantCandidateCount();
+    var configuredTop = Number(($('#pageant-adv-topn') && $('#pageant-adv-topn').value) || 0);
     return {
       pageant_format: fmt,
       competition_categories: competitionCategories.slice(),
@@ -394,7 +420,7 @@
       segment_template: pageantSegments.length ? 'custom' : 'standard',
       advancement_enabled: advancementEnabled,
       advancement: advancementEnabled ? {
-        top_n: Number(($('#pageant-adv-topn') && $('#pageant-adv-topn').value) || 0),
+        top_n: Math.min(configuredTop, candidateCount),
         source_segment: ($('#pageant-adv-source') && $('#pageant-adv-source').value) || '',
         notes: ($('#pageant-adv-notes') && $('#pageant-adv-notes').value) || '',
       } : {},
@@ -896,11 +922,16 @@
       advancementEnabled = e.target.value === 'yes';
       syncAdvancementPanel();
     }
+    if (e.target && e.target.classList && e.target.classList.contains('participant-check')) {
+      syncAdvancementLimit();
+    }
     if (e.target && e.target.name === 'pageant_awards_choice') {
       var awardsPanel = $('#pageant-awards-panel');
       if (awardsPanel) awardsPanel.hidden = e.target.value !== 'yes';
     }
   });
+
+  $('#pageant-adv-topn')?.addEventListener('input', syncAdvancementLimit);
 
   $('#pageant-categories-list')?.addEventListener('input', function (e) {
     if (e.target.classList.contains('pageant-category-input')) {

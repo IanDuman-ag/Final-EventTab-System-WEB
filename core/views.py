@@ -2952,6 +2952,11 @@ def _serialize_match_event(event):
             Event.objects.filter(pk=event.pk, faculty_account__isnull=True).update(
                 faculty_account_id=resolved.id
             )
+    tabulator = next(iter(event.assigned_tabulators.all()), None)
+    tabulator_id = tabulator.id if tabulator else None
+    tabulator_name = (
+        (tabulator.get_full_name().strip() or tabulator.username) if tabulator else ''
+    )
     return {
         'id': event.id,
         'name': event.name,
@@ -2980,6 +2985,8 @@ def _serialize_match_event(event):
         'daily_end_time': event.daily_end_time.strftime('%H:%M') if event.daily_end_time else '',
         'faculty_account_id': faculty_id,
         'faculty_name': faculty_name,
+        'tabulator_account_id': tabulator_id,
+        'tabulator_name': tabulator_name,
         'scoresheet_template_id': event.scoresheet_template_id,
         'allow_result_editing': event.allow_result_editing,
         'require_faculty_confirmation': event.require_faculty_confirmation,
@@ -3102,7 +3109,7 @@ def admin_match_events(request, event_id=None):
     queryset = (
         _match_event_queryset()
         .select_related('faculty_account')
-        .prefetch_related('bracket_teams', 'bracket_matches__team_a', 'bracket_matches__team_b')
+        .prefetch_related('bracket_teams', 'bracket_matches__team_a', 'bracket_matches__team_b', 'assigned_tabulators')
         .order_by('-updated_at')
     )
     if search_query:
@@ -3117,9 +3124,12 @@ def admin_match_events(request, event_id=None):
     events = list(queryset)
     rows = [_serialize_match_event(event) for event in events]
     User = get_user_model()
-    from events.match_event_service import models_q_for_faculty
+    from events.match_event_service import models_q_for_faculty, models_q_for_tabulator
     faculty_options = User.objects.filter(is_active=True).filter(
         models_q_for_faculty()
+    ).distinct().order_by('first_name', 'last_name', 'username')
+    tabulator_options = User.objects.filter(is_active=True).filter(
+        models_q_for_tabulator()
     ).distinct().order_by('first_name', 'last_name', 'username')
     from events.models import ScoresheetTemplate
     match_templates = ScoresheetTemplate.objects.filter(
@@ -3139,6 +3149,7 @@ def admin_match_events(request, event_id=None):
         'event_rows_json': rows,
         'teams': teams,
         'faculty_options': faculty_options,
+        'tabulator_options': tabulator_options,
         'scoresheet_templates': match_templates,
         'total_count': all_match_events.count(),
         'draft_count': all_match_events.filter(publication_status=Event.PUBLICATION_DRAFT).count(),
@@ -3339,6 +3350,9 @@ def admin_criteria_events(request, event_id=None):
                 categories = [{
                     'id': category.id,
                     'name': category.name,
+                    'assigned_round_id': category.assigned_round_id,
+                    'purpose': category.purpose,
+                    'category_purpose': category.category_purpose,
                     'judge_mode': category.judge_mode,
                     'display_order': category.display_order,
                     'overall_weight_percent': float(category.overall_weight_percent),
@@ -3346,7 +3360,10 @@ def admin_criteria_events(request, event_id=None):
                         'id': criterion.id,
                         'name': criterion.name,
                         'weight_percent': float(criterion.weight_percent),
+                        'min_score': float(criterion.min_score),
                         'max_score': float(criterion.max_score) if criterion.max_score is not None else None,
+                        'judging_description': criterion.judging_description,
+                        'tie_breaker_priority': criterion.tie_breaker_priority,
                         'display_order': criterion.display_order,
                     } for criterion in category.criteria.all()],
                 } for category in event.scoring_categories.prefetch_related('criteria').all()]
@@ -3354,26 +3371,35 @@ def admin_criteria_events(request, event_id=None):
             if workflow_action == 'create_category':
                 name = request.POST.get('category_name', '').strip()
                 mode = request.POST.get('judge_mode', '').strip()
+                assigned_round_id = request.POST.get('assigned_round_id', '').strip()[:80]
+                purpose = request.POST.get('purpose', 'official').strip()
+                category_purpose = request.POST.get('category_purpose', '').strip()
                 try:
                     order = int(request.POST.get('display_order', ''))
                     weight = Decimal(request.POST.get('overall_weight_percent', ''))
                 except (ValueError, InvalidOperation):
-                    return workflow_error('Display Order and Overall Category Weighted % must be numeric.')
+                    return workflow_error('Display Order and Category Weight Within Round must be numeric.')
+                if purpose not in {'official', 'special_award'}:
+                    return workflow_error('Select a valid category purpose.')
+                if purpose == 'special_award':
+                    weight = Decimal('0')
                 if not name or mode not in {'scoring', 'ranking'} or order < 1 or not Decimal('0') <= weight <= Decimal('100'):
                     return workflow_error(
-                        'Enter a unique category name, judge mode, positive order, and a weight from 0 to 100 '
-                        '(0 = simple average).'
+                        'Enter a unique category name, judge mode, positive order, and a weight from 0 to 100.'
                     )
                 if event.scoring_categories.filter(name__iexact=name).exists():
                     return workflow_error('A category with this name already exists for the Event.')
                 if event.scoring_categories.filter(display_order=order).exists():
                     return workflow_error('This display order is already in use for the Event.')
                 category = EventScoringCategory.objects.create(
-                    event=event, name=name[:120], judge_mode=mode,
+                    event=event, name=name[:120], assigned_round_id=assigned_round_id,
+                    purpose=purpose, category_purpose=category_purpose[:500], judge_mode=mode,
                     display_order=order, overall_weight_percent=weight,
                 )
                 return JsonResponse({'success': True, 'category': {
                     'id': category.id, 'name': category.name, 'judge_mode': category.judge_mode,
+                    'assigned_round_id': category.assigned_round_id, 'purpose': category.purpose,
+                    'category_purpose': category.category_purpose,
                     'display_order': category.display_order,
                     'overall_weight_percent': float(category.overall_weight_percent),
                 }})
@@ -3383,21 +3409,31 @@ def admin_criteria_events(request, event_id=None):
                     return workflow_error('Category was not found for this Event.', 404)
                 name = request.POST.get('category_name', '').strip()
                 mode = request.POST.get('judge_mode', '').strip()
+                assigned_round_id = request.POST.get('assigned_round_id', '').strip()[:80]
+                purpose = request.POST.get('purpose', 'official').strip()
+                category_purpose = request.POST.get('category_purpose', '').strip()
                 try:
                     order = int(request.POST.get('display_order', ''))
                     weight = Decimal(request.POST.get('overall_weight_percent', ''))
                 except (ValueError, InvalidOperation):
-                    return workflow_error('Display Order and Overall Category Weighted % must be numeric.')
+                    return workflow_error('Display Order and Category Weight Within Round must be numeric.')
+                if purpose not in {'official', 'special_award'}:
+                    return workflow_error('Select a valid category purpose.')
+                if purpose == 'special_award':
+                    weight = Decimal('0')
                 if not name or mode not in {'scoring', 'ranking'} or order < 1 or not Decimal('0') <= weight <= Decimal('100'):
                     return workflow_error(
-                        'Enter a category name, judge mode, positive order, and a weight from 0 to 100 '
-                        '(0 = simple average).'
+                        'Enter a category name, judge mode, positive order, and a weight from 0 to 100.'
                     )
                 if event.scoring_categories.exclude(pk=category.pk).filter(name__iexact=name).exists():
                     return workflow_error('A category with this name already exists for the Event.')
                 if event.scoring_categories.exclude(pk=category.pk).filter(display_order=order).exists():
                     return workflow_error('This display order is already in use for the Event.')
                 category.name, category.judge_mode = name[:120], mode
+                category.assigned_round_id = assigned_round_id
+                category.purpose = purpose
+                if 'category_purpose' in request.POST:
+                    category.category_purpose = category_purpose[:500]
                 category.display_order, category.overall_weight_percent = order, weight
                 category.save()
                 return JsonResponse({'success': True})
@@ -3414,11 +3450,16 @@ def admin_criteria_events(request, event_id=None):
                 criteria = [{
                     'id': criterion.id, 'name': criterion.name,
                     'weight_percent': float(criterion.weight_percent),
+                    'min_score': float(criterion.min_score),
                     'max_score': float(criterion.max_score) if criterion.max_score is not None else None,
+                    'judging_description': criterion.judging_description,
+                    'tie_breaker_priority': criterion.tie_breaker_priority,
                     'display_order': criterion.display_order,
                 } for criterion in category.criteria.all()]
                 return JsonResponse({'success': True, 'category': {
                     'id': category.id, 'name': category.name, 'judge_mode': category.judge_mode,
+                    'assigned_round_id': category.assigned_round_id, 'purpose': category.purpose,
+                    'category_purpose': category.category_purpose,
                     'overall_weight_percent': float(category.overall_weight_percent),
                 }, 'criteria': criteria})
             if workflow_action == 'create_criterion':
@@ -3426,41 +3467,45 @@ def admin_criteria_events(request, event_id=None):
                 if category is None:
                     return workflow_error('Select a category belonging to this Event.', 404)
                 name = request.POST.get('criterion_name', '').strip()
+                description = request.POST.get('judging_description', '').strip()
                 try:
                     weight = Decimal(request.POST.get('weight_percent', ''))
                     order = int(request.POST.get('display_order', ''))
+                    min_score = Decimal(request.POST.get('min_score', '0') or '0')
                     max_score = Decimal(request.POST.get('max_score', '')) if category.judge_mode == 'scoring' else None
+                    tie_priority_raw = request.POST.get('tie_breaker_priority', '').strip()
+                    tie_priority = int(tie_priority_raw) if tie_priority_raw else None
                 except (ValueError, InvalidOperation):
                     return workflow_error('Criterion Weight, Max Score, and Order must be numeric.')
                 if not name or order < 1 or weight < 0 or weight > Decimal('100'):
                     return workflow_error(
-                        'Enter a criterion name, positive order, and an Event Weight % from 0 to 100.'
+                        'Enter a criterion name, positive order, and a Criterion Weight Within Category from 0 to 100.'
                     )
+                if min_score < 0:
+                    return workflow_error('Minimum Score cannot be negative.')
                 if category.judge_mode == 'scoring' and (max_score is None or max_score <= 0):
                     return workflow_error('Max Score must be greater than zero for Scoring Mode.')
+                if max_score is not None and min_score >= max_score:
+                    return workflow_error('Minimum Score must be lower than Maximum Score.')
                 if category.criteria.filter(name__iexact=name).exists() or category.criteria.filter(display_order=order).exists():
                     return workflow_error('Criterion name and order must be unique within this category.')
                 total = sum((row.weight_percent for row in category.criteria.all()), Decimal('0')) + weight
-                category_weight = Decimal(category.overall_weight_percent)
-                # Absolute event weights: criteria under a category must not exceed that category's event %.
-                limit = Decimal('100') if category_weight == 0 else category_weight
-                if total > limit:
-                    if category_weight == 0:
-                        return workflow_error(
-                            'This category uses simple average (0%). Keep criterion Event Weight % at 0, '
-                            'or set a category weight first.'
-                        )
+                if total > Decimal('100'):
                     return workflow_error(
-                        f'Criteria weights for "{category.name}" cannot exceed the category weight '
-                        f'({float(category_weight)}%). Current total would be {float(total)}%.'
+                        f'Criteria weights for "{category.name}" cannot exceed 100%. '
+                        f'Current total would be {float(total)}%.'
                     )
                 criterion = EventScoringCriterion.objects.create(
                     category=category, name=name[:120], weight_percent=weight,
-                    max_score=max_score, display_order=order,
+                    min_score=min_score, max_score=max_score, judging_description=description[:1000],
+                    tie_breaker_priority=tie_priority, display_order=order,
                 )
                 return JsonResponse({'success': True, 'criterion': {
                     'id': criterion.id, 'name': criterion.name, 'weight_percent': float(criterion.weight_percent),
+                    'min_score': float(criterion.min_score),
                     'max_score': float(criterion.max_score) if criterion.max_score is not None else None,
+                    'judging_description': criterion.judging_description,
+                    'tie_breaker_priority': criterion.tie_breaker_priority,
                     'display_order': criterion.display_order,
                 }})
             if workflow_action == 'update_criterion':
@@ -3469,35 +3514,40 @@ def admin_criteria_events(request, event_id=None):
                 if criterion is None:
                     return workflow_error('Criterion was not found for this category.', 404)
                 name = request.POST.get('criterion_name', '').strip()
+                description = request.POST.get('judging_description', '').strip()
                 try:
                     weight = Decimal(request.POST.get('weight_percent', ''))
                     order = int(request.POST.get('display_order', ''))
+                    min_score = Decimal(request.POST.get('min_score', '0') or '0')
                     max_score = Decimal(request.POST.get('max_score', '')) if category.judge_mode == 'scoring' else None
+                    tie_priority_raw = request.POST.get('tie_breaker_priority', '').strip()
+                    tie_priority = int(tie_priority_raw) if tie_priority_raw else None
                 except (ValueError, InvalidOperation):
                     return workflow_error('Criterion Weight, Max Score, and Order must be numeric.')
                 if not name or order < 1 or weight < 0 or weight > Decimal('100'):
                     return workflow_error(
-                        'Enter a criterion name, positive order, and an Event Weight % from 0 to 100.'
+                        'Enter a criterion name, positive order, and a Criterion Weight Within Category from 0 to 100.'
                     )
+                if min_score < 0:
+                    return workflow_error('Minimum Score cannot be negative.')
                 if category.judge_mode == 'scoring' and (max_score is None or max_score <= 0):
                     return workflow_error('Max Score must be greater than zero for Scoring Mode.')
+                if max_score is not None and min_score >= max_score:
+                    return workflow_error('Minimum Score must be lower than Maximum Score.')
                 if category.criteria.exclude(pk=criterion.pk).filter(name__iexact=name).exists() or category.criteria.exclude(pk=criterion.pk).filter(display_order=order).exists():
                     return workflow_error('Criterion name and order must be unique within this category.')
                 total = sum((row.weight_percent for row in category.criteria.exclude(pk=criterion.pk)), Decimal('0')) + weight
-                category_weight = Decimal(category.overall_weight_percent)
-                limit = Decimal('100') if category_weight == 0 else category_weight
-                if total > limit:
-                    if category_weight == 0:
-                        return workflow_error(
-                            'This category uses simple average (0%). Keep criterion Event Weight % at 0, '
-                            'or set a category weight first.'
-                        )
+                if total > Decimal('100'):
                     return workflow_error(
-                        f'Criteria weights for "{category.name}" cannot exceed the category weight '
-                        f'({float(category_weight)}%). Current total would be {float(total)}%.'
+                        f'Criteria weights for "{category.name}" cannot exceed 100%. '
+                        f'Current total would be {float(total)}%.'
                     )
                 criterion.name, criterion.weight_percent = name[:120], weight
+                criterion.min_score = min_score
                 criterion.max_score, criterion.display_order = max_score, order
+                if 'judging_description' in request.POST:
+                    criterion.judging_description = description[:1000]
+                criterion.tie_breaker_priority = tie_priority
                 criterion.save()
                 return JsonResponse({'success': True})
             if workflow_action == 'delete_criterion':
@@ -3868,11 +3918,14 @@ def _ensure_default_scoresheet_templates(user=None):
 
 
 def _serialize_scoresheet_template(template):
-    from events.scoresheet_pdf import extract_fields, extract_order, resolve_elements
+    from events.scoresheet_pdf import extract_builder, extract_fields, extract_order, resolve_elements
 
     layout = template.layout or []
     fields = extract_fields(layout, template.event_type)
     order = extract_order(layout, template.event_type)
+    bound_event = None
+    if hasattr(template, 'assigned_events'):
+        bound_event = template.assigned_events.order_by('-updated_at', '-id').first()
     return {
         'id': template.id,
         'name': template.name,
@@ -3886,9 +3939,12 @@ def _serialize_scoresheet_template(template):
         'orientation': template.orientation,
         'fields': fields,
         'order': order,
+        'builder': extract_builder(layout),
         'layout': layout,
         'elements': resolve_elements(layout, template.event_type, template.orientation),
         'assigned_event_count': template.assigned_events.count() if hasattr(template, 'assigned_events') else 0,
+        'bound_event_id': bound_event.id if bound_event else None,
+        'bound_event_name': bound_event.name if bound_event else '',
         'updated_at': timezone.localtime(template.updated_at).strftime('%b %d, %Y') if template.updated_at else '—',
         'updated_at_iso': template.updated_at.isoformat() if template.updated_at else '',
     }
@@ -3940,6 +3996,10 @@ def admin_scoresheets(request):
     paginator = Paginator(qs, 10)
     page_obj = paginator.get_page(request.GET.get('page') or 1)
     templates = [_serialize_scoresheet_template(t) for t in page_obj.object_list]
+    templates_lookup = [
+        _serialize_scoresheet_template(t)
+        for t in ScoresheetTemplate.objects.all().order_by('-updated_at', '-id')[:300]
+    ]
     categories = list(
         ScoresheetTemplate.objects.exclude(category='')
         .values_list('category', flat=True)
@@ -3947,11 +4007,85 @@ def admin_scoresheets(request):
         .order_by('category')[:50]
     )
 
+    # Match-based events for the scoresheet list + live preview binding.
+    match_preview_events = []
+    for event in (
+        _match_event_queryset()
+        .select_related('scoresheet_template')
+        .prefetch_related('bracket_teams')
+        .order_by('-updated_at', '-id')[:120]
+    ):
+        teams = [
+            {'id': team.id, 'name': team.name or f'Team {team.id}'}
+            for team in event.bracket_teams.all()[:24]
+        ]
+        team_names = [t['name'] for t in teams]
+        sport_label = (
+            event.sport_custom_name
+            if (event.sport_type or '') == 'Custom' and event.sport_custom_name
+            else (event.sport_type or 'Team Sport')
+        )
+        time_display = ''
+        if event.daily_start_time:
+            time_display = event.daily_start_time.strftime('%I:%M %p').lstrip('0')
+            if event.daily_end_time:
+                time_display += (
+                    f' – {event.daily_end_time.strftime("%I:%M %p").lstrip("0")}'
+                )
+        tpl = event.scoresheet_template
+        match_preview_events.append({
+            'id': event.id,
+            'name': event.name,
+            'category': event.category or 'Sports',
+            'sport_type': event.sport_type or '',
+            'sport_label': sport_label,
+            'division': event.division or '',
+            'venue': event.venue or '',
+            'classification': event.event_classification or '',
+            'classification_label': event.get_event_classification_display() or '',
+            'tournament_type': event.tournament_type or 'single_elimination',
+            'tournament_type_label': _tournament_type_label(
+                event.tournament_type or 'single_elimination'
+            ),
+            'start_date': event.event_date.isoformat() if event.event_date else '',
+            'start_date_display': (
+                event.event_date.strftime('%b %d, %Y') if event.event_date else '—'
+            ),
+            'time': (
+                event.daily_start_time.strftime('%H:%M') if event.daily_start_time else ''
+            ),
+            'time_display': time_display or '—',
+            'teams': teams,
+            'team_names': team_names,
+            'team_a': team_names[0] if len(team_names) > 0 else 'Team A',
+            'team_b': team_names[1] if len(team_names) > 1 else 'Team B',
+            'scoresheet_template_id': event.scoresheet_template_id,
+            'scoresheet_template_name': tpl.name if tpl else '',
+            'updated_at': (
+                timezone.localtime(event.updated_at).strftime('%b %d, %Y')
+                if getattr(event, 'updated_at', None) else '—'
+            ),
+        })
+
+    school_logo_url = ''
+    school_name = 'EventTab'
+    intramurals_name = ''
+    try:
+        from events.models import SystemSettings
+        settings_row = SystemSettings.objects.first()
+        if settings_row:
+            school_name = settings_row.school_name or school_name
+            intramurals_name = settings_row.intramurals_name or ''
+            if settings_row.school_logo:
+                school_logo_url = settings_row.school_logo.url
+    except Exception:
+        pass
+
     return render(request, 'admindash/scoresheet.html', {
         'templates': templates,
-        'templates_json': templates,
+        'templates_json': templates_lookup,
         'page_obj': page_obj,
-        'paginator': {
+        'filters': {
             'q': q,
             'event_type': event_type,
             'status': status,
@@ -3971,6 +4105,12 @@ def admin_scoresheets(request):
         },
         'default_match_fields': default_fields_for('match'),
         'default_criteria_fields': default_fields_for('criteria'),
+        'match_preview_events_json': match_preview_events,
+        'school_branding_json': {
+            'school_name': school_name,
+            'intramurals_name': intramurals_name,
+            'school_logo_url': school_logo_url,
+        },
     })
 
 
@@ -4005,7 +4145,8 @@ def admin_scoresheet_template_save(request):
 
     fields = data.get('fields') if isinstance(data.get('fields'), dict) else {}
     order = data.get('order') if isinstance(data.get('order'), list) else None
-    layout = pack_template_layout(fields, event_type, order, orientation)
+    builder = data.get('builder') if isinstance(data.get('builder'), dict) else None
+    layout = pack_template_layout(fields, event_type, order, orientation, builder=builder)
 
     creating = template is None
     if creating:
@@ -4023,6 +4164,20 @@ def admin_scoresheet_template_save(request):
     template.orientation = orientation
     template.layout = layout
     template.save()
+
+    # Bind / update match-based event assignment when creating from the events table.
+    event_id = data.get('event_id') or (builder or {}).get('previewEventId')
+    if event_id:
+        try:
+            event_id = int(event_id)
+        except (TypeError, ValueError):
+            event_id = None
+    if event_id:
+        event = _match_event_queryset().filter(pk=event_id).first()
+        if event is not None:
+            event.scoresheet_template = template
+            event.save(update_fields=['scoresheet_template'])
+
     return JsonResponse({
         'success': True,
         'message': f'Template {"created" if creating else "updated"}.',

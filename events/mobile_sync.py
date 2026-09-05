@@ -14,6 +14,7 @@ from .models import (
     Event,
     EventCategory,
     JudgingEvent,
+    JudgeScore,
 )
 
 User = get_user_model()
@@ -112,6 +113,8 @@ def get_active_judge_users():
 
 def _sync_criteria_from_config(judging_event, criteria_config):
     """Sync mobile Criterion rows from absolute event-weight judging_criteria_config."""
+    if JudgeScore.objects.filter(criterion__event=judging_event).exists():
+        return
     judging_event.criteria.all().delete()
     for order, item in enumerate(criteria_config or []):
         if not isinstance(item, dict):
@@ -136,6 +139,8 @@ def _sync_criteria_from_config(judging_event, criteria_config):
 
 
 def _sync_criteria(judging_event, scoring_criteria_text):
+    if JudgeScore.objects.filter(criterion__event=judging_event).exists():
+        return
     judging_event.criteria.all().delete()
     for order, item in enumerate(parse_scoring_criteria(scoring_criteria_text)):
         Criterion.objects.create(
@@ -150,6 +155,8 @@ def _sync_criteria(judging_event, scoring_criteria_text):
 
 def _sync_candidates(judging_event, event, explicit_candidates=None):
     """Sync mobile candidates from admin form, bracket teams, or placeholders."""
+    if JudgeScore.objects.filter(candidate__event=judging_event).exists():
+        return
     if explicit_candidates:
         judging_event.candidates.all().delete()
         for index, c in enumerate(explicit_candidates, start=1):

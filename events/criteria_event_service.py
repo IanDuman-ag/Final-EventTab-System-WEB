@@ -24,7 +24,7 @@ ALLOWED_CATEGORIES = {
 }
 ALLOWED_CLASSIFICATIONS = {'major', 'minor'}
 ALLOWED_DIVISIONS = {'Men', 'Women', 'Mixed', 'Open', ''}
-ALLOWED_PARTICIPATION = {'team', 'individual'}
+ALLOWED_PARTICIPATION = {'team', 'group', 'individual'}
 ALLOWED_FORMATS = {'single_performance', 'multiple_stage'}
 LEGACY_FORMATS = {'multiple_rounds', 'preliminary_final'}
 ALLOWED_SCORE_METHODS = {
@@ -35,8 +35,12 @@ ALLOWED_SCORE_METHODS = {
 }
 ALLOWED_QUALIFICATION_METHODS = {
     'top_ranking',
+    'top_n_overall',
+    'top_n_per_division',
     'minimum_score',
     'manual_selection',
+    'advance_all',
+    'no_advancement',
 }
 STAGE_STATUSES = {
     'locked',
@@ -439,10 +443,7 @@ def _validated_pageant_config(data, strict=True):
     if not isinstance(advancement, dict):
         advancement = {}
     if strict and advancement_enabled:
-        try:
-            top_n = int(advancement.get('top_n') or 0)
-        except (TypeError, ValueError) as exc:
-            raise CriteriaEventValidationError('Advancement Top N must be numeric.') from exc
+        top_n = _positive_int(advancement.get('top_n'), 'Advancement Top N')
         if top_n < 1:
             raise CriteriaEventValidationError('Advancement requires at least one finalist.')
         advancement = {
@@ -474,6 +475,24 @@ def _validated_pageant_config(data, strict=True):
         'end_time': str(config.get('end_time') or data.get('end_time') or '')[:10],
         'team_ids': config.get('team_ids') if isinstance(config.get('team_ids'), list) else [],
     }
+
+
+def _adjust_pageant_advancement(pageant_config, eligible_candidate_count):
+    if not pageant_config.get('advancement_enabled'):
+        return pageant_config
+    advancement = dict(pageant_config.get('advancement') or {})
+    configured = advancement.get('top_n')
+    if configured is None:
+        return pageant_config
+    configured = _positive_int(configured, 'Advancement Top N')
+    if configured < 1:
+        raise CriteriaEventValidationError('Advancement requires at least one finalist.')
+    actual = _stage_actual_qualifiers(configured, int(eligible_candidate_count or 0))
+    if actual < 1:
+        raise CriteriaEventValidationError('Add at least one candidate.')
+    advancement['top_n'] = actual
+    pageant_config['advancement'] = advancement
+    return pageant_config
 
 
 def models_q_for_judges():
@@ -543,6 +562,29 @@ def _percent_total(values, label, required=True):
     return total
 
 
+def _positive_int(value, label):
+    if isinstance(value, bool):
+        raise CriteriaEventValidationError(f'{label} must be numeric.')
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        raw = value.strip()
+        if raw.startswith('-'):
+            try:
+                return int(raw)
+            except ValueError as exc:
+                raise CriteriaEventValidationError(f'{label} must be numeric.') from exc
+        if raw.isdigit():
+            return int(raw)
+    raise CriteriaEventValidationError(f'{label} must be numeric.')
+
+
+def _stage_actual_qualifiers(configured_count, eligible_count):
+    if eligible_count <= 0:
+        return 0
+    return min(configured_count, eligible_count)
+
+
 def _validated_points(data, classification):
     rows = _json_list(data.get('points_config'), 'Championship points configuration')
     if not rows:
@@ -565,9 +607,11 @@ def _validated_points(data, classification):
     return cleaned
 
 
-def _validated_criteria(data):
+def _validated_criteria(data, strict=True):
     rows = _json_list(data.get('judging_criteria_config'), 'Judging criteria')
     if not rows:
+        if not strict:
+            return []
         raise CriteriaEventValidationError('Create at least one judging criterion.')
     cleaned = []
     weights = []
@@ -592,16 +636,69 @@ def _validated_criteria(data):
             'order': index + 1,
         })
         weights.append(weight)
-    _percent_total(weights, 'Total criteria weight')
+    if strict:
+        _percent_total(weights, 'Total criteria weight')
     return cleaned
 
 
 def _validated_rounds(event_format, data, participant_count=0):
-    if event_format == 'single_performance':
-        return [{
+    rows = _json_list(data.get('rounds_config'), 'Competition stage configuration')
+
+    def _extra(row):
+        return {
+            'id': str(row.get('id') or row.get('stage_number') or '1')[:80],
+            'round_type': str(row.get('round_type') or '').strip()[:40],
+            'scoring_method': str(row.get('scoring_method') or 'numerical').strip()[:40],
+            'score_handling': str(row.get('score_handling') or 'start_zero').strip()[:40],
+            'advancement_rule': str(row.get('advancement_rule') or '').strip()[:40],
+            'performance_order': str(row.get('performance_order') or 'event').strip()[:40],
+            'tie_handling': str(row.get('tie_handling') or 'manual_decision').strip()[:40],
+            'require_all_judges': bool(row.get('require_all_judges', True)),
+            'hide_standings': bool(row.get('hide_standings', False)),
+            'allow_reopen': bool(row.get('allow_reopen', False)),
+            # False means the weight was auto-shared, so reopening the event can
+            # keep sharing it instead of freezing the computed number.
+            'weight_locked': bool(row.get('weight_locked', False)),
+        }
+
+    if event_format == 'single_performance' or len(rows) <= 1:
+        if not rows:
+            return [{
+                'stage_number': 1,
+                'name': 'Main Scoring Round',
+                'weight': 100,
+                'round_type': 'main',
+                'scoring_method': 'numerical',
+                'score_handling': 'start_zero',
+                'advancement_rule': 'no_advancement',
+                'performance_order': 'event',
+                'tie_handling': 'manual_decision',
+                'require_all_judges': True,
+                'hide_standings': False,
+                'allow_reopen': False,
+                'weight_locked': True,
+                'qualification_method': None,
+                'qualifiers': None,
+                'minimum_score': None,
+                'carry_previous_scores': False,
+                'require_faculty_confirmation': False,
+                'is_final': True,
+                'status': 'open',
+            }]
+        row = rows[0]
+        name = str(row.get('name', '') or 'Main Scoring Round').strip() or 'Main Scoring Round'
+        if name.lower().startswith('round ') and name[6:].strip().isdigit():
+            raise CriteriaEventValidationError(
+                'Use a descriptive stage name instead of generic Round labels.'
+            )
+        try:
+            weight = float(row.get('weight') or 100)
+        except (TypeError, ValueError):
+            weight = 100
+        payload = {
             'stage_number': 1,
-            'name': 'Performance',
-            'weight': 100,
+            'name': name[:80],
+            'weight': 100 if weight <= 0 else weight,
             'qualification_method': None,
             'qualifiers': None,
             'minimum_score': None,
@@ -609,21 +706,24 @@ def _validated_rounds(event_format, data, participant_count=0):
             'require_faculty_confirmation': False,
             'is_final': True,
             'status': 'open',
-        }]
+        }
+        payload.update(_extra(row))
+        payload['round_type'] = payload.get('round_type') or 'scoring'
+        return [payload]
 
-    if event_format in LEGACY_FORMATS:
+    if event_format in LEGACY_FORMATS or len(rows) >= 2:
         event_format = 'multiple_stage'
 
     if event_format != 'multiple_stage':
         raise CriteriaEventValidationError('Select a valid event format.')
 
-    rows = _json_list(data.get('rounds_config'), 'Competition stage configuration')
     if len(rows) < 2:
         raise CriteriaEventValidationError('Multiple Stage Competition requires at least two stages.')
 
     cleaned = []
     weights = []
     names = set()
+    current_round_participant_count = int(participant_count or 0)
     for index, row in enumerate(rows):
         is_final = index == len(rows) - 1 or bool(row.get('is_final'))
         name = str(row.get('name', '')).strip()
@@ -649,21 +749,29 @@ def _validated_rounds(event_format, data, participant_count=0):
         minimum_score = None
         require_confirmation = False
         if not is_final:
-            qualification_method = str(row.get('qualification_method') or 'top_ranking').strip().lower()
+            qualification_method = str(
+                row.get('qualification_method') or row.get('advancement_rule') or 'top_ranking'
+            ).strip().lower()
+            if qualification_method == 'top_n_overall':
+                qualification_method = 'top_ranking'
+            if qualification_method == 'no_elimination':
+                qualification_method = 'advance_all'
+            if qualification_method == 'no_advancement':
+                qualification_method = 'advance_all'
             if qualification_method not in ALLOWED_QUALIFICATION_METHODS:
                 raise CriteriaEventValidationError(
-                    'Qualification method must be Top Ranking, Minimum Score, or Manual Selection.'
+                    'Qualification method must be Top Ranking, Minimum Score, Manual Selection, or Advance All.'
                 )
-            try:
-                qualifiers = int(row.get('qualifiers') or 0)
-            except (TypeError, ValueError) as exc:
-                raise CriteriaEventValidationError('Each qualification stage needs a qualifier count.') from exc
-            if qualifiers < 1:
-                raise CriteriaEventValidationError('Each qualification stage needs at least one qualifier.')
-            if participant_count and qualifiers > participant_count:
-                raise CriteriaEventValidationError(
-                    'Number of qualifiers cannot exceed the number of contestants.'
-                )
+            if current_round_participant_count < 1:
+                raise CriteriaEventValidationError('Select at least one participant or team.')
+            if qualification_method == 'advance_all' or row.get('round_type') == 'scoring':
+                qualification_method = 'advance_all'
+                qualifiers = current_round_participant_count
+            else:
+                qualifiers = _positive_int(row.get('qualifiers'), 'Each qualification stage qualifier count')
+                if qualifiers < 1:
+                    raise CriteriaEventValidationError('Each qualification stage needs at least one qualifier.')
+                qualifiers = _stage_actual_qualifiers(qualifiers, current_round_participant_count)
             if qualification_method == 'minimum_score':
                 try:
                     minimum_score = float(row.get('minimum_score') or 0)
@@ -690,7 +798,15 @@ def _validated_rounds(event_format, data, participant_count=0):
             'require_faculty_confirmation': require_confirmation,
             'is_final': is_final,
             'status': status,
+            **_extra(row),
         })
+        cleaned[-1]['qualification_method'] = qualification_method
+        cleaned[-1]['advancement_rule'] = qualification_method or cleaned[-1].get('advancement_rule')
+        if not is_final:
+            current_round_participant_count = _stage_actual_qualifiers(
+                qualifiers or current_round_participant_count,
+                current_round_participant_count,
+            )
         weights.append(weight)
 
     _percent_total(weights, 'Total stage weight')
@@ -704,6 +820,8 @@ def _validated_participants(participation_type, data):
     except (TypeError, ValueError) as exc:
         raise CriteriaEventValidationError('Participants contain an invalid selection.') from exc
     if not ids:
+        if participation_type == 'individual':
+            raise CriteriaEventValidationError('Select at least one candidate.')
         raise CriteriaEventValidationError('Select at least one participant or team.')
     if participation_type == 'individual':
         found = list(RegistryCandidate.objects.filter(id__in=ids, status=RegistryCandidate.STATUS_ACTIVE))
@@ -806,6 +924,48 @@ def _validated_users(data, user_model):
             'Select a Tabulator account created under Users → Faculty.'
         )
     return chief, ordered_judges, faculty
+
+
+def validate_saved_scoring_structure(event, strict=True):
+    """Validate normalized Round -> Category -> Criterion records when present."""
+    if not event or not getattr(event, 'pk', None):
+        return []
+    categories = list(event.scoring_categories.prefetch_related('criteria').all())
+    if not categories:
+        return []
+    issues = []
+    rounds = [row for row in (event.rounds_config or []) if isinstance(row, dict)]
+    round_ids = [
+        str(row.get('id') or row.get('stage_number') or row.get('name') or index + 1)
+        for index, row in enumerate(rounds)
+    ] or ['main']
+    official_by_round = {rid: [] for rid in round_ids}
+    for category in categories:
+        criteria_rows = list(category.criteria.all())
+        if not criteria_rows:
+            issues.append(f'Category "{category.name}" has no criteria.')
+        criterion_total = sum(float(row.weight_percent or 0) for row in criteria_rows)
+        if abs(criterion_total - 100) >= 0.01:
+            issues.append(
+                f'Criteria in category "{category.name}" must total 100% '
+                f'(currently {round(criterion_total, 2)}%).'
+            )
+        assigned = str(category.assigned_round_id or round_ids[0])
+        if category.purpose == category.PURPOSE_OFFICIAL:
+            official_by_round.setdefault(assigned, []).append(category)
+    for rid, rows in official_by_round.items():
+        if not rows:
+            issues.append(f'Round "{rid}" needs at least one official scoring category.')
+            continue
+        total = sum(float(row.overall_weight_percent or 0) for row in rows)
+        if abs(total - 100) >= 0.01:
+            issues.append(
+                f'Official categories in round "{rid}" must total 100% '
+                f'(currently {round(total, 2)}%).'
+            )
+    if strict and issues:
+        raise CriteriaEventValidationError(issues[0])
+    return issues
 
 
 def _validated_tie_breaks(data, criteria):
@@ -927,6 +1087,7 @@ def _save_pageant_event(data, user, files=None, instance=None):
         participant_ids = [i for i in participant_ids if i in by_id]
 
     pageant_config['pending_candidates'] = []
+    pageant_config = _adjust_pageant_advancement(pageant_config, len(participant_ids))
 
     rounds_raw = _json_list(data.get('rounds_config'), 'Pageant segments')
     if not rounds_raw and pageant_config.get('segment_template') == 'standard':
@@ -1101,6 +1262,7 @@ def _save_pageant_event(data, user, files=None, instance=None):
 def save_criteria_event(data, user, files=None, instance=None):
     User = get_user_model()
     files = files or {}
+    strict = (data.get('publication_status') or Event.PUBLICATION_DRAFT).strip().lower() == Event.PUBLICATION_PUBLISHED
 
     if is_pageant_event(data) or (
         instance is not None
@@ -1133,7 +1295,7 @@ def save_criteria_event(data, user, files=None, instance=None):
         raise CriteriaEventValidationError('Select a valid division.')
     participation_type = _required(data, 'participation_type', 'Participation Type')
     if participation_type not in ALLOWED_PARTICIPATION:
-        raise CriteriaEventValidationError('Participation Type must be Team or Individual.')
+        raise CriteriaEventValidationError('Participation Type must be Individual or Group.')
     venue = _required(data, 'venue', 'Venue')[:200]
     start_date = _parse_date(_required(data, 'start_date', 'Start Date'), 'Start Date')
     end_date = _parse_date(_required(data, 'end_date', 'End Date'), 'End Date')
@@ -1151,12 +1313,30 @@ def save_criteria_event(data, user, files=None, instance=None):
     if score_method not in ALLOWED_SCORE_METHODS:
         raise CriteriaEventValidationError('Select a valid scoring method.')
 
-    participant_ids, participants = _validated_participants(participation_type, data)
-    rounds_config = _validated_rounds(event_format, data, participant_count=len(participant_ids))
-    criteria = _validated_criteria(data)
+    try:
+        participant_ids, participants = _validated_participants(participation_type, data)
+    except CriteriaEventValidationError:
+        if strict or _json_list(data.get('participant_ids'), 'Participants'):
+            raise
+        participant_ids, participants = [], []
+    rounds_config = _validated_rounds(
+        event_format,
+        data,
+        participant_count=len(participant_ids) if strict else max(1, len(participant_ids)),
+    )
+    if len(rounds_config) >= 2:
+        event_format = 'multiple_stage'
+    else:
+        event_format = 'single_performance'
+    criteria = _validated_criteria(data, strict=strict)
     score_settings = _validated_score_settings(data)
     deductions_enabled, deductions = _validated_deductions(data)
-    chief, judges, faculty = _validated_users(data, User)
+    try:
+        chief, judges, faculty = _validated_users(data, User)
+    except CriteriaEventValidationError:
+        if strict:
+            raise
+        chief, judges, faculty = None, [], None
     result_processing = {**DEFAULT_RESULT_PROCESSING, **_json_dict(data.get('result_processing_config'), 'Result processing')}
     stage_tiebreak = str(result_processing.get('stage_tiebreak_method') or 'highest_selected_criterion').strip()
     if stage_tiebreak not in TIE_BREAK_OPTIONS:
@@ -1171,11 +1351,11 @@ def save_criteria_event(data, user, files=None, instance=None):
             '0': list(participant_ids),
         })
     judge_settings = {**DEFAULT_JUDGE_SETTINGS, **_json_dict(data.get('judge_settings'), 'Judge settings')}
-    if judge_settings.get('remove_high_low') and len(judges) < 3:
+    if strict and judge_settings.get('remove_high_low') and len(judges) < 3:
         raise CriteriaEventValidationError(
             'Remove Highest and Lowest Judge Scores requires at least three assigned judges.'
         )
-    tie_breaks = _validated_tie_breaks(data, criteria)
+    tie_breaks = _validated_tie_breaks(data, criteria or [{'id': 'overall', 'name': 'Overall'}])
     points = _validated_points(data, classification)
 
     creating = instance is None
@@ -1209,7 +1389,7 @@ def save_criteria_event(data, user, files=None, instance=None):
     event.participant_ids = participant_ids
     event.chief_judge = chief
     event.faculty_account = faculty
-    event.faculty_in_charge = faculty.get_full_name().strip() or faculty.username
+    event.faculty_in_charge = (faculty.get_full_name().strip() or faculty.username) if faculty else ''
     raw_tpl = (data.get('scoresheet_template') or '').strip()
     if raw_tpl:
         from .models import ScoresheetTemplate
@@ -1228,6 +1408,8 @@ def save_criteria_event(data, user, files=None, instance=None):
     if creating:
         event.created_by = user
     event.save()
+    if strict:
+        validate_saved_scoring_structure(event, strict=True)
     event.assigned_judges.set(judges)
     # Criteria events are operated by the assigned Tabulator account.
     event.assigned_tabulators.set([faculty] if faculty else [])
@@ -1244,8 +1426,10 @@ def save_criteria_event(data, user, files=None, instance=None):
         ),
     )
 
-    recipients = list({chief.id: chief, faculty.id: faculty, **{j.id: j for j in judges}}.values())
-    transaction.on_commit(lambda: _notify_assignees(event, recipients))
+    recipients = [item for item in [chief, faculty, *judges] if item is not None]
+    recipients = list({item.id: item for item in recipients}.values())
+    if recipients:
+        transaction.on_commit(lambda: _notify_assignees(event, recipients))
     try:
         sync_event_to_mobile(event)
     except Exception:
@@ -1279,6 +1463,9 @@ def serialize_criteria_event(event):
     scoring_categories = [{
         'id': category.id,
         'name': category.name,
+        'assigned_round_id': category.assigned_round_id,
+        'purpose': category.purpose,
+        'category_purpose': category.category_purpose,
         'judge_mode': category.judge_mode,
         'display_order': category.display_order,
         'overall_weight_percent': float(category.overall_weight_percent),
@@ -1286,7 +1473,10 @@ def serialize_criteria_event(event):
             'id': criterion.id,
             'name': criterion.name,
             'weight_percent': float(criterion.weight_percent),
+            'min_score': float(criterion.min_score),
             'max_score': float(criterion.max_score) if criterion.max_score is not None else None,
+            'judging_description': criterion.judging_description,
+            'tie_breaker_priority': criterion.tie_breaker_priority,
             'display_order': criterion.display_order,
         } for criterion in category.criteria.all()],
     } for category in event.scoring_categories.prefetch_related('criteria').all()]

@@ -113,9 +113,11 @@ class Event(models.Model):
     apply_championship_points = models.BooleanField(default=True)
     championship_points_config = models.JSONField(default=list, blank=True)
     PARTICIPATION_TEAM = 'team'
+    PARTICIPATION_GROUP = 'group'
     PARTICIPATION_INDIVIDUAL = 'individual'
     PARTICIPATION_CHOICES = [
         (PARTICIPATION_TEAM, 'Team'),
+        (PARTICIPATION_GROUP, 'Group'),
         (PARTICIPATION_INDIVIDUAL, 'Individual'),
     ]
     FORMAT_SINGLE = 'single_performance'
@@ -247,9 +249,18 @@ class EventScoringCategory(models.Model):
         (JUDGE_MODE_SCORING, 'Scoring Mode'),
         (JUDGE_MODE_RANKING, 'Ranking Mode'),
     ]
+    PURPOSE_OFFICIAL = 'official'
+    PURPOSE_SPECIAL_AWARD = 'special_award'
+    PURPOSE_CHOICES = [
+        (PURPOSE_OFFICIAL, 'Official Scoring Category'),
+        (PURPOSE_SPECIAL_AWARD, 'Special Award Only'),
+    ]
 
     event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='scoring_categories')
+    assigned_round_id = models.CharField(max_length=80, blank=True, default='')
     name = models.CharField(max_length=120)
+    purpose = models.CharField(max_length=20, choices=PURPOSE_CHOICES, default=PURPOSE_OFFICIAL)
+    category_purpose = models.TextField(blank=True, default='')
     judge_mode = models.CharField(max_length=12, choices=JUDGE_MODE_CHOICES)
     display_order = models.PositiveIntegerField()
     overall_weight_percent = models.DecimalField(max_digits=5, decimal_places=2)
@@ -269,7 +280,10 @@ class EventScoringCriterion(models.Model):
     category = models.ForeignKey(EventScoringCategory, on_delete=models.CASCADE, related_name='criteria')
     name = models.CharField(max_length=120)
     weight_percent = models.DecimalField(max_digits=5, decimal_places=2)
+    min_score = models.DecimalField(max_digits=7, decimal_places=2, default=0)
     max_score = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)
+    judging_description = models.TextField(blank=True, default='')
+    tie_breaker_priority = models.PositiveIntegerField(null=True, blank=True)
     display_order = models.PositiveIntegerField()
 
     class Meta:
@@ -281,6 +295,75 @@ class EventScoringCriterion(models.Model):
 
     def __str__(self):
         return f'{self.category.name} · {self.name}'
+
+
+class CriteriaScoreSubmission(models.Model):
+    SOURCE_MOBILE = 'MOBILE'
+    SOURCE_OCR = 'OCR'
+    SOURCE_MANUAL = 'MANUAL'
+    SOURCE_CHOICES = [
+        (SOURCE_MOBILE, 'Judge Mobile'),
+        (SOURCE_OCR, 'Physical Scoresheet OCR'),
+        (SOURCE_MANUAL, 'Manual Backup'),
+    ]
+    STATUS_DRAFT = 'DRAFT'
+    STATUS_SUBMITTED = 'SUBMITTED'
+    STATUS_NEEDS_REVIEW = 'NEEDS_REVIEW'
+    STATUS_VERIFIED = 'VERIFIED'
+    STATUS_APPROVED = 'APPROVED'
+    STATUS_REJECTED = 'REJECTED'
+    STATUS_REOPENED = 'REOPENED'
+    STATUS_SUPERSEDED = 'SUPERSEDED'
+    STATUS_CHOICES = [
+        (STATUS_DRAFT, 'Draft'),
+        (STATUS_SUBMITTED, 'Submitted'),
+        (STATUS_NEEDS_REVIEW, 'Needs Review'),
+        (STATUS_VERIFIED, 'Verified'),
+        (STATUS_APPROVED, 'Approved'),
+        (STATUS_REJECTED, 'Rejected'),
+        (STATUS_REOPENED, 'Reopened'),
+        (STATUS_SUPERSEDED, 'Superseded'),
+    ]
+
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='criteria_score_submissions')
+    assigned_round_id = models.CharField(max_length=80)
+    category = models.ForeignKey(EventScoringCategory, on_delete=models.CASCADE, related_name='score_submissions')
+    criterion = models.ForeignKey(EventScoringCriterion, on_delete=models.CASCADE, related_name='score_submissions')
+    judge = models.ForeignKey(User, on_delete=models.CASCADE, related_name='criteria_score_submissions')
+    participant_type = models.CharField(max_length=20, default='participant')
+    participant_id = models.PositiveIntegerField()
+    source = models.CharField(max_length=10, choices=SOURCE_CHOICES)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_DRAFT)
+    raw_score = models.DecimalField(max_digits=9, decimal_places=4)
+    normalized_score = models.DecimalField(max_digits=9, decimal_places=4, default=0)
+    is_active = models.BooleanField(default=True)
+    submission_key = models.CharField(max_length=120, blank=True, default='', db_index=True)
+    replacement_reason = models.TextField(blank=True, default='')
+    device_session = models.CharField(max_length=200, blank=True, default='')
+    submitted_at = models.DateTimeField(null=True, blank=True)
+    approved_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = [
+            'event_id', 'assigned_round_id', 'category_id',
+            'judge_id', 'participant_id', 'criterion_id',
+        ]
+        indexes = [
+            models.Index(fields=['event', 'assigned_round_id', 'category', 'judge', 'participant_id'], name='events_crit_event_i_332f9b_idx'),
+            models.Index(fields=['event', 'status', 'source', 'is_active'], name='events_crit_event_i_4ca988_idx'),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['event', 'assigned_round_id', 'category', 'judge', 'participant_id', 'criterion'],
+                condition=Q(is_active=True),
+                name='unique_active_criteria_score_source',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.event.name} - {self.assigned_round_id} - judge {self.judge_id}'
 
 
 class Department(models.Model):
