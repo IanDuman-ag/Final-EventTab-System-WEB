@@ -23,7 +23,6 @@
       <nav class="fac-tabs" aria-label="Event management tabs">
         <a href="?tab=overview" class="{% if tab == 'overview' %}is-active{% endif %}">Overview</a>
         <a href="?tab=schedule" class="{% if tab == 'schedule' %}is-active{% endif %}">Schedule</a>
-        <a href="?tab=scoresheets" class="{% if tab == 'scoresheets' %}is-active{% endif %}">Scoresheets</a>
         <a href="?tab=participants" class="{% if tab == 'participants' %}is-active{% endif %}">Participants</a>
         <a href="?tab=results" class="{% if tab == 'results' %}is-active{% endif %}">Results Review</a>
       </nav>
@@ -85,45 +84,6 @@
             </tbody>
           </table>
         </div>
-      </section>
-      {% endif %}
-
-      {% if tab == 'scoresheets' %}
-      <section class="fac-card">
-        <header>
-          <h2>Scoresheets</h2>
-          <a class="fac-btn fac-btn-sm" href="{% url 'faculty_scoresheets' %}?event_id={{ event.id }}">Open full Scoresheets list</a>
-        </header>
-        <div class="fac-table-wrap">
-          <table class="fac-table">
-            <thead>
-              <tr>
-                <th>Match / Stage</th>
-                <th>Date</th>
-                <th>Venue</th>
-                <th>Participants</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for row in match_schedule %}
-              <tr>
-                <td><strong>{{ row.game }}</strong> · {{ row.stage }}</td>
-                <td>{{ row.date|default:"—" }}</td>
-                <td>{{ row.venue }}</td>
-                <td>{{ row.matchup }}</td>
-                <td>
-                  <a class="fac-btn fac-btn-sm" href="/faculty/scoresheets/{{ event.id }}/match-{{ row.id }}/pdf/?download=1" target="_blank">Download PDF</a>
-                  <a class="fac-btn fac-btn-secondary fac-btn-sm" href="/faculty/scoresheets/{{ event.id }}/match-{{ row.id }}/pdf/" target="_blank">Preview / Print</a>
-                </td>
-              </tr>
-              {% empty %}
-              <tr><td colspan="5" class="fac-empty">No matches available for scoresheets.</td></tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-        <p style="padding:12px 16px;font-size:12px;color:#5a7088;">Scoresheets use Administrator templates and auto-fill event details. Score and signature fields stay blank for paper use.</p>
       </section>
       {% endif %}
 

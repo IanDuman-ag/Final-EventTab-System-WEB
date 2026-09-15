@@ -7,6 +7,10 @@ psycopg2-binary==2.9.12
 # Python Environment Variables (for secure configuration)
 python-decouple==3.8
 
+# Optional remote storage for uploaded images
+cloudinary>=1.44.1,<2
+django-cloudinary-storage==0.3.0
+
 # Pillow for Image Processing (if needed for user avatars, event images)
 # Pillow==10.3.0  # Commented out due to build issues on Python 3.14
 

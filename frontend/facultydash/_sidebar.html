@@ -17,10 +17,6 @@
       <svg viewBox="0 0 24 24"><path d="M19 3h-1V1h-2v2H8V1H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Zm0 16H5V8h14v11Z"/></svg>
       <span>Schedules</span>
     </a>
-    <a class="tab-nav-link{% if active == 'scoresheets' %} is-active{% endif %}" href="{% url 'faculty_scoresheets' %}" {% if active == 'scoresheets' %}aria-current="page"{% endif %}>
-      <svg viewBox="0 0 24 24"><path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Zm0 16H5V5h14v14zM7 7h10v2H7V7zm0 4h10v2H7v-2zm0 4h7v2H7v-2z"/></svg>
-      <span>Scoresheets</span>
-    </a>
     <a class="tab-nav-link{% if active == 'results' %} is-active{% endif %}" href="{% url 'faculty_results_review' %}" {% if active == 'results' %}aria-current="page"{% endif %}>
       <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2Zm-2 15-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9Z"/></svg>
       <span>Results Review</span>

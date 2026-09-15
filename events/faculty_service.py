@@ -419,7 +419,12 @@ def compute_criteria_rankings(event):
     weight_by_id = {c.id: float(c.weight_percent or 0) or 1.0 for c in criteria}
     max_by_id = {c.id: float(c.max_score or 100) for c in criteria}
     candidates = list(judging.candidates.all())
-    scores = JudgeScore.objects.filter(candidate__event=judging, is_locked=True).select_related('candidate', 'criterion', 'judge')
+    candidate_ids = [candidate.id for candidate in candidates]
+    scores = JudgeScore.objects.filter(
+        candidate_id__in=candidate_ids,
+        criterion_id__in=weight_by_id,
+        is_locked=True,
+    ).select_related('candidate', 'criterion')
     # candidate -> judge -> criterion -> score
     by_cand = defaultdict(lambda: defaultdict(dict))
     for s in scores:

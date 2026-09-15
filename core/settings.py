@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 import os
 from pathlib import Path
 from decouple import config
+from django.core.exceptions import ImproperlyConfigured
 
 
 def config_bool(name, default=False):
@@ -161,6 +162,27 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 # Teams → assets/teams/  |  Candidates → assets/candidates/
 MEDIA_URL = '/assets/'
 MEDIA_ROOT = BASE_DIR / 'assets'
+
+# New image uploads can use Cloudinary; existing files and documents stay local.
+USE_CLOUDINARY = config_bool('USE_CLOUDINARY', default=False)
+CLOUDINARY_STORAGE = {
+    'CLOUD_NAME': config('CLOUDINARY_CLOUD_NAME', default=''),
+    'API_KEY': config('CLOUDINARY_API_KEY', default=''),
+    'API_SECRET': config('CLOUDINARY_API_SECRET', default=''),
+    'SECURE': True,
+}
+if USE_CLOUDINARY and not all(
+    CLOUDINARY_STORAGE[key] for key in ('CLOUD_NAME', 'API_KEY', 'API_SECRET')
+):
+    raise ImproperlyConfigured(
+        'Cloudinary requires CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, '
+        'and CLOUDINARY_API_SECRET in your environment or .env file.'
+    )
+
+STORAGES = {
+    'default': {'BACKEND': 'core.storage.ImageMediaStorage'},
+    'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
+}
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

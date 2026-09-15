@@ -360,22 +360,6 @@
               </section>
             {% endif %}
 
-            <section class="et-card side-card">
-              <h3>Result Updates</h3>
-              <div class="body">
-                <ul class="update-list">
-                  {% for u in payload.updates %}
-                    <li>
-                      <strong>{{ u.action }}</strong>
-                      <span>{{ u.description }}</span>
-                      <small>{{ u.user }} · {{ u.when }}</small>
-                    </li>
-                  {% empty %}
-                    <li class="et-empty" style="border:0;background:transparent;">No recent updates.</li>
-                  {% endfor %}
-                </ul>
-              </div>
-            </section>
           </aside>
         </div>
       {% endif %}

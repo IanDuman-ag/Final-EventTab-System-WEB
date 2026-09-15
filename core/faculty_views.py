@@ -8,6 +8,7 @@ from collections import defaultdict
 from datetime import datetime
 
 from django.contrib import messages
+from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db.models import Q
@@ -19,7 +20,6 @@ from django.views.decorators.http import require_POST
 from events.faculty_service import (
     FacultyServiceError,
     approve_results,
-    build_scoresheet_pdf,
     compute_criteria_rankings,
     confirm_stage_advancement,
     dashboard_stats,
@@ -27,7 +27,6 @@ from events.faculty_service import (
     export_schedule_csv,
     faculty_can_access,
     faculty_event_qs,
-    generate_match_scoresheet_pdf,
     is_faculty_user,
     judge_monitoring,
     leaderboard_by_game,
@@ -35,11 +34,9 @@ from events.faculty_service import (
     leaderboard_rows,
     publish_results,
     recent_notifications,
-    record_generated_scoresheet,
     return_for_correction,
     save_match_result,
     schedule_rows,
-    scoresheet_rows_for_user,
     serialize_event_detail,
     serialize_event_row,
     stage_panels,
@@ -128,6 +125,8 @@ def faculty_event_manage(request, event_id):
         messages.error(request, 'You do not have access to this event.')
         return redirect('faculty_my_events')
     tab = (request.GET.get('tab') or 'overview').strip()
+    if tab not in {'overview', 'schedule', 'participants', 'results'}:
+        tab = 'overview'
     detail = serialize_event_detail(event)
     schedule = schedule_rows(event)
     match_schedule = [row for row in schedule if isinstance(row.get('id'), int)]
@@ -135,10 +134,6 @@ def faculty_event_manage(request, event_id):
     rankings = (
         compute_criteria_rankings(event) if detail['event_type'] == 'Criteria-Based' else []
     )
-    sheets = {
-        s.match_id: s
-        for s in ScoreSheet.objects.filter(event=event).select_related('match', 'winner')
-    }
     return render(request, 'facultydash/event_manage.html', {
         'active': 'my_events',
         'tab': tab,
@@ -149,7 +144,6 @@ def faculty_event_manage(request, event_id):
         'monitoring': monitoring,
         'rankings': rankings,
         'stages': stage_panels(event),
-        'sheets': sheets,
         'user_display': request.user.get_full_name() or request.user.username,
     })
 
@@ -166,103 +160,6 @@ def faculty_schedules(request):
         'rows': rows,
         'user_display': request.user.get_full_name() or request.user.username,
     })
-
-
-@_faculty_required
-def faculty_scoresheets(request):
-    q = (request.GET.get('q') or '').strip()
-    event_type = (request.GET.get('event_type') or '').strip()
-    status = (request.GET.get('status') or '').strip()
-    event_id = request.GET.get('event_id') or ''
-    try:
-        event_id_int = int(event_id) if event_id else None
-    except (TypeError, ValueError):
-        event_id_int = None
-
-    rows = scoresheet_rows_for_user(
-        request.user,
-        q=q,
-        event_type=event_type,
-        status=status,
-        event_id=event_id_int,
-    )
-    paginator = Paginator(rows, 15)
-    page_obj = paginator.get_page(request.GET.get('page') or 1)
-    events = faculty_event_qs(request.user).order_by('name')
-    return render(request, 'facultydash/scoresheets.html', {
-        'active': 'scoresheets',
-        'rows': page_obj.object_list,
-        'page_obj': page_obj,
-        'filters': {
-            'q': q,
-            'event_type': event_type,
-            'status': status,
-            'event_id': event_id,
-        },
-        'events': [{'id': e.id, 'name': e.name} for e in events],
-        'user_display': request.user.get_full_name() or request.user.username,
-    })
-
-
-@_faculty_required
-def faculty_scoresheet_item_pdf(request, event_id, item_key):
-    if not is_faculty_user(request.user):
-        return HttpResponse('Faculty access required.', status=403)
-    event = _get_event(request, event_id)
-    if event is None:
-        return HttpResponse('Forbidden', status=403)
-    try:
-        pdf, template, item_label, _payload = build_scoresheet_pdf(event, item_key)
-    except FacultyServiceError as exc:
-        return HttpResponse(str(exc), status=404)
-    response = HttpResponse(pdf, content_type='application/pdf')
-    disposition = 'attachment' if request.GET.get('download') == '1' else 'inline'
-    safe_label = ''.join(ch if ch.isalnum() or ch in '-_' else '-' for ch in item_label)[:60]
-    response['Content-Disposition'] = f'{disposition}; filename="scoresheet-{safe_label or item_key}.pdf"'
-    if template:
-        response['X-Scoresheet-Template'] = template.name
-    return response
-
-
-@require_POST
-@_faculty_required
-def faculty_scoresheet_generate(request, event_id, item_key):
-    if not is_faculty_user(request.user):
-        return JsonResponse({'success': False, 'message': 'Faculty access required.'}, status=403)
-    event = _get_event(request, event_id)
-    if event is None:
-        return JsonResponse({'success': False, 'message': 'Forbidden'}, status=403)
-    try:
-        pdf, template, item_label, payload = build_scoresheet_pdf(event, item_key)
-        row = record_generated_scoresheet(event, template, item_label, payload, request.user, pdf)
-    except FacultyServiceError as exc:
-        return JsonResponse({'success': False, 'message': str(exc)}, status=400)
-    return JsonResponse({
-        'success': True,
-        'message': f'Scoresheet generated for {item_label}.',
-        'item_label': item_label,
-        'template_name': template.name if template else 'Default layout',
-        'download_url': (
-            f'/faculty/scoresheets/{event.id}/{item_key}/pdf/?download=1'
-        ),
-        'preview_url': f'/faculty/scoresheets/{event.id}/{item_key}/pdf/',
-        'generated_id': row.id,
-    })
-
-
-@_faculty_required
-def faculty_scoresheet_pdf(request, event_id, match_id):
-    """Legacy shim → match item PDF download."""
-    if not is_faculty_user(request.user):
-        return HttpResponse('Faculty access required.', status=403)
-    event = _get_event(request, event_id)
-    if event is None:
-        return HttpResponse('Forbidden', status=403)
-    match = get_object_or_404(BracketMatch, pk=match_id, event=event)
-    pdf = generate_match_scoresheet_pdf(event, match)
-    response = HttpResponse(pdf, content_type='application/pdf')
-    response['Content-Disposition'] = f'attachment; filename="scoresheet-game-{match.match_number}.pdf"'
-    return response
 
 
 @require_POST
@@ -611,7 +508,7 @@ def _build_judges_scores(event, candidate_id: int | None) -> dict:
         return empty
     scores = list(
         JudgeScore.objects.filter(candidate_id=candidate_id, is_locked=True)
-        .select_related('judge', 'criterion')
+        .select_related('criterion')
     )
     if not scores:
         return {
@@ -619,11 +516,16 @@ def _build_judges_scores(event, candidate_id: int | None) -> dict:
             'rows': [],
             'averages': [],
         }
+    judge_ids = {score.judge_id for score in scores}
+    judge_names = {
+        user.id: user.get_full_name() or user.username
+        for user in get_user_model().objects.filter(id__in=judge_ids)
+    }
     by_judge: dict[int, dict] = {}
     for s in scores:
         row = by_judge.setdefault(s.judge_id, {
             'judge_id': s.judge_id,
-            'judge_name': (s.judge.get_full_name() or s.judge.username) if s.judge_id else 'Judge',
+            'judge_name': judge_names.get(s.judge_id, 'Former Judge'),
             'scores': {},
         })
         row['scores'][s.criterion_id] = float(s.score)
