@@ -132,7 +132,7 @@ class JudgingEventDetailView(generics.RetrieveAPIView):
     """GET /api/mobile/judging-events/<id>/"""
     serializer_class = MobileJudgingEventSerializer
     permission_classes = [permissions.IsAuthenticated]
-    queryset = JudgingEvent.objects.prefetch_related('criteria', 'candidates')
+    queryset = JudgingEvent.objects.prefetch_related('criteria__subcriteria', 'candidates')
 
 
 # ── Dashboard summary ────────────────────────────────────────────

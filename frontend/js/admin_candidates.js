@@ -89,9 +89,9 @@ document.addEventListener('DOMContentLoaded', function () {
     if (candidateImage) candidateImage.value = '';
     if (candidateImagePreviewWrap) candidateImagePreviewWrap.classList.add('hidden');
     preservedStatus = 'active';
-    modalTitle.textContent = 'Add Candidate';
-    modalSubtitle.textContent = 'Register a candidate with number, name, and department.';
-    submitBtn.textContent = 'Add Candidate';
+    modalTitle.textContent = 'Add Individual';
+    modalSubtitle.textContent = 'Register an individual with number, name, and department.';
+    submitBtn.textContent = 'Add Individual';
   }
 
   function openCreateModal() {
@@ -116,8 +116,8 @@ document.addEventListener('DOMContentLoaded', function () {
       }
     }
     preservedStatus = row.dataset.status || 'active';
-    modalTitle.textContent = 'Edit Candidate';
-    modalSubtitle.textContent = 'Update candidate details.';
+    modalTitle.textContent = 'Edit Individual';
+    modalSubtitle.textContent = 'Update individual details.';
     submitBtn.textContent = 'Save Changes';
     openModal(formModal);
     candidateName.focus();
@@ -151,7 +151,7 @@ document.addEventListener('DOMContentLoaded', function () {
       try {
         var response = await fetch(url);
         var data = await response.json();
-        document.getElementById('candidate-view-title').textContent = data.name || 'Candidate';
+        document.getElementById('candidate-view-title').textContent = data.name || 'Individual';
         document.getElementById('candidate-view-subtitle').textContent = 'No. ' + (data.number || '—');
         document.getElementById('view-candidate-name').textContent = data.name || '—';
         document.getElementById('view-candidate-department').textContent = data.department_name || '—';
@@ -168,7 +168,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         openModal(viewModal);
       } catch (_) {
-        showToast('Could not load candidate details.', 'error');
+        showToast('Could not load individual details.', 'error');
       }
     });
   });
@@ -179,7 +179,7 @@ document.addEventListener('DOMContentLoaded', function () {
       pendingDelete.url = btn.dataset.deleteUrl || '';
       pendingDelete.triggerBtn = btn;
       if (deleteNameEl) {
-        deleteNameEl.textContent = row ? (row.dataset.name || 'this candidate') : 'this candidate';
+        deleteNameEl.textContent = row ? (row.dataset.name || 'this individual') : 'this individual';
       }
       openModal(deleteModal);
     });
@@ -193,7 +193,7 @@ document.addEventListener('DOMContentLoaded', function () {
       confirmDeleteBtn.disabled = false;
       if (result.success) {
         closeModal(deleteModal);
-        showToast(result.message || 'Candidate deleted.');
+        showToast(result.message || 'Individual deleted.');
         var row = pendingDelete.triggerBtn && pendingDelete.triggerBtn.closest('tr');
         if (row) row.remove();
         pendingDelete = { url: '', triggerBtn: null };
@@ -226,7 +226,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var name = candidateName.value.trim();
     var departmentId = candidateDepartment.value || null;
     if (!number || !name || !departmentId) {
-      showToast('Candidate number, name, and department are required.', 'error');
+      showToast('Individual number, name, and department are required.', 'error');
       return;
     }
     var formData = new FormData();
@@ -247,7 +247,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     if (result.success) {
       closeModal(formModal);
-      showToast(result.message || (isEdit ? 'Candidate updated.' : 'Candidate created.'));
+      showToast(result.message || (isEdit ? 'Individual updated.' : 'Individual created.'));
       window.location.reload();
     } else {
       showToast(result.message || 'Save failed.', 'error');

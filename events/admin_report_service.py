@@ -278,8 +278,11 @@ def build_report_preview(report_type: str, filters: dict | None = None) -> dict:
     elif report_type in ('individual_participants', 'contestants'):
         headers = ['Contestant / Participant', 'Department', 'Event']
         for ev in events:
+            entries = list(ev.criteria_entries.select_related('department').all()) if ev.scoring_method == 'criteria' else []
+            for entry in entries:
+                rows.append([entry.display_name, entry.department.name if entry.department else 'â€”', ev.name])
             ids = ev.participant_ids or []
-            if ids:
+            if ids and not entries:
                 for c in RegistryCandidate.objects.filter(id__in=ids):
                     rows.append([f'#{c.number} {c.name}', getattr(c, 'department', '') or '—', ev.name])
             elif ev.judging_event_id:

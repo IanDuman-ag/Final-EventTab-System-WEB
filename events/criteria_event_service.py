@@ -10,8 +10,10 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from .models import Event, RegistryCandidate, Team
+from .models import (CriteriaEventEntry, CriteriaEventEntryMember, CriteriaScoreSubmission,
+                     Event, RegistryCandidate, Team)
 from .mobile_sync import sync_event_to_mobile
+from .subcriteria import subcriteria_data, subcriteria_issue
 
 
 class CriteriaEventValidationError(ValueError):
@@ -24,7 +26,101 @@ ALLOWED_CATEGORIES = {
 }
 ALLOWED_CLASSIFICATIONS = {'major', 'minor'}
 ALLOWED_DIVISIONS = {'Men', 'Women', 'Mixed', 'Open', ''}
-ALLOWED_PARTICIPATION = {'team', 'group', 'individual'}
+ALLOWED_PARTICIPATION = {'team', 'group', 'individual', 'pair'}
+
+
+def _validated_event_entries(participation_type, data, *, strict=False):
+    rows = _json_list(data.get('event_entries'), 'Event entries') if data.get('event_entries') else []
+    canonical_type = 'team' if participation_type == 'group' else participation_type
+    if not rows and canonical_type != 'pair':
+        ids = _json_list(data.get('participant_ids'), 'Participants')
+        rows = [{'source_individual_id' if canonical_type == 'individual' else 'source_team_id': value} for value in ids]
+    cleaned, used_people, used_pairs = [], set(), set()
+    for order, row in enumerate(rows):
+        if canonical_type == 'individual':
+            source_id = row.get('source_individual_id') or row.get('individual_id')
+            source = RegistryCandidate.objects.filter(pk=source_id, status=RegistryCandidate.STATUS_ACTIVE).select_related('department').first()
+            if not source:
+                raise CriteriaEventValidationError('One or more selected individuals are unavailable.')
+            cleaned.append({'entry_type': 'individual', 'source': source, 'display_name': f'#{source.number} {source.name}', 'department': source.department, 'members': [], 'order': order})
+        elif canonical_type == 'team':
+            source_id = row.get('source_team_id') or row.get('team_id')
+            source = Team.objects.filter(pk=source_id, status=Team.STATUS_ACTIVE).select_related('department').first()
+            if not source:
+                raise CriteriaEventValidationError('One or more selected teams are unavailable.')
+            cleaned.append({'entry_type': 'team', 'source': source, 'display_name': source.name, 'department': source.department, 'members': [], 'order': order})
+        else:
+            member_ids = row.get('member_ids') or [row.get('member_1_id'), row.get('member_2_id')]
+            try:
+                member_ids = [int(value) for value in member_ids if value not in (None, '')]
+            except (TypeError, ValueError) as exc:
+                raise CriteriaEventValidationError('Pair members contain an invalid selection.') from exc
+            if len(member_ids) != 2 or member_ids[0] == member_ids[1]:
+                raise CriteriaEventValidationError('Each pair requires two different individuals.')
+            pair_key = tuple(sorted(member_ids))
+            if pair_key in used_pairs:
+                raise CriteriaEventValidationError('The same pair cannot be added twice.')
+            if used_people.intersection(member_ids):
+                raise CriteriaEventValidationError('An individual cannot appear in more than one pair.')
+            people = {p.id: p for p in RegistryCandidate.objects.filter(pk__in=member_ids, status=RegistryCandidate.STATUS_ACTIVE).select_related('department')}
+            if len(people) != 2:
+                raise CriteriaEventValidationError('One or more pair members are unavailable.')
+            ordered = [people[i] for i in member_ids]
+            requested_department = row.get('department_id')
+            if requested_department not in (None, ''):
+                try:
+                    requested_department = int(requested_department)
+                except (TypeError, ValueError) as exc:
+                    raise CriteriaEventValidationError('The selected pair department is invalid.') from exc
+                if any(person.department_id != requested_department for person in ordered):
+                    raise CriteriaEventValidationError('Both pair members must belong to the selected department.')
+            department = ordered[0].department if ordered[0].department_id == ordered[1].department_id else None
+            cleaned.append({'entry_type': 'pair', 'source': None, 'display_name': f'{ordered[0].name} + {ordered[1].name}', 'department': department, 'members': ordered, 'order': order})
+            used_pairs.add(pair_key); used_people.update(member_ids)
+    if strict and not cleaned:
+        raise CriteriaEventValidationError('Add at least one valid event entry.')
+    return cleaned
+
+
+def _sync_event_entries(event, entries, data):
+    existing = list(event.criteria_entries.prefetch_related('member_links').all())
+    def current_signature(row):
+        if row.entry_type == 'individual': return ('individual', row.source_individual_id)
+        if row.entry_type == 'team': return ('team', row.source_team_id)
+        return ('pair', tuple(sorted(row.member_links.values_list('individual_id', flat=True))))
+    def proposed_signature(row):
+        if row['entry_type'] in {'individual', 'team'}: return (row['entry_type'], row['source'].id)
+        return ('pair', tuple(sorted(member.id for member in row['members'])))
+    replacement = bool(existing) and [current_signature(row) for row in existing] != [proposed_signature(row) for row in entries]
+    if replacement and str(data.get('confirm_entry_replacement', '')).lower() not in {'1', 'true', 'yes', 'on'}:
+        raise CriteriaEventValidationError('Changing the participation type will remove the currently selected participants for this event. Continue?')
+    if replacement and CriteriaScoreSubmission.objects.filter(event=event).exists():
+        raise CriteriaEventValidationError('Participants cannot be replaced after judging scores have been recorded.')
+    if existing and not replacement:
+        # An ordinary draft save must be idempotent. Entry IDs are referenced
+        # by scores and round qualification maps, so update snapshots in place.
+        for entry, item in zip(existing, entries):
+            entry.display_name = item['display_name']
+            entry.department = item['department']
+            entry.display_order = item['order']
+            entry.save(update_fields=['display_name', 'department', 'display_order', 'updated_at'])
+        event.participant_ids = [entry.id for entry in existing]
+        event.save(update_fields=['participant_ids'])
+        return existing, False
+    if existing and CriteriaScoreSubmission.objects.filter(event=event).exists():
+        return existing, False
+    event.criteria_entries.all().delete()
+    saved = []
+    for item in entries:
+        kwargs = {'event': event, 'entry_type': item['entry_type'], 'display_name': item['display_name'], 'department': item['department'], 'display_order': item['order']}
+        if item['entry_type'] == 'individual': kwargs['source_individual'] = item['source']
+        if item['entry_type'] == 'team': kwargs['source_team'] = item['source']
+        entry = CriteriaEventEntry.objects.create(**kwargs)
+        CriteriaEventEntryMember.objects.bulk_create([CriteriaEventEntryMember(entry=entry, individual=member, position=index + 1) for index, member in enumerate(item['members'])])
+        saved.append(entry)
+    event.participant_ids = [entry.id for entry in saved]
+    event.save(update_fields=['participant_ids'])
+    return saved, replacement
 ALLOWED_FORMATS = {'single_performance', 'multiple_stage'}
 LEGACY_FORMATS = {'multiple_rounds', 'preliminary_final'}
 ALLOWED_SCORE_METHODS = {
@@ -282,6 +378,7 @@ def _flatten_segment_criteria(segments):
                 'max_score': float(crit.get('max_score') or 100),
                 'order': order,
                 'segment_name': str(seg.get('name') or '')[:80],
+                'subcriteria': list(crit.get('subcriteria') or []),
             })
             order += 1
     # Normalize tiny float drift to 100 when close.
@@ -616,6 +713,8 @@ def _validated_criteria(data, strict=True):
         raise CriteriaEventValidationError('Create at least one judging criterion.')
     cleaned = []
     weights = []
+    segment_weights = {}
+    segment_names = {}
     for index, row in enumerate(rows):
         name = str(row.get('name', '')).strip()
         description = str(row.get('description', '')).strip()
@@ -628,17 +727,43 @@ def _validated_criteria(data, strict=True):
             raise CriteriaEventValidationError('Each criterion needs a name.')
         if weight <= 0 or max_score <= 0:
             raise CriteriaEventValidationError('Criterion weight and maximum score must be greater than zero.')
-        cleaned.append({
+        segment_id = str(row.get('segment_id') or '').strip()[:80]
+        segment_name = str(row.get('segment_name') or description or '').strip()[:120]
+        round_id = str(row.get('round_id') or '').strip()[:80]
+        cleaned_row = {
             'id': str(row.get('id') or f'c{index + 1}'),
             'name': name[:120],
             'description': description[:500],
             'weight': weight,
             'max_score': max_score,
             'order': index + 1,
-        })
+            'subcriteria': list(row.get('subcriteria') or []),
+        }
+        if strict and cleaned_row['subcriteria']:
+            try:
+                child_total = sum((float(item['max_score']) for item in cleaned_row['subcriteria']), 0.0)
+            except (TypeError, KeyError, ValueError) as exc:
+                raise CriteriaEventValidationError(f'"{name}" has invalid subcriteria scores.') from exc
+            if (any(not str(item.get('name') or '').strip() or float(item['max_score']) <= 0 for item in cleaned_row['subcriteria'])
+                    or abs(child_total - max_score) >= 0.001):
+                raise CriteriaEventValidationError(
+                    f'"{name}" subcriteria scores must total {max_score:g} points (currently {child_total:g}).')
+        if segment_id:
+            cleaned_row['segment_id'] = segment_id
+            cleaned_row['segment_name'] = segment_name
+            cleaned_row['round_id'] = round_id
+            segment_weights.setdefault(segment_id, []).append(weight)
+            segment_names[segment_id] = segment_name
+        cleaned.append(cleaned_row)
         weights.append(weight)
     if strict:
-        _percent_total(weights, 'Total criteria weight')
+        if segment_weights:
+            for segment_id, grouped_weights in segment_weights.items():
+                label = segment_names.get(segment_id) or f'Segment {segment_id}'
+                _percent_total(grouped_weights, f'{label} criteria')
+        else:
+            # Backward compatibility for old flat events with no segment identity.
+            _percent_total(weights, 'Total criteria weight')
     return cleaned
 
 
@@ -944,7 +1069,7 @@ def validate_saved_scoring_structure(event, strict=True):
     """Validate normalized Round -> Category -> Criterion records when present."""
     if not event or not getattr(event, 'pk', None):
         return []
-    categories = list(event.scoring_categories.prefetch_related('criteria').all())
+    categories = list(event.scoring_categories.prefetch_related('criteria__subcriteria').all())
     if not categories:
         return []
     issues = []
@@ -959,6 +1084,10 @@ def validate_saved_scoring_structure(event, strict=True):
         if not criteria_rows:
             issues.append(f'Category "{category.name}" has no criteria.')
         criterion_total = sum(float(row.weight_percent or 0) for row in criteria_rows)
+        for criterion in criteria_rows:
+            issue = subcriteria_issue(criterion)
+            if issue:
+                issues.append(issue)
         if abs(criterion_total - 100) >= 0.01:
             issues.append(
                 f'Criteria in category "{category.name}" must total 100% '
@@ -1312,7 +1441,7 @@ def save_criteria_event(data, user, files=None, instance=None):
         raise CriteriaEventValidationError('Select a valid division.')
     participation_type = _required(data, 'participation_type', 'Participation Type')
     if participation_type not in ALLOWED_PARTICIPATION:
-        raise CriteriaEventValidationError('Participation Type must be Individual or Group.')
+        raise CriteriaEventValidationError('Participation Type must be Individual, Pair, or Team / Group.')
     venue = _required(data, 'venue', 'Venue')[:200]
     start_date = _parse_date(_required(data, 'start_date', 'Start Date'), 'Start Date')
     end_date = _parse_date(_required(data, 'end_date', 'End Date'), 'End Date')
@@ -1331,15 +1460,16 @@ def save_criteria_event(data, user, files=None, instance=None):
         raise CriteriaEventValidationError('Select a valid scoring method.')
 
     try:
-        participant_ids, participants = _validated_participants(participation_type, data)
+        event_entries = _validated_event_entries(participation_type, data, strict=strict)
     except CriteriaEventValidationError:
-        if strict or _json_list(data.get('participant_ids'), 'Participants'):
+        if strict or data.get('event_entries') or _json_list(data.get('participant_ids'), 'Participants'):
             raise
-        participant_ids, participants = [], []
+        event_entries = []
+    participant_ids, participants = [], []
     rounds_config = _validated_rounds(
         event_format,
         data,
-        participant_count=len(participant_ids) if strict else max(1, len(participant_ids)),
+        participant_count=len(event_entries) if strict else max(1, len(event_entries)),
         strict=strict,
     )
     if len(rounds_config) >= 2:
@@ -1404,7 +1534,7 @@ def save_criteria_event(data, user, files=None, instance=None):
     event.result_processing_config = result_processing
     event.judge_settings = judge_settings
     event.tie_break_rules = tie_breaks
-    event.participant_ids = participant_ids
+    # Updated below after event-specific entries have been synchronized.
     event.chief_judge = chief
     event.faculty_account = faculty
     event.faculty_in_charge = (faculty.get_full_name().strip() or faculty.username) if faculty else ''
@@ -1426,6 +1556,18 @@ def save_criteria_event(data, user, files=None, instance=None):
     if creating:
         event.created_by = user
     event.save()
+    saved_entries, roster_replaced = _sync_event_entries(event, event_entries, data)
+    participant_ids = [entry.id for entry in saved_entries]
+    if event_format == 'multiple_stage':
+        cfg = dict(event.result_processing_config or {})
+        qualified = dict(cfg.get('qualified_participant_ids') or {})
+        # Entry IDs are event-specific. A confirmed roster replacement must
+        # never retain qualification IDs that belonged to the previous roster.
+        if roster_replaced or '0' not in qualified:
+            qualified = {'0': participant_ids}
+        cfg['qualified_participant_ids'] = qualified
+        event.result_processing_config = cfg
+        event.save(update_fields=['result_processing_config'])
     if strict:
         validate_saved_scoring_structure(event, strict=True)
     event.assigned_judges.set(judges)
@@ -1469,13 +1611,20 @@ def serialize_criteria_event(event):
     judge_ids = list(event.assigned_judges.values_list('id', flat=True))
     judges = list(User.objects.filter(id__in=judge_ids))
     judge_map = {user.id: (user.get_full_name().strip() or user.username) for user in judges}
-    participant_names = []
-    if event.participation_type == 'individual':
-        for item in RegistryCandidate.objects.filter(id__in=event.participant_ids or []):
-            participant_names.append(f'#{item.number} {item.name}')
-    else:
-        for item in Team.objects.filter(id__in=event.participant_ids or []):
-            participant_names.append(item.name)
+    entries = list(event.criteria_entries.select_related('department', 'source_individual', 'source_team').prefetch_related('member_links__individual'))
+    participant_names = [entry.display_name for entry in entries]
+    serialized_entries = [{
+        'id': entry.id, 'entry_type': entry.entry_type, 'display_name': entry.display_name,
+        'department': entry.department.name if entry.department else '',
+        'department_id': entry.department_id,
+        'source_individual_id': entry.source_individual_id, 'source_team_id': entry.source_team_id,
+        'members': [{'id': link.individual_id, 'name': link.individual.name, 'number': link.individual.number, 'position': link.position} for link in entry.member_links.all()],
+    } for entry in entries]
+    if not entries:  # compatibility for databases awaiting the additive migration
+        if event.participation_type == 'individual':
+            participant_names = [f'#{item.number} {item.name}' for item in RegistryCandidate.objects.filter(id__in=event.participant_ids or [])]
+        else:
+            participant_names = [item.name for item in Team.objects.filter(id__in=event.participant_ids or [])]
     pageant_config = event.pageant_config or {}
     is_pageant = is_pageant_event(event)
     scoring_categories = [{
@@ -1496,8 +1645,9 @@ def serialize_criteria_event(event):
             'judging_description': criterion.judging_description,
             'tie_breaker_priority': criterion.tie_breaker_priority,
             'display_order': criterion.display_order,
+            'subcriteria': subcriteria_data(criterion),
         } for criterion in category.criteria.all()],
-    } for category in event.scoring_categories.prefetch_related('criteria').all()]
+    } for category in event.scoring_categories.prefetch_related('criteria__subcriteria').all()]
     format_key = pageant_config.get('pageant_format') or ''
     format_labels = {
         'male_female': 'Male and Female Pageant',
@@ -1529,8 +1679,8 @@ def serialize_criteria_event(event):
         'classification': event.event_classification,
         'classification_label': event.get_event_classification_display() or '—',
         'division': event.division or '—',
-        'participation_type': event.participation_type or 'team',
-        'participation_label': event.get_participation_type_display() or 'Team',
+        'participation_type': 'team' if event.participation_type == 'group' else (event.participation_type or 'team'),
+        'participation_label': 'Team / Group' if event.participation_type in {'team', 'group'} else (event.get_participation_type_display() or 'Team / Group'),
         'venue': event.venue,
         'start_date': event.event_date.isoformat() if event.event_date else '',
         'end_date': (event.end_date or event.event_date).isoformat() if event.event_date else '',
@@ -1565,6 +1715,7 @@ def serialize_criteria_event(event):
         'tie_break_rules': event.tie_break_rules or [],
         'participant_ids': event.participant_ids or [],
         'participant_names': participant_names,
+        'entries': serialized_entries,
         'rules_guidelines': event.rules_guidelines or '',
         'description': event.mechanics or pageant_config.get('description') or '',
         'chief_judge_id': event.chief_judge_id,

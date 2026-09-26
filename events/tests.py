@@ -1102,6 +1102,26 @@ class CriteriaRoundAdvancementValidationTests(TestCase):
         self.assertEqual(event.rounds_config[0]['qualifiers'], 4)
         self.assertEqual(event.rounds_config[0]['qualification_method'], 'top_ranking')
 
+    def test_full_draft_workflow_persists_wizard_progress(self):
+        from .models import Event
+
+        self.client.force_login(self.admin)
+        payload = self._payload(4, qualifiers=3)
+        payload.update({
+            'workflow_action': 'save_full_draft',
+            'criteria_wizard_version': '4',
+        })
+
+        response = self.client.post(reverse('admin_criteria_events'), payload)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['success'])
+        event = Event.objects.get(pk=response.json()['event']['id'])
+        self.assertEqual(event.publication_status, Event.PUBLICATION_DRAFT)
+        self.assertEqual(event.participant_ids, [candidate.id for candidate in self.candidates[:4]])
+        self.assertEqual(len(event.rounds_config), 2)
+        self.assertEqual(list(event.assigned_judges.values_list('id', flat=True)), [self.judge.id])
+
     def test_publish_rejects_top_n_above_eligible_participants(self):
         from events.criteria_event_service import CriteriaEventValidationError, save_criteria_event
         with self.assertRaisesMessage(CriteriaEventValidationError, 'cannot exceed the 4 eligible participants'):
@@ -1214,6 +1234,41 @@ class EventScoringCategoryTests(TestCase):
         self.assertEqual(category.event_id, self.event.id)
         self.assertEqual(criterion.category_id, category.id)
         self.assertEqual(list(self.event.scoring_categories.values_list('name', flat=True)), ['Interview'])
+
+    def test_segmented_flat_criteria_validate_each_segment_independently(self):
+        from events.criteria_event_service import _validated_criteria
+
+        rows = [
+            {'id': 'c1', 'name': 'Attire', 'weight': 30, 'max_score': 100,
+             'segment_id': 's1', 'segment_name': 'Production Attire', 'round_id': 'r1'},
+            {'id': 'c2', 'name': 'Poise', 'weight': 70, 'max_score': 100,
+             'segment_id': 's1', 'segment_name': 'Production Attire', 'round_id': 'r1'},
+            {'id': 'c3', 'name': 'Wit', 'weight': 50, 'max_score': 100,
+             'segment_id': 's2', 'segment_name': 'Preliminary Interview', 'round_id': 'r1'},
+            {'id': 'c4', 'name': 'Delivery', 'weight': 50, 'max_score': 100,
+             'segment_id': 's2', 'segment_name': 'Preliminary Interview', 'round_id': 'r1'},
+        ]
+
+        cleaned = _validated_criteria({'judging_criteria_config': json.dumps(rows)}, strict=True)
+
+        self.assertEqual(sum(row['weight'] for row in cleaned), 200)
+        self.assertEqual({row['segment_id'] for row in cleaned}, {'s1', 's2'})
+
+    def test_segmented_flat_criteria_reports_the_invalid_segment(self):
+        from events.criteria_event_service import CriteriaEventValidationError, _validated_criteria
+
+        rows = [
+            {'id': 'c1', 'name': 'Attire', 'weight': 30, 'max_score': 100,
+             'segment_id': 's1', 'segment_name': 'Production Attire', 'round_id': 'r1'},
+            {'id': 'c2', 'name': 'Poise', 'weight': 40, 'max_score': 100,
+             'segment_id': 's1', 'segment_name': 'Production Attire', 'round_id': 'r1'},
+        ]
+
+        with self.assertRaisesMessage(
+            CriteriaEventValidationError,
+            'Production Attire criteria must total 100% (currently 70.0%).',
+        ):
+            _validated_criteria({'judging_criteria_config': json.dumps(rows)}, strict=True)
 
 
 class TabulatorResultsPortalTests(TestCase):

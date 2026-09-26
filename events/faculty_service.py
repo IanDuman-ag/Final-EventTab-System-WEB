@@ -199,9 +199,12 @@ def serialize_event_detail(event):
             judges.insert(0, f'{chief} (Chief)')
     participants = []
     if event.scoring_method == 'criteria' or event.participation_type == 'individual':
+        entries = list(event.criteria_entries.all()) if event.scoring_method == 'criteria' else []
+        participants.extend(entry.display_name for entry in entries)
         ids = event.participant_ids or []
-        for c in RegistryCandidate.objects.filter(id__in=ids):
-            participants.append(f'#{c.number} {c.name}')
+        if not entries:
+            for c in RegistryCandidate.objects.filter(id__in=ids):
+                participants.append(f'#{c.number} {c.name}')
         if not participants and event.judging_event_id:
             for c in event.judging_event.candidates.all()[:50]:
                 participants.append(c.name)

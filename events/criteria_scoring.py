@@ -2,7 +2,7 @@
 from collections import defaultdict
 from decimal import Decimal, InvalidOperation
 
-from .models import CriteriaScoreSubmission, RegistryCandidate, Team
+from .models import CriteriaEventEntry, CriteriaScoreSubmission, RegistryCandidate, Team
 
 
 def normalized_criterion_score(raw_score, maximum_score, criterion_weight):
@@ -40,12 +40,10 @@ def compute_official_criteria_rankings(event, *, round_id):
             raise ValueError(f'Criteria in "{category.name}" must total 100%.')
         expected[category.id] = {row.id for row in criteria}
 
-    registry = RegistryCandidate if event.participation_type == 'individual' else Team
-    participants = {
-        row.id: row for row in registry.objects.filter(
-            id__in=event.participant_ids, status=registry.STATUS_ACTIVE,
-        )
-    }
+    participants = {row.id: row for row in CriteriaEventEntry.objects.filter(event=event, id__in=event.participant_ids)}
+    if not participants:  # legacy fallback before migration
+        registry = RegistryCandidate if event.participation_type == 'individual' else Team
+        participants = {row.id: row for row in registry.objects.filter(id__in=event.participant_ids, status=registry.STATUS_ACTIVE)}
     judge_ids = set(event.assigned_judges.filter(is_active=True).values_list('id', flat=True))
     scores = CriteriaScoreSubmission.objects.filter(
         event=event, assigned_round_id=round_id, category__in=categories,
@@ -81,7 +79,7 @@ def compute_official_criteria_rankings(event, *, round_id):
         participant = participants[participant_id]
         rows.append({
             'participant_id': participant_id,
-            'name': participant.name,
+            'name': getattr(participant, 'display_name', None) or participant.name,
             'final_score': sum(values, Decimal(0)) / len(values),
             'approved_judges': len(values),
             'complete': bool(judge_ids) and len(values) == len(judge_ids),

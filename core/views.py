@@ -3295,6 +3295,7 @@ def admin_criteria_events(request, event_id=None):
         if workflow_action:
             from decimal import Decimal, InvalidOperation
             from events.models import EventScoringCategory, EventScoringCriterion
+            from events.subcriteria import parse_subcriteria, save_subcriteria, subcriteria_data
 
             def workflow_error(message, status=400):
                 return JsonResponse({'success': False, 'message': message}, status=status)
@@ -3342,6 +3343,30 @@ def admin_criteria_events(request, event_id=None):
                 draft.save()
                 return JsonResponse({'success': True, 'event': {'id': draft.id, 'name': draft.name}})
 
+            if workflow_action == 'save_full_draft':
+                event_pk = request.POST.get('event_id')
+                draft = (
+                    _criteria_event_queryset().filter(pk=event_pk).first()
+                    if event_pk else None
+                )
+                if event_pk and draft is None:
+                    return workflow_error('Event draft was not found.', 404)
+                payload = request.POST.copy()
+                payload['publication_status'] = Event.PUBLICATION_DRAFT
+                try:
+                    draft = save_criteria_event(
+                        payload,
+                        request.user,
+                        files=request.FILES,
+                        instance=draft,
+                    )
+                except CriteriaEventValidationError as exc:
+                    return workflow_error(str(exc))
+                return JsonResponse({
+                    'success': True,
+                    'event': serialize_criteria_event(draft),
+                })
+
             event_pk = request.POST.get('event_id')
             event = _criteria_event_queryset().filter(pk=event_pk).first()
             if event is None:
@@ -3365,6 +3390,7 @@ def admin_criteria_events(request, event_id=None):
                         'judging_description': criterion.judging_description,
                         'tie_breaker_priority': criterion.tie_breaker_priority,
                         'display_order': criterion.display_order,
+                        'subcriteria': subcriteria_data(criterion),
                     } for criterion in category.criteria.all()],
                 } for category in event.scoring_categories.prefetch_related('criteria').all()]
                 return JsonResponse({'success': True, 'categories': categories})
@@ -3441,6 +3467,8 @@ def admin_criteria_events(request, event_id=None):
                 category = event.scoring_categories.filter(pk=request.POST.get('category_id')).first()
                 if category is None:
                     return workflow_error('Category was not found for this Event.', 404)
+                if category.score_submissions.exists() or category.criteria.filter(subcriteria__scores__isnull=False).exists():
+                    return workflow_error('This segment has saved scores and cannot be deleted.')
                 category.delete()
                 return JsonResponse({'success': True})
             if workflow_action == 'list_criteria':
@@ -3455,6 +3483,7 @@ def admin_criteria_events(request, event_id=None):
                     'judging_description': criterion.judging_description,
                     'tie_breaker_priority': criterion.tie_breaker_priority,
                     'display_order': criterion.display_order,
+                    'subcriteria': subcriteria_data(criterion),
                 } for criterion in category.criteria.all()]
                 return JsonResponse({'success': True, 'category': {
                     'id': category.id, 'name': category.name, 'judge_mode': category.judge_mode,
@@ -3495,11 +3524,19 @@ def admin_criteria_events(request, event_id=None):
                         f'Criteria weights for "{category.name}" cannot exceed 100%. '
                         f'Current total would be {float(total)}%.'
                     )
-                criterion = EventScoringCriterion.objects.create(
-                    category=category, name=name[:120], weight_percent=weight,
-                    min_score=min_score, max_score=max_score, judging_description=description[:1000],
-                    tie_breaker_priority=tie_priority, display_order=order,
-                )
+                try:
+                    children = parse_subcriteria(request.POST['subcriteria']) if 'subcriteria' in request.POST else []
+                except ValueError as exc:
+                    return workflow_error(str(exc))
+                if request.POST.get('detailed_subcriteria') == '1' and not children:
+                    return workflow_error('Add at least one subcriterion or turn off detailed subcriteria.')
+                with transaction.atomic():
+                    criterion = EventScoringCriterion.objects.create(
+                        category=category, name=name[:120], weight_percent=weight,
+                        min_score=min_score, max_score=max_score, judging_description=description[:1000],
+                        tie_breaker_priority=tie_priority, display_order=order,
+                    )
+                    save_subcriteria(criterion, children)
                 return JsonResponse({'success': True, 'criterion': {
                     'id': criterion.id, 'name': criterion.name, 'weight_percent': float(criterion.weight_percent),
                     'min_score': float(criterion.min_score),
@@ -3507,6 +3544,7 @@ def admin_criteria_events(request, event_id=None):
                     'judging_description': criterion.judging_description,
                     'tie_breaker_priority': criterion.tie_breaker_priority,
                     'display_order': criterion.display_order,
+                    'subcriteria': subcriteria_data(criterion),
                 }})
             if workflow_action == 'update_criterion':
                 category = event.scoring_categories.filter(pk=request.POST.get('category_id')).first()
@@ -3542,19 +3580,35 @@ def admin_criteria_events(request, event_id=None):
                         f'Criteria weights for "{category.name}" cannot exceed 100%. '
                         f'Current total would be {float(total)}%.'
                     )
-                criterion.name, criterion.weight_percent = name[:120], weight
-                criterion.min_score = min_score
-                criterion.max_score, criterion.display_order = max_score, order
-                if 'judging_description' in request.POST:
-                    criterion.judging_description = description[:1000]
-                criterion.tie_breaker_priority = tie_priority
-                criterion.save()
+                try:
+                    children = parse_subcriteria(request.POST['subcriteria']) if 'subcriteria' in request.POST else None
+                except ValueError as exc:
+                    return workflow_error(str(exc))
+                if request.POST.get('detailed_subcriteria') == '1' and not children:
+                    return workflow_error('Add at least one subcriterion or turn off detailed subcriteria.')
+                if criterion.score_submissions.exists() and (criterion.max_score != max_score or (children is not None and not children and criterion.subcriteria.exists()) or (children and not criterion.subcriteria.exists())):
+                    return workflow_error('This criterion has saved scores; its score structure cannot be removed or resized.')
+                try:
+                    with transaction.atomic():
+                        criterion.name, criterion.weight_percent = name[:120], weight
+                        criterion.min_score = min_score
+                        criterion.max_score, criterion.display_order = max_score, order
+                        if 'judging_description' in request.POST:
+                            criterion.judging_description = description[:1000]
+                        criterion.tie_breaker_priority = tie_priority
+                        criterion.save()
+                        if children is not None:
+                            save_subcriteria(criterion, children)
+                except ValueError as exc:
+                    return workflow_error(str(exc))
                 return JsonResponse({'success': True})
             if workflow_action == 'delete_criterion':
                 category = event.scoring_categories.filter(pk=request.POST.get('category_id')).first()
                 criterion = category.criteria.filter(pk=request.POST.get('criterion_id')).first() if category else None
                 if criterion is None:
                     return workflow_error('Criterion was not found for this category.', 404)
+                if criterion.score_submissions.exists() or criterion.subcriteria.filter(scores__isnull=False).exists():
+                    return workflow_error('This criterion has saved scores and cannot be deleted.')
                 criterion.delete()
                 return JsonResponse({'success': True})
             return workflow_error('Unsupported workflow action.')

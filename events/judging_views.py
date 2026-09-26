@@ -1,5 +1,7 @@
 import uuid
+from decimal import Decimal, InvalidOperation
 
+from django.db import transaction
 from django.utils import timezone
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
@@ -15,6 +17,7 @@ from .judging_serializers import (
     SubmitScoresSerializer,
 )
 from .models import Candidate, Criterion, Event, EventCategory, JudgeActivityLog, JudgeScore, JudgingEvent
+from .subcriteria import save_judge_subscores, validated_child_scores
 
 
 def _client_ip(request):
@@ -45,11 +48,13 @@ class EventCategoryViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class JudgingEventViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = JudgingEvent.objects.all()
+    queryset = JudgingEvent.objects.prefetch_related('criteria__subcriteria', 'candidates')
     permission_classes = [IsJudgeUser]
 
     def get_queryset(self):
-        qs = JudgingEvent.objects.exclude(portal_event__status=Event.STATUS_INACTIVE)
+        qs = JudgingEvent.objects.exclude(
+            portal_event__status=Event.STATUS_INACTIVE,
+        ).prefetch_related('criteria__subcriteria', 'candidates')
         assigned = qs.filter(assigned_judges=self.request.user).distinct()
         if assigned.exists():
             return assigned
@@ -84,26 +89,48 @@ class JudgingEventViewSet(viewsets.ReadOnlyModelViewSet):
         verification_id = str(uuid.uuid4())[:13].upper()
         submitted_at = timezone.now()
         created_scores = []
-
+        prepared = []
+        seen_criteria = set()
         for score_item in scores_data:
             try:
                 criterion = Criterion.objects.get(id=score_item['criterion_id'], event=event)
-            except Criterion.DoesNotExist:
-                continue
+            except (Criterion.DoesNotExist, ValueError, TypeError):
+                return Response({'detail': 'Criterion not found for this event.'}, status=status.HTTP_400_BAD_REQUEST)
+            if criterion.id in seen_criteria:
+                return Response({'detail': 'Each criterion may be submitted once.'}, status=status.HTTP_400_BAD_REQUEST)
+            seen_criteria.add(criterion.id)
+            children = list(criterion.subcriteria.all())
+            if children:
+                try:
+                    child_pairs, score_value = validated_child_scores(criterion, score_item.get('subcriteria'))
+                except ValueError as exc:
+                    return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+                if any(score.as_tuple().exponent < -2 for _, score in child_pairs):
+                    return Response({'detail': 'Subcriterion scores may have at most two decimal places.'},
+                                    status=status.HTTP_400_BAD_REQUEST)
+            else:
+                try:
+                    score_value = Decimal(str(score_item['score']))
+                except (KeyError, TypeError, ValueError, InvalidOperation):
+                    return Response({'detail': 'A numeric criterion score is required.'}, status=status.HTTP_400_BAD_REQUEST)
+                if not score_value.is_finite():
+                    return Response({'detail': 'A finite criterion score is required.'}, status=status.HTTP_400_BAD_REQUEST)
+                if score_value.as_tuple().exponent < -2:
+                    return Response({'detail': 'Criterion scores may have at most two decimal places.'},
+                                    status=status.HTTP_400_BAD_REQUEST)
+                score_value = min(max(score_value, Decimal('0')), criterion.max_score)
+            prepared.append((criterion, score_value, score_item.get('subcriteria') if children else None))
 
-            score_value = min(max(float(score_item['score']), 0), float(criterion.max_score))
-            judge_score, _ = JudgeScore.objects.update_or_create(
-                judge=request.user,
-                candidate=candidate,
-                criterion=criterion,
-                defaults={
-                    'score': score_value,
-                    'is_locked': True,
-                    'submitted_at': submitted_at,
-                    'verification_id': verification_id,
-                },
-            )
-            created_scores.append(judge_score)
+        with transaction.atomic():
+            for criterion, score_value, children in prepared:
+                judge_score, _ = JudgeScore.objects.update_or_create(
+                    judge=request.user, candidate=candidate, criterion=criterion,
+                    defaults={'score': score_value, 'is_locked': True,
+                              'submitted_at': submitted_at, 'verification_id': verification_id},
+                )
+                if children is not None:
+                    save_judge_subscores(judge_score, children)
+                created_scores.append(judge_score)
 
         total_score = 0
         breakdown = []
@@ -116,6 +143,9 @@ class JudgingEventViewSet(viewsets.ReadOnlyModelViewSet):
                 'max_score': float(js.criterion.max_score),
                 'weight': float(js.criterion.weight_percent),
                 'weighted_score': round(weighted, 2),
+                'subcriteria': [{'id': row.subcriterion_id, 'name': row.subcriterion.name,
+                                 'score': float(row.score), 'max_score': float(row.subcriterion.max_score)}
+                                for row in js.subcriterion_scores.select_related('subcriterion').all()],
             })
 
         from core.views import get_assignment_role

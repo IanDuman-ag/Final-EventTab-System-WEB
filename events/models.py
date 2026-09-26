@@ -115,10 +115,12 @@ class Event(models.Model):
     PARTICIPATION_TEAM = 'team'
     PARTICIPATION_GROUP = 'group'
     PARTICIPATION_INDIVIDUAL = 'individual'
+    PARTICIPATION_PAIR = 'pair'
     PARTICIPATION_CHOICES = [
         (PARTICIPATION_TEAM, 'Team'),
         (PARTICIPATION_GROUP, 'Group'),
         (PARTICIPATION_INDIVIDUAL, 'Individual'),
+        (PARTICIPATION_PAIR, 'Pair'),
     ]
     FORMAT_SINGLE = 'single_performance'
     FORMAT_MULTIPLE_STAGE = 'multiple_stage'
@@ -297,6 +299,24 @@ class EventScoringCriterion(models.Model):
         return f'{self.category.name} · {self.name}'
 
 
+class EventScoringSubcriterion(models.Model):
+    criterion = models.ForeignKey(EventScoringCriterion, on_delete=models.CASCADE, related_name='subcriteria')
+    name = models.CharField(max_length=120)
+    max_score = models.DecimalField(max_digits=7, decimal_places=2)
+    display_order = models.PositiveIntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['display_order', 'id']
+        constraints = [
+            models.UniqueConstraint(fields=['criterion', 'display_order'], name='unique_event_subcriterion_order'),
+        ]
+
+    def __str__(self):
+        return f'{self.criterion.name} · {self.name}'
+
+
 class CriteriaScoreSubmission(models.Model):
     SOURCE_MOBILE = 'MOBILE'
     SOURCE_OCR = 'OCR'
@@ -364,6 +384,20 @@ class CriteriaScoreSubmission(models.Model):
 
     def __str__(self):
         return f'{self.event.name} - {self.assigned_round_id} - judge {self.judge_id}'
+
+
+class CriteriaSubcriterionScore(models.Model):
+    submission = models.ForeignKey(CriteriaScoreSubmission, on_delete=models.CASCADE, related_name='subcriterion_scores')
+    subcriterion = models.ForeignKey(EventScoringSubcriterion, on_delete=models.PROTECT, related_name='scores')
+    raw_score = models.DecimalField(max_digits=9, decimal_places=4)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['subcriterion__display_order', 'id']
+        constraints = [
+            models.UniqueConstraint(fields=['submission', 'subcriterion'], name='unique_submission_subcriterion_score'),
+        ]
 
 
 class Department(models.Model):
@@ -453,6 +487,51 @@ class RegistryCandidate(models.Model):
 
     def __str__(self):
         return f'#{self.number} {self.name}'
+
+
+class CriteriaEventEntry(models.Model):
+    TYPE_INDIVIDUAL = 'individual'
+    TYPE_PAIR = 'pair'
+    TYPE_TEAM = 'team'
+    TYPE_CHOICES = [(TYPE_INDIVIDUAL, 'Individual'), (TYPE_PAIR, 'Pair'), (TYPE_TEAM, 'Team / Group')]
+
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='criteria_entries')
+    entry_type = models.CharField(max_length=12, choices=TYPE_CHOICES)
+    display_name = models.CharField(max_length=420)
+    department = models.ForeignKey(Department, null=True, blank=True, on_delete=models.SET_NULL, related_name='criteria_event_entries')
+    source_individual = models.ForeignKey(RegistryCandidate, null=True, blank=True, on_delete=models.SET_NULL, related_name='criteria_event_entries')
+    source_team = models.ForeignKey(Team, null=True, blank=True, on_delete=models.SET_NULL, related_name='criteria_event_entries')
+    display_order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['display_order', 'id']
+        constraints = [
+            models.UniqueConstraint(fields=['event', 'display_order'], name='unique_criteria_entry_order'),
+            models.UniqueConstraint(fields=['event', 'source_individual'], condition=Q(source_individual__isnull=False), name='unique_event_individual_entry'),
+            models.UniqueConstraint(fields=['event', 'source_team'], condition=Q(source_team__isnull=False), name='unique_event_team_entry'),
+            # Nullable source links preserve a display snapshot if a historical
+            # registry row had already disappeared before the data migration.
+            models.CheckConstraint(condition=(Q(entry_type='individual', source_team__isnull=True) | Q(entry_type='team', source_individual__isnull=True) | Q(entry_type='pair', source_individual__isnull=True, source_team__isnull=True)), name='criteria_entry_source_shape'),
+        ]
+
+    def __str__(self):
+        return self.display_name
+
+
+class CriteriaEventEntryMember(models.Model):
+    entry = models.ForeignKey(CriteriaEventEntry, on_delete=models.CASCADE, related_name='member_links')
+    individual = models.ForeignKey(RegistryCandidate, on_delete=models.PROTECT, related_name='criteria_pair_memberships')
+    position = models.PositiveSmallIntegerField()
+
+    class Meta:
+        ordering = ['position', 'id']
+        constraints = [
+            models.UniqueConstraint(fields=['entry', 'individual'], name='unique_criteria_entry_member'),
+            models.UniqueConstraint(fields=['entry', 'position'], name='unique_criteria_entry_member_position'),
+            models.CheckConstraint(condition=Q(position__in=[1, 2]), name='criteria_entry_member_position_1_2'),
+        ]
 
 
 class BracketTeam(models.Model):
@@ -672,7 +751,7 @@ class Criterion(models.Model):
     event = models.ForeignKey(JudgingEvent, on_delete=models.CASCADE, related_name='criteria')
     name = models.CharField(max_length=100)
     description = models.CharField(max_length=200, blank=True)
-    max_score = models.DecimalField(max_digits=5, decimal_places=1)
+    max_score = models.DecimalField(max_digits=7, decimal_places=2)
     weight_percent = models.DecimalField(max_digits=5, decimal_places=1)
     order = models.PositiveIntegerField(default=0)
 
@@ -681,6 +760,21 @@ class Criterion(models.Model):
 
     def __str__(self):
         return f'{self.event.title} - {self.name}'
+
+
+class CriterionSubcriterion(models.Model):
+    criterion = models.ForeignKey(Criterion, on_delete=models.CASCADE, related_name='subcriteria')
+    name = models.CharField(max_length=120)
+    max_score = models.DecimalField(max_digits=7, decimal_places=2)
+    display_order = models.PositiveIntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['display_order', 'id']
+        constraints = [
+            models.UniqueConstraint(fields=['criterion', 'display_order'], name='unique_mobile_subcriterion_order'),
+        ]
 
 
 class Candidate(models.Model):
@@ -703,7 +797,7 @@ class JudgeScore(models.Model):
     judge = models.ForeignKey(User, on_delete=models.CASCADE, related_name='judge_scores')
     candidate = models.ForeignKey(Candidate, on_delete=models.CASCADE, related_name='scores')
     criterion = models.ForeignKey(Criterion, on_delete=models.CASCADE, related_name='scores')
-    score = models.DecimalField(max_digits=5, decimal_places=1)
+    score = models.DecimalField(max_digits=7, decimal_places=2)
     is_locked = models.BooleanField(default=False)
     submitted_at = models.DateTimeField(null=True, blank=True)
     verification_id = models.CharField(max_length=50, blank=True)
@@ -713,6 +807,20 @@ class JudgeScore(models.Model):
 
     def __str__(self):
         return f'{self.judge.username} - {self.candidate.name} - {self.criterion.name}: {self.score}'
+
+
+class JudgeSubcriterionScore(models.Model):
+    judge_score = models.ForeignKey(JudgeScore, on_delete=models.CASCADE, related_name='subcriterion_scores')
+    subcriterion = models.ForeignKey(CriterionSubcriterion, on_delete=models.PROTECT, related_name='scores')
+    score = models.DecimalField(max_digits=7, decimal_places=2)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['subcriterion__display_order', 'id']
+        constraints = [
+            models.UniqueConstraint(fields=['judge_score', 'subcriterion'], name='unique_judge_subcriterion_score'),
+        ]
 
 
 # ──────────────────────────────────────────────────────────────────

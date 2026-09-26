@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Criteria-Based Events · EventTab</title>
-  <link rel="stylesheet" href="{% static 'admindash/criteriabasedevent.css' %}?v=20260926b">
+  <link rel="stylesheet" href="{% static 'admindash/criteriabasedevent.css' %}?v=20260927a">
 </head>
 <body class="admin-dashboard-page admin-dashboard-v2 criteria-page match-events-page">
   <div class="dashboard-shell">
@@ -129,6 +129,8 @@
     <form method="post" id="wizard-form" action="{% url 'admin_criteria_events' %}" novalidate>
       {% csrf_token %}
       <input type="hidden" name="participant_ids" id="participant-ids" value="[]">
+      <input type="hidden" name="event_entries" id="event-entries" value="[]">
+      <input type="hidden" name="confirm_entry_replacement" id="confirm-entry-replacement" value="">
       <input type="hidden" name="rounds_config" id="rounds-config" value="[]">
       <input type="hidden" name="judging_criteria_config" id="criteria-config" value="[]">
       <input type="hidden" name="score_settings" id="score-settings" value="{}">
@@ -184,7 +186,8 @@
             <label>Participation Type
               <select name="participation_type" id="participation-type" required>
                 <option value="individual">Individual</option>
-                <option value="group">Group</option>
+                <option value="pair">Pair</option>
+                <option value="team">Team / Group</option>
               </select>
             </label>
             <label>Event Format
@@ -224,17 +227,22 @@
               {% for team in teams %}
               <label data-kind="group" data-department="{% if team.department %}{{ team.department.name }}{% endif %}" data-course="" data-search="{{ team.name|lower }} {{ team.code|lower }} {% if team.department %}{{ team.department.name|lower }}{% endif %}">
                 <input type="checkbox" class="participant-check" value="{{ team.id }}" data-name="{{ team.name }}">
-                <span><strong>{{ team.name }}</strong><small>{{ team.code }}{% if team.department %} · {{ team.department.name }}{% endif %}</small></span>
+                <span><strong>{{ team.name }}</strong><small>{{ team.code }}{% if team.department %} &middot; {{ team.department.name }}{% endif %}</small></span>
               </label>
               {% empty %}<p data-kind="team">No active teams available.</p>{% endfor %}
             </div>
             <div class="team-options criteria-hidden" id="candidate-options">
               {% for cand in candidates %}
-              <label data-kind="individual" data-department="{% if cand.department %}{{ cand.department.name }}{% endif %}" data-course="" data-search="{{ cand.name|lower }} {{ cand.number|lower }} {% if cand.department %}{{ cand.department.name|lower }}{% endif %}">
+              <label data-kind="individual" data-department-id="{{ cand.department_id|default:'' }}" data-department="{% if cand.department %}{{ cand.department.name }}{% endif %}" data-course="" data-search="{{ cand.name|lower }} {{ cand.number|lower }} {% if cand.department %}{{ cand.department.name|lower }}{% endif %}">
                 <input type="checkbox" class="participant-check" value="{{ cand.id }}" data-name="#{{ cand.number }} {{ cand.name }}">
-                <span><strong>#{{ cand.number }} {{ cand.name }}</strong><small>{% if cand.department %}{{ cand.department.name }}{% else %}Candidate{% endif %}</small></span>
+                <span><strong>#{{ cand.number }} {{ cand.name }}</strong><small>{% if cand.department %}{{ cand.department.name }}{% else %}Individual{% endif %}</small></span>
               </label>
-              {% empty %}<p data-kind="individual">No active candidates available.</p>{% endfor %}
+              {% empty %}<p data-kind="individual">No active individuals available.</p>{% endfor %}
+            </div>
+            <div class="criteria-hidden" id="pair-options">
+              <div id="pair-entry-list"></div>
+              <p id="pair-entry-status" class="field-hint" aria-live="polite"></p>
+              <button type="button" class="match-secondary" id="add-pair-entry">+ Add Pair</button>
             </div>
           </fieldset>
           <fieldset hidden>
@@ -298,8 +306,9 @@
 
         <dialog id="round-modal" class="judging-modal" aria-labelledby="round-modal-title"><div class="judging-modal-body"><header><h3 id="round-modal-title">Add Round</h3><button type="button" data-close-judging-modal aria-label="Close">&times;</button></header><input type="hidden" id="simple-round-edit-id"><label>Round Name<input id="simple-round-name" maxlength="80" placeholder="Preliminary Round"></label><label>Advancement<select id="simple-round-advancement"><option value="advance_all">All participants continue</option><option value="top_ranking">Top participants advance</option><option value="final">Final round / no advancement</option></select></label><label id="simple-round-qualifiers-wrap" hidden>Number to Advance<input id="simple-round-qualifiers" type="number" min="1" step="1" value="1"></label><footer><button type="button" data-close-judging-modal class="match-secondary">Cancel</button><button type="button" id="simple-round-save" class="match-primary">Save Round</button></footer></div></dialog>
         <dialog id="segment-modal" class="judging-modal" aria-labelledby="segment-modal-title"><div class="judging-modal-body"><header><h3 id="segment-modal-title">Add Segment</h3><button type="button" data-close-judging-modal aria-label="Close">&times;</button></header><input type="hidden" id="simple-segment-edit-id"><label>Segment Name<input id="simple-segment-name" maxlength="120" placeholder="Production Number"></label><footer><button type="button" data-close-judging-modal class="match-secondary">Cancel</button><button type="button" id="simple-segment-save" class="match-primary">Save Segment</button></footer></div></dialog>
-        <dialog id="criterion-modal" class="judging-modal" aria-labelledby="criterion-modal-title"><div class="judging-modal-body"><header><h3 id="criterion-modal-title">Add Criterion</h3><button type="button" data-close-judging-modal aria-label="Close">&times;</button></header><input type="hidden" id="simple-criterion-edit-id"><input type="hidden" id="simple-criterion-category-id"><label>Criterion Name<input id="simple-criterion-name" maxlength="120" placeholder="Stage Presence"></label><label>Weight %<input id="simple-criterion-weight" type="number" min="0" max="100" step="0.01"></label><label>Max Score<input id="simple-criterion-max" type="number" min="1" step="0.01" value="100"></label><footer><button type="button" data-close-judging-modal class="match-secondary">Cancel</button><button type="button" id="simple-criterion-save" class="match-primary">Save Criterion</button></footer></div></dialog>
+        <dialog id="criterion-modal" class="judging-modal" aria-labelledby="criterion-modal-title"><div class="judging-modal-body"><header><h3 id="criterion-modal-title">Add Criterion</h3><button type="button" data-close-judging-modal aria-label="Close">&times;</button></header><input type="hidden" id="simple-criterion-edit-id"><input type="hidden" id="simple-criterion-category-id"><label>Criterion Name<input id="simple-criterion-name" maxlength="120" placeholder="Stage Presence"></label><label>Weight %<input id="simple-criterion-weight" type="number" min="0" max="100" step="0.01"></label><label>Max Score<input id="simple-criterion-max" type="number" min="1" step="0.01" value="100"></label><label class="judging-check"><input id="simple-criterion-detailed" type="checkbox"> Add detailed subcriteria</label><div id="simple-subcriteria-section" class="judging-subcriteria-editor" hidden><h4>Subcriteria</h4><div id="simple-subcriteria-rows"></div><button type="button" id="simple-subcriterion-add" class="match-secondary">+ Add Subcriterion</button><p id="simple-subcriteria-total" aria-live="polite"></p></div><footer><button type="button" data-close-judging-modal class="match-secondary">Cancel</button><button type="button" id="simple-criterion-save" class="match-primary">Save Criterion</button></footer></div></dialog>
         <dialog id="judging-delete-modal" class="judging-modal judging-delete-modal" aria-labelledby="judging-delete-title" aria-describedby="judging-delete-message"><div class="judging-modal-body"><header><h3 id="judging-delete-title">Delete item?</h3><button type="button" data-close-judging-modal aria-label="Close">&times;</button></header><p id="judging-delete-message">This action cannot be undone.</p><footer><button type="button" data-close-judging-modal class="match-secondary">Cancel</button><button type="button" id="judging-delete-confirm" class="judging-danger-action">Delete</button></footer></div></dialog>
+        <dialog id="participation-change-modal" class="judging-modal" aria-labelledby="participation-change-title" aria-describedby="participation-change-message"><div class="judging-modal-body"><header><h3 id="participation-change-title">Change participation type?</h3><button type="button" id="participation-change-close" aria-label="Close">&times;</button></header><p id="participation-change-message">Changing the participation type will remove the currently selected participants for this event. Continue?</p><footer><button type="button" id="participation-change-cancel" class="match-secondary">Cancel</button><button type="button" id="participation-change-confirm" class="match-primary">Continue</button></footer></div></dialog>
 
         <section class="wizard-panel criteria-hidden" data-legacy-step="3" hidden inert aria-hidden="true">
           <div class="round-setup">
@@ -887,6 +896,6 @@
     <option value="Production Number"></option>
     <option value="Question and Answer"></option>
   </datalist>
-  <script src="{% static 'admindash/criteriabasedevent.js' %}?v=20260926c"></script>
+  <script src="{% static 'admindash/criteriabasedevent.js' %}?v=20260927b"></script>
 </body>
 </html>

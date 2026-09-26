@@ -15,9 +15,15 @@ class EventCategorySerializer(serializers.ModelSerializer):
 
 
 class CriterionSerializer(serializers.ModelSerializer):
+    subcriteria = serializers.SerializerMethodField()
+
     class Meta:
         model = Criterion
-        fields = ['id', 'name', 'description', 'max_score', 'weight_percent', 'order']
+        fields = ['id', 'name', 'description', 'max_score', 'weight_percent', 'order', 'subcriteria']
+
+    def get_subcriteria(self, obj):
+        return [{'id': row.id, 'name': row.name, 'max_score': str(row.max_score),
+                 'display_order': row.display_order} for row in obj.subcriteria.all()]
 
 
 class CandidateSerializer(serializers.ModelSerializer):
@@ -64,14 +70,20 @@ class JudgingEventDetailSerializer(serializers.ModelSerializer):
 class JudgeScoreSerializer(serializers.ModelSerializer):
     criterion_name = serializers.CharField(source='criterion.name', read_only=True)
     criterion_max = serializers.DecimalField(
-        source='criterion.max_score', max_digits=5, decimal_places=1, read_only=True,
+        source='criterion.max_score', max_digits=7, decimal_places=2, read_only=True,
     )
+    subcriterion_scores = serializers.SerializerMethodField()
+
+    def get_subcriterion_scores(self, obj):
+        return [{'subcriterion_id': row.subcriterion_id, 'name': row.subcriterion.name,
+                 'score': str(row.score), 'max_score': str(row.subcriterion.max_score)}
+                for row in obj.subcriterion_scores.select_related('subcriterion').all()]
 
     class Meta:
         model = JudgeScore
         fields = [
             'id', 'criterion', 'criterion_name', 'criterion_max',
-            'score', 'is_locked', 'submitted_at', 'verification_id',
+            'score', 'subcriterion_scores', 'is_locked', 'submitted_at', 'verification_id',
         ]
 
 
@@ -81,6 +93,6 @@ class SubmitScoresSerializer(serializers.Serializer):
 
     def validate_scores(self, value):
         for item in value:
-            if 'criterion_id' not in item or 'score' not in item:
-                raise serializers.ValidationError('Each score must have criterion_id and score.')
+            if 'criterion_id' not in item or ('score' not in item and 'subcriteria' not in item):
+                raise serializers.ValidationError('Each score needs criterion_id and a score or subcriteria scores.')
         return value

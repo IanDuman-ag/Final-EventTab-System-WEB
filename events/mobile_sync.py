@@ -11,6 +11,7 @@ from .models import (
     BracketTeam,
     Candidate,
     Criterion,
+    CriterionSubcriterion,
     Event,
     EventCategory,
     JudgingEvent,
@@ -128,7 +129,7 @@ def _sync_criteria_from_config(judging_event, criteria_config):
             max_score = float(item.get('max_score') or 100)
         except (TypeError, ValueError):
             max_score = 100
-        Criterion.objects.create(
+        criterion = Criterion.objects.create(
             event=judging_event,
             name=name or f'Criterion {order + 1}',
             description=str(item.get('description') or '')[:200],
@@ -136,6 +137,15 @@ def _sync_criteria_from_config(judging_event, criteria_config):
             weight_percent=weight,
             order=int(item.get('order') or order),
         )
+        for child_order, child in enumerate(item.get('subcriteria') or [], 1):
+            if not isinstance(child, dict):
+                continue
+            CriterionSubcriterion.objects.create(
+                criterion=criterion,
+                name=str(child.get('name') or '').strip()[:120],
+                max_score=child.get('max_score') or 0,
+                display_order=child_order,
+            )
 
 
 def _sync_criteria(judging_event, scoring_criteria_text):
@@ -173,6 +183,13 @@ def _sync_candidates(judging_event, event, explicit_candidates=None):
         return
 
     judging_event.candidates.all().delete()
+    entries = list(event.criteria_entries.select_related('department').prefetch_related('member_links__individual')) if event.scoring_method == 'criteria' else []
+    if entries:
+        for index, entry in enumerate(entries, start=1):
+            Candidate.objects.create(event=judging_event, name=entry.display_name, number=index,
+                                     department=entry.department.name if entry.department else '',
+                                     description=' + '.join(link.individual.name for link in entry.member_links.all()))
+        return
     teams = list(event.bracket_teams.order_by('seed', 'name'))
     if teams:
         for index, team in enumerate(teams, start=1):

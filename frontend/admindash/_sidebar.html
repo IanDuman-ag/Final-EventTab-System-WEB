@@ -84,13 +84,13 @@
         <svg class="v2-nav-chevron" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41Z"/></svg>
       </button>
       <div class="v2-nav-sub" id="participants-nav-sub">
+        <a class="v2-nav-sub-link{% if active == 'candidates' %} active{% endif %}" href="{% url 'admin_candidates' %}" {% if active == 'candidates' %}aria-current="page"{% endif %}>
+          <span class="v2-nav-sub-dot" aria-hidden="true"></span>
+          <span>Individuals</span>
+        </a>
         <a class="v2-nav-sub-link{% if active == 'teams' %} active{% endif %}" href="{% url 'admin_teams' %}" {% if active == 'teams' %}aria-current="page"{% endif %}>
           <span class="v2-nav-sub-dot" aria-hidden="true"></span>
           <span>Teams</span>
-        </a>
-        <a class="v2-nav-sub-link{% if active == 'candidates' %} active{% endif %}" href="{% url 'admin_candidates' %}" {% if active == 'candidates' %}aria-current="page"{% endif %}>
-          <span class="v2-nav-sub-dot" aria-hidden="true"></span>
-          <span>Candidates</span>
         </a>
       </div>
     </div>

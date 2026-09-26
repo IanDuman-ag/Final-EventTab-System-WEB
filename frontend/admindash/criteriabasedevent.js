@@ -17,6 +17,8 @@
   var roundDragId = null;
   var roundAdjustmentWarning = '';
   var events = [];
+  var pairEntries = [];
+  var lastParticipationType = 'individual';
   var scoringWorkflow = {
     eventId: null, eventName: '', categories: [], selectedCategoryId: null,
     editingCategoryId: null, editingCriterionId: null, criteria: [],
@@ -124,6 +126,8 @@
     return participationType() === 'individual';
   }
 
+  function isPairParticipation() { return participationType() === 'pair'; }
+
   function eventFormat() {
     var picker = $('#event-format-select');
     if (picker) return picker.value || 'single_performance';
@@ -152,11 +156,11 @@
   }
 
   function participantCount() {
-    return collectParticipants().length;
+    return isPairParticipation() ? pairEntries.length : collectParticipants().length;
   }
 
   function participantNoun() {
-    return isIndividualParticipation() ? 'participants' : 'groups';
+    return isPairParticipation() ? 'pairs' : (isIndividualParticipation() ? 'participants' : 'teams');
   }
 
   function participantNounLower() {
@@ -476,8 +480,9 @@
     if (!draft.is_final && draft.round_type !== 'final') {
       var count = roundParticipantCount(roundFormIndex());
       if (count < 1) {
-        return participationType() === 'individual' ? 'Select at least one candidate.' : 'Select at least one participant or team.';
+        return participationType() === 'individual' ? 'Select at least one individual.' : (isPairParticipation() ? 'Add at least one pair.' : 'Select at least one team.');
       }
+      if (isPairParticipation() && pairEntries.some(function (row) { return !row.member_1_id || !row.member_2_id || String(row.member_1_id) === String(row.member_2_id); })) return 'Each pair requires two different individuals.';
       if (isAdvanceAllRound(draft, false)) {
         draft.qualifiers = count;
       } else {
@@ -680,11 +685,12 @@
 
   function syncParticipantPanels() {
     var kind = participationType();
-    $('#team-options').classList.toggle('criteria-hidden', kind === 'individual');
+    $('#team-options').classList.toggle('criteria-hidden', kind !== 'team');
     $('#candidate-options').classList.toggle('criteria-hidden', kind !== 'individual');
+    $('#pair-options').classList.toggle('criteria-hidden', kind !== 'pair');
     var legend = $('#participant-legend-label');
     if (legend) {
-      legend.textContent = kind === 'individual' ? 'Participating Individuals' : 'Participating Groups';
+      legend.textContent = kind === 'individual' ? 'Participating Individuals' : (kind === 'pair' ? 'Pair Entries' : 'Participating Teams / Groups');
     }
     $$('#team-options .participant-check').forEach(function (box) {
       if (kind === 'individual') box.checked = false;
@@ -694,6 +700,47 @@
     });
     updateParticipantCount();
     refreshParticipantFilters();
+  }
+
+  function individualOptions(selected, excluded, departmentId) {
+    return '<option value="">Select individual</option>' + $$('#candidate-options .participant-check').map(function (box) {
+      var label = box.closest('label');
+      if (departmentId && String(label.dataset.departmentId || '') !== String(departmentId) && String(box.value) !== String(selected)) return '';
+      var disabled = excluded.indexOf(String(box.value)) !== -1 && String(box.value) !== String(selected);
+      return '<option value="' + escapeAttr(box.value) + '"' + (String(box.value) === String(selected) ? ' selected' : '') + (disabled ? ' disabled' : '') + '>' + escapeHtml(box.dataset.name) + '</option>';
+    }).join('');
+  }
+
+  function pairDepartmentOptions(selected) {
+    var departments = {};
+    $$('#candidate-options label[data-department-id]').forEach(function (label) {
+      if (label.dataset.departmentId) departments[label.dataset.departmentId] = label.dataset.department;
+    });
+    return '<option value="">All departments</option>' + Object.keys(departments).sort(function (a, b) { return departments[a].localeCompare(departments[b]); }).map(function (id) {
+      return '<option value="' + escapeAttr(id) + '"' + (String(id) === String(selected) ? ' selected' : '') + '>' + escapeHtml(departments[id]) + '</option>';
+    }).join('');
+  }
+
+  function renderPairEntries(focusIndex, focusField) {
+    var used = [];
+    pairEntries.forEach(function (row) { if (row.member_1_id) used.push(String(row.member_1_id)); if (row.member_2_id) used.push(String(row.member_2_id)); });
+    $('#pair-entry-list').innerHTML = pairEntries.map(function (row, index) {
+      var incompatible = row.department_id && [row.member_1_id, row.member_2_id].some(function (selected) {
+        var label = selected && $('#candidate-options .participant-check[value="' + selected + '"]')?.closest('label');
+        return label && String(label.dataset.departmentId || '') !== String(row.department_id);
+      });
+      return '<article class="pair-entry-card" data-pair-index="' + index + '"><header><strong>Pair ' + (index + 1) + '</strong><button type="button" data-remove-pair>Remove Pair</button></header>' +
+        '<label class="pair-department">Department (optional)<select data-pair-department>' + pairDepartmentOptions(row.department_id) + '</select></label>' +
+        '<label>Member 1<select data-pair-member="1">' + individualOptions(row.member_1_id, used, row.department_id) + '</select></label>' +
+        '<label>Member 2<select data-pair-member="2">' + individualOptions(row.member_2_id, used, row.department_id) + '</select></label>' +
+        '<small' + (incompatible ? ' class="pair-entry-error" role="alert"' : '') + '>' + (incompatible ? 'Choose both members from the selected department.' : 'One competition entry; judges submit one score sheet.') + '</small></article>';
+    }).join('');
+    $('#pair-entry-status').textContent = pairEntries.length ? pairEntries.length + ' pair ' + (pairEntries.length === 1 ? 'entry' : 'entries') + ' configured.' : 'Add a pair to begin.';
+    updateParticipantCount();
+    if (focusIndex != null && focusField) {
+      var focusTarget = $('#pair-entry-list [data-pair-index="' + focusIndex + '"] [' + focusField + ']');
+      if (focusTarget) { focusTarget.focus(); }
+    }
   }
 
   function visibleParticipantBoxes() {
@@ -760,6 +807,10 @@
   }
 
   function updateParticipantCount() {
+    if (isPairParticipation()) {
+      $('#selected-participant-count').textContent = pairEntries.length + ' pair' + (pairEntries.length === 1 ? '' : 's') + ' added';
+      return;
+    }
     var panel = isIndividualParticipation() ? '#candidate-options' : '#team-options';
     var count = $$(panel + ' .participant-check:checked').length;
     $('#selected-participant-count').textContent = count + ' participants selected';
@@ -1006,6 +1057,7 @@
   }
 
   function collectParticipants() {
+    if (isPairParticipation()) return pairEntries.map(function (_, index) { return index + 1; });
     var panel = isIndividualParticipation() ? '#candidate-options' : '#team-options';
     return $$(panel + ' .participant-check:checked').map(function (box) {
       return Number(box.value);
@@ -1122,14 +1174,6 @@
     $('#official-category-total').textContent = 'Official categories: ' + total + '% of 100% configured.';
   }
 
-  function categoryOverallWeightTotal() {
-    return scoringWorkflow.categories.filter(function (row) {
-      return (row.purpose || 'official') === 'official';
-    }).reduce(function (sum, row) {
-      return sum + (Number(row.overall_weight_percent) || 0);
-    }, 0);
-  }
-
   function roundKeyFor(row, index) {
     return String((row && (row.id || row.stage_number || row.name)) || (index + 1));
   }
@@ -1159,10 +1203,6 @@
       if (total > 100) return 'Official categories in this round exceed 100% by ' + roundWeight(total - 100) + '%.';
     }
     return '';
-  }
-
-  function categoryTargetWeight(category, categoryCount, eventWeightTotal) {
-    return Number(category.overall_weight_percent) || 0;
   }
 
   function criteriaWeightTotal(categoryRow) {
@@ -1206,47 +1246,35 @@
     );
   }
 
-  function absoluteCriterionEventWeight(criterion, criteriaCount, localSum, categoryWeight) {
-    var local = Number(criterion.weight_percent) || 0;
-    if (Math.abs(localSum) < 0.01) return 0;
-    return roundWeight((local / localSum) * categoryWeight);
-  }
-
   function syncCriteriaFromScoringWorkflow() {
-    // Adapt category-local weights for the legacy flat mobile payload.
+    // Keep segment-local criterion weights intact in the compatibility payload.
+    // Segment and round IDs let the server validate each segment independently.
     var flat = [];
     var cats = scoringWorkflow.categories;
-    var eventWeightTotal = categoryOverallWeightTotal();
     cats.filter(function (category) {
       return (category.purpose || 'official') === 'official';
     }).forEach(function (category) {
-      var categoryWeight = categoryTargetWeight(category, cats.length, eventWeightTotal);
       var rows = category.criteria || [];
-      var localSum = criteriaWeightTotal(category);
       rows.forEach(function (criterion) {
         flat.push({
           id: 'esc_' + criterion.id,
           name: criterion.name || '',
           description: category.name || '',
-          weight: absoluteCriterionEventWeight(criterion, rows.length, localSum, categoryWeight),
+          weight: Number(criterion.weight_percent) || 0,
           max_score: criterion.max_score != null ? Number(criterion.max_score) : 100,
+          subcriteria: criterion.subcriteria || [],
+          segment_id: String(category.id),
+          segment_name: category.name || '',
+          round_id: categoryRoundKey(category),
         });
       });
     });
-    if (flat.length) {
-      var total = roundWeight(flat.reduce(function (sum, row) { return sum + Number(row.weight); }, 0));
-      var drift = roundWeight(100 - total);
-      if (Math.abs(drift) <= 0.15 && Math.abs(drift) > 0.001) {
-        flat[flat.length - 1].weight = roundWeight(flat[flat.length - 1].weight + drift);
-      }
-      criteria = flat;
-    }
+    if (flat.length) criteria = flat;
   }
 
   function updateCriteriaWeightMeter(category, criteriaRows) {
     var meter = $('#scoring-criterion-total');
     if (!meter) return;
-    var eventWeightTotal = categoryOverallWeightTotal();
     var categoryWeight = category ? 100 : 0;
     var total = roundWeight((criteriaRows || []).reduce(function (sum, row) {
       return sum + (Number(row.weight_percent) || 0);
@@ -1329,12 +1357,16 @@
     var host = $('#judging-segment-list');
     host.innerHTML = rows.map(function (category) {
       var total = criteriaWeightTotal(category);
+      var maximumTotal = (category.criteria || []).reduce(function (sum, criterion) { return sum + (Number(criterion.max_score) || 0); }, 0);
       var valid = category.criteria && category.criteria.length && Math.abs(total - 100) < 0.01;
       var criteriaRows = (category.criteria || []).map(function (criterion, index) {
-        return '<tr><td>' + (index + 1) + '</td><td>' + escapeHtml(criterion.name) + '</td><td>' + (Number(criterion.weight_percent) || 0) + '</td><td>' + (Number(criterion.max_score) || 100) + '</td><td><button type="button" data-simple-criterion-edit="' + criterion.id + '" data-category-id="' + category.id + '">Edit</button><button type="button" class="danger" data-simple-criterion-delete="' + criterion.id + '" data-category-id="' + category.id + '">Delete</button></td></tr>';
+        var children = criterion.subcriteria || [];
+        var toggle = children.length ? '<button type="button" class="judging-criterion-toggle" data-subcriteria-toggle="' + criterion.id + '" aria-expanded="false" aria-label="Show subcriteria for ' + escapeAttr(criterion.name) + '">&#9656;</button>' : '';
+        var parent = '<tr><td>' + (index + 1) + '</td><td>' + toggle + escapeHtml(criterion.name) + '</td><td>' + (Number(criterion.weight_percent) || 0) + '</td><td>' + (Number(criterion.max_score) || 100) + '</td><td><button type="button" data-simple-criterion-edit="' + criterion.id + '" data-category-id="' + category.id + '">Edit</button><button type="button" class="danger" data-simple-criterion-delete="' + criterion.id + '" data-category-id="' + category.id + '">Delete</button></td></tr>';
+        return parent + children.map(function (child) { return '<tr class="judging-subcriterion-row" data-subcriterion-parent="' + criterion.id + '" hidden><td></td><td>' + escapeHtml(child.name) + '</td><td>—</td><td>' + Number(child.max_score) + '</td><td></td></tr>'; }).join('');
       }).join('');
       return '<details class="judging-segment" open><summary><strong>' + escapeHtml(category.name) + '</strong><span class="weight-state ' + (valid ? 'is-valid' : 'is-invalid') + '">' + (valid ? '&#10003; ' : '&#9888; ') + 'Total Weight: ' + total + '%</span><span class="judging-row-actions"><button type="button" data-simple-segment-edit="' + category.id + '">Edit</button><button type="button" class="danger" data-simple-segment-delete="' + category.id + '">Delete</button></span></summary>' +
-        '<div class="judging-table-wrap"><table><thead><tr><th>#</th><th>Criterion</th><th>Weight (%)</th><th>Max Score</th><th>Actions</th></tr></thead><tbody>' + criteriaRows + '</tbody><tfoot><tr><td colspan="2">Total</td><td>' + total + '%</td><td colspan="2"></td></tr></tfoot></table></div>' +
+        '<div class="judging-table-wrap"><table><thead><tr><th>#</th><th>Criterion</th><th>Weight (%)</th><th>Max Score</th><th>Actions</th></tr></thead><tbody>' + criteriaRows + '</tbody><tfoot><tr><td colspan="2">Total</td><td>' + total + '%</td><td>' + maximumTotal + '</td><td></td></tr></tfoot></table></div>' +
         '<button type="button" class="judging-add-criterion" data-simple-add-criterion="' + category.id + '">+ Add Criterion</button></details>';
     }).join('') || '<div class="judging-empty"><strong>No segments for this round</strong><span>Add the first part or performance that judges will score.</span></div>';
   }
@@ -1363,6 +1395,14 @@
     scoringWorkflow.categories.filter(function (row) { return (row.purpose || 'official') === 'official'; }).forEach(function (category) {
       var error = validateCriteriaWeightsForCategory(category);
       if (error) issues.push({ step: 3, text: error });
+      (category.criteria || []).forEach(function (criterion) {
+        var children = criterion.subcriteria || [];
+        if (!children.length) return;
+        var total = children.reduce(function (sum, child) { return sum + Number(child.max_score || 0); }, 0);
+        if (children.some(function (child) { return !child.name || Number(child.max_score) <= 0; }) || Math.abs(total - Number(criterion.max_score)) > 0.001) {
+          issues.push({ step: 3, text: criterion.name + ' subcriteria scores must total ' + criterion.max_score + ' points (currently ' + total + ').' });
+        }
+      });
     });
     stages.forEach(function (round, index) {
       if (!isFinalRoundAt(round, index, stages.length) && !isAdvanceAllRound(round, false)) {
@@ -1380,6 +1420,11 @@
     syncDeductionsFromDom();
     syncPointsFromDom();
     $('#participant-ids').value = JSON.stringify(collectParticipants());
+    $('#event-entries').value = JSON.stringify(isPairParticipation()
+      ? pairEntries.map(function (row) { return { department_id: row.department_id || null, member_ids: [Number(row.member_1_id), Number(row.member_2_id)] }; })
+      : $$('#' + (isIndividualParticipation() ? 'candidate-options' : 'team-options') + ' .participant-check:checked').map(function (box) {
+          return isIndividualParticipation() ? { source_individual_id: Number(box.value) } : { source_team_id: Number(box.value) };
+        }));
     $('#rounds-config').value = JSON.stringify(collectRounds());
     $('#criteria-config').value = JSON.stringify(criteria);
     $('#score-settings').value = JSON.stringify(collectScoreSettings());
@@ -1402,8 +1447,9 @@
     }
     if (current === 2) {
       if (collectParticipants().length < 1) {
-        return participationType() === 'individual' ? 'Select at least one candidate.' : 'Select at least one participant or team.';
+        return participationType() === 'individual' ? 'Select at least one individual.' : (isPairParticipation() ? 'Add at least one pair.' : 'Select at least one team.');
       }
+      if (isPairParticipation() && pairEntries.some(function (row) { return !row.member_1_id || !row.member_2_id || String(row.member_1_id) === String(row.member_2_id); })) return 'Each pair requires two different individuals.';
     }
     if (current === 3) {
       var setupIssues = judgingPublishIssues().filter(function (issue) { return issue.step === 3; });
@@ -1421,25 +1467,31 @@
     syncHiddenFields();
     var panel = isIndividualParticipation() ? '#candidate-options' : '#team-options';
     var names = $$(panel + ' .participant-check:checked').map(function (box) { return box.dataset.name; });
+    if (isPairParticipation()) names = pairEntries.map(function (row, index) {
+      var one = $('#candidate-options .participant-check[value="' + row.member_1_id + '"]');
+      var two = $('#candidate-options .participant-check[value="' + row.member_2_id + '"]');
+      var deptLabel = row.department_id ? $('#candidate-options label[data-department-id="' + row.department_id + '"]') : null;
+      return 'Pair ' + (index + 1) + ': ' + (one ? one.dataset.name : '') + ' + ' + (two ? two.dataset.name : '') + (deptLabel ? ' — ' + deptLabel.dataset.department : '');
+    });
     var judgeNames = $$('.judge-check:checked').map(function (box) { return box.dataset.name; });
     var chief = $('#chief-judge');
     var faculty = form.faculty_account;
     var categories = scoringWorkflow.categories.map(function (category) {
-      var criteriaSummary = (category.criteria || []).map(function (criterion) {
-        return criterion.name + ' (' + criterion.weight_percent + '% of event)';
-      }).join(', ') || 'No criteria saved';
-      var criteriaTotal = criteriaWeightTotal(category);
-      return category.name + ' · Criteria total ' + criteriaTotal + '%' +
-        ' · ' + criteriaSummary;
-    }).join(' | ') || '—';
+      var criteriaRows = (category.criteria || []).map(function (criterion) {
+        return '<p><strong>' + escapeHtml(criterion.name) + '</strong> — ' + Number(criterion.weight_percent) + '%, max ' + Number(criterion.max_score) + '</p>' +
+          (criterion.subcriteria || []).map(function (child) { return '<p class="judging-review-child">' + escapeHtml(child.name) + ' — ' + Number(child.max_score) + ' points</p>'; }).join('');
+      }).join('') || '<p>No criteria saved</p>';
+      var totalMax = (category.criteria || []).reduce(function (sum, criterion) { return sum + (Number(criterion.max_score) || 0); }, 0);
+      return '<section><h4>' + escapeHtml(category.name) + '</h4>' + criteriaRows + '<p>Total Weight: ' + criteriaWeightTotal(category) + '% · Total Max Score: ' + totalMax + '</p></section>';
+    }).join('') || '<p>No judging segments saved</p>';
     var rows = [
       ['Event Name', form.event_name.value],
       ['Category Name', form.category.options[form.category.selectedIndex] ? form.category.options[form.category.selectedIndex].text : '—'],
       ['Event Classification', form.event_classification.options[form.event_classification.selectedIndex].text],
-      ['Participation Type', isIndividualParticipation() ? 'Individual' : 'Group'],
+      ['Participation Type', isIndividualParticipation() ? 'Individual' : (isPairParticipation() ? 'Pair' : 'Team / Group')],
       ['Venue', form.venue.value],
       ['Date & Time', form.start_date.value + (($('#event-time') || {}).value ? ' · ' + $('#event-time').value : '')],
-      ['Participants', names.join(', ') || '—'],
+      [isPairParticipation() ? ('Entries (' + names.length + ' Pairs)') : (isIndividualParticipation() ? ('Individuals (' + names.length + ')') : ('Teams (' + names.length + ')')), names.join('; ') || '—'],
       ['Rounds', stages.map(function (row, index) {
         return (index + 1) + '. ' + (row.name || 'Untitled') + ' (' + (row.weight || 0) + '%)';
       }).join(' · ') || '—'],
@@ -1448,7 +1500,7 @@
       ['Advanced Settings', ($('#advanced-carry-scores').checked ? 'Carry scores · ' : 'Do not carry scores · ') + ($('#advanced-special-awards').checked ? 'Special awards enabled · ' : 'Special awards disabled · ') + $('#advanced-tie-rule').options[$('#advanced-tie-rule').selectedIndex].text + ' · Default max ' + $('#advanced-default-max').value],
     ];
     $('#review-summary').innerHTML = rows.map(function (row) {
-      return '<div><span>' + escapeHtml(row[0]) + '</span><strong>' + escapeHtml(row[1]) + '</strong></div>';
+      return '<div><span>' + escapeHtml(row[0]) + '</span>' + (row[0] === 'Judging Segments & Criteria' ? '<div class="judging-review-structure">' + row[1] + '</div>' : '<strong>' + escapeHtml(row[1]) + '</strong>') + '</div>';
     }).join('');
     var issues = judgingPublishIssues();
     $('#review-validation').innerHTML = issues.length
@@ -1507,6 +1559,10 @@
   function resetWizard() {
     mobileApprovalRequired = true;
     form.reset();
+    pairEntries = [];
+    lastParticipationType = participationType();
+    $('#confirm-entry-replacement').value = '';
+    renderPairEntries();
     form.action = '/admin/events/criteria/';
     $('#publication-status').value = 'draft';
     $('#wizard-title').textContent = 'Create criteria event';
@@ -1582,13 +1638,38 @@
     return [];
   }
 
+  function stagesFromSavedCategories(categories) {
+    var roundIds = [];
+    (categories || []).forEach(function (category) {
+      var key = String(category.assigned_round_id || '').trim();
+      if (key && roundIds.indexOf(key) === -1) roundIds.push(key);
+    });
+    return roundIds.map(function (key, index) {
+      var isFinal = index === roundIds.length - 1;
+      var sharedWeight = roundWeight(100 / roundIds.length);
+      return normalizeRound({
+        id: key,
+        name: roundIds.length === 1 ? 'Main Scoring Round' : 'Recovered Stage ' + (index + 1),
+        weight: isFinal ? roundWeight(100 - (sharedWeight * (roundIds.length - 1))) : sharedWeight,
+        weight_locked: false,
+        qualification_method: isFinal ? null : 'advance_all',
+        advancement_rule: isFinal ? null : 'advance_all',
+        qualifiers: null,
+        carry_previous_scores: false,
+        round_type: isFinal ? 'final' : 'scoring',
+        is_final: isFinal,
+      }, index, roundIds.length);
+    });
+  }
+
   function fillEditor(event) {
     form.action = '/admin/events/criteria/' + event.id + '/edit/';
     $('#wizard-title').textContent = 'Edit criteria event';
     form.event_name.value = event.name || '';
     form.category.value = event.category || '';
     form.event_classification.value = event.classification || '';
-    form.participation_type.value = event.participation_type === 'team' ? 'group' : (event.participation_type || 'individual');
+    form.participation_type.value = event.participation_type === 'group' ? 'team' : (event.participation_type || 'individual');
+    lastParticipationType = form.participation_type.value;
     form.division.value = event.division === '—' ? '' : (event.division || '');
     form.venue.value = event.venue || '';
     form.start_date.value = event.start_date || '';
@@ -1605,12 +1686,20 @@
       input.checked = input.value === event.criteria_score_method;
     });
     syncParticipantPanels();
-    var ids = (event.participant_ids || []).map(String);
+    var ids = (event.entries || []).map(function (entry) { return String(entry.source_individual_id || entry.source_team_id || ''); });
+    if (!ids.length) ids = (event.participant_ids || []).map(String);
     $$('.participant-check').forEach(function (box) {
       box.checked = ids.indexOf(box.value) !== -1;
     });
     updateParticipantCount();
+    pairEntries = (event.entries || []).filter(function (entry) { return entry.entry_type === 'pair'; }).map(function (entry) {
+      return { department_id: entry.department_id || '', member_1_id: entry.members[0] && entry.members[0].id, member_2_id: entry.members[1] && entry.members[1].id };
+    });
+    renderPairEntries();
     stages = stagesFromLegacyConfig(event);
+    if (!stages.length && scoringWorkflow.categories.length) {
+      stages = stagesFromSavedCategories(scoringWorkflow.categories);
+    }
     $('#event-format-select').value = normalizeLoadedFormat(event.event_format);
     if ($('#stage-count')) $('#stage-count').value = String(stages.length);
     var stageTie = ((event.result_processing_config || {}).stage_tiebreak_method) || 'manual_decision';
@@ -1733,6 +1822,27 @@
       scoringWorkflow.eventName = data.event.name;
       form.action = '/admin/events/criteria/' + data.event.id + '/edit/';
       return data;
+    });
+  }
+
+  function saveFullDraftProgress() {
+    syncHiddenFields();
+    var body = new FormData(form);
+    body.set('workflow_action', 'save_full_draft');
+    body.set('event_id', currentEventId());
+    body.set('publication_status', 'draft');
+    return fetch(form.action || '/admin/events/criteria/', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'X-CSRFToken': csrfToken(), 'X-Requested-With': 'XMLHttpRequest' },
+      body: body,
+    }).then(function (response) {
+      return response.json().then(function (data) {
+        if (!response.ok || !data.success) {
+          throw new Error(data.message || 'Unable to save the complete event draft.');
+        }
+        return data;
+      });
     });
   }
 
@@ -1967,6 +2077,40 @@
     var existing = scoringWorkflow.categories.filter(function (row) { return String(row.id) === String(editId); })[0];
     workflowRequest(editId ? 'update_category' : 'create_category', { event_id: scoringWorkflow.eventId, category_id: editId, category_name: name, assigned_round_id: roundId, purpose: 'official', judge_mode: 'scoring', display_order: existing ? existing.display_order : scoringWorkflow.categories.length + 1, overall_weight_percent: existing ? existing.overall_weight_percent : 0 }).then(loadCategories).then(function () { return rebalanceSegmentWeights(roundId); }).then(function () { $('#segment-modal').close(); renderJudgingSegments(); }).catch(function (error) { showError(error.message); });
   });
+  function renderSubcriteriaEditor(rows) {
+    $('#simple-subcriteria-rows').innerHTML = (rows || []).map(function (row) {
+      return '<div class="judging-subcriterion-row" data-child-id="' + (row.id || '') + '"><label>Subcriterion Name<input data-child-name maxlength="120" value="' + escapeAttr(row.name || '') + '"></label><label>Max Score<input data-child-max type="number" min="0" step="0.01" value="' + escapeAttr(row.max_score == null ? '' : row.max_score) + '"></label><button type="button" data-child-remove aria-label="Remove subcriterion">Delete</button></div>';
+    }).join('');
+    updateSubcriteriaTotal();
+  }
+  function updateSubcriteriaTotal() {
+    var maximum = Number($('#simple-criterion-max').value) || 0;
+    var rows = $$('#simple-subcriteria-rows .judging-subcriterion-row');
+    var total = rows.reduce(function (sum, row) { return sum + (Number($('[data-child-max]', row).value) || 0); }, 0);
+    var complete = rows.length > 0 && rows.every(function (row) { return $('[data-child-name]', row).value.trim() && Number($('[data-child-max]', row).value) > 0; });
+    var valid = complete && maximum > 0 && Math.abs(total - maximum) < 0.001;
+    var meter = $('#simple-subcriteria-total');
+    meter.textContent = 'Subcriteria Total: ' + total + ' / ' + maximum + (valid ? ' ✓' : (!complete ? ' — enter a name and positive score for each row.' : ' — scores must total ' + maximum + ' points.'));
+    meter.classList.toggle('is-valid', valid);
+  }
+  function openSubcriteriaEditor(criterion) {
+    var children = criterion && criterion.subcriteria || [];
+    $('#simple-criterion-detailed').checked = children.length > 0;
+    $('#simple-subcriteria-section').hidden = !children.length;
+    renderSubcriteriaEditor(children);
+  }
+  $('#simple-criterion-detailed').addEventListener('change', function () {
+    $('#simple-subcriteria-section').hidden = !this.checked;
+    if (this.checked && !$('#simple-subcriteria-rows').children.length) renderSubcriteriaEditor([{ name: '', max_score: '' }]);
+  });
+  $('#simple-subcriterion-add').addEventListener('click', function () {
+    $('#simple-subcriteria-rows').insertAdjacentHTML('beforeend', '<div class="judging-subcriterion-row"><label>Subcriterion Name<input data-child-name maxlength="120"></label><label>Max Score<input data-child-max type="number" min="0" step="0.01"></label><button type="button" data-child-remove aria-label="Remove subcriterion">Delete</button></div>');
+    updateSubcriteriaTotal();
+  });
+  $('#simple-subcriteria-rows').addEventListener('click', function (event) {
+    if (event.target.closest('[data-child-remove]')) { event.target.closest('.judging-subcriterion-row').remove(); updateSubcriteriaTotal(); }
+  });
+  $('#criterion-modal').addEventListener('input', updateSubcriteriaTotal);
   $('#simple-criterion-save').addEventListener('click', function () {
     var categoryId = $('#simple-criterion-category-id').value;
     var editId = $('#simple-criterion-edit-id').value;
@@ -1975,7 +2119,11 @@
     var category = scoringWorkflow.categories.filter(function (row) { return String(row.id) === String(categoryId); })[0];
     var existing = category && category.criteria.filter(function (row) { return String(row.id) === String(editId); })[0];
     var order = existing ? existing.display_order : ((category && category.criteria.length) || 0) + 1;
-    workflowRequest(editId ? 'update_criterion' : 'create_criterion', { event_id: scoringWorkflow.eventId, category_id: categoryId, criterion_id: editId, criterion_name: name, weight_percent: $('#simple-criterion-weight').value, min_score: 0, max_score: $('#simple-criterion-max').value, display_order: order, tie_breaker_priority: '' }).then(function () { scoringWorkflow.selectedCategoryId = Number(categoryId); return loadScoringCriteria(categoryId); }).then(function () { $('#criterion-modal').close(); renderJudgingSegments(); }).catch(function (error) { showError(error.message); });
+    var children = $('#simple-criterion-detailed').checked ? $$('#simple-subcriteria-rows .judging-subcriterion-row').map(function (row) {
+      return { id: row.dataset.childId || null, name: $('[data-child-name]', row).value.trim(), max_score: $('[data-child-max]', row).value || 0 };
+    }) : [];
+    if ($('#simple-criterion-detailed').checked && !children.length) return showError('Add at least one subcriterion or turn off detailed subcriteria.');
+    workflowRequest(editId ? 'update_criterion' : 'create_criterion', { event_id: scoringWorkflow.eventId, category_id: categoryId, criterion_id: editId, criterion_name: name, weight_percent: $('#simple-criterion-weight').value, min_score: 0, max_score: $('#simple-criterion-max').value, display_order: order, tie_breaker_priority: '', detailed_subcriteria: $('#simple-criterion-detailed').checked ? '1' : '0', subcriteria: JSON.stringify(children) }).then(function () { scoringWorkflow.selectedCategoryId = Number(categoryId); return loadScoringCriteria(categoryId); }).then(function () { $('#criterion-modal').close(); renderJudgingSegments(); }).catch(function (error) { showError(error.message); });
   });
   $('#judging-judge-search').addEventListener('input', renderJudgingJudges);
   document.addEventListener('change', function (event) {
@@ -2004,6 +2152,14 @@
     roundDragId = null;
   });
   document.addEventListener('click', function (event) {
+    var subcriteriaToggle = event.target.closest('[data-subcriteria-toggle]');
+    if (subcriteriaToggle) {
+      var expanded = subcriteriaToggle.getAttribute('aria-expanded') === 'true';
+      subcriteriaToggle.setAttribute('aria-expanded', String(!expanded));
+      subcriteriaToggle.innerHTML = expanded ? '&#9656;' : '&#9662;';
+      $$('[data-subcriterion-parent="' + subcriteriaToggle.dataset.subcriteriaToggle + '"]').forEach(function (row) { row.hidden = expanded; });
+      return;
+    }
     var closeModal = event.target.closest('[data-close-judging-modal]');
     var roundMove = event.target.closest('[data-round-move]');
     var roundEdit = event.target.closest('[data-simple-round-edit]');
@@ -2047,10 +2203,10 @@
         workflowRequest('delete_category', { event_id: scoringWorkflow.eventId, category_id: segmentId }).then(loadCategories).then(function () { return rebalanceSegmentWeights(deleted ? categoryRoundKey(deleted) : selectedJudgingRound()); }).then(renderJudgingSegments).catch(function (error) { showError(error.message); });
       });
     } else if (addCriterion) {
-      $('#simple-criterion-edit-id').value = ''; $('#simple-criterion-category-id').value = addCriterion.dataset.simpleAddCriterion; $('#simple-criterion-name').value = ''; $('#simple-criterion-weight').value = ''; $('#simple-criterion-max').value = $('#advanced-default-max').value || 100; $('#criterion-modal-title').textContent = 'Add Criterion'; $('#criterion-modal').showModal(); requestAnimationFrame(function () { $('#simple-criterion-name').focus(); });
+      $('#simple-criterion-edit-id').value = ''; $('#simple-criterion-category-id').value = addCriterion.dataset.simpleAddCriterion; $('#simple-criterion-name').value = ''; $('#simple-criterion-weight').value = ''; $('#simple-criterion-max').value = $('#advanced-default-max').value || 100; openSubcriteriaEditor(null); $('#criterion-modal-title').textContent = 'Add Criterion'; $('#criterion-modal').showModal(); requestAnimationFrame(function () { $('#simple-criterion-name').focus(); });
     } else if (criterionEdit) {
       var cat = scoringWorkflow.categories.filter(function (row) { return String(row.id) === criterionEdit.dataset.categoryId; })[0]; var criterion = cat && cat.criteria.filter(function (row) { return String(row.id) === criterionEdit.dataset.simpleCriterionEdit; })[0]; if (!criterion) return;
-      $('#simple-criterion-edit-id').value = criterion.id; $('#simple-criterion-category-id').value = cat.id; $('#simple-criterion-name').value = criterion.name; $('#simple-criterion-weight').value = criterion.weight_percent; $('#simple-criterion-max').value = criterion.max_score || 100; $('#criterion-modal-title').textContent = 'Edit Criterion'; $('#criterion-modal').showModal(); requestAnimationFrame(function () { $('#simple-criterion-name').focus(); });
+      $('#simple-criterion-edit-id').value = criterion.id; $('#simple-criterion-category-id').value = cat.id; $('#simple-criterion-name').value = criterion.name; $('#simple-criterion-weight').value = criterion.weight_percent; $('#simple-criterion-max').value = criterion.max_score || 100; openSubcriteriaEditor(criterion); $('#criterion-modal-title').textContent = 'Edit Criterion'; $('#criterion-modal').showModal(); requestAnimationFrame(function () { $('#simple-criterion-name').focus(); });
     } else if (criterionDelete) {
       var criterionId = criterionDelete.dataset.simpleCriterionDelete;
       var criterionCategoryId = criterionDelete.dataset.categoryId;
@@ -2099,6 +2255,26 @@
       $('#publication-status').value = btn.dataset.status;
     });
   });
+  $('#save-draft-action').addEventListener('click', function (event) {
+    event.preventDefault();
+    var error = validateStep(1);
+    if (error) {
+      showError(error);
+      return;
+    }
+    var button = this;
+    var originalText = button.textContent;
+    button.disabled = true;
+    button.textContent = 'Saving...';
+    $('#publication-status').value = 'draft';
+    saveFullDraftProgress().then(function () {
+      window.location.assign('/admin/events/criteria/');
+    }).catch(function (draftError) {
+      showError(draftError.message);
+      button.disabled = false;
+      button.textContent = originalText;
+    });
+  });
   form.addEventListener('submit', function (e) {
     var publishing = $('#publication-status').value === 'published';
     var error = publishing ? (validateStep(1) || validateStep(2) || validateStep(3) || validateStep(4)) : validateStep(1);
@@ -2111,8 +2287,67 @@
   });
 
   $('#participation-type').addEventListener('change', function () {
+    var next = participationType();
+    var hasEntries = pairEntries.length || $$('.participant-check:checked').length;
+    if (hasEntries && next !== lastParticipationType) {
+      this.value = lastParticipationType;
+      $('#participation-change-modal').dataset.pendingType = next;
+      $('#participation-change-modal').showModal();
+      requestAnimationFrame(function () { $('#participation-change-cancel').focus(); });
+      return;
+    }
+    lastParticipationType = next;
     syncParticipantPanels();
     renderRoundSetup();
+  });
+  function closeParticipationChange() {
+    $('#participation-change-modal').close();
+    $('#participation-type').focus();
+  }
+  $('#participation-change-cancel')?.addEventListener('click', closeParticipationChange);
+  $('#participation-change-close')?.addEventListener('click', closeParticipationChange);
+  $('#participation-change-modal')?.addEventListener('cancel', function (event) { event.preventDefault(); closeParticipationChange(); });
+  $('#participation-change-confirm')?.addEventListener('click', function () {
+    var next = $('#participation-change-modal').dataset.pendingType;
+    pairEntries = [];
+    $$('.participant-check').forEach(function (box) { box.checked = false; });
+    $('#confirm-entry-replacement').value = 'true';
+    $('#participation-type').value = next;
+    lastParticipationType = next;
+    renderPairEntries();
+    syncParticipantPanels();
+    renderRoundSetup();
+    closeParticipationChange();
+  });
+  $('#add-pair-entry')?.addEventListener('click', function () {
+    pairEntries.push({ member_1_id: '', member_2_id: '' });
+    renderPairEntries(pairEntries.length - 1, 'data-pair-member="1"');
+  });
+  $('#pair-entry-list')?.addEventListener('change', function (event) {
+    var card = event.target.closest('[data-pair-index]');
+    if (!card) return;
+    var index = Number(card.dataset.pairIndex);
+    if (event.target.matches('[data-pair-department]')) {
+      pairEntries[index].department_id = event.target.value;
+      var invalid = ['member_1_id', 'member_2_id'].some(function (key) {
+        var selected = pairEntries[index][key];
+        var label = selected && $('#candidate-options .participant-check[value="' + selected + '"]')?.closest('label');
+        return selected && event.target.value && label && String(label.dataset.departmentId) !== String(event.target.value);
+      });
+      if (invalid) $('#pair-entry-status').textContent = 'Choose members from the selected department.';
+      renderPairEntries(index, 'data-pair-department');
+      return;
+    }
+    if (!event.target.matches('[data-pair-member]')) return;
+    var member = event.target.dataset.pairMember;
+    pairEntries[index]['member_' + member + '_id'] = event.target.value;
+    renderPairEntries(index, 'data-pair-member="' + member + '"');
+  });
+  $('#pair-entry-list')?.addEventListener('click', function (event) {
+    var button = event.target.closest('[data-remove-pair]');
+    if (!button) return;
+    pairEntries.splice(Number(button.closest('[data-pair-index]').dataset.pairIndex), 1);
+    renderPairEntries();
   });
   $('#event-format-select')?.addEventListener('change', syncFormatPanels);
   $('#round-type')?.addEventListener('change', function () {

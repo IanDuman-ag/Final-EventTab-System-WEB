@@ -138,9 +138,18 @@ class ScoreSheetSerializer(serializers.ModelSerializer):
 # ── Judging (re-export for mobile convenience) ───────────────────
 
 class MobileCriterionSerializer(serializers.ModelSerializer):
+    subcriteria = serializers.SerializerMethodField()
+
     class Meta:
         model = Criterion
-        fields = ['id', 'name', 'description', 'max_score', 'weight_percent', 'order']
+        fields = ['id', 'name', 'description', 'max_score', 'weight_percent', 'order', 'subcriteria']
+
+    def get_subcriteria(self, obj):
+        return [
+            {'id': row.id, 'name': row.name, 'max_score': str(row.max_score),
+             'display_order': row.display_order}
+            for row in obj.subcriteria.all()
+        ]
 
 
 class MobileCandidateSerializer(serializers.ModelSerializer):
