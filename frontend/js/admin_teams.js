@@ -13,10 +13,10 @@ document.addEventListener('DOMContentLoaded', function () {
   var teamImage = document.getElementById('team-image');
   var teamImagePreview = document.getElementById('team-image-preview');
   var teamImagePreviewWrap = document.getElementById('team-image-preview-wrap');
-  var teamCoach = document.getElementById('team-coach');
-  var teamStatus = document.getElementById('team-status');
   var submitBtn = document.getElementById('team-submit-btn');
   var modalTitle = document.getElementById('team-modal-title');
+  var preservedCoach = '';
+  var preservedStatus = 'active';
 
   if (!openBtn || !formModal || !form) return;
 
@@ -122,8 +122,8 @@ document.addEventListener('DOMContentLoaded', function () {
     teamDepartment.value = '';
     if (teamImage) teamImage.value = '';
     setImagePreview('');
-    teamCoach.value = '';
-    teamStatus.value = 'active';
+    preservedCoach = '';
+    preservedStatus = 'active';
     modalTitle.textContent = 'Add Team';
     submitBtn.textContent = 'Add Team';
     openModal(formModal);
@@ -138,8 +138,8 @@ document.addEventListener('DOMContentLoaded', function () {
     teamDepartment.value = row.dataset.departmentId || '';
     if (teamImage) teamImage.value = '';
     setImagePreview(row.dataset.imageUrl || '');
-    teamCoach.value = row.dataset.coach === '—' ? '' : (row.dataset.coach || '');
-    teamStatus.value = row.dataset.status || 'active';
+    preservedCoach = row.dataset.coach === '—' ? '' : (row.dataset.coach || '');
+    preservedStatus = row.dataset.status || 'active';
     modalTitle.textContent = 'Edit Team';
     submitBtn.textContent = 'Save Changes';
     openModal(formModal);
@@ -156,8 +156,6 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('team-members-title').textContent = data.name || fallbackName || 'Team';
     document.getElementById('team-members-subtitle').textContent = data.code ? ('Code: ' + data.code) : '';
     document.getElementById('view-team-department').textContent = data.department_name || '—';
-    document.getElementById('view-team-coach').textContent = data.coach || '—';
-    document.getElementById('view-team-status').textContent = data.status_label || '—';
 
     var viewImage = document.getElementById('view-team-image');
     var viewImageWrap = document.getElementById('view-team-image-wrap');
@@ -247,24 +245,6 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
-  var listView = document.getElementById('teams-list-view');
-  var gridView = document.getElementById('teams-grid-view');
-  document.querySelectorAll('.teams-view-btn').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      var mode = btn.dataset.view || 'list';
-      document.querySelectorAll('.teams-view-btn').forEach(function (b) {
-        var active = b === btn;
-        b.classList.toggle('is-active', active);
-        b.setAttribute('aria-pressed', active ? 'true' : 'false');
-      });
-      if (listView) listView.classList.toggle('is-hidden', mode !== 'list');
-      if (gridView) {
-        gridView.classList.toggle('hidden', mode !== 'grid');
-        gridView.setAttribute('aria-hidden', mode === 'grid' ? 'false' : 'true');
-      }
-    });
-  });
-
   bindTeamActions();
 
   formModal.addEventListener('click', function (e) {
@@ -314,8 +294,8 @@ document.addEventListener('DOMContentLoaded', function () {
     formData.append('code', code);
     formData.append('department_id', departmentId);
     formData.append('members', '');
-    formData.append('coach', teamCoach.value.trim());
-    formData.append('status', teamStatus.value);
+    formData.append('coach', preservedCoach);
+    formData.append('status', preservedStatus);
     if (teamImage && teamImage.files && teamImage.files[0]) {
       formData.append('image', teamImage.files[0]);
     }

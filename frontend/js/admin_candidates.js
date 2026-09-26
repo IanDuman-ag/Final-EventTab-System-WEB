@@ -13,10 +13,10 @@ document.addEventListener('DOMContentLoaded', function () {
   var candidateImage = document.getElementById('candidate-image');
   var candidateImagePreview = document.getElementById('candidate-image-preview');
   var candidateImagePreviewWrap = document.getElementById('candidate-image-preview-wrap');
-  var candidateStatus = document.getElementById('candidate-status');
   var submitBtn = document.getElementById('candidate-submit-btn');
   var modalTitle = document.getElementById('candidate-modal-title');
   var modalSubtitle = document.getElementById('candidate-modal-subtitle');
+  var preservedStatus = 'active';
 
   if (!openBtn || !formModal || !form) return;
 
@@ -88,7 +88,7 @@ document.addEventListener('DOMContentLoaded', function () {
     candidateDepartment.value = '';
     if (candidateImage) candidateImage.value = '';
     if (candidateImagePreviewWrap) candidateImagePreviewWrap.classList.add('hidden');
-    candidateStatus.value = 'active';
+    preservedStatus = 'active';
     modalTitle.textContent = 'Add Candidate';
     modalSubtitle.textContent = 'Register a candidate with number, name, and department.';
     submitBtn.textContent = 'Add Candidate';
@@ -115,7 +115,7 @@ document.addEventListener('DOMContentLoaded', function () {
         candidateImagePreviewWrap.classList.add('hidden');
       }
     }
-    candidateStatus.value = row.dataset.status || 'active';
+    preservedStatus = row.dataset.status || 'active';
     modalTitle.textContent = 'Edit Candidate';
     modalSubtitle.textContent = 'Update candidate details.';
     submitBtn.textContent = 'Save Changes';
@@ -155,7 +155,6 @@ document.addEventListener('DOMContentLoaded', function () {
         document.getElementById('candidate-view-subtitle').textContent = 'No. ' + (data.number || '—');
         document.getElementById('view-candidate-name').textContent = data.name || '—';
         document.getElementById('view-candidate-department').textContent = data.department_name || '—';
-        document.getElementById('view-candidate-status').textContent = data.status_label || '—';
         var viewImage = document.getElementById('view-candidate-image');
         var viewImageWrap = document.getElementById('view-candidate-image-wrap');
         if (viewImage && viewImageWrap) {
@@ -234,7 +233,7 @@ document.addEventListener('DOMContentLoaded', function () {
     formData.append('number', number);
     formData.append('name', name);
     formData.append('department_id', departmentId);
-    formData.append('status', candidateStatus.value);
+    formData.append('status', preservedStatus);
     if (candidateImage && candidateImage.files && candidateImage.files[0]) {
       formData.append('image', candidateImage.files[0]);
     }

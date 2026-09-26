@@ -1102,6 +1102,29 @@ class CriteriaRoundAdvancementValidationTests(TestCase):
         self.assertEqual(event.rounds_config[0]['qualifiers'], 4)
         self.assertEqual(event.rounds_config[0]['qualification_method'], 'top_ranking')
 
+    def test_publish_rejects_top_n_above_eligible_participants(self):
+        from events.criteria_event_service import CriteriaEventValidationError, save_criteria_event
+        with self.assertRaisesMessage(CriteriaEventValidationError, 'cannot exceed the 4 eligible participants'):
+            save_criteria_event(
+                self._payload(4, qualifiers=10, publication_status='published'),
+                self.admin,
+            )
+
+    def test_publish_uses_first_assigned_judge_when_chief_is_omitted(self):
+        from events.criteria_event_service import save_criteria_event
+        event = save_criteria_event(
+            self._payload(
+                4,
+                qualifiers=3,
+                publication_status='published',
+                chief_judge='',
+                faculty_account='',
+            ),
+            self.admin,
+        )
+        self.assertEqual(event.chief_judge, self.judge)
+        self.assertIsNone(event.faculty_account)
+
     def test_four_candidates_top_three_stays_top_three(self):
         from events.criteria_event_service import save_criteria_event
         event = save_criteria_event(self._payload(4, qualifiers=3), self.admin)

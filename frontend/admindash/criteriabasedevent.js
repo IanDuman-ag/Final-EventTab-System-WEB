@@ -57,16 +57,13 @@
   }
 
   function maxWizardStep() {
-    return mode === 'pageant' ? 5 : 7;
+    return 4;
   }
 
   function setStep(next) {
     activeStep = Math.max(1, Math.min(maxWizardStep(), Number(next) || 1));
     $$('.wizard-panel').forEach(function (panel) {
-      var pageantPanel = panel.hasAttribute('data-pageant');
-      var visible = mode === 'pageant'
-        ? pageantPanel && Number(panel.dataset.pageantStep) === activeStep
-        : !pageantPanel && Number(panel.dataset.step) === activeStep;
+      var visible = !panel.hasAttribute('data-pageant') && Number(panel.dataset.step) === activeStep;
       panel.hidden = !visible;
       panel.classList.toggle('active', visible);
     });
@@ -83,24 +80,19 @@
     wizard.classList.toggle('at-review', activeStep === maxWizardStep());
     $('#wizard-back').style.display = activeStep === 1 ? 'none' : '';
     showError('');
-    if (mode === 'pageant' && window.PageantWizard) window.PageantWizard.render(activeStep);
-    if (mode === 'standard' && activeStep === 7) {
+    if (activeStep === 4) {
       syncCriteriaFromScoringWorkflow();
       buildReview();
     }
-    if (mode === 'standard' && activeStep === 3) {
+    if (activeStep === 3) {
       syncEventFormatFromRounds();
-      renderRoundSetup();
-    }
-    if (mode === 'standard' && activeStep === 4) {
       loadCategories().then(function () {
-        renderScoringCategories();
-        renderScoringCriteria();
+        renderJudgingSetup();
       }).catch(function (error) { showError(error.message); });
     }
-    if (mode === 'standard' && activeStep === 5) {
-      renderJudgeAssignmentDashboard();
-    }
+    $('#wizard-next').hidden = activeStep === 4;
+    $('#publish-action').hidden = activeStep !== 4;
+    $('#save-draft-action').hidden = false;
     var body = $('.wizard-body');
     if (body) body.scrollTop = 0;
     var heading = $('.wizard-panel.active h3');
@@ -111,12 +103,10 @@
   }
 
   function setMode(nextMode) {
-    mode = nextMode === 'pageant' ? 'pageant' : 'standard';
-    wizard.classList.toggle('pageant-mode', mode === 'pageant');
-    $('#wizard-steps').setAttribute('aria-label', mode === 'pageant' ? 'Pageant setup progress' : 'Creation progress');
-    var labels = mode === 'pageant'
-      ? ['Details', 'Candidates', 'Segments & Scoring', 'Judges, Advancement & Awards', 'Review & Publish']
-      : ['Event Details', 'Participants', 'Rounds', 'Scoring Structure', 'Score Collection', 'Awards', 'Review & Publish'];
+    mode = 'standard';
+    wizard.classList.remove('pageant-mode');
+    $('#wizard-steps').setAttribute('aria-label', 'Creation progress');
+    var labels = ['Event Details', 'Participants', 'Judging Setup', 'Review & Publish'];
     $$('[data-step-marker]').forEach(function (marker, index) {
       var label = labels[index];
       marker.hidden = !label;
@@ -1092,6 +1082,8 @@
     $$('[data-js]').forEach(function (input) {
       out[input.dataset.js] = input.checked;
     });
+    out.enable_special_awards = !!($('#advanced-special-awards') && $('#advanced-special-awards').checked);
+    out.default_max_score = Number(($('#advanced-default-max') || {}).value) || 100;
     return out;
   }
 
@@ -1284,6 +1276,104 @@
     );
   }
 
+  function advancementLabel(round, index) {
+    if (isFinalRoundAt(round, index, stages.length)) return 'Final round / no advancement';
+    if (isAdvanceAllRound(round, false)) return 'All participants continue';
+    return 'Top ' + (Number(round.qualifiers) || 0) + ' participants advance';
+  }
+
+  function selectedJudgingRound() {
+    var picker = $('#judging-round-select');
+    return picker && picker.value ? picker.value : (stages[0] ? roundKeyFor(stages[0], 0) : '');
+  }
+
+  function renderJudgingSetup() {
+    if (!stages.length) stages = defaultStages(1);
+    var summary = $('#judging-summary');
+    var categoryText = form.category.options[form.category.selectedIndex] ? form.category.options[form.category.selectedIndex].text : 'Not selected';
+    summary.innerHTML = '<span><small>Event</small><strong>' + escapeHtml(form.event_name.value || 'Untitled event') + '</strong></span>' +
+      '<span><small>Category</small><strong>' + escapeHtml(categoryText) + '</strong></span>' +
+      '<span><small>Type</small><strong>' + (isIndividualParticipation() ? 'Individual' : 'Group') + '</strong></span>' +
+      '<span><small>Participants</small><strong>' + participantCount() + '</strong></span>' +
+      '<em>' + escapeHtml(($('#publication-status').value || 'draft').toUpperCase()) + '</em>';
+    renderJudgingRounds();
+    renderJudgingRoundPicker();
+    renderJudgingSegments();
+    renderJudgingJudges();
+  }
+
+  function renderJudgingRounds() {
+    var host = $('#judging-round-list');
+    host.innerHTML = stages.map(function (round, index) {
+      var key = roundKeyFor(round, index);
+      return '<article class="judging-round-row" draggable="true" data-simple-round="' + escapeAttr(key) + '">' +
+        '<button type="button" class="judging-drag" aria-label="Drag to reorder">&#8942;&#8942;</button>' +
+        '<span class="judging-number">' + (index + 1) + '</span><span class="judging-round-copy"><strong>' + escapeHtml(round.name) + '</strong><small>' + escapeHtml(advancementLabel(round, index)) + '</small></span>' +
+        '<span class="judging-row-actions"><button type="button" class="round-move" data-round-move="up" data-round-key="' + escapeAttr(key) + '" aria-label="Move ' + escapeAttr(round.name) + ' up" ' + (index === 0 ? 'disabled' : '') + '>&uarr;</button>' +
+        '<button type="button" class="round-move" data-round-move="down" data-round-key="' + escapeAttr(key) + '" aria-label="Move ' + escapeAttr(round.name) + ' down" ' + (index === stages.length - 1 ? 'disabled' : '') + '>&darr;</button>' +
+        '<button type="button" data-simple-round-edit="' + escapeAttr(key) + '" aria-label="Edit ' + escapeAttr(round.name) + '">&#9998;</button>' +
+        '<button type="button" class="danger" data-simple-round-delete="' + escapeAttr(key) + '" aria-label="Delete ' + escapeAttr(round.name) + '">&#128465;</button></span></article>';
+    }).join('');
+  }
+
+  function renderJudgingRoundPicker() {
+    var picker = $('#judging-round-select');
+    var previous = picker.value;
+    picker.innerHTML = stages.map(function (round, index) { return '<option value="' + escapeAttr(roundKeyFor(round, index)) + '">' + escapeHtml(round.name) + '</option>'; }).join('');
+    if ($('option[value="' + CSS.escape(previous) + '"]', picker)) picker.value = previous;
+  }
+
+  function renderJudgingSegments() {
+    var roundId = selectedJudgingRound();
+    var rows = scoringWorkflow.categories.filter(function (category) { return categoryRoundKey(category) === String(roundId) && (category.purpose || 'official') === 'official'; });
+    var host = $('#judging-segment-list');
+    host.innerHTML = rows.map(function (category) {
+      var total = criteriaWeightTotal(category);
+      var valid = category.criteria && category.criteria.length && Math.abs(total - 100) < 0.01;
+      var criteriaRows = (category.criteria || []).map(function (criterion, index) {
+        return '<tr><td>' + (index + 1) + '</td><td>' + escapeHtml(criterion.name) + '</td><td>' + (Number(criterion.weight_percent) || 0) + '</td><td>' + (Number(criterion.max_score) || 100) + '</td><td><button type="button" data-simple-criterion-edit="' + criterion.id + '" data-category-id="' + category.id + '">Edit</button><button type="button" class="danger" data-simple-criterion-delete="' + criterion.id + '" data-category-id="' + category.id + '">Delete</button></td></tr>';
+      }).join('');
+      return '<details class="judging-segment" open><summary><strong>' + escapeHtml(category.name) + '</strong><span class="weight-state ' + (valid ? 'is-valid' : 'is-invalid') + '">' + (valid ? '&#10003; ' : '&#9888; ') + 'Total Weight: ' + total + '%</span><span class="judging-row-actions"><button type="button" data-simple-segment-edit="' + category.id + '">Edit</button><button type="button" class="danger" data-simple-segment-delete="' + category.id + '">Delete</button></span></summary>' +
+        '<div class="judging-table-wrap"><table><thead><tr><th>#</th><th>Criterion</th><th>Weight (%)</th><th>Max Score</th><th>Actions</th></tr></thead><tbody>' + criteriaRows + '</tbody><tfoot><tr><td colspan="2">Total</td><td>' + total + '%</td><td colspan="2"></td></tr></tfoot></table></div>' +
+        '<button type="button" class="judging-add-criterion" data-simple-add-criterion="' + category.id + '">+ Add Criterion</button></details>';
+    }).join('') || '<div class="judging-empty"><strong>No segments for this round</strong><span>Add the first part or performance that judges will score.</span></div>';
+  }
+
+  function renderJudgingJudges() {
+    var query = ($('#judging-judge-search').value || '').trim().toLowerCase();
+    var boxes = $$('.judge-check');
+    $('#judging-judge-list').innerHTML = boxes.filter(function (box) { return !query || (box.dataset.name || '').toLowerCase().indexOf(query) !== -1; }).map(function (box) {
+      var role = box.closest('label') && $('small', box.closest('label')) ? $('small', box.closest('label')).textContent : 'Judge';
+      return '<label><input type="checkbox" data-judge-proxy="' + escapeAttr(box.value) + '" ' + (box.checked ? 'checked' : '') + '><strong>' + escapeHtml(box.dataset.name) + '</strong><small>' + escapeHtml(role) + '</small></label>';
+    }).join('') || '<p class="judging-empty">No judges match your search.</p>';
+  }
+
+  function judgingPublishIssues() {
+    var issues = [];
+    if (!form.event_name.value.trim() || !form.category.value || !form.event_classification.value || !form.venue.value.trim() || !form.start_date.value) issues.push({ step: 1, text: 'Complete all required event details.' });
+    if (!collectParticipants().length) issues.push({ step: 2, text: 'Select at least one participant.' });
+    if (!collectJudges().length) issues.push({ step: 3, text: 'Assign at least one judge.' });
+    if (!scoringWorkflow.categories.length) issues.push({ step: 3, text: 'Add at least one judging segment.' });
+    stages.forEach(function (round, index) {
+      var roundId = roundKeyFor(round, index);
+      if (!scoringWorkflow.categories.some(function (category) { return categoryRoundKey(category) === roundId && (category.purpose || 'official') === 'official'; })) {
+        issues.push({ step: 3, text: 'Add at least one judging segment to "' + round.name + '".' });
+      }
+    });
+    scoringWorkflow.categories.filter(function (row) { return (row.purpose || 'official') === 'official'; }).forEach(function (category) {
+      var error = validateCriteriaWeightsForCategory(category);
+      if (error) issues.push({ step: 3, text: error });
+    });
+    stages.forEach(function (round, index) {
+      if (!isFinalRoundAt(round, index, stages.length) && !isAdvanceAllRound(round, false)) {
+        var top = Number(round.qualifiers) || 0;
+        var eligible = roundParticipantCount(index);
+        if (top < 1 || top > eligible) issues.push({ step: 3, text: 'Advancement for "' + round.name + '" must be between 1 and ' + eligible + '.' });
+      }
+    });
+    return issues;
+  }
+
   function syncHiddenFields() {
     syncCriteriaFromScoringWorkflow();
     if (!criteria.length) syncCriteriaFromDom();
@@ -1316,84 +1406,13 @@
       }
     }
     if (current === 3) {
-      revalidateRoundQualifiers();
-      if (!stages.length) return 'Add at least one round. For simple events, create one Main Scoring round.';
-      var names = {};
-      for (var i = 0; i < stages.length; i++) {
-        var stage = stages[i];
-        var nameKey = (stage.name || '').trim().toLowerCase();
-        if (!nameKey) return 'Each round needs a name.';
-        if (/^round\s*\d+$/i.test(stage.name.trim())) {
-          return 'Use a descriptive round name instead of generic Round labels.';
-        }
-        if (names[nameKey]) return 'Each round name must be unique.';
-        names[nameKey] = true;
-        var isFinal = isFinalRoundAt(stage, i, stages.length);
-        if (!isFinal) {
-          var stageCount = roundParticipantCount(i);
-          if (stageCount < 1) {
-            return participationType() === 'individual' ? 'Select at least one candidate.' : 'Select at least one participant or team.';
-          }
-          if (isAdvanceAllRound(stage, isFinal)) continue;
-          var quals = Number(stage.qualifiers) || 0;
-          if (quals < 1) return 'Each elimination round needs at least one qualifier.';
-        }
-      }
-      if (stages.length === 1) {
-        stages[0].weight = 100;
-        stages[0].is_final = true;
-        stages[0].round_type = stages[0].round_type || 'scoring';
-      } else {
-        var total = stages.reduce(function (sum, row) { return sum + (Number(row.weight) || 0); }, 0);
-        if (Math.abs(total - 100) >= 0.01) return 'Total round weight must equal 100%. Currently ' + round2(total) + '%.';
-        for (var w = 0; w < stages.length; w++) {
-          if ((Number(stages[w].weight) || 0) <= 0) return 'Every round weight must be greater than zero.';
-        }
-      }
+      var setupIssues = judgingPublishIssues().filter(function (issue) { return issue.step === 3; });
+      if (setupIssues.length) return setupIssues[0].text;
       syncEventFormatFromRounds();
     }
     if (current === 4) {
-      if (!scoringWorkflow.eventId) return 'Complete Step 1 so categories can be saved to this event.';
-      if (!scoringWorkflow.categories.length) return 'Save at least one scoring category.';
-      var categoryWeightError = validateCategoryOverallWeights();
-      if (categoryWeightError) return categoryWeightError;
-    }
-    if (current === 4) {
-      if (!scoringWorkflow.categories.length) return 'Save at least one scoring category first.';
-      var emptyCategory = scoringWorkflow.categories.filter(function (category) {
-        return !(category.criteria && category.criteria.length);
-      })[0];
-      if (emptyCategory) {
-        return 'Add criteria for "' + emptyCategory.name + '" before continuing.';
-      }
-      var categoryWeightErrorStep4 = validateCategoryOverallWeights();
-      if (categoryWeightErrorStep4) return categoryWeightErrorStep4;
-      for (var c = 0; c < scoringWorkflow.categories.length; c++) {
-        var criteriaWeightError = validateCriteriaWeightsForCategory(scoringWorkflow.categories[c]);
-        if (criteriaWeightError) return criteriaWeightError;
-      }
-      syncCriteriaFromScoringWorkflow();
-      var flatTotal = roundWeight(criteria.reduce(function (sum, row) { return sum + (Number(row.weight) || 0); }, 0));
-      if (criteria.length && Math.abs(flatTotal - 100) >= 0.01 && Math.abs(categoryOverallWeightTotal()) >= 0.01) {
-        return 'All criterion event weights must total 100%. Current total: ' + flatTotal + '%.';
-      }
-    }
-    if (current === 5) {
-      if (!$('#chief-judge').value) return 'Chief Judge is required.';
-      if (!form.faculty_account.value) return 'Tabulator in Charge is required.';
-      var judges = collectJudges();
-      if (!judges.length) return 'Assign at least one judge.';
-      if ($('#remove-high-low').checked && judges.length < 3) {
-        return 'Remove Highest and Lowest Judge Scores requires at least three judges.';
-      }
-      syncPointsFromDom();
-      var labels = {};
-      for (var i = 0; i < points.length; i++) {
-        var key = (points[i].label || '').toLowerCase();
-        if (!key) return 'Championship point ranks require labels.';
-        if (labels[key]) return 'Championship point rankings must be unique.';
-        labels[key] = true;
-      }
+      var reviewIssues = judgingPublishIssues();
+      if (reviewIssues.length) return reviewIssues[0].text;
     }
     return '';
   }
@@ -1410,8 +1429,7 @@
         return criterion.name + ' (' + criterion.weight_percent + '% of event)';
       }).join(', ') || 'No criteria saved';
       var criteriaTotal = criteriaWeightTotal(category);
-      return category.name + ' · ' + (category.judge_mode === 'ranking' ? 'Ranking Mode' : 'Scoring Mode') +
-        ' · Category ' + category.overall_weight_percent + '% · Criteria ' + criteriaTotal + '%' +
+      return category.name + ' · Criteria total ' + criteriaTotal + '%' +
         ' · ' + criteriaSummary;
     }).join(' | ') || '—';
     var rows = [
@@ -1425,14 +1443,18 @@
       ['Rounds', stages.map(function (row, index) {
         return (index + 1) + '. ' + (row.name || 'Untitled') + ' (' + (row.weight || 0) + '%)';
       }).join(' · ') || '—'],
-      ['Scoring Categories & Criteria', categories],
-      ['Chief Judge', chief.options[chief.selectedIndex] ? chief.options[chief.selectedIndex].text : '—'],
+      ['Judging Segments & Criteria', categories],
       ['Assigned Judges', judgeNames.join(', ') || '—'],
-      ['Tabulator in Charge', faculty.options[faculty.selectedIndex] ? faculty.options[faculty.selectedIndex].text : '—'],
+      ['Advanced Settings', ($('#advanced-carry-scores').checked ? 'Carry scores · ' : 'Do not carry scores · ') + ($('#advanced-special-awards').checked ? 'Special awards enabled · ' : 'Special awards disabled · ') + $('#advanced-tie-rule').options[$('#advanced-tie-rule').selectedIndex].text + ' · Default max ' + $('#advanced-default-max').value],
     ];
     $('#review-summary').innerHTML = rows.map(function (row) {
       return '<div><span>' + escapeHtml(row[0]) + '</span><strong>' + escapeHtml(row[1]) + '</strong></div>';
     }).join('');
+    var issues = judgingPublishIssues();
+    $('#review-validation').innerHTML = issues.length
+      ? '<strong>Fix ' + issues.length + ' item' + (issues.length === 1 ? '' : 's') + ' before publishing</strong><ul>' + issues.map(function (issue) { return '<li><span>' + escapeHtml(issue.text) + '</span><button type="button" data-review-fix="' + issue.step + '">Fix</button></li>'; }).join('') + '</ul>'
+      : '<strong>Ready to publish</strong><p>Event details and judging setup are complete.</p>';
+    $('#review-validation').classList.toggle('is-ready', !issues.length);
   }
 
   function resetScoringWorkflow() {
@@ -1508,11 +1530,6 @@
     if (specialSel) specialSel.value = '';
     var typeInput = document.getElementById('special-event-type-input');
     if (typeInput) typeInput.value = '';
-    if (window.PageantWizard && typeof window.PageantWizard.hydrate === 'function') {
-      // Force exit pageant mode after reset
-      var cat = form.category;
-      if (cat) cat.dispatchEvent(new Event('change'));
-    }
   }
 
   function normalizeLoadedFormat(value) {
@@ -1647,6 +1664,10 @@
     $$('[data-js]').forEach(function (input) {
       input.checked = !!js[input.dataset.js];
     });
+    $('#advanced-special-awards').checked = !!js.enable_special_awards;
+    $('#advanced-default-max').value = js.default_max_score || settings.max_score || 100;
+    $('#advanced-carry-scores').checked = stages.some(function (round, index) { return index > 0 && round.carry_previous_scores; });
+    $('#advanced-tie-rule').value = stageTie === 'highest_selected_criterion' || stageTie === 'manual_decision' ? stageTie : 'highest_final_round';
     points = event.points_config && event.points_config.length
       ? event.points_config.slice()
       : defaultPoints(event.classification);
@@ -1661,14 +1682,7 @@
       };
     }));
     setStep(1);
-    if (window.PageantWizard && event.is_pageant) {
-      window.PageantWizard.hydrate(event);
-    } else if (window.PageantWizard) {
-      var specialSel = document.getElementById('special-event-type');
-      if (specialSel) specialSel.value = event.special_event_type || '';
-      var cat = form.category;
-      if (cat) cat.dispatchEvent(new Event('change'));
-    }
+    $('#special-event-type-input').value = event.special_event_type || '';
   }
 
   function openWizard() {
@@ -1790,15 +1804,18 @@
     loadScoringCriteria();
   }
 
-  function loadScoringCriteria() {
-    var categoryId = ($('#scoring-criterion-category') || {}).value;
+  function loadScoringCriteria(preferredCategoryId) {
+    var picker = $('#scoring-criterion-category');
+    var hasPreferredCategory = typeof preferredCategoryId === 'string' || typeof preferredCategoryId === 'number';
+    var categoryId = hasPreferredCategory ? preferredCategoryId : (picker || {}).value;
     var host = $('#scoring-criterion-list');
     if (!categoryId || !scoringWorkflow.eventId) {
       if (host) host.innerHTML = '<p class="pageant-empty-state">Save and select a category first.</p>';
-      return;
+      return Promise.resolve();
     }
+    if (picker) picker.value = categoryId;
     scoringWorkflow.selectedCategoryId = categoryId;
-    workflowRequest('list_criteria', { event_id: scoringWorkflow.eventId, category_id: categoryId }).then(function (data) {
+    return workflowRequest('list_criteria', { event_id: scoringWorkflow.eventId, category_id: categoryId }).then(function (data) {
       var ranking = data.category.judge_mode === 'ranking';
       $('#scoring-criterion-max-score-wrap').hidden = ranking;
       $('#scoring-criterion-max-score').required = !ranking;
@@ -1872,6 +1889,177 @@
     $('#view-event').showModal();
   }
 
+  function rebalanceSegmentWeights(roundId) {
+    var rows = scoringWorkflow.categories.filter(function (row) { return categoryRoundKey(row) === String(roundId) && (row.purpose || 'official') === 'official'; });
+    if (!rows.length) return Promise.resolve();
+    var weight = roundWeight(100 / rows.length);
+    return Promise.all(rows.map(function (row, index) {
+      var rowWeight = index === rows.length - 1 ? roundWeight(100 - (weight * (rows.length - 1))) : weight;
+      return workflowRequest('update_category', { event_id: scoringWorkflow.eventId, category_id: row.id, category_name: row.name, assigned_round_id: row.assigned_round_id || roundId, purpose: row.purpose || 'official', judge_mode: row.judge_mode || 'scoring', display_order: row.display_order || index + 1, overall_weight_percent: rowWeight });
+    })).then(loadCategories);
+  }
+
+  function findStageByKey(key) {
+    return stages.filter(function (round, index) { return roundKeyFor(round, index) === String(key); })[0];
+  }
+
+  var pendingJudgingDelete = null;
+  function openJudgingDelete(title, message, action) {
+    var modal = $('#judging-delete-modal');
+    $('#judging-delete-title').textContent = title;
+    $('#judging-delete-message').textContent = message;
+    pendingJudgingDelete = action;
+    modal.showModal();
+    requestAnimationFrame(function () { $('#judging-delete-confirm').focus(); });
+  }
+
+  $('#judging-delete-modal').addEventListener('close', function () {
+    pendingJudgingDelete = null;
+  });
+  $('#judging-delete-confirm').addEventListener('click', function () {
+    var action = pendingJudgingDelete;
+    pendingJudgingDelete = null;
+    $('#judging-delete-modal').close();
+    if (action) action();
+  });
+
+  $('#judging-add-round').addEventListener('click', function () {
+    $('#simple-round-edit-id').value = '';
+    $('#simple-round-name').value = '';
+    $('#simple-round-advancement').value = 'advance_all';
+    $('#simple-round-qualifiers-wrap').hidden = true;
+    $('#round-modal-title').textContent = 'Add Round';
+    $('#round-modal').showModal();
+    requestAnimationFrame(function () { $('#simple-round-name').focus(); });
+  });
+  $('#simple-round-advancement').addEventListener('change', function () { $('#simple-round-qualifiers-wrap').hidden = this.value !== 'top_ranking'; });
+  $('#simple-round-save').addEventListener('click', function () {
+    var name = $('#simple-round-name').value.trim();
+    var advancement = $('#simple-round-advancement').value;
+    if (!name) return showError('Round Name is required.');
+    var existingKey = $('#simple-round-edit-id').value;
+    var row = existingKey ? findStageByKey(existingKey) : null;
+    if (!row) { row = defaultStages(1)[0]; row.id = 'round-' + Date.now(); stages.push(row); }
+    row.name = name;
+    row.qualification_method = advancement === 'final' ? null : advancement;
+    row.advancement_rule = row.qualification_method;
+    row.qualifiers = advancement === 'top_ranking' ? Number($('#simple-round-qualifiers').value) || 1 : null;
+    row.is_final = advancement === 'final';
+    row.round_type = advancement === 'final' ? 'final' : (advancement === 'top_ranking' ? 'elimination' : 'scoring');
+    stages.forEach(function (stage, index) { stage.weight = roundWeight(100 / stages.length); stage.weight_locked = false; if (index !== stages.length - 1 && stage.is_final) { stage.is_final = false; stage.round_type = 'scoring'; } });
+    syncEventFormatFromRounds();
+    $('#round-modal').close();
+    renderJudgingSetup();
+  });
+  $('#judging-round-select').addEventListener('change', renderJudgingSegments);
+  $('#judging-add-segment').addEventListener('click', function () {
+    $('#simple-segment-edit-id').value = '';
+    $('#simple-segment-name').value = '';
+    $('#segment-modal-title').textContent = 'Add Segment';
+    $('#segment-modal').showModal();
+    requestAnimationFrame(function () { $('#simple-segment-name').focus(); });
+  });
+  $('#simple-segment-save').addEventListener('click', function () {
+    var name = $('#simple-segment-name').value.trim();
+    if (!name) return showError('Segment Name is required.');
+    var editId = $('#simple-segment-edit-id').value;
+    var roundId = selectedJudgingRound();
+    var existing = scoringWorkflow.categories.filter(function (row) { return String(row.id) === String(editId); })[0];
+    workflowRequest(editId ? 'update_category' : 'create_category', { event_id: scoringWorkflow.eventId, category_id: editId, category_name: name, assigned_round_id: roundId, purpose: 'official', judge_mode: 'scoring', display_order: existing ? existing.display_order : scoringWorkflow.categories.length + 1, overall_weight_percent: existing ? existing.overall_weight_percent : 0 }).then(loadCategories).then(function () { return rebalanceSegmentWeights(roundId); }).then(function () { $('#segment-modal').close(); renderJudgingSegments(); }).catch(function (error) { showError(error.message); });
+  });
+  $('#simple-criterion-save').addEventListener('click', function () {
+    var categoryId = $('#simple-criterion-category-id').value;
+    var editId = $('#simple-criterion-edit-id').value;
+    var name = $('#simple-criterion-name').value.trim();
+    if (!name) return showError('Criterion Name is required.');
+    var category = scoringWorkflow.categories.filter(function (row) { return String(row.id) === String(categoryId); })[0];
+    var existing = category && category.criteria.filter(function (row) { return String(row.id) === String(editId); })[0];
+    var order = existing ? existing.display_order : ((category && category.criteria.length) || 0) + 1;
+    workflowRequest(editId ? 'update_criterion' : 'create_criterion', { event_id: scoringWorkflow.eventId, category_id: categoryId, criterion_id: editId, criterion_name: name, weight_percent: $('#simple-criterion-weight').value, min_score: 0, max_score: $('#simple-criterion-max').value, display_order: order, tie_breaker_priority: '' }).then(function () { scoringWorkflow.selectedCategoryId = Number(categoryId); return loadScoringCriteria(categoryId); }).then(function () { $('#criterion-modal').close(); renderJudgingSegments(); }).catch(function (error) { showError(error.message); });
+  });
+  $('#judging-judge-search').addEventListener('input', renderJudgingJudges);
+  document.addEventListener('change', function (event) {
+    if (event.target.matches('[data-judge-proxy]')) {
+      var original = $('.judge-check[value="' + CSS.escape(event.target.dataset.judgeProxy) + '"]');
+      if (original) { original.checked = event.target.checked; updateJudgeCount(); }
+    }
+    if (event.target === $('#advanced-carry-scores')) stages.forEach(function (round, index) { round.carry_previous_scores = index > 0 && event.target.checked; round.score_handling = index > 0 && event.target.checked ? 'carry' : 'start_zero'; });
+    if (event.target === $('#advanced-default-max')) $('#max-score').value = event.target.value || 100;
+    if (event.target === $('#advanced-tie-rule')) $('#stage-tiebreak-method').value = event.target.value;
+  });
+  document.addEventListener('dragstart', function (event) {
+    var row = event.target.closest('[data-simple-round]');
+    if (row) { roundDragId = row.dataset.simpleRound; event.dataTransfer.effectAllowed = 'move'; }
+  });
+  document.addEventListener('dragover', function (event) {
+    if (roundDragId && event.target.closest('[data-simple-round]')) event.preventDefault();
+  });
+  document.addEventListener('drop', function (event) {
+    var target = event.target.closest('[data-simple-round]');
+    if (!target || !roundDragId) return;
+    event.preventDefault();
+    var from = stages.findIndex(function (round, index) { return roundKeyFor(round, index) === roundDragId; });
+    var to = stages.findIndex(function (round, index) { return roundKeyFor(round, index) === target.dataset.simpleRound; });
+    if (from >= 0 && to >= 0 && from !== to) { var moved = stages.splice(from, 1)[0]; stages.splice(to, 0, moved); renderJudgingSetup(); }
+    roundDragId = null;
+  });
+  document.addEventListener('click', function (event) {
+    var closeModal = event.target.closest('[data-close-judging-modal]');
+    var roundMove = event.target.closest('[data-round-move]');
+    var roundEdit = event.target.closest('[data-simple-round-edit]');
+    var roundDelete = event.target.closest('[data-simple-round-delete]');
+    var segmentEdit = event.target.closest('[data-simple-segment-edit]');
+    var segmentDelete = event.target.closest('[data-simple-segment-delete]');
+    var addCriterion = event.target.closest('[data-simple-add-criterion]');
+    var criterionEdit = event.target.closest('[data-simple-criterion-edit]');
+    var criterionDelete = event.target.closest('[data-simple-criterion-delete]');
+    var reviewFix = event.target.closest('[data-review-fix]');
+    if (closeModal) { closeModal.closest('dialog').close(); return; }
+    if (roundMove) {
+      var moveIndex = stages.findIndex(function (round, index) { return roundKeyFor(round, index) === roundMove.dataset.roundKey; });
+      var nextIndex = roundMove.dataset.roundMove === 'up' ? moveIndex - 1 : moveIndex + 1;
+      if (moveIndex >= 0 && nextIndex >= 0 && nextIndex < stages.length) {
+        var movedRound = stages.splice(moveIndex, 1)[0]; stages.splice(nextIndex, 0, movedRound); renderJudgingSetup();
+        $('#round-order-status').textContent = movedRound.name + ' moved to position ' + (nextIndex + 1) + '.';
+      }
+      return;
+    }
+    if (reviewFix) return setStep(reviewFix.dataset.reviewFix);
+    if (roundEdit) {
+      var round = findStageByKey(roundEdit.dataset.simpleRoundEdit); var idx = stages.indexOf(round); if (!round) return;
+      $('#simple-round-edit-id').value = roundEdit.dataset.simpleRoundEdit; $('#simple-round-name').value = round.name;
+      $('#simple-round-advancement').value = isFinalRoundAt(round, idx, stages.length) ? 'final' : (isAdvanceAllRound(round, false) ? 'advance_all' : 'top_ranking');
+      $('#simple-round-qualifiers').value = round.qualifiers || 1; $('#simple-round-qualifiers-wrap').hidden = $('#simple-round-advancement').value !== 'top_ranking'; $('#round-modal-title').textContent = 'Edit Round'; $('#round-modal').showModal(); requestAnimationFrame(function () { $('#simple-round-name').focus(); });
+    } else if (roundDelete) {
+      if (stages.length === 1) return showError('A simple event needs one round. Edit this round instead.');
+      if (scoringWorkflow.categories.some(function (category) { return categoryRoundKey(category) === roundDelete.dataset.simpleRoundDelete; })) return showError('Delete or move this round\'s judging segments first.');
+      var roundKey = roundDelete.dataset.simpleRoundDelete;
+      openJudgingDelete('Delete round?', 'This round will be permanently removed. This action cannot be undone.', function () {
+        stages = stages.filter(function (round, index) { return roundKeyFor(round, index) !== roundKey; }); renderJudgingSetup();
+      });
+    } else if (segmentEdit) {
+      var category = scoringWorkflow.categories.filter(function (row) { return String(row.id) === segmentEdit.dataset.simpleSegmentEdit; })[0]; if (!category) return;
+      $('#simple-segment-edit-id').value = category.id; $('#simple-segment-name').value = category.name; $('#segment-modal-title').textContent = 'Edit Segment'; $('#segment-modal').showModal(); requestAnimationFrame(function () { $('#simple-segment-name').focus(); });
+    } else if (segmentDelete) {
+      var segmentId = segmentDelete.dataset.simpleSegmentDelete;
+      var deleted = scoringWorkflow.categories.filter(function (row) { return String(row.id) === segmentId; })[0];
+      openJudgingDelete('Delete segment?', 'This judging segment and all of its criteria will be permanently removed.', function () {
+        workflowRequest('delete_category', { event_id: scoringWorkflow.eventId, category_id: segmentId }).then(loadCategories).then(function () { return rebalanceSegmentWeights(deleted ? categoryRoundKey(deleted) : selectedJudgingRound()); }).then(renderJudgingSegments).catch(function (error) { showError(error.message); });
+      });
+    } else if (addCriterion) {
+      $('#simple-criterion-edit-id').value = ''; $('#simple-criterion-category-id').value = addCriterion.dataset.simpleAddCriterion; $('#simple-criterion-name').value = ''; $('#simple-criterion-weight').value = ''; $('#simple-criterion-max').value = $('#advanced-default-max').value || 100; $('#criterion-modal-title').textContent = 'Add Criterion'; $('#criterion-modal').showModal(); requestAnimationFrame(function () { $('#simple-criterion-name').focus(); });
+    } else if (criterionEdit) {
+      var cat = scoringWorkflow.categories.filter(function (row) { return String(row.id) === criterionEdit.dataset.categoryId; })[0]; var criterion = cat && cat.criteria.filter(function (row) { return String(row.id) === criterionEdit.dataset.simpleCriterionEdit; })[0]; if (!criterion) return;
+      $('#simple-criterion-edit-id').value = criterion.id; $('#simple-criterion-category-id').value = cat.id; $('#simple-criterion-name').value = criterion.name; $('#simple-criterion-weight').value = criterion.weight_percent; $('#simple-criterion-max').value = criterion.max_score || 100; $('#criterion-modal-title').textContent = 'Edit Criterion'; $('#criterion-modal').showModal(); requestAnimationFrame(function () { $('#simple-criterion-name').focus(); });
+    } else if (criterionDelete) {
+      var criterionId = criterionDelete.dataset.simpleCriterionDelete;
+      var criterionCategoryId = criterionDelete.dataset.categoryId;
+      openJudgingDelete('Delete criterion?', 'This criterion will be permanently removed. This action cannot be undone.', function () {
+        workflowRequest('delete_criterion', { event_id: scoringWorkflow.eventId, category_id: criterionCategoryId, criterion_id: criterionId }).then(loadCategories).then(renderJudgingSegments).catch(function (error) { showError(error.message); });
+      });
+    }
+  });
+
   // Events
   $('#open-wizard').addEventListener('click', function () {
     resetWizard();
@@ -1885,14 +2073,12 @@
     if (activeStep > 1) setStep(activeStep - 1);
   });
   $('#wizard-next').addEventListener('click', function () {
-    var error = mode === 'pageant' && window.PageantWizard
-      ? window.PageantWizard.validate(activeStep)
-      : validateStep(activeStep);
+    var error = validateStep(activeStep);
     if (error) {
       showError(error);
       return;
     }
-    if (mode === 'standard' && activeStep === 1) {
+    if (activeStep === 1) {
       var button = this;
       button.disabled = true;
       saveEventDraft().then(function () {
@@ -1914,20 +2100,8 @@
     });
   });
   form.addEventListener('submit', function (e) {
-    if (mode === 'pageant' && window.PageantWizard) {
-      window.PageantWizard.sync();
-      if ($('#publication-status').value === 'published') {
-        var issues = window.PageantWizard.publishIssues();
-        if (issues.length) {
-          e.preventDefault();
-          setStep(5);
-          showError(issues[0].text);
-        }
-      }
-      return;
-    }
     var publishing = $('#publication-status').value === 'published';
-    var error = publishing ? (validateStep(1) || validateStep(2) || validateStep(3) || validateStep(4) || validateStep(5) || validateStep(6)) : validateStep(1);
+    var error = publishing ? (validateStep(1) || validateStep(2) || validateStep(3) || validateStep(4)) : validateStep(1);
     if (error) {
       e.preventDefault();
       showError(error);

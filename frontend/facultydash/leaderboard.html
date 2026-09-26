@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="{% static 'facultydash/pages.css' %}?v=20260805a">
   <meta http-equiv="refresh" content="120">
 </head>
-<body class="fac-v2 tab-v2">
+<body class="fac-v2 tab-v2" data-leaderboard-version="{{ leaderboard_version }}">
 <div class="tab-shell">
   {% include 'facultydash/_sidebar.html' with active='leaderboard' %}
   <div class="tab-main">
@@ -119,5 +119,44 @@
     </main>
   </div>
 </div>
+<script>
+  (function () {
+    'use strict';
+
+    var currentVersion = document.body.dataset.leaderboardVersion || 'empty';
+    var checking = false;
+
+    async function syncLeaderboard() {
+      if (checking || document.hidden) return;
+      checking = true;
+      try {
+        var url = new URL(window.location.href);
+        url.searchParams.set('_sync', String(Date.now()));
+        var response = await fetch(url.toString(), {
+          method: 'HEAD',
+          credentials: 'same-origin',
+          cache: 'no-store',
+          headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        if (!response.ok) return;
+        var latestVersion = response.headers.get('X-Leaderboard-Version');
+        if (latestVersion && latestVersion !== currentVersion) {
+          window.location.reload();
+        }
+      } catch (error) {
+        // A temporary network failure is retried by the next poll/reconnect event.
+      } finally {
+        checking = false;
+      }
+    }
+
+    window.setInterval(syncLeaderboard, 10000);
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden) syncLeaderboard();
+    });
+    window.addEventListener('focus', syncLeaderboard);
+    window.addEventListener('online', syncLeaderboard);
+  })();
+</script>
 </body>
 </html>

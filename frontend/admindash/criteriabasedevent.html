@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Criteria-Based Events · EventTab</title>
-  <link rel="stylesheet" href="{% static 'admindash/criteriabasedevent.css' %}?v=20260901g">
+  <link rel="stylesheet" href="{% static 'admindash/criteriabasedevent.css' %}?v=20260926b">
 </head>
 <body class="admin-dashboard-page admin-dashboard-v2 criteria-page match-events-page">
   <div class="dashboard-shell">
@@ -141,6 +141,7 @@
       <input type="hidden" name="publication_status" id="publication-status" value="draft">
       <input type="hidden" name="special_event_type" id="special-event-type-input" value="">
       <input type="hidden" name="pageant_config" id="pageant-config-input" value="{}">
+      <input type="hidden" name="criteria_wizard_version" value="4">
       <header class="wizard-head">
         <div>
           <span class="wizard-kicker">JUDGING BLUEPRINT</span>
@@ -157,11 +158,8 @@
       <ol class="wizard-steps" id="wizard-steps" aria-label="Creation progress">
         <li class="active" data-step-marker="1"><span>1</span><small>Event Details</small></li>
         <li data-step-marker="2"><span>2</span><small>Participants</small></li>
-        <li data-step-marker="3"><span>3</span><small>Rounds</small></li>
-        <li data-step-marker="4"><span>4</span><small>Scoring Structure</small></li>
-        <li data-step-marker="5"><span>5</span><small>Score Collection</small></li>
-        <li data-step-marker="6"><span>6</span><small>Awards</small></li>
-        <li data-step-marker="7"><span>7</span><small>Review & Publish</small></li>
+        <li data-step-marker="3"><span>3</span><small>Judging Setup</small></li>
+        <li data-step-marker="4"><span>4</span><small>Review &amp; Publish</small></li>
       </ol>
       <div class="wizard-body">
         <section class="wizard-panel active" data-step="1">
@@ -263,7 +261,47 @@
           <input type="hidden" id="stage-tiebreak-method" value="highest_selected_criterion">
         </section>
 
-        <section class="wizard-panel" data-step="3">
+        <section class="wizard-panel judging-setup-panel" data-step="3">
+          <div class="wizard-section-title"><span>03</span><div><h3>Judging Setup</h3><p>Create rounds (if any), judging segments, set criteria and weights, and assign judges.</p></div></div>
+          <div class="judging-summary" id="judging-summary" aria-live="polite"></div>
+          <div class="judging-layout">
+            <div class="judging-main">
+              <section class="judging-card" id="judging-rounds-section">
+                <header class="judging-card-head"><div><h4><span>1</span> Rounds (Stages)</h4><p>Add rounds only if your event has elimination stages. For simple events, you can use one round.</p></div><button type="button" class="match-primary" id="judging-add-round">+ Add Round</button></header>
+                <p class="sr-only" id="round-order-status" aria-live="polite"></p>
+                <div id="judging-round-list" class="judging-round-list"></div>
+              </section>
+              <section class="judging-card" id="judging-segments-section">
+                <header class="judging-card-head"><div><h4><span>2</span> Judging Segments &amp; Criteria</h4><p>Add judging segments for the selected round. Each segment has its own criteria and weights.</p></div></header>
+                <div class="judging-toolbar"><label>Round <select id="judging-round-select"></select></label><button type="button" class="match-primary" id="judging-add-segment">+ Add Segment</button></div>
+                <div id="judging-segment-list" class="judging-segment-list"></div>
+              </section>
+            </div>
+            <aside class="judging-side">
+              <section class="judging-card" id="judging-judges-section">
+                <header class="judging-card-head"><div><h4><span>3</span> Judges</h4><p>Select the judges who will score this event.</p></div></header>
+                <input type="search" id="judging-judge-search" placeholder="Search judges..." aria-label="Search judges">
+                <div class="judging-judge-list" id="judging-judge-list"></div>
+              </section>
+              <details class="judging-card judging-advanced" id="judging-advanced">
+                <summary><strong><span>4</span> Advanced Options</strong><small>Additional settings for judging and tabulation.</small></summary>
+                <div class="judging-advanced-body">
+                  <label class="judging-check"><input type="checkbox" id="advanced-carry-scores"> Carry previous round scores to next round</label>
+                  <label class="judging-check"><input type="checkbox" id="advanced-special-awards"> Enable Special Awards</label>
+                  <label>Tie-breaking Rule<select id="advanced-tie-rule"><option value="highest_final_round">Highest final round score</option><option value="highest_selected_criterion">Highest selected criterion</option><option value="manual_decision">Manual decision</option></select></label>
+                  <label>Default Max Score per Criterion<input type="number" id="advanced-default-max" min="1" step="1" value="100"></label>
+                </div>
+              </details>
+            </aside>
+          </div>
+        </section>
+
+        <dialog id="round-modal" class="judging-modal" aria-labelledby="round-modal-title"><div class="judging-modal-body"><header><h3 id="round-modal-title">Add Round</h3><button type="button" data-close-judging-modal aria-label="Close">&times;</button></header><input type="hidden" id="simple-round-edit-id"><label>Round Name<input id="simple-round-name" maxlength="80" placeholder="Preliminary Round"></label><label>Advancement<select id="simple-round-advancement"><option value="advance_all">All participants continue</option><option value="top_ranking">Top participants advance</option><option value="final">Final round / no advancement</option></select></label><label id="simple-round-qualifiers-wrap" hidden>Number to Advance<input id="simple-round-qualifiers" type="number" min="1" step="1" value="1"></label><footer><button type="button" data-close-judging-modal class="match-secondary">Cancel</button><button type="button" id="simple-round-save" class="match-primary">Save Round</button></footer></div></dialog>
+        <dialog id="segment-modal" class="judging-modal" aria-labelledby="segment-modal-title"><div class="judging-modal-body"><header><h3 id="segment-modal-title">Add Segment</h3><button type="button" data-close-judging-modal aria-label="Close">&times;</button></header><input type="hidden" id="simple-segment-edit-id"><label>Segment Name<input id="simple-segment-name" maxlength="120" placeholder="Production Number"></label><footer><button type="button" data-close-judging-modal class="match-secondary">Cancel</button><button type="button" id="simple-segment-save" class="match-primary">Save Segment</button></footer></div></dialog>
+        <dialog id="criterion-modal" class="judging-modal" aria-labelledby="criterion-modal-title"><div class="judging-modal-body"><header><h3 id="criterion-modal-title">Add Criterion</h3><button type="button" data-close-judging-modal aria-label="Close">&times;</button></header><input type="hidden" id="simple-criterion-edit-id"><input type="hidden" id="simple-criterion-category-id"><label>Criterion Name<input id="simple-criterion-name" maxlength="120" placeholder="Stage Presence"></label><label>Weight %<input id="simple-criterion-weight" type="number" min="0" max="100" step="0.01"></label><label>Max Score<input id="simple-criterion-max" type="number" min="1" step="0.01" value="100"></label><footer><button type="button" data-close-judging-modal class="match-secondary">Cancel</button><button type="button" id="simple-criterion-save" class="match-primary">Save Criterion</button></footer></div></dialog>
+        <dialog id="judging-delete-modal" class="judging-modal judging-delete-modal" aria-labelledby="judging-delete-title" aria-describedby="judging-delete-message"><div class="judging-modal-body"><header><h3 id="judging-delete-title">Delete item?</h3><button type="button" data-close-judging-modal aria-label="Close">&times;</button></header><p id="judging-delete-message">This action cannot be undone.</p><footer><button type="button" data-close-judging-modal class="match-secondary">Cancel</button><button type="button" id="judging-delete-confirm" class="judging-danger-action">Delete</button></footer></div></dialog>
+
+        <section class="wizard-panel criteria-hidden" data-legacy-step="3" hidden inert aria-hidden="true">
           <div class="round-setup">
             <div class="wizard-section-title"><span>03</span><div>
               <h3>Round Setup</h3>
@@ -367,7 +405,7 @@
           </div>
         </section>
 
-        <section class="wizard-panel" data-step="4">
+        <section class="wizard-panel criteria-hidden" data-legacy-step="4" hidden inert aria-hidden="true">
           <div class="wizard-section-title"><span>04</span><div><h3>Scoring Structure</h3><p>Build Round -> Category -> Criterion weights for official results and special awards.</p></div></div>
           <div class="wizard-grid">
             <label class="wide">Event Name
@@ -394,7 +432,7 @@
           <div id="scoring-category-list" class="pageant-review-cards"></div>
         </section>
 
-        <section class="wizard-panel" data-step="4">
+        <section class="wizard-panel criteria-hidden" data-legacy-step="4" hidden inert aria-hidden="true">
           <div class="wizard-section-title"><span>04</span><div><h3>Criteria</h3><p>Add criteria to one saved category at a time. Criterion weights are within the selected category.</p></div></div>
           <div class="wizard-grid">
             <label class="wide">Category <select id="scoring-criterion-category"></select></label>
@@ -458,7 +496,7 @@
           </fieldset>
         </section>
 
-        <section class="wizard-panel" data-step="5">
+        <section class="wizard-panel criteria-hidden" data-legacy-step="5" hidden inert aria-hidden="true">
           <div class="wizard-section-title"><span>05</span><div><h3>Judges and Score Collection</h3><p>Assign officials and configure Judge Mobile, OCR, or hybrid scoring.</p></div></div>
           <label class="field-block">Chief Judge
             <select name="chief_judge" id="chief-judge" required>
@@ -534,7 +572,7 @@
           </fieldset>
         </section>
 
-        <section class="wizard-panel" data-step="6">
+        <section class="wizard-panel criteria-hidden" data-legacy-step="6" hidden inert aria-hidden="true">
           <div class="wizard-section-title"><span>06</span><div><h3>Awards and Result Rules</h3><p>Configure placements, special awards, optional points, approval, and publication rules.</p></div></div>
           <div class="wizard-grid">
             <label>Final Result Basis
@@ -559,8 +597,12 @@
         </section>
 
 
+        {% comment %}
+        Legacy pageant panels intentionally excluded from the rendered DOM.
+        Existing pageant records hydrate into the universal four-step wizard;
+        pageant_config remains preserved server-side for compatibility.
         <!-- ═══════ PAGEANT WIZARD PANELS ═══════ -->
-        <section class="wizard-panel" data-pageant data-pageant-step="1">
+        <section class="wizard-panel" data-pageant data-pageant-step="1" hidden inert aria-hidden="true">
           <div class="wizard-section-title"><span>01</span><div>
             <h3>Set up your Pageant</h3>
             <p>Start with the basic event information. You can configure scoring, judges, and awards in the next steps.</p>
@@ -601,7 +643,7 @@
           </details>
         </section>
 
-        <section class="wizard-panel" data-pageant data-pageant-step="2">
+        <section class="wizard-panel" data-pageant data-pageant-step="2" hidden inert aria-hidden="true">
           <div class="wizard-section-title"><span>02</span><div>
             <h3>Add Pageant Candidates</h3>
             <p>Register the candidates and assign the team or department they represent.</p>
@@ -622,7 +664,7 @@
           </details>
         </section>
 
-        <section class="wizard-panel" data-pageant data-pageant-step="3">
+        <section class="wizard-panel" data-pageant data-pageant-step="3" hidden inert aria-hidden="true">
           <div class="wizard-section-title"><span>03</span><div>
             <h3>Set Up Segments and Scoring</h3>
             <p>Choose the parts of the Pageant and define how judges will score each one.</p>
@@ -635,7 +677,7 @@
           <div id="pageant-segments-list"></div>
         </section>
 
-        <section class="wizard-panel" data-pageant data-pageant-step="4">
+        <section class="wizard-panel" data-pageant data-pageant-step="4" hidden inert aria-hidden="true">
           <div class="wizard-section-title"><span>04</span><div>
             <h3>Judges, Advancement, and Awards</h3>
             <p>Assign officials, decide whether candidates advance between rounds, and optionally add special awards.</p>
@@ -712,16 +754,18 @@
           </div>
         </section>
 
-        <section class="wizard-panel" data-pageant data-pageant-step="5">
+        <section class="wizard-panel" data-pageant data-pageant-step="5" hidden inert aria-hidden="true">
           <div class="wizard-section-title"><span>05</span><div>
             <h3>Review Your Pageant</h3>
             <p>Check the setup before saving or publishing the Pageant.</p>
           </div></div>
           <div id="pageant-review"></div>
         </section>
+        {% endcomment %}
 
-        <section class="wizard-panel" data-step="7">
-          <div class="wizard-section-title"><span>07</span><div><h3>Review & publish</h3><p>Confirm the full configuration before saving.</p></div></div>
+        <section class="wizard-panel" data-step="4">
+          <div class="wizard-section-title"><span>04</span><div><h3>Review &amp; Publish</h3><p>Confirm the event, participants, judging setup, and publication readiness.</p></div></div>
+          <div id="review-validation" class="review-validation" aria-live="polite"></div>
           <div id="review-summary" class="review-summary"></div>
         </section>
       </div>
@@ -843,7 +887,6 @@
     <option value="Production Number"></option>
     <option value="Question and Answer"></option>
   </datalist>
-  <script src="{% static 'admindash/criteriabasedevent-pageant.js' %}?v=20260901j"></script>
-  <script src="{% static 'admindash/criteriabasedevent.js' %}?v=20260905-simplified-fields"></script>
+  <script src="{% static 'admindash/criteriabasedevent.js' %}?v=20260926c"></script>
 </body>
 </html>

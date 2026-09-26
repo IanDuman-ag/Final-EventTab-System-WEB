@@ -82,6 +82,7 @@ DEFAULT_JUDGE_SETTINGS = {
     'remove_high_low': False,
 }
 TIE_BREAK_OPTIONS = {
+    'highest_final_round',
     'highest_selected_criterion',
     'highest_chief_judge',
     'lowest_deduction',
@@ -641,7 +642,7 @@ def _validated_criteria(data, strict=True):
     return cleaned
 
 
-def _validated_rounds(event_format, data, participant_count=0):
+def _validated_rounds(event_format, data, participant_count=0, strict=False):
     rows = _json_list(data.get('rounds_config'), 'Competition stage configuration')
 
     def _extra(row):
@@ -771,6 +772,10 @@ def _validated_rounds(event_format, data, participant_count=0):
                 qualifiers = _positive_int(row.get('qualifiers'), 'Each qualification stage qualifier count')
                 if qualifiers < 1:
                     raise CriteriaEventValidationError('Each qualification stage needs at least one qualifier.')
+                if strict and qualifiers > current_round_participant_count:
+                    raise CriteriaEventValidationError(
+                        f'Top {qualifiers} cannot exceed the {current_round_participant_count} eligible participants.'
+                    )
                 qualifiers = _stage_actual_qualifiers(qualifiers, current_round_participant_count)
             if qualification_method == 'minimum_score':
                 try:
@@ -903,11 +908,20 @@ def _validated_users(data, user_model):
         raise CriteriaEventValidationError('One or more selected judges are not authorized.')
     ordered_judges = [by_id[i] for i in judge_ids]
 
-    if not chief_raw.isdigit():
-        raise CriteriaEventValidationError('Chief Judge is required.')
-    chief = user_model.objects.filter(pk=int(chief_raw), is_active=True).filter(models_q_for_judges()).distinct().first()
-    if not chief:
-        raise CriteriaEventValidationError('The selected Chief Judge is not authorized.')
+    # The simplified wizard assigns one judge pool. Preserve an explicit chief
+    # from older records, otherwise use the first assigned judge.
+    chief = ordered_judges[0]
+    if chief_raw:
+        if not chief_raw.isdigit():
+            raise CriteriaEventValidationError('The selected Chief Judge is not authorized.')
+        chief = user_model.objects.filter(pk=int(chief_raw), is_active=True).filter(models_q_for_judges()).distinct().first()
+        if not chief:
+            raise CriteriaEventValidationError('The selected Chief Judge is not authorized.')
+
+    # Tabulator assignment remains supported for existing workflows, but is
+    # optional in the streamlined event creation flow.
+    if not faculty_raw:
+        return chief, ordered_judges, None
 
     if not faculty_raw.isdigit():
         raise CriteriaEventValidationError('Tabulator in Charge is required.')
@@ -1264,12 +1278,13 @@ def save_criteria_event(data, user, files=None, instance=None):
     files = files or {}
     strict = (data.get('publication_status') or Event.PUBLICATION_DRAFT).strip().lower() == Event.PUBLICATION_PUBLISHED
 
-    if is_pageant_event(data) or (
+    unified_wizard = str(data.get('criteria_wizard_version') or '') == '4'
+    if not unified_wizard and (is_pageant_event(data) or (
         instance is not None
         and is_pageant_event(instance)
         and (data.get('special_event_type') or 'pageant').strip().lower() == 'pageant'
         and (data.get('category') or instance.category) == 'Special Event'
-    ):
+    )):
         # Prefer explicit POST flags; fall back to instance when editing a pageant.
         if not (data.get('special_event_type') or '').strip():
             mutable = data.copy() if hasattr(data, 'copy') else dict(data)
@@ -1283,6 +1298,8 @@ def save_criteria_event(data, user, files=None, instance=None):
     if category not in ALLOWED_CATEGORIES:
         raise CriteriaEventValidationError('Select a valid category.')
     special_event_type = (data.get('special_event_type') or '').strip().lower()
+    if unified_wizard and instance is not None and is_pageant_event(instance):
+        special_event_type = instance.special_event_type
     if category == 'Special Event' and special_event_type and special_event_type not in SPECIAL_EVENT_TYPES:
         raise CriteriaEventValidationError('Select a valid Special Event Type.')
     if category != 'Special Event':
@@ -1323,6 +1340,7 @@ def save_criteria_event(data, user, files=None, instance=None):
         event_format,
         data,
         participant_count=len(participant_ids) if strict else max(1, len(participant_ids)),
+        strict=strict,
     )
     if len(rounds_config) >= 2:
         event_format = 'multiple_stage'
@@ -1366,7 +1384,7 @@ def save_criteria_event(data, user, files=None, instance=None):
     event.name = name
     event.category = category
     event.special_event_type = special_event_type
-    event.pageant_config = {}
+    event.pageant_config = instance.pageant_config if unified_wizard and instance is not None else {}
     event.event_classification = classification
     event.division = division
     event.venue = venue
