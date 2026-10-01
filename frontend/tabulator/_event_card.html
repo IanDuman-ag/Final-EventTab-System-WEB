@@ -1,0 +1,8 @@
+<article class="et-card event-card">
+  <div class="event-card-media">{% if ev.image_url %}<img src="{{ ev.image_url }}" alt="" loading="lazy">{% else %}<span aria-hidden="true">ET</span>{% endif %}</div>
+  <div class="event-card-body"><div class="event-card-title"><div><h3>{{ ev.name }}</h3><p>{{ ev.category }} · {{ ev.event_type }} · {{ ev.mode_label }}</p></div><span class="et-status-pill status-{{ ev.status_key }}">{{ ev.status_label }}</span></div>
+    <div class="event-card-meta"><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2v3h10V2h2v3h2v17H3V5h2V2zm12 9H5v9h14V7H5z"/></svg>{{ ev.date }}</span><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a7 7 0 0 1 7 7c0 5-7 13-7 13S5 14 5 9a7 7 0 0 1 7-7zm0 4a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg>{{ ev.venue }}</span></div>
+    <div class="event-card-progress"><span>{{ ev.progress_label }}</span><strong>{{ ev.progress }}%</strong></div><div class="et-progress"><span style="width:{{ ev.progress }}%"></span></div>
+    <div class="event-card-actions"><a class="et-btn et-btn-primary" href="{% url 'tabulator_full_results' %}?event_id={{ ev.id }}">View Full Results</a><a class="et-btn et-btn-ghost" href="{% url 'tabulator_live_rankings' %}?event_id={{ ev.id }}">Live Rankings</a></div>
+  </div>
+</article>

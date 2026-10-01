@@ -171,7 +171,22 @@ DEFAULT_RESULT_PROCESSING = {
     'require_faculty_confirmation': False,
     'display_score_breakdown': True,
     'stage_tiebreak_method': 'highest_selected_criterion',
+    'verification_mode': 'admin_only',
 }
+RESULT_VERIFICATION_MODES = {
+    'admin_only',
+    'tabulator_verification',
+    'tabulator_admin_approval',
+}
+
+
+def _normalize_verification_mode(config, tabulator):
+    mode = str(config.get('verification_mode') or 'admin_only').strip().lower()
+    if mode not in RESULT_VERIFICATION_MODES:
+        raise CriteriaEventValidationError('Select a valid result verification workflow.')
+    # An unassigned optional officer always falls back to Admin review.
+    config['verification_mode'] = mode if tabulator else 'admin_only'
+    return config
 DEFAULT_JUDGE_SETTINGS = {
     'require_all_judges': True,
     'allow_edit_before_submit': True,
@@ -1082,7 +1097,7 @@ def validate_saved_scoring_structure(event, strict=True):
     for category in categories:
         criteria_rows = list(category.criteria.all())
         if not criteria_rows:
-            issues.append(f'Category "{category.name}" has no criteria.')
+            issues.append(f'Judging segment "{category.name}" has no criteria.')
         criterion_total = sum(float(row.weight_percent or 0) for row in criteria_rows)
         for criterion in criteria_rows:
             issue = subcriteria_issue(criterion)
@@ -1090,8 +1105,8 @@ def validate_saved_scoring_structure(event, strict=True):
                 issues.append(issue)
         if abs(criterion_total - 100) >= 0.01:
             issues.append(
-                f'Criteria in category "{category.name}" must total 100% '
-                f'(currently {round(criterion_total, 2)}%).'
+                f'Criteria weights for "{category.name}" must total 100%. '
+                f'Current total: {round(criterion_total, 2)}%.'
             )
         assigned = str(category.assigned_round_id or round_ids[0])
         if category.purpose == category.PURPOSE_OFFICIAL:
@@ -1276,6 +1291,7 @@ def _save_pageant_event(data, user, files=None, instance=None):
         **DEFAULT_RESULT_PROCESSING,
         **_json_dict(data.get('result_processing_config'), 'Result processing'),
     }
+    _normalize_verification_mode(result_processing, faculty)
     result_processing['multi_stage'] = True
     result_processing['active_stage_index'] = 0
     result_processing.setdefault('confirmed_stages', {})
@@ -1486,6 +1502,7 @@ def save_criteria_event(data, user, files=None, instance=None):
             raise
         chief, judges, faculty = None, [], None
     result_processing = {**DEFAULT_RESULT_PROCESSING, **_json_dict(data.get('result_processing_config'), 'Result processing')}
+    _normalize_verification_mode(result_processing, faculty)
     stage_tiebreak = str(result_processing.get('stage_tiebreak_method') or 'highest_selected_criterion').strip()
     if stage_tiebreak not in TIE_BREAK_OPTIONS:
         raise CriteriaEventValidationError('Select a valid stage tie-breaking method.')
@@ -1611,6 +1628,8 @@ def serialize_criteria_event(event):
     judge_ids = list(event.assigned_judges.values_list('id', flat=True))
     judges = list(User.objects.filter(id__in=judge_ids))
     judge_map = {user.id: (user.get_full_name().strip() or user.username) for user in judges}
+    assigned_tabulator = event.assigned_tabulators.order_by('id').first()
+    primary_tabulator = event.faculty_account or assigned_tabulator
     entries = list(event.criteria_entries.select_related('department', 'source_individual', 'source_team').prefetch_related('member_links__individual'))
     participant_names = [entry.display_name for entry in entries]
     serialized_entries = [{
@@ -1723,10 +1742,10 @@ def serialize_criteria_event(event):
             event.chief_judge.get_full_name().strip() or event.chief_judge.username
             if event.chief_judge else '—'
         ),
-        'faculty_account_id': event.faculty_account_id,
+        'faculty_account_id': primary_tabulator.id if primary_tabulator else None,
         'faculty_name': (
-            event.faculty_account.get_full_name().strip() or event.faculty_account.username
-            if event.faculty_account else event.faculty_in_charge or '—'
+            primary_tabulator.get_full_name().strip() or primary_tabulator.username
+            if primary_tabulator else event.faculty_in_charge or '—'
         ),
         'scoresheet_template_id': event.scoresheet_template_id,
         'judge_ids': judge_ids,

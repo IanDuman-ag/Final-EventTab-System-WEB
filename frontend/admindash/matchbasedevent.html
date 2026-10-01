@@ -250,20 +250,6 @@
           <input type="hidden" name="result_entry_format" id="result-entry-format" value="team_final_score">
           <input type="hidden" name="tie_break_rules" id="tie-break-rules" value='["head_to_head","score_difference","points_scored"]'>
 
-          <fieldset>
-            <legend>Scoresheet Template</legend>
-            <label class="field-block" id="scoresheet-template-wrap">
-              Select Existing Template
-              <select name="scoresheet_template" id="scoresheet-template">
-                <option value="">Auto-match by Sport/Game Type</option>
-                {% for tpl in scoresheet_templates %}
-                <option value="{{ tpl.id }}" data-category="{{ tpl.category }}">{{ tpl.name }}{% if tpl.category %} · {{ tpl.category }}{% endif %}</option>
-                {% endfor %}
-              </select>
-              <small class="field-hint">Leave blank to auto-match by Sport/Game Type, or pick a saved template.</small>
-            </label>
-          </fieldset>
-
           <fieldset id="points-fieldset">
             <legend>Championship Points</legend>
             <label class="inline-check">

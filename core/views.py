@@ -3131,11 +3131,6 @@ def admin_match_events(request, event_id=None):
     tabulator_options = User.objects.filter(is_active=True).filter(
         models_q_for_tabulator()
     ).distinct().order_by('first_name', 'last_name', 'username')
-    from events.models import ScoresheetTemplate
-    match_templates = ScoresheetTemplate.objects.filter(
-        event_type=ScoresheetTemplate.EVENT_MATCH,
-        status=ScoresheetTemplate.STATUS_ACTIVE,
-    ).order_by('name')
     teams = Team.objects.filter(status=Team.STATUS_ACTIVE).select_related('department').order_by('name')
     all_match_events = _match_event_queryset()
     from events.match_event_service import current_intramurals_season
@@ -3150,7 +3145,6 @@ def admin_match_events(request, event_id=None):
         'teams': teams,
         'faculty_options': faculty_options,
         'tabulator_options': tabulator_options,
-        'scoresheet_templates': match_templates,
         'total_count': all_match_events.count(),
         'draft_count': all_match_events.filter(publication_status=Event.PUBLICATION_DRAFT).count(),
         'published_count': all_match_events.filter(publication_status=Event.PUBLICATION_PUBLISHED).count(),
@@ -3455,6 +3449,15 @@ def admin_criteria_events(request, event_id=None):
                     return workflow_error('A category with this name already exists for the Event.')
                 if event.scoring_categories.exclude(pk=category.pk).filter(display_order=order).exists():
                     return workflow_error('This display order is already in use for the Event.')
+                if category.score_submissions.exists() and (
+                    category.assigned_round_id != assigned_round_id
+                    or category.purpose != purpose
+                    or category.judge_mode != mode
+                    or category.overall_weight_percent != weight
+                ):
+                    return workflow_error(
+                        'This judging segment has saved scores; its round, scoring mode, purpose, and weight cannot be changed.'
+                    )
                 category.name, category.judge_mode = name[:120], mode
                 category.assigned_round_id = assigned_round_id
                 category.purpose = purpose
@@ -3586,8 +3589,16 @@ def admin_criteria_events(request, event_id=None):
                     return workflow_error(str(exc))
                 if request.POST.get('detailed_subcriteria') == '1' and not children:
                     return workflow_error('Add at least one subcriterion or turn off detailed subcriteria.')
-                if criterion.score_submissions.exists() and (criterion.max_score != max_score or (children is not None and not children and criterion.subcriteria.exists()) or (children and not criterion.subcriteria.exists())):
-                    return workflow_error('This criterion has saved scores; its score structure cannot be removed or resized.')
+                if criterion.score_submissions.exists() and (
+                    criterion.weight_percent != weight
+                    or criterion.min_score != min_score
+                    or criterion.max_score != max_score
+                    or (children is not None and not children and criterion.subcriteria.exists())
+                    or (children and not criterion.subcriteria.exists())
+                ):
+                    return workflow_error(
+                        'This criterion has saved scores; its weight, score range, and subcriteria structure cannot be changed.'
+                    )
                 try:
                     with transaction.atomic():
                         criterion.name, criterion.weight_percent = name[:120], weight
@@ -4498,16 +4509,12 @@ def _tabulator_display_name(user):
 
 
 def _tabulator_event_qs(user=None):
-    """Events visible to a tabulator: assigned to them, or unassigned (legacy)."""
-    from django.db.models import Count
+    """Events explicitly assigned to this Tabulator."""
     from events.models import Event
 
-    qs = Event.objects.annotate(_tab_count=Count('assigned_tabulators', distinct=True))
     if user is None or not getattr(user, 'is_authenticated', False):
-        return qs.order_by('-event_date')
-    return qs.filter(
-        Q(assigned_tabulators=user) | Q(_tab_count=0)
-    ).distinct().order_by('-event_date')
+        return Event.objects.none()
+    return Event.objects.filter(assigned_tabulators=user).distinct().order_by('-event_date')
 
 
 def _tabulator_event_ids(user=None):
@@ -4518,10 +4525,7 @@ def _tabulator_event_ids(user=None):
 def _tabulator_can_access_event(user, event):
     if event is None:
         return False
-    tab_ids = list(event.assigned_tabulators.values_list('id', flat=True))
-    if not tab_ids:
-        return True  # unassigned → any tabulator
-    return user.id in tab_ids
+    return event.assigned_tabulators.filter(pk=user.pk).exists()
 
 
 def _get_tab_event_rows(request):
@@ -4680,7 +4684,7 @@ def tabulator_approve_result(request, result_type, result_id):
             if portal_ev is None:
                 from events.models import Event
                 portal_ev = Event.objects.filter(judging_event=js.candidate.event).first()
-            if portal_ev and not _tabulator_can_access_event(request.user, portal_ev):
+            if not _tabulator_can_access_event(request.user, portal_ev):
                 return JsonResponse({'success': False, 'message': 'Not assigned to this event'}, status=403)
             JudgeScore.objects.filter(
                 candidate=js.candidate,
@@ -4743,7 +4747,7 @@ def tabulator_reject_result(request, result_type, result_id):
             if portal_ev is None:
                 from events.models import Event
                 portal_ev = Event.objects.filter(judging_event=js.candidate.event).first()
-            if portal_ev and not _tabulator_can_access_event(request.user, portal_ev):
+            if not _tabulator_can_access_event(request.user, portal_ev):
                 return JsonResponse({'success': False, 'message': 'Not assigned to this event'}, status=403)
             due = _pending_result_due_info(js.submitted_at)
             if due.get('is_overdue'):
@@ -5891,7 +5895,9 @@ def tabulator_generate_report(request):
     }
     type_label = type_label_map.get(report_type, report_type.title())
 
-    event_obj = Event.objects.filter(name=event_name).first()
+    event_obj = _tabulator_event_qs(request.user).filter(name=event_name).first()
+    if event_obj is None:
+        return HttpResponse('Event is not assigned to you.', status=403)
     event_ct = ContentType.objects.get_for_model(Event)
 
     LogEntry.objects.create(
@@ -6039,6 +6045,9 @@ def _build_official_activity_rows():
 
     rows = []
     seen_submit_keys = set()
+    portal_event_ids = dict(Event.objects.filter(
+        judging_event__isnull=False,
+    ).values_list('judging_event_id', 'id'))
 
     for log in JudgeActivityLog.objects.select_related('event', 'candidate').order_by('-timestamp'):
         role = _activity_role_for_user_id(log.judge_id)
@@ -6061,6 +6070,7 @@ def _build_official_activity_rows():
             'action_label': label,
             'action_key': action_key,
             'event_name': log.event.title if log.event else '—',
+            'event_id': portal_event_ids.get(log.event_id),
             'round_label': log.event.get_status_display() if log.event else '—',
             'description': (log.details or log.get_action_display())[:200],
         })
@@ -6130,6 +6140,7 @@ def _build_official_activity_rows():
             'action_label': 'Submitted Scores',
             'action_key': 'submit',
             'event_name': je.title if je else '—',
+            'event_id': portal_event_ids.get(je_id),
             'round_label': je.get_status_display() if je else '—',
             'description': (
                 f'{role} submitted scores for Contestant #{g["candidate__number"]} '
@@ -6168,6 +6179,7 @@ def _build_official_activity_rows():
             'action_label': action_label,
             'action_key': action_key,
             'event_name': ss.event.name if ss.event else '—',
+            'event_id': ss.event_id,
             'round_label': ss.match.round_name if ss.match else '—',
             'description': f'Match result: {team_a} vs {team_b} ({ss.status})'[:200],
         })
@@ -6190,7 +6202,8 @@ def tabulator_activity_logs_feed(request):
     """JSON feed for near-realtime activity log polling."""
     tab = request.GET.get('tab', 'all').strip().lower()
     since = (request.GET.get('since') or '').strip()
-    all_rows = _build_official_activity_rows()
+    assigned_ids = _tabulator_event_ids(request.user)
+    all_rows = [row for row in _build_official_activity_rows() if row.get('event_id') in assigned_ids]
     rows = all_rows
     if tab == 'judge':
         rows = [r for r in all_rows if r['user_role'] == 'Judge']

@@ -5,8 +5,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Faculty Dashboard · EventTab</title>
-  <link rel="stylesheet" href="{% static 'facultydash/faculty.css' %}?v=20260802a">
-  <link rel="stylesheet" href="{% static 'facultydash/pages.css' %}?v=20260802a">
+  <link rel="stylesheet" href="{% static 'facultydash/faculty.css' %}?v=20260929b">
+  <link rel="stylesheet" href="{% static 'facultydash/pages.css' %}?v=20260929b">
 </head>
 <body class="fac-v2 tab-v2">
 <div class="tab-shell">
@@ -14,68 +14,68 @@
   <div class="tab-main">
     <header class="tab-topbar">
       <div>
-        <p class="fac-kicker">Faculty In-Charge</p>
-        <h1>Dashboard</h1>
+        <p class="fac-kicker">Faculty workspace</p>
+        <h1>Welcome back, {{ user_display|default:"Faculty" }}</h1>
+        <p class="fac-lead">Here’s an overview of your assigned match-based events.</p>
       </div>
     </header>
     <main class="tab-content fac-content">
-      <section class="fac-stats">
-        <article><span>Assigned Events</span><strong>{{ stats.assigned_events }}</strong></article>
-        <article><span>Today's Schedule</span><strong>{{ stats.todays_schedule }}</strong></article>
-        <article><span>Pending Result Reviews</span><strong>{{ stats.pending_reviews }}</strong></article>
-        <article><span>Published Events</span><strong>{{ stats.published_events }}</strong></article>
+      <section class="fac-stats" aria-label="Summary">
+        <article><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2Zm0 5v9h14V9H5Zm2-7h2v4H7V2Zm8 0h2v4h-2V2Z"/></svg><span>Assigned Events</span><strong>{{ stats.assigned_events }}</strong></article>
+        <article><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20Zm1 5h-2v6l5 3 1-1.7-4-2.3V7Z"/></svg><span>Today's Matches</span><strong>{{ stats.todays_matches }}</strong></article>
+        <article><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 3h2v10h-2V3Zm0 14h2v2h-2v-2ZM4 2h16a2 2 0 0 1 2 2v18H2V4a2 2 0 0 1 2-2Zm0 2v16h16V4H4Z"/></svg><span>Pending Results</span><strong>{{ stats.pending_results }}</strong></article>
+        <article class="is-confirmed"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20Zm-1.4 14.2 7-7-1.4-1.4-5.6 5.6-2.8-2.8L6.4 12l4.2 4.2Z"/></svg><span>Confirmed Results</span><strong>{{ stats.confirmed_results }}</strong></article>
       </section>
 
-      <div class="fac-grid-2">
-        <section class="fac-card">
-          <header><h2>Recent Assigned Events</h2></header>
-          <div class="fac-table-wrap">
-            <table class="fac-table">
-              <thead>
-                <tr>
-                  <th>Event Name</th>
-                  <th>Event Type</th>
-                  <th>Venue</th>
-                  <th>Schedule</th>
-                  <th>Status</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for e in recent_events %}
-                <tr>
-                  <td><strong>{{ e.name }}</strong></td>
-                  <td>{{ e.event_type }}</td>
-                  <td>{{ e.venue }}</td>
-                  <td>{{ e.schedule }}</td>
-                  <td><span class="fac-pill">{{ e.status }}</span></td>
-                  <td><a class="fac-btn fac-btn-sm" href="{% url 'faculty_event_manage' e.id %}">Manage</a></td>
-                </tr>
-                {% empty %}
-                <tr><td colspan="6" class="fac-empty">No events assigned yet.</td></tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-        </section>
+      <section class="fac-card fac-section">
+        <header><div><h2>Today's Matches</h2><p>Matches scheduled for today across your assigned events.</p></div></header>
+        <div class="fac-table-wrap">
+          <table class="fac-table fac-responsive-table">
+            <thead><tr><th>Event</th><th>Game / Stage</th><th>Matchup</th><th>Time</th><th>Status</th><th>Action</th></tr></thead>
+            <tbody>
+              {% for row in today_matches %}
+              <tr>
+                <td data-label="Event"><strong>{{ row.event_name }}</strong></td>
+                <td data-label="Game / Stage">{{ row.game }}<small>{{ row.stage }}</small></td>
+                <td data-label="Matchup">{{ row.matchup }}</td>
+                <td data-label="Time">{{ row.time|default:"—" }}<small>{{ row.venue }}</small></td>
+                <td data-label="Status"><span class="fac-pill fac-pill--{{ row.result_status_key }}">{{ row.result_status }}</span></td>
+                <td data-label="Action"><a class="fac-btn fac-btn-sm" href="{% url 'faculty_event_manage' row.event_id %}?tab=matches&amp;match={{ row.id }}">{% if row.is_confirmed or not row.team_a_id or not row.team_b_id %}View Match{% else %}Enter Result{% endif %}</a></td>
+              </tr>
+              {% empty %}
+              <tr><td colspan="6"><div class="fac-empty"><strong>No matches today</strong><span>Your schedule is clear. Open an assigned event to review upcoming matches.</span></div></td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
-        <section class="fac-card">
-          <header><h2>Recent Notifications</h2></header>
-          <ul class="fac-notes">
-            {% for n in notifications %}
-            <li>
-              <strong>{{ n.kind }}</strong>
-              <span>{{ n.message }}</span>
-              <small>{{ n.when }}</small>
-            </li>
-            {% empty %}
-            <li class="fac-empty">No notifications.</li>
-            {% endfor %}
-          </ul>
-        </section>
-      </div>
+      <section class="fac-card fac-section">
+        <header><div><h2>My Assigned Events</h2><p>Match-based events assigned to you.</p></div><a class="fac-link" href="{% url 'faculty_my_events' %}">View all</a></header>
+        <div class="fac-table-wrap">
+          <table class="fac-table fac-responsive-table">
+            <thead><tr><th>Event</th><th>Type</th><th>Schedule</th><th>Venue</th><th>Match progress</th><th>Status</th><th>Action</th></tr></thead>
+            <tbody>
+              {% for e in recent_events %}
+              <tr>
+                <td data-label="Event"><strong>{{ e.name }}</strong></td>
+                <td data-label="Type">{{ e.event_type }}</td>
+                <td data-label="Schedule">{{ e.schedule }}</td>
+                <td data-label="Venue">{{ e.venue }}</td>
+                <td data-label="Progress"><div class="fac-inline-progress"><span><i style="width:{{ e.progress_percent }}%"></i></span><small>{{ e.matches_completed }}/{{ e.matches_total }}</small></div></td>
+                <td data-label="Status"><span class="fac-pill">{{ e.status }}</span></td>
+                <td data-label="Action"><a class="fac-btn fac-btn-sm" href="{% url 'faculty_event_manage' e.id %}">Open Event</a></td>
+              </tr>
+              {% empty %}
+              <tr><td colspan="7"><div class="fac-empty"><strong>No assigned events</strong><span>Match-based events assigned by an administrator will appear here.</span></div></td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </main>
   </div>
 </div>
+<script src="{% static 'facultydash/faculty.js' %}?v=20260929b"></script>
 </body>
 </html>

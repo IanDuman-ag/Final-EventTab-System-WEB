@@ -4,289 +4,163 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{ detail.name }} · Event Management · EventTab</title>
-  <link rel="stylesheet" href="{% static 'facultydash/faculty.css' %}?v=20260802a">
-  <link rel="stylesheet" href="{% static 'facultydash/pages.css' %}?v=20260802a">
+  <title>{{ detail.name }} · EventTab</title>
+  <link rel="stylesheet" href="{% static 'facultydash/faculty.css' %}?v=20260929b">
+  <link rel="stylesheet" href="{% static 'facultydash/pages.css' %}?v=20260929b">
 </head>
-<body class="fac-v2 tab-v2" data-event-id="{{ event.id }}" data-csrf="{{ csrf_token }}">
+<body class="fac-v2 tab-v2" data-event-id="{{ event.id }}" data-csrf="{{ csrf_token }}" data-open-match-id="{{ open_match_id }}">
 <div class="tab-shell">
   {% include 'facultydash/_sidebar.html' with active='my_events' %}
   <div class="tab-main">
-    <header class="tab-topbar">
+    <header class="tab-topbar fac-event-header">
       <div>
-        <p class="fac-kicker"><a href="{% url 'faculty_my_events' %}" style="color:inherit;text-decoration:none;">My Events</a> / Manage</p>
-        <h1>{{ detail.name }}</h1>
+        <p class="fac-breadcrumb"><a href="{% url 'faculty_my_events' %}">My Events</a><span>/</span>{{ detail.name }}</p>
+        <div class="fac-title-row"><h1>{{ detail.name }}</h1><span class="fac-pill">{{ detail.status }}</span></div>
+        <div class="fac-meta">
+          <span><b>Schedule</b>{{ detail.schedule }}</span>
+          <span><b>Venue</b>{{ detail.venue }}</span>
+          <span><b>Matches</b>{{ match_count }}</span>
+          <span><b>Teams</b>{{ detail.participants|length }}</span>
+        </div>
       </div>
-      <span class="fac-pill">{{ detail.status }}</span>
     </header>
+
     <main class="tab-content fac-content">
-      <nav class="fac-tabs" aria-label="Event management tabs">
+      <nav class="fac-tabs" aria-label="Event workspace">
         <a href="?tab=overview" class="{% if tab == 'overview' %}is-active{% endif %}">Overview</a>
-        <a href="?tab=schedule" class="{% if tab == 'schedule' %}is-active{% endif %}">Schedule</a>
+        <a href="?tab=matches" class="{% if tab == 'matches' %}is-active{% endif %}">Matches</a>
         <a href="?tab=participants" class="{% if tab == 'participants' %}is-active{% endif %}">Participants</a>
-        <a href="?tab=results" class="{% if tab == 'results' %}is-active{% endif %}">Results Review</a>
       </nav>
 
       {% if tab == 'overview' %}
       <section class="fac-card">
-        <header><h2>Overview (read-only)</h2></header>
+        <header><div><h2>Event & assignment information</h2><p>Read-only details provided by the administrator.</p></div></header>
         <div class="fac-readonly">
           <div><span>Event Name</span><strong>{{ detail.name }}</strong></div>
           <div><span>Category</span><strong>{{ detail.category }}</strong></div>
-          <div><span>Event Classification</span><strong>{{ detail.classification }}</strong></div>
+          <div><span>Classification</span><strong>{{ detail.classification }}</strong></div>
           <div><span>Division</span><strong>{{ detail.division }}</strong></div>
           <div><span>Venue</span><strong>{{ detail.venue }}</strong></div>
-          <div><span>Event Date Range</span><strong>{{ detail.schedule }}</strong></div>
+          <div><span>Schedule</span><strong>{{ detail.schedule }}</strong></div>
           <div><span>Event Type</span><strong>{{ detail.event_type }}</strong></div>
           <div><span>Competition Structure</span><strong>{{ detail.structure }}</strong></div>
-          <div><span>Event Status</span><strong>{{ detail.status }}</strong></div>
-          <div><span>Faculty In Charge</span><strong>{{ detail.faculty_name }}</strong></div>
-          <div style="grid-column:1/-1"><span>Assigned Judges</span><strong>{% if detail.judges %}{{ detail.judges|join:", " }}{% else %}—{% endif %}</strong></div>
-          <div style="grid-column:1/-1"><span>Assigned Participants / Teams</span><strong>{% if detail.participants %}{{ detail.participants|join:", " }}{% else %}—{% endif %}</strong></div>
+          <div><span>Result Format</span><strong>{{ detail.result_entry_format }}</strong></div>
+          <div><span>Faculty In-Charge</span><strong>{{ detail.faculty_name }}</strong></div>
+          <div><span>Teams</span><strong>{{ detail.participants|length }}</strong></div>
         </div>
       </section>
       {% endif %}
 
-      {% if tab == 'schedule' %}
+      {% if tab == 'matches' %}
+      <section class="fac-match-summary">
+        <div><span>Match progress</span><strong>{{ confirmed_count }} of {{ match_count }} confirmed</strong></div>
+        <div class="fac-progress-bar"><i style="width:{{ progress_percent }}%"></i></div>
+      </section>
+      {% if match_count and confirmed_count == match_count %}
+      <div class="fac-waiting-banner" role="status"><strong>All match results confirmed</strong><span>Results are locked and waiting for administrator publication.</span></div>
+      {% endif %}
+      <nav class="fac-status-filters" aria-label="Match status filters">
+        <a class="{% if match_filter == 'all' %}is-active{% endif %}" href="?tab=matches&amp;status=all">All</a>
+        <a class="{% if match_filter == 'pending' %}is-active{% endif %}" href="?tab=matches&amp;status=pending">Pending</a>
+        <a class="{% if match_filter == 'draft' %}is-active{% endif %}" href="?tab=matches&amp;status=draft">Draft</a>
+        <a class="{% if match_filter == 'confirmed' %}is-active{% endif %}" href="?tab=matches&amp;status=confirmed">Confirmed</a>
+      </nav>
       <section class="fac-card">
-        <header>
-          <h2>Schedule</h2>
-          <div style="display:flex;gap:8px;">
-            <button type="button" class="fac-btn fac-btn-secondary fac-btn-sm" onclick="window.print()">Print Schedule</button>
-            <a class="fac-btn fac-btn-sm" href="{% url 'faculty_export_schedule' event.id %}">Export Schedule</a>
-          </div>
-        </header>
         <div class="fac-table-wrap">
-          <table class="fac-table">
-            <thead>
-              <tr>
-                <th>Game Number / Stage</th>
-                <th>Match / Participant</th>
-                <th>Date</th>
-                <th>Time</th>
-                <th>Venue</th>
-                <th>Status</th>
-              </tr>
-            </thead>
+          <table class="fac-table fac-match-table">
+            <thead><tr><th>Game / Stage</th><th>Matchup</th><th>Schedule</th><th>Venue</th><th>Status</th><th>Action</th></tr></thead>
             <tbody>
-              {% for row in schedule %}
-              <tr>
-                <td><strong>{{ row.game }}</strong><br><small>{{ row.stage }}</small></td>
+              {% for row in match_schedule %}
+              <tr id="match-{{ row.id }}">
+                <td><strong>{{ row.game }}</strong><small>{{ row.stage }}</small></td>
                 <td>{{ row.matchup }}</td>
-                <td>{{ row.date|default:"—" }}</td>
-                <td>{{ row.time|default:"—" }}</td>
+                <td>{{ row.date|default:"—" }}<small>{{ row.time|default:"—" }}</small></td>
                 <td>{{ row.venue }}</td>
-                <td><span class="fac-pill">{{ row.status }}</span></td>
+                <td><span class="fac-pill fac-pill--{{ row.result_status_key }}">{{ row.result_status }}</span></td>
+                <td>
+                  {% if row.team_a_id and row.team_b_id %}
+                  <button type="button" class="fac-btn fac-btn-sm{% if row.is_confirmed %} fac-btn-secondary{% endif %}" data-open-match="{{ row.id }}">
+                    {% if row.is_confirmed %}View Match{% elif row.result_status_key == 'draft' %}Edit Draft{% else %}Enter Result{% endif %}
+                  </button>
+                  {% else %}<span class="fac-muted">Teams pending</span>{% endif %}
+                </td>
               </tr>
               {% empty %}
-              <tr><td colspan="6" class="fac-empty">No schedule items.</td></tr>
+              <tr><td colspan="6"><div class="fac-empty"><strong>No {{ match_filter|title }} matches</strong><span>Choose another status filter to see more matches.</span></div></td></tr>
               {% endfor %}
             </tbody>
           </table>
         </div>
       </section>
-      {% endif %}
 
-      {% if tab == 'participants' %}
-      <section class="fac-card">
-        <header><h2>Participants</h2></header>
-        <div class="fac-table-wrap">
-          <table class="fac-table">
-            <thead><tr><th>#</th><th>Name</th></tr></thead>
-            <tbody>
-              {% for name in detail.participants %}
-              <tr><td>{{ forloop.counter }}</td><td>{{ name }}</td></tr>
-              {% empty %}
-              <tr><td colspan="2" class="fac-empty">No participants listed.</td></tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      </section>
-      {% endif %}
-
-      {% if tab == 'results' %}
-        {% if detail.event_type == 'Match-Based' %}
-        <section class="fac-card" style="margin-bottom:14px;">
-          <header><h2>Match Result Management</h2></header>
-          {% for row in match_schedule %}
-          {% if row.team_a_id %}
-          <div class="fac-form-grid" data-match-form="{{ row.id }}">
-            <div style="grid-column:1/-1;"><strong>{{ row.game }} · {{ row.stage }}</strong> — {{ row.matchup }}</div>
-            <label>Team A <input value="{{ row.team_a }}" readonly></label>
-            <label>Team B <input value="{{ row.team_b }}" readonly></label>
-            <label>Score A <input type="number" step="0.01" name="score_a" value="{{ row.score_a }}"></label>
-            <label>Score B <input type="number" step="0.01" name="score_b" value="{{ row.score_b }}"></label>
-            <label>Winner
-              <select name="winner_id">
+      {% for row in match_schedule %}
+      <dialog class="fac-dialog fac-result-dialog" data-match-dialog="{{ row.id }}" aria-labelledby="match-title-{{ row.id }}">
+        <div class="fac-dialog-shell" data-match-form="{{ row.id }}">
+          <header>
+            <div><p>{{ row.game }} · {{ row.stage }}</p><h2 id="match-title-{{ row.id }}">{{ row.team_a }} vs {{ row.team_b }}</h2></div>
+            <button type="button" data-close-match aria-label="Close dialog">×</button>
+          </header>
+          <div class="fac-dialog-body">
+            <div class="fac-match-meta"><span>{{ row.date|default:"Date TBD" }}</span><span>{{ row.time|default:"Time TBD" }}</span><span>{{ row.venue }}</span></div>
+            {% if row.is_confirmed %}<div class="fac-confirmed-banner"><strong>Confirmed result</strong><span>{% if row.confirmed_at %}Confirmed by {{ row.confirmed_by|default:"Faculty" }} on {{ row.confirmed_at }}{% else %}This result is locked.{% endif %}</span></div>{% endif %}
+            <div class="fac-score-grid">
+              <label><span>Team A</span><strong>{{ row.team_a }}</strong><b>Score A</b><input type="number" min="0" step="0.01" name="score_a" value="{{ row.score_a }}" {% if row.is_confirmed %}disabled{% endif %} required></label>
+              <span class="fac-versus">VS</span>
+              <label><span>Team B</span><strong>{{ row.team_b }}</strong><b>Score B</b><input type="number" min="0" step="0.01" name="score_b" value="{{ row.score_b }}" {% if row.is_confirmed %}disabled{% endif %} required></label>
+            </div>
+            <label class="fac-field">Winner
+              <select name="winner_id" {% if row.is_confirmed %}disabled{% endif %} required>
                 <option value="">Select winner</option>
                 <option value="{{ row.team_a_id }}" {% if row.winner_id == row.team_a_id %}selected{% endif %}>{{ row.team_a }}</option>
                 <option value="{{ row.team_b_id }}" {% if row.winner_id == row.team_b_id %}selected{% endif %}>{{ row.team_b }}</option>
               </select>
+              <small data-winner-suggestion>Verify the winner before confirmation.</small>
             </label>
-            <label>Remarks <input name="remarks" placeholder="Optional remarks"></label>
-            <div class="fac-actions" style="grid-column:1/-1;padding:0;">
-              <button type="button" class="fac-btn fac-btn-secondary" data-save-draft="{{ row.id }}">Save Draft</button>
-              <button type="button" class="fac-btn fac-btn-success" data-confirm-result="{{ row.id }}">Confirm Result</button>
-            </div>
+            <label class="fac-field">Remarks <span>(optional)</span><textarea name="remarks" rows="3" {% if row.is_confirmed %}disabled{% endif %}>{{ row.remarks }}</textarea></label>
+            <p class="fac-form-error" role="alert" aria-live="polite"></p>
           </div>
-          {% endif %}
-          {% empty %}
-          <p class="fac-empty">No matches to supervise.</p>
-          {% endfor %}
-        </section>
-        {% else %}
-        <section class="fac-card" style="margin-bottom:14px;">
-          <header><h2>Judge Monitoring</h2></header>
-          {% if monitoring %}
-          <div class="fac-progress">
-            <p><strong>{{ monitoring.submitted }}</strong> submitted · <strong>{{ monitoring.remaining }}</strong> remaining · {{ monitoring.total }} total</p>
-            <div class="fac-progress-bar"><i style="width:{% if monitoring.total %}{% widthratio monitoring.submitted monitoring.total 100 %}{% else %}0{% endif %}%"></i></div>
-          </div>
-          <div class="fac-table-wrap">
-            <table class="fac-table">
-              <thead><tr><th>Judge Name</th><th>Submission Status</th><th>Submitted Time</th></tr></thead>
-              <tbody>
-                {% for j in monitoring.rows %}
-                <tr>
-                  <td>{{ j.name }}</td>
-                  <td><span class="fac-pill">{{ j.status }}</span></td>
-                  <td>{{ j.submitted_at }}</td>
-                </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-          {% if not monitoring.all_submitted %}
-          <p style="padding:12px 16px;color:#a65d08;font-size:13px;">Waiting until all required judges have submitted their scores before final processing.</p>
-          {% endif %}
-          {% else %}
-          <p class="fac-empty">No judges assigned.</p>
-          {% endif %}
-        </section>
+          <footer>
+            {% if row.is_confirmed %}
+            <button type="button" class="fac-btn fac-btn-secondary" data-close-match>Back to Matches</button>
+            {% else %}
+            <button type="button" class="fac-btn fac-btn-secondary" data-close-match>Cancel</button>
+            <button type="button" class="fac-btn fac-btn-secondary" data-save-draft="{{ row.id }}">Save Draft</button>
+            <button type="button" class="fac-btn fac-btn-success" data-review-result="{{ row.id }}">Confirm Result</button>
+            {% endif %}
+          </footer>
+        </div>
+      </dialog>
+      {% endfor %}
 
-        {% if stages %}
-        <section class="fac-card" style="margin-bottom:14px;">
-          <header><h2>Multi-Stage Competition</h2></header>
-          {% for s in stages %}
-          <div class="fac-stage" data-stage-index="{{ s.index }}" data-stage-status="{{ s.status }}">
-            <strong>Stage {{ forloop.counter }} – {{ s.name }}</strong>
-            <span>
-              Weight: {{ s.weight|default:"—" }}%
-              · Status: {{ s.status_label }}
-              {% if s.is_final %}
-              · Final Stage · No Further Qualification
-              {% else %}
-              · {{ s.rule }}
-              · Faculty confirmation: {% if s.require_faculty_confirmation %}Required{% else %}Optional{% endif %}
-              {% endif %}
-              {% if s.carry_previous_scores %} · Carries previous stage scores{% endif %}
-            </span>
-          </div>
-          {% endfor %}
-          {% if rankings %}
-          <div class="fac-table-wrap" style="margin-top:10px;">
-            <table class="fac-table" id="qualification-preview">
-              <thead>
-                <tr>
-                  <th></th>
-                  <th>Rank</th>
-                  <th>Contestant</th>
-                  <th>Department</th>
-                  <th>Total Stage Score</th>
-                  <th>Qualification Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for r in rankings %}
-                <tr>
-                  <td>
-                    {% if r.qualification_status == 'Qualified' or r.qualification_status == 'Pending Manual Selection' %}
-                    <input type="checkbox" data-qualifier-id value="{{ r.candidate_id }}" {% if r.qualification_status == 'Qualified' %}checked{% endif %}>
-                    {% endif %}
-                  </td>
-                  <td>{{ r.rank }}</td>
-                  <td>{% if r.number %}#{{ r.number }} {% endif %}{{ r.name }}</td>
-                  <td>{{ r.department }}</td>
-                  <td>{{ r.final_score }}</td>
-                  <td><span class="fac-pill">{{ r.qualification_status }}</span></td>
-                </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-          <div class="fac-actions">
-            <button type="button" class="fac-btn" id="btn-confirm-stage" data-active-stage="{{ stages.0.index }}">Confirm Qualifiers</button>
-          </div>
-          {% endif %}
-        </section>
-        {% endif %}
+      <dialog class="fac-dialog fac-confirm-dialog" id="result-confirm-dialog" aria-labelledby="confirm-result-title">
+        <div class="fac-dialog-shell">
+          <header><div><p>Final confirmation</p><h2 id="confirm-result-title">Confirm match result?</h2></div><button type="button" data-close-confirm aria-label="Close dialog">×</button></header>
+          <div class="fac-dialog-body"><p>This result becomes read-only and updates bracket progression.</p><div id="result-confirm-summary" class="fac-confirm-summary"></div></div>
+          <footer><button type="button" class="fac-btn fac-btn-secondary" data-close-confirm>Go Back</button><button type="button" class="fac-btn fac-btn-success" id="confirm-result-submit">Confirm Result</button></footer>
+        </div>
+      </dialog>
+      {% endif %}
 
-        <section class="fac-card">
-          <header><h2>Results Review</h2></header>
-          <div class="fac-table-wrap">
-            <table class="fac-table">
-              <thead>
-                <tr>
-                  <th>Rank</th>
-                  <th>Contestant</th>
-                  <th>Final Score</th>
-                  <th>Score Breakdown</th>
-                  <th>Penalties</th>
-                  <th>Judge Comments</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for r in rankings %}
-                <tr>
-                  <td>{{ r.rank }}</td>
-                  <td>{% if r.number %}#{{ r.number }} {% endif %}{{ r.name }}</td>
-                  <td>{{ r.final_score }}</td>
-                  <td>{{ r.breakdown }}</td>
-                  <td>{{ r.penalties }}</td>
-                  <td>{% if r.comments %}{{ r.comments|join:" · " }}{% else %}—{% endif %}</td>
-                </tr>
-                {% empty %}
-                <tr><td colspan="6" class="fac-empty">Rankings appear after judges submit scores.</td></tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-          <div class="fac-actions">
-            <button type="button" class="fac-btn fac-btn-secondary" id="btn-return">Return for Correction</button>
-            <button type="button" class="fac-btn" id="btn-approve">Approve Results</button>
-            <button type="button" class="fac-btn fac-btn-success" id="btn-publish">Publish Results</button>
-          </div>
-        </section>
-        {% endif %}
-
-        {% if detail.event_type == 'Match-Based' %}
-        <section class="fac-card" style="margin-top:14px;">
-          <header><h2>Publish Official Results</h2></header>
-          <div class="fac-actions">
-            <button type="button" class="fac-btn fac-btn-success" id="btn-publish">Confirm and Publish</button>
-          </div>
-        </section>
-        {% endif %}
+      {% if tab == 'participants' %}
+      <section class="fac-card">
+        <header><div><h2>Participants</h2><p>Read-only team list for this event.</p></div></header>
+        <div class="fac-table-wrap">
+          <table class="fac-table fac-responsive-table">
+            <thead><tr><th>#</th><th>Team / Participant</th><th>Department</th><th>Seed</th><th>Status</th></tr></thead>
+            <tbody>
+              {% for participant in detail.participant_rows %}
+              <tr><td data-label="#">{{ forloop.counter }}</td><td data-label="Team"><strong>{{ participant.name }}</strong></td><td data-label="Department">{{ participant.department }}</td><td data-label="Seed">{{ participant.seed }}</td><td data-label="Status">{{ participant.status }}</td></tr>
+              {% empty %}
+              <tr><td colspan="5"><div class="fac-empty"><strong>No participants listed</strong><span>Participant assignments will appear here when available.</span></div></td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
       {% endif %}
     </main>
   </div>
 </div>
-
-<dialog class="fac-dialog" id="publish-dialog">
-  <header>
-    <h3>Publish Results</h3>
-    <button type="button" data-close-publish aria-label="Close">×</button>
-  </header>
-  <div class="body">
-    Publishing the results will finalize the rankings, lock the scores, apply championship points, update the leaderboard, and make the results visible to all viewers.
-  </div>
-  <div class="actions">
-    <button type="button" class="fac-btn fac-btn-secondary" data-close-publish>Cancel</button>
-    <button type="button" class="fac-btn fac-btn-success" id="btn-confirm-publish">Confirm and Publish</button>
-  </div>
-</dialog>
-
-<script src="{% static 'facultydash/faculty.js' %}?v=20260803a"></script>
+<script src="{% static 'facultydash/faculty.js' %}?v=20260929b"></script>
 </body>
 </html>

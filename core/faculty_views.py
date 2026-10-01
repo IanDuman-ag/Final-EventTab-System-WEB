@@ -22,12 +22,14 @@ from events.faculty_service import (
     FacultyServiceError,
     approve_results,
     compute_criteria_rankings,
+    confirm_tabulation,
     confirm_stage_advancement,
     dashboard_stats,
     event_type_label,
     export_schedule_csv,
     faculty_can_access,
     faculty_event_qs,
+    faculty_match_event_qs,
     is_faculty_user,
     judge_monitoring,
     leaderboard_by_game,
@@ -59,9 +61,11 @@ from events.models import (
 def _faculty_required(view):
     @login_required(login_url='login')
     def wrapped(request, *args, **kwargs):
-        if not is_faculty_user(request.user) and not request.user.is_staff:
-            messages.error(request, 'Faculty access required.')
-            return redirect('login')
+        if not request.user.is_staff and (
+            request.user.groups.filter(name__iexact='Tabulator').exists()
+            or not request.user.groups.filter(name__iexact='Faculty').exists()
+        ):
+            return HttpResponse('Faculty access required.', status=403)
         return view(request, *args, **kwargs)
     return wrapped
 
@@ -75,20 +79,26 @@ def _get_event(request, event_id):
 
 @_faculty_required
 def faculty_dashboard(request):
-    events = faculty_event_qs(request.user).order_by('-updated_at')
+    events = faculty_match_event_qs(request.user).order_by('-updated_at')
     recent = [serialize_event_row(e) for e in events[:6]]
+    today = timezone.localdate()
+    today_matches = []
+    for event in events:
+        for row in schedule_rows(event):
+            if row.get('date') == today.isoformat():
+                today_matches.append({**row, 'event_id': event.id, 'event_name': event.name})
     return render(request, 'facultydash/dashboard.html', {
         'active': 'dashboard',
         'stats': dashboard_stats(request.user),
         'recent_events': recent,
-        'notifications': recent_notifications(request.user),
+        'today_matches': today_matches,
         'user_display': request.user.get_full_name() or request.user.username,
     })
 
 
 @_faculty_required
 def faculty_my_events(request):
-    qs = faculty_event_qs(request.user)
+    qs = faculty_match_event_qs(request.user)
     q = (request.GET.get('q') or '').strip()
     status = (request.GET.get('status') or 'all').strip()
     sort = (request.GET.get('sort') or '-updated_at').strip()
@@ -122,29 +132,39 @@ def faculty_my_events(request):
 @_faculty_required
 def faculty_event_manage(request, event_id):
     event = _get_event(request, event_id)
-    if event is None:
+    if event is None or event_type_label(event) != 'Match-Based':
         messages.error(request, 'You do not have access to this event.')
         return redirect('faculty_my_events')
     tab = (request.GET.get('tab') or 'overview').strip()
-    if tab not in {'overview', 'schedule', 'participants', 'results'}:
+    tab = {'schedule': 'matches', 'results': 'matches'}.get(tab, tab)
+    if tab not in {'overview', 'matches', 'participants'}:
         tab = 'overview'
     detail = serialize_event_detail(event)
     schedule = schedule_rows(event)
     match_schedule = [row for row in schedule if isinstance(row.get('id'), int)]
-    monitoring = judge_monitoring(event) if detail['event_type'] == 'Criteria-Based' else None
-    rankings = (
-        compute_criteria_rankings(event) if detail['event_type'] == 'Criteria-Based' else []
-    )
+    match_filter = (request.GET.get('status') or 'all').lower()
+    if match_filter not in {'all', 'pending', 'draft', 'confirmed'}:
+        match_filter = 'all'
+    filtered_matches = match_schedule if match_filter == 'all' else [
+        row for row in match_schedule if row['result_status_key'] == match_filter
+    ]
+    confirmed_count = sum(1 for row in match_schedule if row['is_confirmed'])
+    requested_match = request.GET.get('match')
+    open_match_id = ''
+    if requested_match and any(str(row['id']) == requested_match for row in match_schedule):
+        open_match_id = requested_match
     return render(request, 'facultydash/event_manage.html', {
         'active': 'my_events',
         'tab': tab,
         'event': event,
         'detail': detail,
         'schedule': schedule,
-        'match_schedule': match_schedule,
-        'monitoring': monitoring,
-        'rankings': rankings,
-        'stages': stage_panels(event),
+        'match_schedule': filtered_matches,
+        'match_filter': match_filter,
+        'confirmed_count': confirmed_count,
+        'match_count': len(match_schedule),
+        'progress_percent': round((confirmed_count / len(match_schedule)) * 100) if match_schedule else 0,
+        'open_match_id': open_match_id,
         'user_display': request.user.get_full_name() or request.user.username,
     })
 
@@ -169,21 +189,30 @@ def faculty_match_result(request, event_id, match_id):
     event = _get_event(request, event_id)
     if event is None:
         return JsonResponse({'success': False, 'message': 'Forbidden'}, status=403)
+    if event_type_label(event) != 'Match-Based':
+        return JsonResponse({'success': False, 'message': 'Match result entry is unavailable for this event.'}, status=400)
     match = get_object_or_404(BracketMatch, pk=match_id, event=event)
+    if match.is_automatic_advance or not match.team_a_id or not match.team_b_id:
+        return JsonResponse({'success': False, 'message': 'This match is not ready for result entry.'}, status=400)
     try:
         data = json.loads(request.body.decode('utf-8') or '{}')
     except json.JSONDecodeError:
         data = request.POST
+    if not hasattr(data, 'get'):
+        return JsonResponse({'success': False, 'message': 'Request body must be a JSON object.'}, status=400)
     confirm = str(data.get('confirm') or data.get('action') or '').lower() in {'1', 'true', 'confirm'}
+    score_a = data.get('score_a') if 'score_a' in data else data.get('scoreA')
+    score_b = data.get('score_b') if 'score_b' in data else data.get('scoreB')
+    winner_id = data.get('winner_id') if 'winner_id' in data else data.get('winner')
     try:
         sheet = save_match_result(
             event,
             match,
             request.user,
-            score_a=data.get('score_a') or data.get('scoreA'),
-            score_b=data.get('score_b') or data.get('scoreB'),
-            winner_id=data.get('winner_id') or data.get('winner'),
-            remarks=data.get('remarks') or '',
+            score_a=score_a,
+            score_b=score_b,
+            winner_id=winner_id,
+            remarks=data.get('remarks', ''),
             confirm=confirm,
         )
     except FacultyServiceError as exc:
@@ -255,7 +284,21 @@ def faculty_results_action(request, event_id):
         data = json.loads(request.body.decode('utf-8') or '{}')
     except json.JSONDecodeError:
         data = request.POST
+    if not hasattr(data, 'get'):
+        return JsonResponse({'success': False, 'message': 'Request body must be a JSON object.'}, status=400)
     action = (data.get('action') or '').strip().lower()
+    is_faculty_only = (
+        request.user.groups.filter(name__iexact='Faculty').exists()
+        and not request.user.groups.filter(name__iexact='Tabulator').exists()
+        and not request.user.is_staff
+    )
+    if is_faculty_only:
+        return JsonResponse({'success': False, 'message': 'Faculty cannot manage criteria result approval.'}, status=403)
+    if not request.user.is_staff and action in {'approve', 'publish'}:
+        return JsonResponse({'success': False, 'message': 'Faculty cannot approve or publish official results.'}, status=403)
+    is_tabulator = request.user.groups.filter(name__iexact='Tabulator').exists() and not request.user.is_staff
+    if is_tabulator and action in {'approve', 'publish'}:
+        return JsonResponse({'success': False, 'message': 'Tabulation Officers cannot approve or publish official results.'}, status=403)
     try:
         if action == 'return':
             return_for_correction(event, request.user, data.get('judge_ids'))
@@ -279,6 +322,12 @@ def faculty_stage_confirm(request, event_id):
     event = _get_event(request, event_id)
     if event is None:
         return JsonResponse({'success': False, 'message': 'Forbidden'}, status=403)
+    if (
+        request.user.groups.filter(name__iexact='Faculty').exists()
+        and not request.user.groups.filter(name__iexact='Tabulator').exists()
+        and not request.user.is_staff
+    ):
+        return JsonResponse({'success': False, 'message': 'Faculty cannot manage criteria stages.'}, status=403)
     try:
         data = json.loads(request.body.decode('utf-8') or '{}')
     except json.JSONDecodeError:
@@ -299,10 +348,10 @@ def faculty_stage_confirm(request, event_id):
 
 
 def _tabulator_portal_required(view):
-    """Allow Tabulator or Faculty group members (and staff)."""
+    """Keep the read-only portal available to Tabulators and staff."""
     @login_required(login_url='login')
     def wrapped(request, *args, **kwargs):
-        if request.user.is_staff or is_faculty_user(request.user):
+        if request.user.is_staff or request.user.groups.filter(name__iexact='Tabulator').exists():
             return view(request, *args, **kwargs)
         messages.error(request, 'Tabulator access required.')
         return redirect('login')
@@ -353,8 +402,9 @@ def _participant_label(event_kind: str, participation_type: str) -> str:
 
 
 def _event_is_ranking_mode(event) -> bool:
-    if (event.criteria_score_method or '') == Event.CRITERIA_SCORE_RANKING:
-        return True
+    """Match events have team standings; criteria events use judge scores."""
+    if (event.scoring_method or '').lower() == 'criteria' or event.judging_event_id:
+        return False
     if (event.scoring_method or '').lower() == 'match':
         return True
     if (event.category or '').lower() == 'sports':
@@ -367,41 +417,99 @@ def _event_is_ranking_mode(event) -> bool:
     return label == 'Match-Based'
 
 
+def _judge_completion(event):
+    """Count a submission only when every participant and criterion is locked."""
+    judges = list(event.assigned_judges.all())
+    judging = event.judging_event
+    candidates = judging.candidates.count() if judging else 0
+    criteria = judging.criteria.count() if judging else 0
+    expected = candidates * criteria
+    rows = []
+    for judge in judges:
+        locked = JudgeScore.objects.filter(
+            candidate__event=judging, judge=judge, is_locked=True,
+        ).count() if judging else 0
+        rows.append({
+            'name': judge.get_full_name() or judge.username,
+            'complete': expected > 0 and locked == expected,
+            'locked': locked,
+            'expected': expected,
+        })
+    submitted = sum(row['complete'] for row in rows)
+    return {'rows': rows, 'submitted': submitted, 'total': len(judges),
+            'expected_per_judge': expected}
+
+
 def _serialize_portal_event(event) -> dict:
     mode = 'ranking' if _event_is_ranking_mode(event) else 'scoring'
     kind = _infer_event_kind(event)
-    status = event.get_status_display() if hasattr(event, 'get_status_display') else (event.status or '')
+    match_mode = mode == 'ranking'
+    if match_mode:
+        matches = event.bracket_matches.filter(is_automatic_advance=False)
+        total = matches.count()
+        completed = matches.filter(status__in=[BracketMatch.STATUS_COMPLETED, BracketMatch.STATUS_FORFEIT]).count()
+        progress_label = f'{completed} / {total} matches completed'
+    else:
+        total = event.assigned_judges.count()
+        completed = sum(1 for row in _judge_completion(event)['rows'] if row['complete'])
+        progress_label = f'{completed} / {total} judges submitted'
+    progress = round(completed * 100 / total) if total else 0
+    config = event.result_processing_config or {}
+    if event.results_finalized:
+        status = 'Published' if event.publication_status == Event.PUBLICATION_PUBLISHED else 'Finalized'
+    elif config.get('tabulation_confirmed_at'):
+        status = 'Finalized'
+    elif total and completed == total:
+        status = 'Ready for Review'
+    elif event.status == Event.STATUS_COMPLETED or (
+        event.status == Event.STATUS_UPCOMING and event.event_date and event.event_date < timezone.localdate()
+    ):
+        status = 'Awaiting Results'
+    elif event.status == Event.STATUS_ACTIVE:
+        status = 'Ongoing'
+    else:
+        status = 'Upcoming'
     return {
         'id': event.id,
         'name': event.name,
         'category': event.category or '—',
         'status': status,
-        'status_key': event.status or '',
+        'status_label': status,
+        'status_key': status.lower().replace(' ', '_'),
         'results_finalized': bool(event.results_finalized),
         'mode': mode,
         'mode_label': 'Ranking Mode' if mode == 'ranking' else 'Scoring Mode',
         'event_kind': kind,
         'participant_label': _participant_label(kind, event.participation_type or ''),
         'event_type': event_type_label(event),
+        'event_kind': 'match' if match_mode else 'criteria',
+        'date': event.event_date.strftime('%b %d, %Y') if event.event_date else '—',
+        'venue': event.venue or '—',
+        'image_url': event.image.url if event.image else '',
+        'progress': progress,
+        'progress_label': progress_label,
     }
 
 
 def _tabulator_portal_events(user) -> list[dict]:
-    events = faculty_event_qs(user).order_by('-updated_at', 'name')
+    events = _tabulator_event_qs(user).order_by('-updated_at', 'name')
     return [_serialize_portal_event(ev) for ev in events]
 
 
+def _tabulator_event_qs(user):
+    if not user or not user.is_authenticated:
+        return Event.objects.none()
+    return Event.objects.filter(assigned_tabulators=user).distinct().select_related('judging_event')
+
+
 def _resolve_portal_event(user, event_id=None):
-    qs = faculty_event_qs(user).order_by('-updated_at', 'name')
+    qs = _tabulator_event_qs(user).order_by('-updated_at', 'name')
     if event_id:
         try:
             eid = int(event_id)
         except (TypeError, ValueError):
             eid = None
-        if eid:
-            event = qs.filter(pk=eid).first()
-            if event:
-                return event
+        return qs.filter(pk=eid).first() if eid else None
     return qs.first()
 
 
@@ -434,6 +542,9 @@ def _enough_locked_scores(event) -> bool:
 def _status_label_for_results(event, mode: str) -> str:
     if event.results_finalized:
         return 'Completed'
+    result_cfg = event.result_processing_config or {}
+    if result_cfg.get('tabulation_confirmed_at'):
+        return 'Tabulation Confirmed'
     if event.status == Event.STATUS_COMPLETED:
         return 'Completed'
     if mode == 'ranking':
@@ -443,6 +554,8 @@ def _status_label_for_results(event, mode: str) -> str:
         if completed:
             return 'Live'
         return 'Results Pending'
+    if judge_monitoring(event)['all_submitted']:
+        return 'Ready for Verification'
     if _enough_locked_scores(event):
         return 'Live'
     return 'Results Pending'
@@ -562,13 +675,21 @@ def _match_standings(event) -> list[dict]:
     teams = list(event.bracket_teams.select_related('department').order_by('-points', 'name'))
     completed = list(
         event.bracket_matches.filter(
-            status__in=[BracketMatch.STATUS_COMPLETED, BracketMatch.STATUS_FORFEIT]
+            status__in=[BracketMatch.STATUS_COMPLETED, BracketMatch.STATUS_FORFEIT],
+            is_automatic_advance=False,
         ).select_related('team_a', 'team_b', 'winner')
     )
     wins = defaultdict(int)
     pf = defaultdict(float)
     pa = defaultdict(float)
+    played = defaultdict(int)
+    form = defaultdict(list)
     for m in completed:
+        for team_id in (m.team_a_id, m.team_b_id):
+            if team_id:
+                played[team_id] += 1
+                if m.winner_id:
+                    form[team_id].append('W' if team_id == m.winner_id else 'L')
         if m.winner_id:
             wins[m.winner_id] += 1
         sa = _score_to_float(m.score_a)
@@ -583,30 +704,33 @@ def _match_standings(event) -> list[dict]:
     rows = []
     for idx, team in enumerate(teams, start=1):
         rows.append({
-            'rank': idx,
+            'rank': idx if completed else None,
             'team_id': team.id,
             'name': team.name,
             'department': team.department.name if team.department_id else '—',
             'wins': wins.get(team.id, 0),
+            'played': played.get(team.id, 0),
             'losses': int(team.loss_count or 0),
             'points': int(team.points or 0),
             'pf': round(pf.get(team.id, 0.0), 1),
             'pa': round(pa.get(team.id, 0.0), 1),
-            'prize': _prize_label(idx),
+            'prize': _prize_label(idx) if completed else '—',
+            'form': form.get(team.id, [])[-5:],
             'is_champion': bool(team.is_champion),
             'photo': '',
         })
     rows.sort(key=lambda r: (-r['points'], -r['wins'], r['name']))
     for idx, row in enumerate(rows, start=1):
-        row['rank'] = idx
-        row['prize'] = _prize_label(idx)
+        row['rank'] = idx if completed else None
+        row['prize'] = _prize_label(idx) if completed else '—'
     return rows
 
 
 def _recent_games(event, limit=12) -> list[dict]:
     matches = (
         event.bracket_matches.filter(
-            status__in=[BracketMatch.STATUS_COMPLETED, BracketMatch.STATUS_FORFEIT]
+            status__in=[BracketMatch.STATUS_COMPLETED, BracketMatch.STATUS_FORFEIT],
+            is_automatic_advance=False,
         )
         .select_related('team_a', 'team_b', 'winner')
         .order_by('-updated_at', '-match_number')[:limit]
@@ -623,8 +747,95 @@ def _recent_games(event, limit=12) -> list[dict]:
             'score_b': m.score_b or '—',
             'winner': m.winner.name if m.winner_id else '—',
             'status': m.get_status_display(),
+            'date': m.match_date.strftime('%b %d, %Y') if m.match_date else '—',
+            'time': m.match_time.strftime('%I:%M %p') if m.match_time else '—',
+            'venue': m.venue or event.venue or '—',
+            'details': m.remarks or '',
         })
     return rows
+
+
+def _upcoming_games(event, limit=12):
+    matches = event.bracket_matches.filter(
+        status__in=[BracketMatch.STATUS_PENDING, BracketMatch.STATUS_ONGOING],
+        is_automatic_advance=False,
+    ).select_related('team_a', 'team_b').order_by('match_date', 'match_time', 'match_number')[:limit]
+    return [{
+        'id': match.id,
+        'match_number': match.match_number,
+        'team_a': match.team_a.name if match.team_a_id else 'TBD',
+        'team_b': match.team_b.name if match.team_b_id else 'TBD',
+        'date': match.match_date.strftime('%b %d, %Y') if match.match_date else 'To be scheduled',
+        'time': match.match_time.strftime('%I:%M %p') if match.match_time else '—',
+        'venue': match.venue or event.venue or '—',
+        'status': match.get_status_display(),
+    } for match in matches]
+
+
+def _all_match_rows(event):
+    matches = event.bracket_matches.filter(is_automatic_advance=False).select_related(
+        'team_a', 'team_b', 'winner',
+    ).order_by('match_number')
+    return [{
+        'id': match.id,
+        'match_number': match.match_number,
+        'date': match.match_date.strftime('%b %d, %Y') if match.match_date else '—',
+        'time': match.match_time.strftime('%I:%M %p') if match.match_time else '—',
+        'venue': match.venue or event.venue or '—',
+        'team_a': match.team_a.name if match.team_a_id else 'TBD',
+        'team_b': match.team_b.name if match.team_b_id else 'TBD',
+        'score_a': match.score_a if match.score_a != '' else None,
+        'score_b': match.score_b if match.score_b != '' else None,
+        'status': match.get_status_display(),
+        'winner': match.winner.name if match.winner_id else '',
+        'details': match.remarks or '',
+    } for match in matches]
+
+
+def _verification_summary(event, match_mode, match_count, completed_matches, completion):
+    if match_mode:
+        completed = event.bracket_matches.filter(
+            status__in=[BracketMatch.STATUS_COMPLETED, BracketMatch.STATUS_FORFEIT],
+            is_automatic_advance=False,
+        )
+        missing_winners = completed.filter(winner__isnull=True).count()
+        points = list(event.bracket_teams.values_list('points', flat=True)) if completed_matches else []
+        tied_points = len(points) != len(set(points)) if points else False
+        checks = [
+            {'label': 'All matches completed', 'complete': match_count > 0 and completed_matches == match_count,
+             'detail': f'{completed_matches} of {match_count} completed'},
+            {'label': 'Winners recorded', 'complete': completed_matches > 0 and missing_winners == 0,
+             'detail': f'{missing_winners} completed matches missing winners' if completed_matches else 'Awaiting completed matches'},
+            {'label': 'Points calculated', 'complete': completed_matches > 0 and missing_winners == 0,
+             'detail': 'Calculated from recorded match results' if completed_matches else 'Points will appear after the first completed match'},
+            {'label': 'Tie-break rules checked', 'complete': completed_matches > 0 and (not tied_points or event.results_finalized),
+             'detail': 'Review after standings are available' if not completed_matches else ('Tied points need review against the event rules' if tied_points and not event.results_finalized else 'No unresolved points tie')},
+            {'label': 'Final standings generated', 'complete': event.results_finalized and completed_matches == match_count and match_count > 0,
+             'detail': 'Awaiting final confirmation' if completed_matches else 'Awaiting completed matches'},
+        ]
+    else:
+        judging = event.judging_event
+        criteria = list(judging.criteria.all()) if judging else []
+        expected = completion['expected_per_judge']
+        all_submitted = completion['total'] > 0 and completion['submitted'] == completion['total'] and expected > 0
+        weighted = event.criteria_score_method == Event.CRITERIA_SCORE_WEIGHTED
+        weight_total = sum(float(criterion.weight_percent or 0) for criterion in criteria)
+        weight_ok = not weighted or (bool(criteria) and abs(weight_total - 100) < 0.01)
+        checks = [
+            {'label': 'All judges submitted', 'complete': all_submitted,
+             'detail': f"{completion['submitted']} of {completion['total']} complete"},
+            {'label': 'All criteria completed', 'complete': all_submitted,
+             'detail': 'Every participant has a locked score for every criterion' if all_submitted else 'Scores are still missing'},
+            {'label': 'Total weight equals 100%', 'complete': weight_ok,
+             'detail': f'{weight_total:g}% configured' if weighted else 'Not used by this scoring method'},
+            {'label': 'No missing scores', 'complete': all_submitted,
+             'detail': 'Complete' if all_submitted else 'Review judge submissions'},
+            {'label': 'Final calculations completed', 'complete': all_submitted and weight_ok,
+             'detail': 'Ready for verification' if all_submitted and weight_ok else 'Awaiting complete scoring'},
+        ]
+    has_results = completed_matches > 0 if match_mode else completion['submitted'] > 0
+    issues = [check['detail'] for check in checks if not check['complete']] if has_results else []
+    return {'checks': checks, 'complete': all(check['complete'] for check in checks), 'issues': issues}
 
 
 def _criteria_result_rows(event, category='', q='') -> list[dict]:
@@ -718,9 +929,7 @@ def _by_round_groups(event, rows: list[dict]) -> list[dict]:
 def _result_updates(event, limit=12) -> list[dict]:
     updates = []
     event_name = event.name
-    for log in AuditLog.objects.filter(
-        Q(event_name__iexact=event_name) | Q(module__icontains='Result')
-    ).order_by('-created_at')[:limit]:
+    for log in AuditLog.objects.filter(event_name__iexact=event_name).order_by('-created_at')[:limit]:
         if log.event_name and log.event_name.lower() != event_name.lower():
             if 'result' not in (log.module or '').lower() and 'result' not in (log.action or '').lower():
                 continue
@@ -759,7 +968,7 @@ def _result_updates(event, limit=12) -> list[dict]:
     return updates[:limit]
 
 
-def _tabulator_results_payload(user, event_id=None, category='', tab='overall', q=''):
+def _tabulator_results_payload(user, event_id=None, category='', tab='overall', q='', participant_id=None):
     events = _tabulator_portal_events(user)
     event = _resolve_portal_event(user, event_id)
     if event is None:
@@ -771,6 +980,7 @@ def _tabulator_results_payload(user, event_id=None, category='', tab='overall', 
             'tab': tab or 'overall',
             'is_finalized': False,
             'status_label': 'Results Pending',
+            'event_kind': 'criteria',
             'mode': 'scoring',
             'participant_label': 'Participant',
             'results': [],
@@ -781,6 +991,11 @@ def _tabulator_results_payload(user, event_id=None, category='', tab='overall', 
             'by_round': [],
             'match_standings': [],
             'recent_games': [],
+            'upcoming_matches': [],
+            'match_results': [],
+            'participants': [],
+            'selected_participant': None,
+            'verification': {'checks': [], 'complete': False, 'issues': []},
             'updates': [],
             'message': 'No events are currently assigned to you.',
             'stats': {
@@ -788,6 +1003,10 @@ def _tabulator_results_payload(user, event_id=None, category='', tab='overall', 
                 'scored_count': 0,
                 'judge_count': 0,
                 'match_count': 0,
+                'completed_matches': 0,
+                'remaining_matches': 0,
+                'submitted_judges': 0,
+                'completion_pct': 0,
             },
         }
 
@@ -796,8 +1015,8 @@ def _tabulator_results_payload(user, event_id=None, category='', tab='overall', 
     categories = _category_filter_options(event)
     selected_category = (category or '').strip()
     tab = (tab or 'overall').strip().lower()
-    is_finalized = _is_finalized_display(event)
-    status_label = _status_label_for_results(event, mode)
+    is_finalized = bool(event.results_finalized)
+    status_label = portal['status_label']
 
     results = []
     match_standings = []
@@ -821,7 +1040,7 @@ def _tabulator_results_payload(user, event_id=None, category='', tab='overall', 
         if q:
             ql = q.strip().lower()
             results = [r for r in results if ql in (r.get('name') or '').lower()]
-        winner = results[0] if results else None
+        winner = results[0] if results and results[0].get('rank') else None
         by_category = _by_category_groups(event, results)
         if not results:
             message = 'No match standings yet for this event.'
@@ -829,8 +1048,16 @@ def _tabulator_results_payload(user, event_id=None, category='', tab='overall', 
         results = _criteria_result_rows(event, category=selected_category, q=q)
         scored = [r for r in results if r.get('has_score')]
         winner = scored[0] if scored else None
-        selected_id = winner.get('candidate_id') if winner else None
-        # Allow focusing breakdown on ?participant_id=
+        selected_id = None
+        if participant_id:
+            try:
+                requested_id = int(participant_id)
+            except (TypeError, ValueError):
+                requested_id = None
+            if requested_id and any(row.get('candidate_id') == requested_id for row in results):
+                selected_id = requested_id
+        if selected_id is None:
+            selected_id = winner.get('candidate_id') if winner else (results[0].get('candidate_id') if results else None)
         score_breakdown = _build_score_breakdown(event, selected_id)
         judges_scores = _build_judges_scores(event, selected_id)
         by_category = _by_category_groups(event, results)
@@ -846,7 +1073,9 @@ def _tabulator_results_payload(user, event_id=None, category='', tab='overall', 
     participant_count = 0
     scored_count = 0
     judge_count = event.assigned_judges.count()
-    match_count = event.bracket_matches.count()
+    match_qs = event.bracket_matches.filter(is_automatic_advance=False)
+    match_count = match_qs.count() if mode == 'ranking' else 0
+    completed_matches = match_qs.filter(status__in=[BracketMatch.STATUS_COMPLETED, BracketMatch.STATUS_FORFEIT]).count() if mode == 'ranking' else 0
     if mode == 'ranking':
         participant_count = event.bracket_teams.count()
         scored_count = len([r for r in match_standings if r.get('wins') or r.get('points')])
@@ -854,12 +1083,55 @@ def _tabulator_results_payload(user, event_id=None, category='', tab='overall', 
         participant_count = Candidate.objects.filter(event_id=event.judging_event_id).count()
         scored_count = len([r for r in results if r.get('has_score')])
 
+    monitoring = judge_monitoring(event) if mode == 'scoring' else {
+        'rows': [], 'submitted': 0, 'remaining': 0, 'total': 0, 'all_submitted': False,
+    }
+    completion = _judge_completion(event) if mode == 'scoring' else {'rows': [], 'submitted': 0, 'total': 0, 'expected_per_judge': 0}
+    complete_scores = completion['total'] > 0 and completion['submitted'] == completion['total']
+    if mode == 'scoring':
+        judge_count = completion['total']
+        for row in results:
+            candidate_scores = list(JudgeScore.objects.filter(
+                candidate_id=row['candidate_id'], is_locked=True,
+            ).values_list('score', flat=True)) if row.get('candidate_id') else []
+            row['average_score'] = round(sum(candidate_scores) / len(candidate_scores), 2) if candidate_scores else None
+            row['weighted_score'] = row.get('final_score') if event.criteria_score_method == Event.CRITERIA_SCORE_WEIGHTED else None
+            row['judges_submitted'] = JudgeScore.objects.filter(candidate_id=row['candidate_id'], is_locked=True).values('judge_id').distinct().count() if row.get('candidate_id') else 0
+            row['judge_count'] = judge_count
+            row['final_visible'] = is_finalized or complete_scores
+            row['status'] = 'Complete' if row['judges_submitted'] == judge_count and judge_count else 'In Progress'
+            if not row['final_visible']:
+                row['rank'] = None
+                row['prize'] = '—'
+        if not (is_finalized or complete_scores):
+            winner = None
+    verification = _verification_summary(event, mode == 'ranking', match_count, completed_matches, completion)
+    if is_finalized:
+        status_message = 'Results have been finalized and published.' if status_label == 'Published' else 'Results have been finalized and are awaiting publication.'
+    elif mode == 'ranking':
+        review_count = event.scoresheets.filter(status=ScoreSheet.STATUS_CONFIRMED).count()
+        if review_count:
+            status_message = f'{review_count} result{"s are" if review_count != 1 else " is"} ready for review.'
+        elif match_count and completed_matches == match_count:
+            status_message = 'All match results have been completed and are ready for verification.'
+        else:
+            status_message = 'Results are still in progress. Standings will update after results are submitted.'
+    elif verification['complete']:
+        status_message = 'All results have been completed and are ready for verification.'
+    else:
+        status_message = 'Results are still in progress. Standings will update after results are submitted.'
+    if mode == 'ranking':
+        progress_pct = round(completed_matches * 100 / match_count) if match_count else 0
+        upcoming_matches = _upcoming_games(event)
+        match_results = _all_match_rows(event)
+    else:
+        progress_pct = round(completion['submitted'] * 100 / judge_count) if judge_count else 0
+        upcoming_matches = []
+        match_results = []
+    result_cfg = dict(event.result_processing_config or {})
     return {
-        'event': {
-            **portal,
-            'venue': event.venue or '—',
-            'date': event.event_date.strftime('%b %d, %Y') if event.event_date else '—',
-        },
+        'event': portal,
+        'event_kind': portal['event_kind'],
         'events': events,
         'categories': categories,
         'selected_category': selected_category,
@@ -876,13 +1148,35 @@ def _tabulator_results_payload(user, event_id=None, category='', tab='overall', 
         'by_round': by_round,
         'match_standings': match_standings,
         'recent_games': recent_games,
+        'upcoming_matches': upcoming_matches,
+        'match_results': match_results,
+        'participants': results if mode == 'scoring' else [],
+        'selected_participant': next((row for row in results if row.get('candidate_id') == selected_id), None) if mode == 'scoring' else None,
+        'verification': verification,
+        'status_message': status_message,
         'updates': _result_updates(event),
+        'judge_monitoring': monitoring,
+        'verification_mode': result_cfg.get('verification_mode') or 'admin_only',
+        'tabulation_confirmed': bool(result_cfg.get('tabulation_confirmed_at')),
+        'tabulation_confirmed_at': result_cfg.get('tabulation_confirmed_at') or '',
+        'can_confirm_tabulation': (
+            mode == 'scoring'
+            and result_cfg.get('verification_mode') in {'tabulator_verification', 'tabulator_admin_approval'}
+            and event.assigned_tabulators.filter(pk=user.pk).exists()
+            and not result_cfg.get('tabulation_confirmed_at')
+            and not event.results_finalized
+            and verification['complete']
+        ),
         'message': message,
         'stats': {
             'participant_count': participant_count,
             'scored_count': scored_count,
             'judge_count': judge_count,
             'match_count': match_count,
+            'completed_matches': completed_matches,
+            'remaining_matches': max(0, match_count - completed_matches),
+            'submitted_judges': completion['submitted'],
+            'completion_pct': progress_pct,
         },
         'q': q or '',
     }
@@ -911,6 +1205,27 @@ def tabulator_dashboard(request):
 
 
 @_tabulator_portal_required
+def tabulator_my_events(request):
+    payload = _tabulator_results_payload(request.user, event_id=request.GET.get('event_id'))
+    status = (request.GET.get('status') or 'all').strip().lower()
+    query = (request.GET.get('q') or '').strip()
+    allowed = {'all', 'ongoing', 'upcoming', 'completed'}
+    if status not in allowed:
+        status = 'all'
+    events = payload['events']
+    if status == 'completed':
+        events = [event for event in events if event['status_label'] in {'Finalized', 'Published'}]
+    elif status != 'all':
+        events = [event for event in events if event['status_label'].lower() == status]
+    if query:
+        events = [event for event in events if query.lower() in event['name'].lower()]
+    payload['filtered_events'] = events
+    payload['event_filter'] = status
+    payload['event_query'] = query
+    return render(request, 'tabulator/tabmyevents.html', _portal_context(request, 'my_events', payload))
+
+
+@_tabulator_portal_required
 def tabulator_live_rankings(request):
     event_id = request.GET.get('event_id')
     payload = _tabulator_results_payload(
@@ -926,16 +1241,41 @@ def tabulator_live_rankings(request):
 
 @_tabulator_portal_required
 def tabulator_results(request):
-    event_id = request.GET.get('event_id')
+    payload = _tabulator_results_payload(request.user, event_id=request.GET.get('event_id'))
+    return render(request, 'tabulator/tabresults.html', _portal_context(request, 'results', payload))
+
+
+@_tabulator_portal_required
+def tabulator_full_results(request):
     payload = _tabulator_results_payload(
         request.user,
-        event_id=event_id,
-        category=request.GET.get('category') or '',
-        tab=request.GET.get('tab') or 'overall',
-        q=request.GET.get('q') or '',
+        event_id=request.GET.get('event_id'),
+        participant_id=request.GET.get('participant_id'),
     )
-    ctx = _portal_context(request, 'results', payload)
-    return render(request, 'tabulator/tabresults.html', ctx)
+    return render(request, 'tabulator/tabfullresults.html', _portal_context(request, 'results', payload))
+
+
+@_tabulator_portal_required
+def tabulator_profile(request):
+    payload = _tabulator_results_payload(request.user)
+    return render(request, 'tabulator/tabprofile.html', _portal_context(request, 'profile', payload))
+
+
+@require_POST
+@_tabulator_portal_required
+def tabulator_confirm_results(request, event_id):
+    event = _resolve_portal_event(request.user, event_id)
+    if event is None or event.pk != event_id:
+        return JsonResponse({'success': False, 'message': 'Forbidden'}, status=403)
+    if not request.user.groups.filter(name__iexact='Tabulator').exists():
+        return JsonResponse({'success': False, 'message': 'Tabulator access required.'}, status=403)
+    try:
+        confirm_tabulation(event, request.user)
+    except (FacultyServiceError, ValueError) as exc:
+        messages.error(request, str(exc))
+    else:
+        messages.success(request, 'Tabulation confirmed. Results are ready for the configured approval workflow.')
+    return redirect(f'/tabulator/results/full/?event_id={event.id}')
 
 
 @_tabulator_portal_required
@@ -946,6 +1286,7 @@ def tabulator_results_data(request):
         category=request.GET.get('category') or '',
         tab=request.GET.get('tab') or 'overall',
         q=request.GET.get('q') or '',
+        participant_id=request.GET.get('participant_id'),
     )
     return JsonResponse({'success': True, 'payload': payload})
 
@@ -971,6 +1312,11 @@ def tabulator_rankings_data(request):
 
 @_tabulator_portal_required
 def tabulator_results_csv(request):
+    event = _resolve_portal_event(request.user, request.GET.get('event_id'))
+    if event is None:
+        return HttpResponse('No assigned event selected.', status=404)
+    if not event.results_finalized:
+        return HttpResponse('Final results are not available yet.', status=409)
     payload = _tabulator_results_payload(
         request.user,
         event_id=request.GET.get('event_id'),
@@ -978,9 +1324,7 @@ def tabulator_results_csv(request):
         tab=request.GET.get('tab') or 'overall',
         q=request.GET.get('q') or '',
     )
-    event = payload.get('event')
-    if not event:
-        return HttpResponse('No event assigned.', status=404)
+    event = payload['event']
 
     buf = io.StringIO()
     writer = csv.writer(buf)
@@ -1014,73 +1358,3 @@ def tabulator_results_csv(request):
     response = HttpResponse(buf.getvalue(), content_type='text/csv')
     response['Content-Disposition'] = f'attachment; filename="{filename}"'
     return response
-
-
-@_tabulator_portal_required
-def tabulator_participants(request):
-    event = _resolve_portal_event(request.user, request.GET.get('event_id'))
-    events = _tabulator_portal_events(request.user)
-    rows = []
-    portal = _serialize_portal_event(event) if event else None
-    if event:
-        if _event_is_ranking_mode(event):
-            for team in event.bracket_teams.select_related('department').order_by('seed', 'name'):
-                rows.append({
-                    'label': team.name,
-                    'meta': team.department.name if team.department_id else '—',
-                    'number': team.seed or '',
-                })
-        elif event.judging_event_id:
-            for cand in Candidate.objects.filter(event_id=event.judging_event_id).order_by('number'):
-                rows.append({
-                    'label': cand.name,
-                    'meta': cand.department or '—',
-                    'number': cand.number,
-                    'photo': cand.photo.url if cand.photo else '',
-                })
-    payload = {
-        'event': portal,
-        'events': events,
-        'rows': rows,
-        'message': '' if rows else ('No participants for this event.' if event else 'No events assigned.'),
-    }
-    ctx = _portal_context(request, 'participants', payload)
-    ctx['rows'] = rows
-    return render(request, 'tabulator/tabparticipants.html', ctx)
-
-
-@_tabulator_portal_required
-def tabulator_categories(request):
-    event = _resolve_portal_event(request.user, request.GET.get('event_id'))
-    events = _tabulator_portal_events(request.user)
-    rows = []
-    portal = _serialize_portal_event(event) if event else None
-    if event:
-        cats = list(event.scoring_categories.order_by('display_order', 'name'))
-        if cats:
-            for cat in cats:
-                crit_count = cat.criteria.count()
-                rows.append({
-                    'name': cat.name,
-                    'mode': cat.get_judge_mode_display(),
-                    'weight': float(cat.overall_weight_percent or 0),
-                    'criteria_count': crit_count,
-                })
-        elif event.judging_event_id:
-            for c in Criterion.objects.filter(event_id=event.judging_event_id).order_by('order', 'id'):
-                rows.append({
-                    'name': c.name,
-                    'mode': 'Scoring',
-                    'weight': float(c.weight_percent or 0),
-                    'criteria_count': 1,
-                    'max_score': float(c.max_score or 0),
-                })
-    payload = {
-        'event': portal,
-        'events': events,
-        'rows': rows,
-        'message': '' if rows else ('No categories/criteria for this event.' if event else 'No events assigned.'),
-    }
-    ctx = _portal_context(request, 'categories', payload)
-    ctx['rows'] = rows
-    return render(request, 'tabulator/tabcategories.html', ctx)

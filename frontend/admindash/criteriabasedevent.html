@@ -42,7 +42,7 @@
         <section class="match-table-card">
           <form class="match-toolbar" method="get">
             <label class="match-search"><span class="sr-only">Search events</span>
-              <input name="q" type="search" value="{{ search_query }}" placeholder="Search event, category, division, or venue">
+              <input name="q" type="search" value="{{ search_query }}" placeholder="Search event, category, or venue">
             </label>
             <label><span class="sr-only">Filter status</span>
               <select name="status">
@@ -76,7 +76,6 @@
                   <th>Event Name</th>
                   <th>Category</th>
                   <th>Event Classification</th>
-                  <th>Division</th>
                   <th>Scoring Method</th>
                   <th>Event Date</th>
                   <th>Status</th>
@@ -89,7 +88,6 @@
                   <td><strong>{{ event.name }}</strong><small>{{ event.venue }}</small></td>
                   <td>{{ event.category_label|default:event.category }}</td>
                   <td>{{ event.classification_label }}</td>
-                  <td>{{ event.division }}</td>
                   <td>{{ event.criteria_score_method_label }}</td>
                   <td>{{ event.start_date }}{% if event.end_date != event.start_date %}<small>to {{ event.end_date }}</small>{% endif %}</td>
                   <td><span class="match-status match-status--{{ event.publication_status }}">{{ event.publication_label }}</span></td>
@@ -102,7 +100,7 @@
                   </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="8" class="match-empty"><strong>No criteria events found</strong><span>Select <strong>Create Event</strong> above to add your first draft.</span></td></tr>
+                <tr><td colspan="7" class="match-empty"><strong>No criteria events found</strong><span>Select <strong>Create Event</strong> above to add your first draft.</span></td></tr>
                 {% endfor %}
               </tbody>
             </table>
@@ -291,9 +289,19 @@
                 <input type="search" id="judging-judge-search" placeholder="Search judges..." aria-label="Search judges">
                 <div class="judging-judge-list" id="judging-judge-list"></div>
               </section>
+              <section class="judging-card" id="judging-tabulator-section">
+                <header class="judging-card-head"><div><h4><span>4</span> Tabulation Officer <em class="judging-optional"></em></h4><p>Assign who will verify and finalize tabulated results.</p></div></header>
+                <input type="search" id="judging-tabulator-search" placeholder="Search tabulators..." aria-label="Search tabulators">
+                <div class="judging-judge-list" id="judging-tabulator-list">
+                  {% for user in tabulator_options %}
+                  <label data-tabulator-name="{{ user.get_full_name|default:user.username|lower }} {{ user.username|lower }}"><input type="checkbox" name="faculty_account" value="{{ user.id }}"><span><strong>{{ user.get_full_name|default:user.username }}</strong><small>{{ user.username }}</small></span></label>
+                  {% endfor %}
+                </div>
+              </section>
               <details class="judging-card judging-advanced" id="judging-advanced">
-                <summary><strong><span>4</span> Advanced Options</strong><small>Additional settings for judging and tabulation.</small></summary>
+                <summary><strong><span>5</span> Advanced Options</strong><small>Additional settings for judging and tabulation.</small></summary>
                 <div class="judging-advanced-body">
+                  <label>Result Verification<select id="advanced-result-verification"><option value="admin_only">Admin only</option><option value="tabulator_verification">Tabulation Officer verification</option><option value="tabulator_admin_approval">Tabulation Officer verification + Admin approval</option></select></label>
                   <label class="judging-check"><input type="checkbox" id="advanced-carry-scores"> Carry previous round scores to next round</label>
                   <label class="judging-check"><input type="checkbox" id="advanced-special-awards"> Enable Special Awards</label>
                   <label>Tie-breaking Rule<select id="advanced-tie-rule"><option value="highest_final_round">Highest final round score</option><option value="highest_selected_criterion">Highest selected criterion</option><option value="manual_decision">Manual decision</option></select></label>
@@ -525,7 +533,7 @@
             </div>
           </fieldset>
           <label class="field-block">Tabulator in Charge
-            <select name="faculty_account" required>
+            <select name="legacy_faculty_account">
               <option value="">Select tabulator account</option>
               {% for user in tabulator_options %}
               <option value="{{ user.id }}">

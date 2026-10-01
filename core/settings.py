@@ -155,7 +155,11 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
-STATICFILES_DIRS = [BASE_DIR / 'frontend', BASE_DIR / 'frontend' / 'superadmindash']
+STATICFILES_DIRS = [
+    BASE_DIR / 'frontend',
+    BASE_DIR / 'frontend' / 'superadmindash',
+    ('loginlogo', BASE_DIR / 'assets' / 'loginlogo'),
+]
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # Media files (User uploaded content) — stored under project assets/

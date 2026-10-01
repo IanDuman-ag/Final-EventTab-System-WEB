@@ -5,8 +5,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>My Events · Faculty · EventTab</title>
-  <link rel="stylesheet" href="{% static 'facultydash/faculty.css' %}?v=20260802a">
-  <link rel="stylesheet" href="{% static 'facultydash/pages.css' %}?v=20260802a">
+  <link rel="stylesheet" href="{% static 'facultydash/faculty.css' %}?v=20260929b">
+  <link rel="stylesheet" href="{% static 'facultydash/pages.css' %}?v=20260929b">
 </head>
 <body class="fac-v2 tab-v2">
 <div class="tab-shell">
@@ -16,19 +16,23 @@
       <div>
         <p class="fac-kicker">Assigned by Administrator</p>
         <h1>My Events</h1>
+        <p class="fac-lead">Search and open your assigned match-based events.</p>
       </div>
     </header>
     <main class="tab-content fac-content">
       <section class="fac-card">
         <form class="fac-toolbar" method="get">
-          <input type="search" name="q" value="{{ search_query }}" placeholder="Search events">
-          <select name="status">
+          <label class="fac-sr-only" for="event-search">Search events</label>
+          <input id="event-search" type="search" name="q" value="{{ search_query }}" placeholder="Search events">
+          <label class="fac-sr-only" for="event-status">Filter by status</label>
+          <select id="event-status" name="status" aria-label="Filter by status">
             <option value="all" {% if status_filter == 'all' %}selected{% endif %}>All statuses</option>
             <option value="published" {% if status_filter == 'published' %}selected{% endif %}>Published</option>
             <option value="draft" {% if status_filter == 'draft' %}selected{% endif %}>Draft</option>
             <option value="ready" {% if status_filter == 'ready' %}selected{% endif %}>Ready for Publication</option>
           </select>
-          <select name="sort">
+          <label class="fac-sr-only" for="event-sort">Sort events</label>
+          <select id="event-sort" name="sort" aria-label="Sort events">
             <option value="-updated_at" {% if sort == '-updated_at' %}selected{% endif %}>Newest updated</option>
             <option value="name" {% if sort == 'name' %}selected{% endif %}>Name A–Z</option>
             <option value="-name" {% if sort == '-name' %}selected{% endif %}>Name Z–A</option>
@@ -38,7 +42,7 @@
           <button class="fac-btn fac-btn-sm" type="submit">Apply</button>
         </form>
         <div class="fac-table-wrap">
-          <table class="fac-table">
+          <table class="fac-table fac-responsive-table">
             <thead>
               <tr>
                 <th>Event Name</th>
@@ -46,6 +50,7 @@
                 <th>Category</th>
                 <th>Schedule</th>
                 <th>Venue</th>
+                <th>Progress</th>
                 <th>Status</th>
                 <th>Actions</th>
               </tr>
@@ -53,16 +58,17 @@
             <tbody>
               {% for e in event_rows %}
               <tr>
-                <td><strong>{{ e.name }}</strong></td>
-                <td>{{ e.event_type }}</td>
-                <td>{{ e.category }}</td>
-                <td>{{ e.schedule }}</td>
-                <td>{{ e.venue }}</td>
-                <td><span class="fac-pill">{{ e.status }}</span></td>
-                <td><a class="fac-btn fac-btn-sm" href="{% url 'faculty_event_manage' e.id %}">Manage</a></td>
+                <td data-label="Event"><strong>{{ e.name }}</strong></td>
+                <td data-label="Type">{{ e.event_type }}</td>
+                <td data-label="Category">{{ e.category }}</td>
+                <td data-label="Schedule">{{ e.schedule }}</td>
+                <td data-label="Venue">{{ e.venue }}</td>
+                <td data-label="Progress"><div class="fac-inline-progress"><span><i style="width:{{ e.progress_percent }}%"></i></span><small>{{ e.matches_completed }}/{{ e.matches_total }}</small></div></td>
+                <td data-label="Status"><span class="fac-pill">{{ e.status }}</span></td>
+                <td data-label="Action"><a class="fac-btn fac-btn-sm" href="{% url 'faculty_event_manage' e.id %}">Open Event</a></td>
               </tr>
               {% empty %}
-              <tr><td colspan="7" class="fac-empty">No assigned events found.</td></tr>
+              <tr><td colspan="8"><div class="fac-empty"><strong>No assigned events found</strong><span>Try changing the search or status filter.</span></div></td></tr>
               {% endfor %}
             </tbody>
           </table>
@@ -84,5 +90,6 @@
     </main>
   </div>
 </div>
+<script src="{% static 'facultydash/faculty.js' %}?v=20260929b"></script>
 </body>
 </html>

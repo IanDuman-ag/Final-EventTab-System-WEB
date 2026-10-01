@@ -12,7 +12,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.core.mail import send_mail
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Case, Count, IntegerField, Q, Value, When
 from django.utils import timezone
 
 from .bracket_progression import apply_scoresheet_to_bracket, recompute_points
@@ -127,6 +127,17 @@ def faculty_event_qs(user):
     )
 
 
+def faculty_match_event_qs(user):
+    """Assigned match events, including legacy untyped events with bracket rows."""
+    return faculty_event_qs(user).filter(
+        Q(scoring_method='match')
+        | (
+            Q(scoring_method='')
+            & (Q(category__iexact='sports') | Q(bracket_matches__isnull=False))
+        )
+    ).distinct()
+
+
 def faculty_can_access(user, event):
     if not event or not user or not user.is_authenticated:
         return False
@@ -172,6 +183,20 @@ def serialize_event_row(event):
         status = 'Published Results'
     elif (event.result_processing_config or {}).get('ready_for_publication'):
         status = 'Ready for Publication'
+    matches = list(event.bracket_matches.filter(is_automatic_advance=False))
+    finalized_match_ids = set(
+        ScoreSheet.objects.filter(
+            event=event,
+            match_id__in=[match.id for match in matches],
+            status__in=[ScoreSheet.STATUS_CONFIRMED, ScoreSheet.STATUS_FINALIZED],
+        ).values_list('match_id', flat=True)
+    )
+    completed = sum(
+        1 for match in matches
+        if match.id in finalized_match_ids
+        or match.status in {BracketMatch.STATUS_COMPLETED, BracketMatch.STATUS_FORFEIT}
+    )
+    total = len(matches)
     return {
         'id': event.id,
         'name': event.name,
@@ -183,6 +208,9 @@ def serialize_event_row(event):
         'publication_status': event.publication_status,
         'scoring_method': event.scoring_method or '',
         'division': event.division or '—',
+        'matches_completed': completed,
+        'matches_total': total,
+        'progress_percent': round((completed / total) * 100) if total else 0,
         'classification': event.get_event_classification_display() or '—',
     }
 
@@ -198,24 +226,55 @@ def serialize_event_detail(event):
         if chief not in judges:
             judges.insert(0, f'{chief} (Chief)')
     participants = []
+    participant_rows = []
     if event.scoring_method == 'criteria' or event.participation_type == 'individual':
         entries = list(event.criteria_entries.all()) if event.scoring_method == 'criteria' else []
         participants.extend(entry.display_name for entry in entries)
+        participant_rows.extend({
+            'name': entry.display_name,
+            'department': getattr(entry, 'department', '') or '—',
+            'seed': '—',
+            'status': 'Assigned',
+        } for entry in entries)
         ids = event.participant_ids or []
         if not entries:
             for c in RegistryCandidate.objects.filter(id__in=ids):
                 participants.append(f'#{c.number} {c.name}')
+                participant_rows.append({
+                    'name': c.name,
+                    'department': getattr(c, 'department', '') or '—',
+                    'seed': c.number or '—',
+                    'status': 'Assigned',
+                })
         if not participants and event.judging_event_id:
             for c in event.judging_event.candidates.all()[:50]:
                 participants.append(c.name)
+                participant_rows.append({
+                    'name': c.name,
+                    'department': c.department or '—',
+                    'seed': c.number or '—',
+                    'status': 'Assigned',
+                })
     else:
         ids = event.participant_ids or []
         if ids:
             for t in Team.objects.filter(id__in=ids):
                 participants.append(t.name)
+                participant_rows.append({
+                    'name': t.name,
+                    'department': t.department.name if t.department_id else '—',
+                    'seed': '—',
+                    'status': 'Assigned',
+                })
         else:
-            for t in BracketTeam.objects.filter(event=event).order_by('seed', 'name')[:50]:
+            for t in BracketTeam.objects.filter(event=event).select_related('department').order_by('seed', 'name')[:50]:
                 participants.append(t.name)
+                participant_rows.append({
+                    'name': t.name,
+                    'department': t.department.name if t.department_id else '—',
+                    'seed': t.seed or '—',
+                    'status': 'Active',
+                })
     structure = 'Single Performance'
     if event.scoring_method == 'match':
         structure = (event.tournament_type or 'single_elim').replace('_', ' ').title()
@@ -226,7 +285,9 @@ def serialize_event_detail(event):
         'end_date': (event.end_date or event.event_date).isoformat() if event.event_date else '',
         'judges': judges,
         'participants': participants,
+        'participant_rows': participant_rows,
         'structure': structure,
+        'result_entry_format': (event.result_entry_format or 'Final score').replace('_', ' ').title(),
         'rounds_config': event.rounds_config or [],
         'results_finalized': event.results_finalized,
         'ready_for_publication': bool((event.result_processing_config or {}).get('ready_for_publication')),
@@ -244,10 +305,30 @@ def schedule_rows(event):
     rows = []
     matches = (
         BracketMatch.objects.filter(event=event)
+        .filter(is_automatic_advance=False)
         .select_related('team_a', 'team_b', 'winner')
         .order_by('match_number', 'match_date', 'match_time')
     )
+    sheet_rows = ScoreSheet.objects.filter(event=event).select_related('winner', 'tabulator').annotate(
+        result_priority=Case(
+            When(status=ScoreSheet.STATUS_FINALIZED, then=Value(0)),
+            When(status=ScoreSheet.STATUS_CONFIRMED, then=Value(1)),
+            default=Value(2),
+            output_field=IntegerField(),
+        )
+    ).order_by('match_id', 'result_priority', '-updated_at', '-id')
+    sheets = {}
+    for sheet_row in sheet_rows:
+        sheets.setdefault(sheet_row.match_id, sheet_row)
     for m in matches:
+        sheet = sheets.get(m.id)
+        legacy_complete = m.status in {BracketMatch.STATUS_COMPLETED, BracketMatch.STATUS_FORFEIT}
+        if (sheet and sheet.status in {ScoreSheet.STATUS_CONFIRMED, ScoreSheet.STATUS_FINALIZED}) or legacy_complete:
+            result_status, result_status_key = 'Confirmed', 'confirmed'
+        elif sheet:
+            result_status, result_status_key = 'Draft', 'draft'
+        else:
+            result_status, result_status_key = 'Pending', 'pending'
         rows.append({
             'id': m.id,
             'game': f'Game {m.match_number}',
@@ -258,13 +339,28 @@ def schedule_rows(event):
             'venue': m.venue or event.venue or '—',
             'status': m.get_status_display(),
             'status_key': m.status,
-            'score_a': m.score_a or '',
-            'score_b': m.score_b or '',
+            'result_status': result_status,
+            'result_status_key': result_status_key,
+            'score_a': sheet.score_team_a if sheet else (m.score_a or ''),
+            'score_b': sheet.score_team_b if sheet else (m.score_b or ''),
             'team_a': m.team_a.name if m.team_a else 'TBD',
             'team_b': m.team_b.name if m.team_b else 'TBD',
             'team_a_id': m.team_a_id,
             'team_b_id': m.team_b_id,
-            'winner_id': m.winner_id,
+            'winner_id': sheet.winner_id if sheet else m.winner_id,
+            'remarks': sheet.remarks if sheet else (m.remarks or ''),
+            'is_confirmed': bool(
+                (sheet and sheet.status in {ScoreSheet.STATUS_CONFIRMED, ScoreSheet.STATUS_FINALIZED})
+                or legacy_complete
+            ),
+            'confirmed_by': (
+                sheet.tabulator.get_full_name() or sheet.tabulator.username
+                if sheet and sheet.tabulator_id else ''
+            ),
+            'confirmed_at': (
+                timezone.localtime(sheet.updated_at).strftime('%b %d, %Y %I:%M %p')
+                if sheet and sheet.status in {ScoreSheet.STATUS_CONFIRMED, ScoreSheet.STATUS_FINALIZED} else ''
+            ),
         })
     if not rows and (event.rounds_config or []):
         for idx, round_cfg in enumerate(event.rounds_config):
@@ -326,26 +422,26 @@ def export_schedule_csv(event):
 
 
 def dashboard_stats(user):
-    events = faculty_event_qs(user)
+    events = faculty_match_event_qs(user)
     today = timezone.localdate()
-    todays = BracketMatch.objects.filter(event__in=events, match_date=today).count()
-    pending = ScoreSheet.objects.filter(
-        event__in=events, status__in=[ScoreSheet.STATUS_PENDING, ScoreSheet.STATUS_CONFIRMED]
-    ).count()
-    # Criteria pending: events with judges not all submitted and not finalized
-    criteria_pending = 0
-    for ev in events.filter(scoring_method='criteria', results_finalized=False)[:30]:
-        mon = judge_monitoring(ev)
-        if mon['total'] and mon['submitted'] < mon['total']:
-            criteria_pending += 1
-    published = events.filter(
-        Q(results_finalized=True) | Q(publication_status=Event.PUBLICATION_PUBLISHED)
+    actual_matches = BracketMatch.objects.filter(event__in=events, is_automatic_advance=False)
+    todays = actual_matches.filter(match_date=today).count()
+    confirmed_statuses = [ScoreSheet.STATUS_CONFIRMED, ScoreSheet.STATUS_FINALIZED]
+    confirmed = actual_matches.filter(
+        Q(scoresheets__status__in=confirmed_statuses)
+        | Q(status__in=[BracketMatch.STATUS_COMPLETED, BracketMatch.STATUS_FORFEIT])
+    ).distinct().count()
+    confirmed_match_ids = ScoreSheet.objects.filter(
+        event__in=events, status__in=confirmed_statuses,
+    ).values_list('match_id', flat=True)
+    pending = actual_matches.exclude(id__in=confirmed_match_ids).exclude(
+        status__in=[BracketMatch.STATUS_COMPLETED, BracketMatch.STATUS_FORFEIT]
     ).count()
     return {
         'assigned_events': events.count(),
-        'todays_schedule': todays,
-        'pending_reviews': pending + criteria_pending,
-        'published_events': published,
+        'todays_matches': todays,
+        'pending_results': pending,
+        'confirmed_results': confirmed,
     }
 
 
@@ -585,24 +681,53 @@ def _patch_result_config(event, **kwargs):
 def save_match_result(event, match, user, *, score_a, score_b, winner_id, remarks, confirm=False):
     if match.event_id != event.id:
         raise FacultyServiceError('Match does not belong to this event.')
+    match = BracketMatch.objects.select_for_update().get(pk=match.pk, event=event)
+    if (
+        match.is_automatic_advance
+        or not match.team_a_id
+        or not match.team_b_id
+    ):
+        raise FacultyServiceError('This match is not ready for result entry.')
+    if match.status in {BracketMatch.STATUS_COMPLETED, BracketMatch.STATUS_FORFEIT}:
+        raise FacultyServiceError('This result is confirmed and can no longer be changed.')
+    locked_sheets = ScoreSheet.objects.select_for_update().filter(event=event, match=match)
+    if locked_sheets.filter(
+        status__in=[ScoreSheet.STATUS_CONFIRMED, ScoreSheet.STATUS_FINALIZED]
+    ).exists():
+        raise FacultyServiceError('This result is confirmed and can no longer be changed.')
+    existing = locked_sheets.order_by('-updated_at', '-id').first()
+    if existing and existing.tabulator_id != user.id and not user.is_staff:
+        raise FacultyServiceError('This draft belongs to another authorized scorer and cannot be changed.')
     try:
         sa = Decimal(str(score_a))
         sb = Decimal(str(score_b))
     except Exception as exc:
         raise FacultyServiceError('Scores must be numeric.') from exc
+    if not sa.is_finite() or not sb.is_finite() or sa < 0 or sb < 0:
+        raise FacultyServiceError('Scores must be finite, non-negative numbers.')
+    if sa > Decimal('999999.99') or sb > Decimal('999999.99'):
+        raise FacultyServiceError('Scores are too large.')
+    try:
+        has_extra_decimals = sa != sa.quantize(Decimal('0.01')) or sb != sb.quantize(Decimal('0.01'))
+    except Exception as exc:
+        raise FacultyServiceError('Scores must be valid numbers.') from exc
+    if has_extra_decimals:
+        raise FacultyServiceError('Scores may have at most two decimal places.')
+    if not isinstance(remarks, str):
+        raise FacultyServiceError('Remarks must be text.')
     winner = None
     if winner_id:
-        if int(winner_id) not in {match.team_a_id, match.team_b_id}:
+        try:
+            winner_pk = int(winner_id)
+        except (TypeError, ValueError) as exc:
+            raise FacultyServiceError('Winner selection is invalid.') from exc
+        if winner_pk not in {match.team_a_id, match.team_b_id}:
             raise FacultyServiceError('Winner must be Team A or Team B.')
-        winner = BracketTeam.objects.filter(pk=int(winner_id), event=event).first()
-    elif sa != sb:
-        winner = match.team_a if sa > sb else match.team_b
+        winner = BracketTeam.objects.filter(pk=winner_pk, event=event).first()
+    if confirm and (sa == sb or winner is None):
+        raise FacultyServiceError('Choose a winner before confirming. Tied scores cannot be confirmed.')
 
-    sheet, _ = ScoreSheet.objects.get_or_create(
-        event=event,
-        match=match,
-        defaults={'tabulator': user},
-    )
+    sheet = existing or ScoreSheet(event=event, match=match, tabulator=user)
     sheet.tabulator = user
     sheet.score_team_a = sa
     sheet.score_team_b = sb
@@ -614,14 +739,21 @@ def save_match_result(event, match, user, *, score_a, score_b, winner_id, remark
     if confirm:
         apply_scoresheet_to_bracket(sheet)
         recompute_points(event)
-        remaining = BracketMatch.objects.filter(event=event).exclude(
-            status=BracketMatch.STATUS_COMPLETED
+        actual_match_ids = BracketMatch.objects.filter(
+            event=event, is_automatic_advance=False,
+        ).values_list('id', flat=True)
+        remaining = BracketMatch.objects.filter(
+            id__in=actual_match_ids,
+        ).exclude(
+            scoresheets__status__in=[ScoreSheet.STATUS_CONFIRMED, ScoreSheet.STATUS_FINALIZED],
+        ).exclude(
+            status__in=[BracketMatch.STATUS_COMPLETED, BracketMatch.STATUS_FORFEIT],
         ).count()
         if remaining == 0:
             event.status = Event.STATUS_COMPLETED
             event.save(update_fields=['status', 'updated_at'])
             _apply_championship_points(event)
-        _patch_result_config(event, ready_for_publication=True)
+        _patch_result_config(event, ready_for_publication=(remaining == 0))
         LogEntry.objects.create(
             user=user,
             content_type=ContentType.objects.get_for_model(Event),
@@ -695,6 +827,9 @@ def return_for_correction(event, user, judge_ids=None):
 
 @transaction.atomic
 def approve_results(event, user):
+    cfg = dict(event.result_processing_config or {})
+    if cfg.get('verification_mode') == 'tabulator_admin_approval' and not cfg.get('tabulation_confirmed_at'):
+        raise FacultyServiceError('The assigned Tabulation Officer must confirm the tabulation first.')
     _patch_result_config(event, approved=True, ready_for_publication=True)
     LogEntry.objects.create(
         user=user,
@@ -718,7 +853,70 @@ def approve_results(event, user):
 
 
 @transaction.atomic
+def confirm_tabulation(event, user):
+    """Verify completeness and record approval without changing Judge scores."""
+    cfg = dict(event.result_processing_config or {})
+    mode = cfg.get('verification_mode') or 'admin_only'
+    if mode == 'admin_only':
+        raise FacultyServiceError('This event uses Admin-only result verification.')
+    if not event.assigned_tabulators.filter(pk=user.pk).exists():
+        raise FacultyServiceError('You are not the assigned Tabulation Officer for this event.')
+    from .criteria_event_service import validate_saved_scoring_structure
+    validate_saved_scoring_structure(event, strict=True)
+    monitoring = judge_monitoring(event)
+    if not monitoring['all_submitted']:
+        raise FacultyServiceError(
+            f"All required Judge scores must be submitted before confirmation "
+            f"({monitoring['submitted']} of {monitoring['total']} complete)."
+        )
+    judging = event.judging_event
+    expected_per_judge = (
+        judging.candidates.count() * judging.criteria.count() if judging else 0
+    )
+    if expected_per_judge <= 0:
+        raise FacultyServiceError('Participants and scoring criteria are required before confirmation.')
+    for judge in event.assigned_judges.all():
+        locked_count = JudgeScore.objects.filter(
+            candidate__event=judging, judge=judge, is_locked=True,
+        ).count()
+        if locked_count != expected_per_judge:
+            raise FacultyServiceError(
+                f'{judge.get_full_name() or judge.username} has an incomplete score submission.'
+            )
+    if not compute_criteria_rankings(event):
+        raise FacultyServiceError('Automatic results could not be produced for this event.')
+    cfg['tabulation_status'] = 'confirmed'
+    cfg['tabulation_confirmed_by'] = user.pk
+    cfg['tabulation_confirmed_at'] = timezone.now().isoformat()
+    cfg['ready_for_publication'] = mode == 'tabulator_verification'
+    if mode == 'tabulator_admin_approval':
+        cfg['approved'] = False
+    event.result_processing_config = cfg
+    event.save(update_fields=['result_processing_config', 'updated_at'])
+    LogEntry.objects.create(
+        user=user,
+        content_type=ContentType.objects.get_for_model(Event),
+        object_id=str(event.pk), object_repr=event.name, action_flag=CHANGE,
+        change_message='Tabulation Officer confirmed automatic tabulation.',
+    )
+    try:
+        from .audit_service import record_audit
+        record_audit(user=user, action='Confirmed Tabulation',
+                     description=f'Confirmed automatic tabulation for "{event.name}".',
+                     module='Results', event_name=event.name)
+    except Exception:
+        pass
+    return cfg
+
+
+@transaction.atomic
 def publish_results(event, user):
+    cfg = dict(event.result_processing_config or {})
+    mode = cfg.get('verification_mode') or 'admin_only'
+    if mode in {'tabulator_verification', 'tabulator_admin_approval'} and not cfg.get('tabulation_confirmed_at'):
+        raise FacultyServiceError('Tabulation must be confirmed before publishing results.')
+    if mode == 'tabulator_admin_approval' and not cfg.get('approved'):
+        raise FacultyServiceError('Admin approval is required before publishing results.')
     judging = event.judging_event
     if judging:
         JudgeScore.objects.filter(candidate__event=judging).update(is_locked=True)
@@ -726,7 +924,6 @@ def publish_results(event, user):
     event.publication_status = Event.PUBLICATION_PUBLISHED
     if event.status != Event.STATUS_COMPLETED:
         event.status = Event.STATUS_COMPLETED
-    cfg = dict(event.result_processing_config or {})
     cfg['ready_for_publication'] = False
     cfg['published_at'] = timezone.now().isoformat()
     cfg['published_by'] = user.id

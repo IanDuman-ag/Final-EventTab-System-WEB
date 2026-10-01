@@ -1,5 +1,6 @@
 import json
 from datetime import date, time
+from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
@@ -14,7 +15,180 @@ from .match_event_service import (
     ensure_unique_match_event_name,
     MatchEventValidationError,
 )
-from .models import BracketMatch, BracketTeam, Department, Event, EventCategory, SystemSettings, Team
+from .models import BracketMatch, BracketTeam, Department, Event, EventCategory, ScoreSheet, SystemSettings, Team
+
+
+class FacultyMatchWorkspaceTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.faculty = User.objects.create_user(username='workspace-faculty', password='test')
+        self.other = User.objects.create_user(username='workspace-other', password='test')
+        group, _ = Group.objects.get_or_create(name='Faculty')
+        self.faculty.groups.add(group)
+        self.other.groups.add(group)
+        self.match_event = Event.objects.create(
+            name='Faculty Basketball', scoring_method='match', category='Sports',
+            event_date=date.today(), faculty_account=self.faculty,
+        )
+        self.criteria_event = Event.objects.create(
+            name='Faculty Dance', scoring_method='criteria', category='Cultural',
+            event_date=date.today(), faculty_account=self.faculty,
+        )
+        self.team_a = BracketTeam.objects.create(event=self.match_event, name='Blue')
+        self.team_b = BracketTeam.objects.create(event=self.match_event, name='Gold')
+        self.match = BracketMatch.objects.create(
+            event=self.match_event, match_number=1, round_name='Final',
+            team_a=self.team_a, team_b=self.team_b,
+        )
+        self.client.force_login(self.faculty)
+
+    def result_url(self):
+        return reverse('faculty_match_result', args=[self.match_event.id, self.match.id])
+
+    def test_faculty_lists_only_assigned_match_events(self):
+        response = self.client.get(reverse('faculty_my_events'))
+        self.assertContains(response, self.match_event.name)
+        self.assertNotContains(response, self.criteria_event.name)
+
+    def test_other_faculty_cannot_open_event(self):
+        self.client.force_login(self.other)
+        response = self.client.get(reverse('faculty_event_manage', args=[self.match_event.id]))
+        self.assertRedirects(response, reverse('faculty_my_events'))
+
+    def test_draft_persists_and_can_be_edited(self):
+        response = self.client.post(
+            self.result_url(), data=json.dumps({'score_a': 0, 'score_b': 1, 'winner_id': self.team_b.id}),
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 200)
+        sheet = ScoreSheet.objects.get(match=self.match)
+        self.assertEqual(sheet.status, ScoreSheet.STATUS_PENDING)
+        self.assertEqual(sheet.score_team_a, Decimal('0'))
+        edit = self.client.post(
+            self.result_url(),
+            data=json.dumps({'score_a': 3, 'score_b': 2, 'remarks': 'Correction'}),
+            content_type='application/json',
+        )
+        self.assertEqual(edit.status_code, 200)
+        sheet.refresh_from_db()
+        self.match.refresh_from_db()
+        self.match_event.refresh_from_db()
+        self.assertEqual(sheet.status, ScoreSheet.STATUS_PENDING)
+        self.assertEqual(sheet.score_team_a, Decimal('3'))
+        self.assertEqual(sheet.remarks, 'Correction')
+        self.assertEqual(self.match.status, BracketMatch.STATUS_PENDING)
+        self.assertFalse((self.match_event.result_processing_config or {}).get('ready_for_publication', False))
+
+    def test_successful_confirmations_progress_authored_links_and_gate_readiness(self):
+        team_c = BracketTeam.objects.create(event=self.match_event, name='Green')
+        team_d = BracketTeam.objects.create(event=self.match_event, name='Red')
+        winner_target = BracketMatch.objects.create(
+            event=self.match_event, match_number=0, round_name='Winner Advance',
+            is_automatic_advance=True,
+        )
+        loser_target = BracketMatch.objects.create(
+            event=self.match_event, match_number=0, round_name='Loser Advance',
+            is_automatic_advance=True,
+        )
+        self.match.next_match_winner = winner_target
+        self.match.next_match_loser = loser_target
+        self.match.save(update_fields=['next_match_winner', 'next_match_loser'])
+        second = BracketMatch.objects.create(
+            event=self.match_event, match_number=2, round_name='Placement',
+            team_a=team_c, team_b=team_d,
+        )
+
+        first_response = self.client.post(
+            self.result_url(),
+            data=json.dumps({'score_a': 4, 'score_b': 2, 'winner_id': self.team_a.id, 'confirm': True}),
+            content_type='application/json',
+        )
+        self.assertEqual(first_response.status_code, 200)
+        self.match.refresh_from_db()
+        winner_target.refresh_from_db()
+        loser_target.refresh_from_db()
+        self.match_event.refresh_from_db()
+        self.assertEqual(self.match.winner, self.team_a)
+        self.assertEqual(self.match.loser, self.team_b)
+        self.assertIn(self.team_a.id, {winner_target.team_a_id, winner_target.team_b_id, winner_target.winner_id})
+        self.assertIn(self.team_b.id, {loser_target.team_a_id, loser_target.team_b_id, loser_target.winner_id})
+        self.assertFalse(self.match_event.result_processing_config.get('ready_for_publication', False))
+
+        second_response = self.client.post(
+            reverse('faculty_match_result', args=[self.match_event.id, second.id]),
+            data=json.dumps({'score_a': 1, 'score_b': 2, 'winner_id': team_d.id, 'confirm': True}),
+            content_type='application/json',
+        )
+        self.assertEqual(second_response.status_code, 200)
+        self.match_event.refresh_from_db()
+        self.assertTrue(self.match_event.result_processing_config['ready_for_publication'])
+
+    def test_other_owner_draft_is_not_overwritten(self):
+        ScoreSheet.objects.create(
+            event=self.match_event, match=self.match, tabulator=self.other,
+            score_team_a=1, score_team_b=0, status=ScoreSheet.STATUS_PENDING,
+        )
+        response = self.client.post(
+            self.result_url(),
+            data=json.dumps({'score_a': 2, 'score_b': 0}),
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, 'belongs to another', status_code=400)
+        sheet = ScoreSheet.objects.get(match=self.match)
+        self.assertEqual(sheet.score_team_a, Decimal('1'))
+
+    def test_invalid_json_and_non_finite_scores_return_validation_errors(self):
+        cases = (
+            ('[]', 'Request body must be a JSON object'),
+            ('{"score_a": NaN, "score_b": 1}', 'finite, non-negative'),
+        )
+        for body, message in cases:
+            with self.subTest(body=body):
+                response = self.client.post(self.result_url(), data=body, content_type='application/json')
+                self.assertEqual(response.status_code, 400)
+                self.assertContains(response, message, status_code=400)
+
+    def test_confirmation_requires_winner_and_rejects_tie(self):
+        malformed_winner = self.client.post(
+            self.result_url(),
+            data=json.dumps({'score_a': 2, 'score_b': 1, 'winner_id': {'bad': 'value'}, 'confirm': True}),
+            content_type='application/json',
+        )
+        self.assertEqual(malformed_winner.status_code, 400)
+        self.assertContains(malformed_winner, 'Winner selection is invalid', status_code=400)
+        missing_winner = self.client.post(
+            self.result_url(), data=json.dumps({'score_a': 2, 'score_b': 1, 'confirm': True}),
+            content_type='application/json',
+        )
+        self.assertEqual(missing_winner.status_code, 400)
+        self.assertContains(missing_winner, 'Choose a winner', status_code=400)
+        response = self.client.post(
+            self.result_url(), data=json.dumps({'score_a': 1, 'score_b': 1, 'confirm': True}),
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, 'cannot be confirmed', status_code=400)
+
+    def test_confirmed_result_is_immutable(self):
+        ScoreSheet.objects.create(
+            event=self.match_event, match=self.match, tabulator=self.faculty,
+            score_team_a=2, score_team_b=1, winner=self.team_a,
+            status=ScoreSheet.STATUS_FINALIZED,
+        )
+        response = self.client.post(
+            self.result_url(), data=json.dumps({'score_a': 0, 'score_b': 3, 'winner_id': self.team_b.id}),
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, 'can no longer be changed', status_code=400)
+
+    def test_faculty_cannot_publish(self):
+        response = self.client.post(
+            reverse('faculty_results_action', args=[self.match_event.id]),
+            data=json.dumps({'action': 'publish'}), content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 403)
 
 
 class MatchEventWorkflowTests(TestCase):
@@ -1144,6 +1318,25 @@ class CriteriaRoundAdvancementValidationTests(TestCase):
         )
         self.assertEqual(event.chief_judge, self.judge)
         self.assertIsNone(event.faculty_account)
+        self.assertFalse(event.assigned_tabulators.exists())
+        self.assertEqual(event.result_processing_config['verification_mode'], 'admin_only')
+
+    def test_tabulator_assignment_is_event_level_and_does_not_make_them_a_judge(self):
+        from events.criteria_event_service import save_criteria_event
+
+        payload = self._payload(4, qualifiers=3)
+        payload['result_processing_config'] = json.dumps({
+            'verification_mode': 'tabulator_verification',
+        })
+        event = save_criteria_event(payload, self.admin)
+
+        self.assertEqual(event.faculty_account, self.tabulator)
+        self.assertEqual(list(event.assigned_tabulators.all()), [self.tabulator])
+        self.assertNotIn(self.tabulator, event.assigned_judges.all())
+        self.assertEqual(
+            event.result_processing_config['verification_mode'],
+            'tabulator_verification',
+        )
 
     def test_four_candidates_top_three_stays_top_three(self):
         from events.criteria_event_service import save_criteria_event
@@ -1270,6 +1463,53 @@ class EventScoringCategoryTests(TestCase):
         ):
             _validated_criteria({'judging_criteria_config': json.dumps(rows)}, strict=True)
 
+    def test_vocal_duet_sibling_criteria_total_100(self):
+        from events.criteria_event_service import _validated_criteria
+
+        rows = [
+            {'name': 'Tone Quality / Vocal Technique', 'weight': 30, 'max_score': 30,
+             'segment_id': 'duet', 'segment_name': 'Vocal Duet Performance',
+             'subcriteria': [{'name': 'Tone Quality', 'max_score': 15},
+                             {'name': 'Vocal Technique', 'max_score': 15}]},
+            {'name': 'Blending / Harmony', 'weight': 30, 'max_score': 30,
+             'segment_id': 'duet', 'segment_name': 'Vocal Duet Performance',
+             'subcriteria': [{'name': 'Blending', 'max_score': 15},
+                             {'name': 'Harmony', 'max_score': 15}]},
+            {'name': 'Musicianship', 'weight': 30, 'max_score': 30,
+             'segment_id': 'duet', 'segment_name': 'Vocal Duet Performance',
+             'subcriteria': [{'name': 'Interpretation', 'max_score': 10},
+                             {'name': 'Dynamic Phrasing', 'max_score': 10},
+                             {'name': 'Diction', 'max_score': 10}]},
+            {'name': 'Deportment', 'weight': 10, 'max_score': 10,
+             'segment_id': 'duet', 'segment_name': 'Vocal Duet Performance',
+             'subcriteria': [{'name': 'Stage Presence', 'max_score': 5},
+                             {'name': 'Audience Appeal', 'max_score': 5}]},
+        ]
+
+        cleaned = _validated_criteria({'judging_criteria_config': json.dumps(rows)}, strict=True)
+
+        self.assertEqual([row['weight'] for row in cleaned], [30, 30, 30, 10])
+
+    def test_dance_and_pageant_segments_validate_independently(self):
+        from events.criteria_event_service import _validated_criteria
+
+        rows = [
+            {'name': name, 'weight': weight, 'max_score': 100,
+             'segment_id': segment, 'segment_name': label, 'round_id': round_id}
+            for segment, label, round_id, values in (
+                ('dance', 'Dance Performance', 'final',
+                 [('Choreography', 40), ('Performance', 20), ('Concept', 20), ('Technique', 20)]),
+                ('talent', 'Talent', 'preliminary', [('Skill', 60), ('Presentation', 40)]),
+                ('qa', 'Question & Answer', 'final', [('Content', 50), ('Delivery', 50)]),
+            )
+            for name, weight in values
+        ]
+
+        cleaned = _validated_criteria({'judging_criteria_config': json.dumps(rows)}, strict=True)
+
+        self.assertEqual(sum(row['weight'] for row in cleaned), 300)
+        self.assertEqual({row['segment_id'] for row in cleaned}, {'dance', 'talent', 'qa'})
+
 
 class TabulatorResultsPortalTests(TestCase):
     def setUp(self):
@@ -1389,12 +1629,125 @@ class TabulatorResultsPortalTests(TestCase):
         self.assertIn('Alice', body)
         self.assertIn('Bianca', body)
 
-    def test_results_page_renders_for_tabulator(self):
+    def test_draft_results_cannot_be_exported_as_final(self):
+        self.event.results_finalized = False
+        self.event.save(update_fields=['results_finalized'])
+        self.client.force_login(self.tabulator)
+        response = self.client.get(reverse('tabulator_results_csv'), {'event_id': self.event.id})
+        self.assertEqual(response.status_code, 409)
+
+    def test_match_teams_have_no_rank_before_first_result(self):
+        from core.faculty_views import _match_standings
+        from .models import BracketTeam
+
+        BracketTeam.objects.create(event=self.foreign, name='Ateneo')
+        rows = _match_standings(self.foreign)
+        self.assertEqual(len(rows), 1)
+        self.assertIsNone(rows[0]['rank'])
+        self.assertEqual(rows[0]['played'], 0)
+
+    def test_match_dashboard_uses_match_progress_and_pending_rank(self):
+        from core.faculty_views import _tabulator_results_payload
+        from .models import BracketMatch, BracketTeam
+
+        self.foreign.assigned_tabulators.add(self.tabulator)
+        team_a = BracketTeam.objects.create(event=self.foreign, name='Ateneo')
+        team_b = BracketTeam.objects.create(event=self.foreign, name='Blackknights')
+        BracketMatch.objects.create(
+            event=self.foreign, match_number=1, round_name='Round 1',
+            team_a=team_a, team_b=team_b,
+        )
+        payload = _tabulator_results_payload(self.tabulator, event_id=self.foreign.id)
+        self.assertEqual(payload['event_kind'], 'match')
+        self.assertEqual(payload['stats']['match_count'], 1)
+        self.assertEqual(payload['stats']['completed_matches'], 0)
+        self.assertEqual(payload['stats']['remaining_matches'], 1)
+        self.assertIsNone(payload['winner'])
+        self.assertTrue(all(row['rank'] is None for row in payload['results']))
+
+    def test_tabulator_pages_render_and_old_pages_stay_removed(self):
         from unittest.mock import patch
 
         self.client.force_login(self.tabulator)
         with patch('core.faculty_views.compute_criteria_rankings', return_value=self._ranking_rows):
-            response = self.client.get(reverse('tabulator_results'), {'event_id': self.event.id})
+            response = self.client.get(reverse('tabulator_live_rankings'), {'event_id': self.event.id})
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Final Results')
+        self.assertContains(response, 'Live Rankings')
+        self.assertNotContains(response, '/tabulator/participants/')
+        self.assertEqual(self.client.get('/tabulator/participants/').status_code, 404)
+        self.assertEqual(self.client.get('/tabulator/categories/').status_code, 404)
         self.assertContains(response, 'Alice')
+        for page_name in ('tabulator_dashboard', 'tabulator_my_events', 'tabulator_results',
+                          'tabulator_full_results', 'tabulator_profile'):
+            response = self.client.get(reverse(page_name), {'event_id': self.event.id})
+            self.assertEqual(response.status_code, 200)
+            self.assertNotContains(response, '/tabulator/participants/')
+            self.assertNotContains(response, '/tabulator/categories/')
+        for alias in ('tabulator_scoresheets', 'tabulator_ocr_upload'):
+            response = self.client.get(reverse(alias))
+            self.assertRedirects(response, reverse('tabulator_live_rankings'), fetch_redirect_response=False)
+
+    def test_unassigned_event_is_not_visible_or_exportable(self):
+        from core.faculty_views import _tabulator_results_payload
+
+        payload = _tabulator_results_payload(self.tabulator, event_id=self.foreign.id)
+        self.assertIsNone(payload['event'])
+        self.assertNotIn(self.foreign.id, {event['id'] for event in payload['events']})
+        self.client.force_login(self.tabulator)
+        response = self.client.get(reverse('tabulator_results_csv'), {'event_id': self.foreign.id})
+        self.assertEqual(response.status_code, 404)
+
+    def test_tabulator_cannot_open_faculty_setup(self):
+        self.client.force_login(self.tabulator)
+        response = self.client.get(reverse('faculty_event_manage', args=[self.event.id]))
+        self.assertEqual(response.status_code, 403)
+
+    def test_tabulator_confirmation_requires_complete_judge_scores(self):
+        from events.faculty_service import FacultyServiceError, confirm_tabulation
+
+        self.event.results_finalized = False
+        self.event.result_processing_config = {'verification_mode': 'tabulator_verification'}
+        self.event.save(update_fields=['results_finalized', 'result_processing_config'])
+        with self.assertRaisesMessage(FacultyServiceError, 'All required Judge scores'):
+            confirm_tabulation(self.event, self.tabulator)
+
+    def test_tabulator_confirmation_records_user_and_time_without_editing_scores(self):
+        from events.faculty_service import confirm_tabulation
+        from .models import JudgeScore
+
+        judge = get_user_model().objects.create_user(username='confirmation-judge')
+        self.judging.assigned_judges.add(judge)
+        self.event.assigned_judges.add(judge)
+        criterion = self.judging.criteria.get()
+        original = []
+        for candidate, score in ((self.cand_a, 90), (self.cand_b, 80)):
+            row = JudgeScore.objects.create(
+                judge=judge, candidate=candidate, criterion=criterion,
+                score=score, is_locked=True,
+            )
+            original.append((row.pk, Decimal(str(score))))
+        self.event.results_finalized = False
+        self.event.result_processing_config = {'verification_mode': 'tabulator_verification'}
+        self.event.save(update_fields=['results_finalized', 'result_processing_config'])
+
+        confirm_tabulation(self.event, self.tabulator)
+
+        self.event.refresh_from_db()
+        config = self.event.result_processing_config
+        self.assertEqual(config['tabulation_status'], 'confirmed')
+        self.assertEqual(config['tabulation_confirmed_by'], self.tabulator.id)
+        self.assertTrue(config['tabulation_confirmed_at'])
+        self.assertTrue(config['ready_for_publication'])
+        self.assertEqual(list(JudgeScore.objects.filter(pk__in=[pk for pk, _ in original]).values_list('pk', 'score')), original)
+
+    def test_tabulator_cannot_publish_results(self):
+        self.event.results_finalized = False
+        self.event.save(update_fields=['results_finalized'])
+        self.client.force_login(self.tabulator)
+        response = self.client.post(
+            reverse('faculty_results_action', args=[self.event.id]),
+            data=json.dumps({'action': 'publish'}), content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 403)
+        self.event.refresh_from_db()
+        self.assertFalse(self.event.results_finalized)

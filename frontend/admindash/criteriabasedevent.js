@@ -1114,6 +1114,7 @@
     var out = {};
     out.final_result_basis = $('#final-result-basis').value;
     out.placements_count = Number($('#placements-count').value);
+    out.verification_mode = ($('#advanced-result-verification') || {}).value || 'admin_only';
     $$('[data-rp]').forEach(function (input) {
       out[input.dataset.rp] = input.checked;
     });
@@ -1223,7 +1224,7 @@
     for (var i = 0; i < rows.length; i++) {
       var raw = rows[i].weight_percent;
       if (raw === '' || raw == null || Number.isNaN(Number(raw))) {
-        return 'Criterion "' + (rows[i].name || 'Untitled') + '" in "' + categoryRow.name + '" needs a valid Criterion Weight Within Category.';
+        return 'Criterion "' + (rows[i].name || 'Untitled') + '" in "' + categoryRow.name + '" needs a valid weight.';
       }
       if (Number(raw) < 0) {
         return 'Criterion weights cannot be negative in "' + categoryRow.name + '".';
@@ -1236,13 +1237,13 @@
     if (Math.abs(weightTotal - categoryWeight) < 0.01) return '';
     if (weightTotal > categoryWeight) {
       return (
-        'Criteria weights for "' + categoryRow.name + '" exceed the category weight by ' +
+        'Criteria weights for "' + categoryRow.name + '" exceed 100% by ' +
         roundWeight(weightTotal - categoryWeight) + '%.'
       );
     }
     return (
       'Criteria weights for "' + categoryRow.name + '" must total ' + categoryWeight +
-      '% of category. Current total: ' + weightTotal + '%.'
+      '%. Current total: ' + weightTotal + '%.'
     );
   }
 
@@ -1281,25 +1282,25 @@
     }, 0));
     meter.classList.remove('is-ok', 'is-bad');
     if (!category) {
-      meter.textContent = 'Category criteria total: 0% / 0%';
+      meter.textContent = 'Judging segment criteria total: 0% / 0%';
       return;
     }
     if (Math.abs(total - categoryWeight) < 0.01) {
       meter.classList.add('is-ok');
-      meter.textContent = '✓ Category criteria total: ' + total + '% / ' + categoryWeight + '%';
+      meter.textContent = '✓ Judging segment criteria total: ' + total + '% / ' + categoryWeight + '%';
       return;
     }
     if (total > categoryWeight) {
       meter.classList.add('is-bad');
       meter.textContent = (
-        'Category criteria total: ' + total + '% / ' + categoryWeight + '%\n' +
-        roundWeight(total - categoryWeight) + '% over the allowed category weight'
+        'Judging segment criteria total: ' + total + '% / ' + categoryWeight + '%\n' +
+        roundWeight(total - categoryWeight) + '% over the allowed total'
       );
       return;
     }
     meter.classList.add('is-bad');
     meter.textContent = (
-      'Category criteria total: ' + total + '% / ' + categoryWeight + '%\n' +
+      'Judging segment criteria total: ' + total + '% / ' + categoryWeight + '%\n' +
       roundWeight(categoryWeight - total) + '% remaining'
     );
   }
@@ -1366,7 +1367,7 @@
         return parent + children.map(function (child) { return '<tr class="judging-subcriterion-row" data-subcriterion-parent="' + criterion.id + '" hidden><td></td><td>' + escapeHtml(child.name) + '</td><td>—</td><td>' + Number(child.max_score) + '</td><td></td></tr>'; }).join('');
       }).join('');
       return '<details class="judging-segment" open><summary><strong>' + escapeHtml(category.name) + '</strong><span class="weight-state ' + (valid ? 'is-valid' : 'is-invalid') + '">' + (valid ? '&#10003; ' : '&#9888; ') + 'Total Weight: ' + total + '%</span><span class="judging-row-actions"><button type="button" data-simple-segment-edit="' + category.id + '">Edit</button><button type="button" class="danger" data-simple-segment-delete="' + category.id + '">Delete</button></span></summary>' +
-        '<div class="judging-table-wrap"><table><thead><tr><th>#</th><th>Criterion</th><th>Weight (%)</th><th>Max Score</th><th>Actions</th></tr></thead><tbody>' + criteriaRows + '</tbody><tfoot><tr><td colspan="2">Total</td><td>' + total + '%</td><td>' + maximumTotal + '</td><td></td></tr></tfoot></table></div>' +
+        '<div class="judging-table-wrap"><table><thead><tr><th>#</th><th>Criteria / Subcriteria</th><th>Weight (%)</th><th>Max Score</th><th>Actions</th></tr></thead><tbody>' + criteriaRows + '</tbody><tfoot><tr><td colspan="2">Total</td><td>' + total + '%</td><td>' + maximumTotal + '</td><td></td></tr></tfoot></table></div>' +
         '<button type="button" class="judging-add-criterion" data-simple-add-criterion="' + category.id + '">+ Add Criterion</button></details>';
     }).join('') || '<div class="judging-empty"><strong>No segments for this round</strong><span>Add the first part or performance that judges will score.</span></div>';
   }
@@ -1378,6 +1379,13 @@
       var role = box.closest('label') && $('small', box.closest('label')) ? $('small', box.closest('label')).textContent : 'Judge';
       return '<label><input type="checkbox" data-judge-proxy="' + escapeAttr(box.value) + '" ' + (box.checked ? 'checked' : '') + '><strong>' + escapeHtml(box.dataset.name) + '</strong><small>' + escapeHtml(role) + '</small></label>';
     }).join('') || '<p class="judging-empty">No judges match your search.</p>';
+  }
+
+  function filterJudgingTabulators() {
+    var query = ($('#judging-tabulator-search').value || '').trim().toLowerCase();
+    $$('#judging-tabulator-list label').forEach(function (label) {
+      label.hidden = !!query && (label.dataset.tabulatorName || '').indexOf(query) === -1;
+    });
   }
 
   function judgingPublishIssues() {
@@ -1476,6 +1484,10 @@
     var judgeNames = $$('.judge-check:checked').map(function (box) { return box.dataset.name; });
     var chief = $('#chief-judge');
     var faculty = form.faculty_account;
+    var selectedTabulator = form.querySelector('[name="faculty_account"]:checked');
+    var tabulatorLabel = selectedTabulator && selectedTabulator.value
+      ? selectedTabulator.closest('label').querySelector('strong').textContent
+      : 'Not assigned (Admin will verify results)';
     var categories = scoringWorkflow.categories.map(function (category) {
       var criteriaRows = (category.criteria || []).map(function (criterion) {
         return '<p><strong>' + escapeHtml(criterion.name) + '</strong> — ' + Number(criterion.weight_percent) + '%, max ' + Number(criterion.max_score) + '</p>' +
@@ -1496,6 +1508,7 @@
         return (index + 1) + '. ' + (row.name || 'Untitled') + ' (' + (row.weight || 0) + '%)';
       }).join(' · ') || '—'],
       ['Judging Segments & Criteria', categories],
+      ['Tabulation Officer', tabulatorLabel],
       ['Assigned Judges', judgeNames.join(', ') || '—'],
       ['Advanced Settings', ($('#advanced-carry-scores').checked ? 'Carry scores · ' : 'Do not carry scores · ') + ($('#advanced-special-awards').checked ? 'Special awards enabled · ' : 'Special awards disabled · ') + $('#advanced-tie-rule').options[$('#advanced-tie-rule').selectedIndex].text + ' · Default max ' + $('#advanced-default-max').value],
     ];
@@ -1730,7 +1743,9 @@
     deductions = event.deductions_config || [];
     renderDeductions();
     $('#chief-judge').value = event.chief_judge_id || '';
-    form.faculty_account.value = event.faculty_account_id || '';
+    $$('[name="faculty_account"]').forEach(function (input) {
+      input.checked = String(input.value) === String(event.faculty_account_id || '');
+    });
     if (form.scoresheet_template) form.scoresheet_template.value = event.scoresheet_template_id || '';
     var judgeIds = (event.judge_ids || []).map(String);
     $$('.judge-check').forEach(function (box) {
@@ -1738,6 +1753,7 @@
     });
     updateJudgeCount();
     var rp = event.result_processing_config || {};
+    $('#advanced-result-verification').value = rp.verification_mode || 'admin_only';
     $('#final-result-basis').value = rp.final_result_basis || 'main_round';
     $('#placements-count').value = rp.placements_count || 3;
     $$('[data-rp]').forEach(function (input) {
@@ -2126,7 +2142,13 @@
     workflowRequest(editId ? 'update_criterion' : 'create_criterion', { event_id: scoringWorkflow.eventId, category_id: categoryId, criterion_id: editId, criterion_name: name, weight_percent: $('#simple-criterion-weight').value, min_score: 0, max_score: $('#simple-criterion-max').value, display_order: order, tie_breaker_priority: '', detailed_subcriteria: $('#simple-criterion-detailed').checked ? '1' : '0', subcriteria: JSON.stringify(children) }).then(function () { scoringWorkflow.selectedCategoryId = Number(categoryId); return loadScoringCriteria(categoryId); }).then(function () { $('#criterion-modal').close(); renderJudgingSegments(); }).catch(function (error) { showError(error.message); });
   });
   $('#judging-judge-search').addEventListener('input', renderJudgingJudges);
+  $('#judging-tabulator-search').addEventListener('input', filterJudgingTabulators);
   document.addEventListener('change', function (event) {
+    if (event.target.matches('#judging-tabulator-list input[type="checkbox"][name="faculty_account"]') && event.target.checked) {
+      $$('#judging-tabulator-list input[name="faculty_account"]').forEach(function (input) {
+        if (input !== event.target) input.checked = false;
+      });
+    }
     if (event.target.matches('[data-judge-proxy]')) {
       var original = $('.judge-check[value="' + CSS.escape(event.target.dataset.judgeProxy) + '"]');
       if (original) { original.checked = event.target.checked; updateJudgeCount(); }

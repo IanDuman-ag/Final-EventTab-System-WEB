@@ -540,6 +540,12 @@ html.event-wizard-open body { overflow:hidden; }
 .judging-card-head h4 { margin:0; color:#0a2850; font-size:14px; }
 .judging-card-head h4 span,.judging-advanced summary strong span { display:inline-grid; place-items:center; width:22px; height:22px; margin-right:7px; border-radius:50%; background:#1263df; color:#fff; font-size:11px; }
 .judging-card-head p { margin:3px 0 0 29px; color:#687d93; font-size:12px; line-height:1.4; }
+.judging-optional { display:inline-block; margin-left:7px; padding:2px 7px; border-radius:999px; background:#e8f1ff; color:#145fc7; font-size:9px; font-style:normal; letter-spacing:.04em; text-transform:uppercase; vertical-align:middle; }
+#judging-tabulator-list input[type="checkbox"] { appearance:none; width:16px; height:16px; margin:0; border:1.5px solid #8497ac; border-radius:50%; background:#fff; display:grid; place-items:center; flex:0 0 16px; }
+#judging-tabulator-list input[type="checkbox"]::before { content:""; width:8px; height:8px; border-radius:50%; background:#087cff; transform:scale(0); transition:transform .1s ease; }
+#judging-tabulator-list input[type="checkbox"]:checked { border-color:#087cff; }
+#judging-tabulator-list input[type="checkbox"]:checked::before { transform:scale(1); }
+#judging-tabulator-list input[type="checkbox"]:focus-visible { outline:2px solid #8db9ff; outline-offset:2px; }
 .judging-card .match-primary { min-height:32px; padding:6px 12px; white-space:nowrap; }
 .judging-round-list,.judging-segment-list { display:grid; gap:7px; }
 .judging-round-row { display:grid; grid-template-columns:20px 27px minmax(0,1fr) auto; gap:8px; align-items:center; padding:8px 9px; border:1px solid #dbe5ef; border-radius:4px; background:#fbfdff; }

@@ -1029,7 +1029,6 @@
       ['Schedule', $('#schedule-preview tbody') ? `${actual.length} scheduled actual matches · ${valueText('schedule_mode')}` : 'Not generated'],
       ['Faculty In Charge', valueText('faculty_account')],
       ['Tabulator In Charge', valueText('tabulator_account')],
-      ['Scoresheet Template', valueText('scoresheet_template') || 'Auto by Sport/Game Type'],
       ['Championship Points', form.elements.apply_championship_points.checked
         ? pointsRows.map(point => `${point.label}: ${point.points}`).join(' · ')
         : 'Disabled']
@@ -1207,9 +1206,6 @@
       form.elements.result_entry_format.value = event.result_entry_format;
     }
     syncTieBreakHidden();
-    if (form.elements.scoresheet_template) {
-      form.elements.scoresheet_template.value = event.scoresheet_template_id || '';
-    }
     form.elements.apply_championship_points.checked = event.apply_championship_points;
     $$('.team-check').forEach(input => { input.checked = event.team_ids.includes(Number(input.value)); });
     pointsRows = (event.points_config && event.points_config.length)
