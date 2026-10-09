@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Tournament Brackets - EventTab</title>
   {% include 'admindash/_bootstrap.html' %}
-  <link rel="stylesheet" href="{% static 'admindash/bracket.css' %}?v=20260806k">
+  <link rel="stylesheet" href="{% static 'admindash/bracket.css' %}?v=20261009b">
   <link rel="stylesheet" href="{% static 'admindash/bootstrap-admin.css' %}?v=1">
 </head>
 <body class="admin-dashboard-page bracket-page admin-dashboard-v2">
@@ -174,9 +174,9 @@
                     <td class="bracket-actions-cell" data-label="Actions">
                       <div class="bracket-row-actions">
                         {% if row.has_bracket %}
-                        <button type="button" class="btn btn-outline-secondary btn-bracket-details btn-view-bracket" data-listing-action="view" data-id="{{ row.id }}" aria-label="View bracket for {{ row.name }}">View Bracket</button>
+                        <button type="button" class="btn btn-primary btn-bracket-details btn-view-bracket" data-listing-action="view" data-id="{{ row.id }}" aria-label="View bracket for {{ row.name }}">View Bracket</button>
                         {% else %}
-                        <a class="btn btn-outline-secondary btn-bracket-details" href="{{ row.edit_url }}">Complete Event Setup</a>
+                        <a class="btn btn-primary btn-bracket-details" href="{{ row.edit_url }}">Complete Event Setup</a>
                         {% endif %}
                       </div>
                     </td>
@@ -431,6 +431,11 @@
             <span class="legend-item"><span class="legend-dot legend-dot--pending"></span>Pending</span>
           </div>
           <div class="bracket-view-actions">
+            <button type="button" class="btn-toolbar" id="bracketZoomOut" aria-label="Zoom out">−</button>
+            <output id="bracketZoomLabel" aria-live="polite">100%</output>
+            <button type="button" class="btn-toolbar" id="bracketZoomIn" aria-label="Zoom in">+</button>
+            <button type="button" class="btn-toolbar" id="bracketFitView">Fit to view</button>
+            <button type="button" class="btn-toolbar" id="bracketActualSize">100%</button>
             <button type="button" class="btn-toolbar" id="exportBracketBtn" title="Print bracket" hidden>
               <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M19 8H5a3 3 0 0 0-3 3v6h4v4h12v-4h4v-6a3 3 0 0 0-3-3Zm-1 10H6v-5h12v5Zm-1-9V4H7v5h10Z"/></svg>
               Print
@@ -736,6 +741,8 @@
         currentViewLocked = !!data.locked;
         populateBracketDetails(data);
         const result = renderBracketFlowTree(visualizer, data.matches || [], { mode: 'view' });
+        setBracketZoom(1);
+        flowScroll.scrollTo(0, 0);
         if (championBar && championNameEl) {
           if (result.champion) {
             championNameEl.textContent = result.champion;
@@ -1616,16 +1623,15 @@
         const numRounds = roundColumns.length;
         if (!numRounds) return { rounds: [], treeHeight: 0, champion: null };
 
-        const firstCount = roundColumns[0].matches.length || 1;
-        const treeSlots = firstCount * Math.pow(2, numRounds - 1);
-        const treeHeight = treeSlots * BRACKET_SLOT_H;
+        // Losers rounds must not exponentially increase the diagram height.
+        const maxMatches = Math.max(...roundColumns.map(col => col.matches.length), 1);
+        const matchSpacing = 180;
+        const treeHeight = maxMatches * matchSpacing;
 
         let champion = null;
         const rounds = roundColumns.map((col, rIdx) => {
-          const span = Math.pow(2, rIdx);
           const matches = col.matches.map((m, mIdx) => {
-            const slotCenter = mIdx * span * 2 + span;
-            const topPx = slotCenter * BRACKET_SLOT_H - 44;
+            const topPx = (mIdx + 0.5) * treeHeight / col.matches.length - 64;
             if (rIdx === numRounds - 1 && m.winner) champion = m.winner;
             return { ...m, topPx, mIdx, rIdx };
           });
@@ -1760,16 +1766,40 @@
           const rIdx = parseInt(node.dataset.r, 10);
           const mIdx = parseInt(node.dataset.m, 10);
           if (isNaN(rIdx) || isNaN(mIdx)) return;
-          const armH = Math.pow(2, rIdx) * BRACKET_SLOT_H;
+          const nextTrack = container.querySelector('[data-round="' + (rIdx + 1) + '"] .bracket-flow-col-track');
+          const targets = nextTrack ? Array.from(nextTrack.querySelectorAll('.bracket-flow-node')) : [];
+          const target = targets[Math.min(Math.floor(mIdx / 2), targets.length - 1)];
+          const delta = target ? parseFloat(target.style.top) - parseFloat(node.style.top) : 0;
+          const armH = Math.abs(delta);
           node.style.setProperty('--arm-h', armH + 'px');
-          node.classList.toggle('bf-node--arm-down', mIdx % 2 === 0);
-          node.classList.toggle('bf-node--arm-up', mIdx % 2 === 1);
+          node.classList.toggle('bf-node--arm-down', delta >= 0);
+          node.classList.toggle('bf-node--arm-up', delta < 0);
         });
       }
 
       const viewModal = document.getElementById('viewBracketModal');
       const closeViewBtn = document.getElementById('closeViewBracketBtn');
       const visualizer = document.getElementById('bracketVisualizer');
+      const flowScroll = document.getElementById('bracketFlowScroll');
+      let bracketZoom = 1;
+      function setBracketZoom(value) {
+        bracketZoom = Math.min(2, Math.max(0.2, value));
+        visualizer.style.zoom = bracketZoom;
+        document.getElementById('bracketZoomLabel').textContent = Math.round(bracketZoom * 100) + '%';
+        document.getElementById('bracketZoomOut').disabled = bracketZoom <= 0.2;
+        document.getElementById('bracketZoomIn').disabled = bracketZoom >= 2;
+      }
+      document.getElementById('bracketZoomOut').addEventListener('click', () => setBracketZoom(bracketZoom - 0.1));
+      document.getElementById('bracketZoomIn').addEventListener('click', () => setBracketZoom(bracketZoom + 0.1));
+      document.getElementById('bracketActualSize').addEventListener('click', () => setBracketZoom(1));
+      document.getElementById('bracketFitView').addEventListener('click', () => {
+        setBracketZoom(1);
+        const tree = visualizer.querySelector('.bracket-flow');
+        if (!tree) return;
+        setBracketZoom(Math.min(1, (flowScroll.clientWidth - 48) / tree.scrollWidth,
+          (flowScroll.clientHeight - 40) / tree.scrollHeight));
+        flowScroll.scrollTo(0, 0);
+      });
       const viewMetaEl = document.getElementById('viewBracketMeta');
       const viewTitleEl = document.getElementById('view-bracket-title');
       const viewBadgesEl = document.getElementById('viewBracketBadges');

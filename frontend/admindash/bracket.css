@@ -2527,10 +2527,25 @@
 
 /* ── Bracket Details modal (wide layout) ────────────────────────── */
 .bracket-modal-view--wide {
-  max-width: min(96vw, 1280px);
+  max-width: min(96vw, 1600px);
   width: 96vw;
+  height: 94vh;
   max-height: 94vh;
 }
+
+.bracket-modal-view--wide .bracket-modal-header,
+.bracket-modal-view--wide .bracket-view-toolbar { flex-shrink: 0; }
+.bracket-modal-view--wide .bracket-view-body { flex: 1; min-height: 0; overflow: hidden; }
+.bracket-modal-view--wide .bracket-close-modal {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .15);
+  color: #fff;
+}
+.bracket-view-actions { align-items: center; flex-wrap: wrap; }
+#bracketZoomLabel { min-width: 46px; text-align: center; font-size: 13px; }
 
 .bracket-details-head {
   display: flex;
@@ -2578,10 +2593,11 @@
 
 .bracket-details-layout {
   display: grid;
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: 250px minmax(0, 1fr);
   gap: 0;
-  min-height: 420px;
-  max-height: calc(94vh - 160px);
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
 }
 
 .bracket-details-sidebar {
@@ -2599,6 +2615,7 @@
   flex-direction: column;
   overflow: hidden;
   min-width: 0;
+  min-height: 0;
 }
 
 .bracket-details-main .bracket-view-hint {
@@ -2608,8 +2625,15 @@
 
 .bracket-details-main .bracket-flow-scroll {
   flex: 1;
+  min-height: 0;
   max-height: none;
 }
+
+.bracket-details-main .bracket-flow-canvas { width: max-content; }
+.bracket-details-main .bracket-flow-col { width: 240px; }
+.bracket-details-main .bf-slot { font-size: 14px; min-height: 36px; }
+.bracket-details-main .bf-match-label { font-size: 11px; color: #64748b; }
+.bracket-details-main .bracket-flow-col-title { font-size: 12px; letter-spacing: .04em; }
 
 .bd-panel {
   background: #fff;
@@ -2807,6 +2831,7 @@
 @media (max-width: 900px) {
   .bracket-details-layout {
     grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 160px) minmax(0, 1fr);
   }
   .bracket-details-sidebar {
     border-right: none;

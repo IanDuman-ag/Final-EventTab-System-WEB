@@ -1560,6 +1560,8 @@ select {
 /* Keep expanded navigation scrollable without showing a scrollbar. */
 .v2-nav::-webkit-scrollbar {
   display: none;
+  width: 0;
+  height: 0;
 }
 
 .v2-nav-section {
