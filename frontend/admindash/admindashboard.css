@@ -1549,10 +1549,17 @@ select {
 .v2-nav {
   flex: 1;
   overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   padding: 0 12px;
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+/* Keep expanded navigation scrollable without showing a scrollbar. */
+.v2-nav::-webkit-scrollbar {
+  display: none;
 }
 
 .v2-nav-section {

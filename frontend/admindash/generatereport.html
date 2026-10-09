@@ -5,11 +5,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Generate Reports · Admin · EventTab</title>
+  {% include 'admindash/_bootstrap.html' %}
   <link rel="stylesheet" href="{% static 'admindash/admindashboard.css' %}?v=20260616c">
   <link rel="stylesheet" href="{% static 'admindash/generatereport.css' %}?v=20260803a">
+  <link rel="stylesheet" href="{% static 'admindash/bootstrap-admin.css' %}?v=1">
 </head>
 <body class="admin-dashboard-page admin-dashboard-v2 admin-generate-report-page">
-  <div class="dashboard-shell">
+  <div class="dashboard-shell d-flex flex-column flex-lg-row">
     {% include 'admindash/_sidebar.html' with active='reports' %}
     <div class="content-area v2-content">
       <header class="v2-topbar">
@@ -19,7 +21,7 @@
         </div>
       </header>
 
-      <main class="v2-main rpt-main">
+      <main class="container-fluid v2-main rpt-main">
         {% if messages %}
         <ul class="events-flash" role="list">
           {% for message in messages %}
@@ -38,7 +40,7 @@
                 <div class="rpt-cat-grid">
                   {% for key, cat in catalog.items %}
                   <label class="rpt-cat-card{% if selected.category == key %} active{% endif %}">
-                    <input type="radio" name="category" value="{{ key }}" {% if selected.category == key %}checked{% endif %} hidden>
+                    <input class="form-check-input" type="radio" name="category" value="{{ key }}" {% if selected.category == key %}checked{% endif %} hidden>
                     <strong>{{ cat.label }}</strong>
                   </label>
                   {% endfor %}
@@ -47,7 +49,7 @@
 
               <section class="rpt-section">
                 <h3 class="rpt-section-title">Report Type</h3>
-                <select name="report_type" id="reportType" class="rpt-select">
+                <select name="report_type" id="reportType" class="form-select rpt-select">
                   {% for key, cat in catalog.items %}
                     {% for type_key, type_label in cat.types %}
                     <option value="{{ type_key }}" data-category="{{ key }}"
@@ -62,15 +64,15 @@
                 <div class="rpt-filters-grid">
                   <div class="rpt-filter-group">
                     <label>Date From</label>
-                    <input type="date" name="date_from" value="{{ selected.date_from }}">
+                    <input class="form-control" type="date" name="date_from" value="{{ selected.date_from }}">
                   </div>
                   <div class="rpt-filter-group">
                     <label>Date To</label>
-                    <input type="date" name="date_to" value="{{ selected.date_to }}">
+                    <input class="form-control" type="date" name="date_to" value="{{ selected.date_to }}">
                   </div>
                   <div class="rpt-filter-group">
                     <label>Event</label>
-                    <select name="event_id">
+                    <select class="form-select" name="event_id">
                       <option value="all">All Events</option>
                       {% for ev in filter_events %}
                       <option value="{{ ev.id }}" {% if selected.event_id == ev.id|stringformat:"s" %}selected{% endif %}>{{ ev.name }}</option>
@@ -79,7 +81,7 @@
                   </div>
                   <div class="rpt-filter-group">
                     <label>Event Type</label>
-                    <select name="event_type">
+                    <select class="form-select" name="event_type">
                       <option value="all" {% if selected.event_type == 'all' %}selected{% endif %}>All Types</option>
                       <option value="match" {% if selected.event_type == 'match' %}selected{% endif %}>Match-Based</option>
                       <option value="criteria" {% if selected.event_type == 'criteria' %}selected{% endif %}>Criteria-Based</option>
@@ -87,7 +89,7 @@
                   </div>
                   <div class="rpt-filter-group">
                     <label>Category</label>
-                    <select name="category_filter">
+                    <select class="form-select" name="category_filter">
                       <option value="all">All Categories</option>
                       {% for c in categories %}
                       <option value="{{ c }}" {% if selected.category_filter == c %}selected{% endif %}>{{ c }}</option>
@@ -96,7 +98,7 @@
                   </div>
                   <div class="rpt-filter-group">
                     <label>Event Classification</label>
-                    <select name="classification">
+                    <select class="form-select" name="classification">
                       <option value="all" {% if selected.classification == 'all' %}selected{% endif %}>All</option>
                       <option value="major" {% if selected.classification == 'major' %}selected{% endif %}>Major</option>
                       <option value="minor" {% if selected.classification == 'minor' %}selected{% endif %}>Minor</option>
@@ -104,7 +106,7 @@
                   </div>
                   <div class="rpt-filter-group">
                     <label>Department</label>
-                    <select name="department">
+                    <select class="form-select" name="department">
                       <option value="all">All Departments</option>
                       {% for d in departments %}
                       <option value="{{ d }}" {% if selected.department == d %}selected{% endif %}>{{ d }}</option>
@@ -113,7 +115,7 @@
                   </div>
                   <div class="rpt-filter-group">
                     <label>Faculty In-Charge</label>
-                    <select name="faculty_id">
+                    <select class="form-select" name="faculty_id">
                       <option value="all">All Faculty</option>
                       {% for u in faculty_users %}
                       <option value="{{ u.id }}" {% if selected.faculty_id == u.id|stringformat:"s" %}selected{% endif %}>{{ u.first_name }} {{ u.last_name }} ({{ u.username }})</option>
@@ -122,7 +124,7 @@
                   </div>
                   <div class="rpt-filter-group">
                     <label>Judge</label>
-                    <select name="judge_id">
+                    <select class="form-select" name="judge_id">
                       <option value="all">All Judges</option>
                       {% for u in judge_users %}
                       <option value="{{ u.id }}" {% if selected.judge_id == u.id|stringformat:"s" %}selected{% endif %}>{{ u.first_name }} {{ u.last_name }} ({{ u.username }})</option>
@@ -131,7 +133,7 @@
                   </div>
                   <div class="rpt-filter-group">
                     <label>Status</label>
-                    <select name="status">
+                    <select class="form-select" name="status">
                       <option value="all" {% if selected.status == 'all' %}selected{% endif %}>All Status</option>
                       <option value="upcoming" {% if selected.status == 'upcoming' %}selected{% endif %}>Upcoming</option>
                       <option value="active" {% if selected.status == 'active' %}selected{% endif %}>Active</option>
@@ -141,7 +143,7 @@
                   </div>
                   <div class="rpt-filter-group">
                     <label>Export Format</label>
-                    <select name="export_format">
+                    <select class="form-select" name="export_format">
                       <option value="pdf" {% if selected.export_format == 'pdf' %}selected{% endif %}>PDF</option>
                       <option value="excel" {% if selected.export_format == 'excel' %}selected{% endif %}>Excel</option>
                       <option value="csv" {% if selected.export_format == 'csv' %}selected{% endif %}>CSV</option>
@@ -150,10 +152,10 @@
                 </div>
 
                 <div class="rpt-actions">
-                  <button class="rpt-btn primary" type="submit" name="action" value="preview">Generate Report</button>
-                  <button class="rpt-btn" type="submit" name="action" value="download_pdf">Download PDF</button>
-                  <button class="rpt-btn" type="submit" name="action" value="download_excel">Export Excel</button>
-                  <button class="rpt-btn" type="button" id="printReportBtn">Print Report</button>
+                  <button class="btn btn-primary rpt-btn primary" type="submit" name="action" value="preview">Generate Report</button>
+                  <button class="btn btn-outline-secondary rpt-btn" type="submit" name="action" value="download_pdf">Download PDF</button>
+                  <button class="btn btn-outline-secondary rpt-btn" type="submit" name="action" value="download_excel">Export Excel</button>
+                  <button class="btn btn-outline-secondary rpt-btn" type="button" id="printReportBtn">Print Report</button>
                 </div>
               </section>
             </div>
@@ -185,8 +187,8 @@
                 </div>
 
                 <h4 class="rpt-preview-title">{{ preview.title }}</h4>
-                <div class="rpt-table-wrap">
-                  <table class="rpt-table">
+                <div class="table-responsive rpt-table-wrap">
+                  <table class="table table-hover align-middle rpt-table">
                     <thead>
                       <tr>
                         {% for h in preview.headers %}<th>{{ h }}</th>{% endfor %}
@@ -217,8 +219,8 @@
         <section class="rpt-section">
           <h3 class="rpt-section-title">Report History</h3>
           <p class="rpt-section-sub">Previously generated exports. Historical data cannot be edited here.</p>
-          <div class="rpt-table-wrap">
-            <table class="rpt-table">
+          <div class="table-responsive rpt-table-wrap">
+            <table class="table table-hover align-middle rpt-table">
               <thead>
                 <tr>
                   <th>Report Name</th>
@@ -240,7 +242,7 @@
                     <form method="post" style="display:inline">
                       {% csrf_token %}
                       <input type="hidden" name="history_id" value="{{ h.id }}">
-                      <button class="rpt-btn tiny" type="submit" name="action" value="download_history">Download</button>
+                      <button class="btn btn-outline-secondary rpt-btn tiny" type="submit" name="action" value="download_history">Download</button>
                     </form>
                     {% else %}
                     <span class="rpt-muted">No file</span>
@@ -248,7 +250,7 @@
                     <form method="post" style="display:inline" onsubmit="return confirm('Delete this history entry?');">
                       {% csrf_token %}
                       <input type="hidden" name="history_id" value="{{ h.id }}">
-                      <button class="rpt-btn tiny danger" type="submit" name="action" value="delete_history">Delete</button>
+                      <button class="btn btn-danger rpt-btn tiny danger" type="submit" name="action" value="delete_history">Delete</button>
                     </form>
                   </td>
                 </tr>

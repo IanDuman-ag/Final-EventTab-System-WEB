@@ -1512,6 +1512,76 @@ class EventScoringCategoryTests(TestCase):
 
 
 class TabulatorResultsPortalTests(TestCase):
+    def test_results_includes_detailed_review_and_selected_participant(self):
+        self.client.force_login(self.tabulator)
+        response = self.client.get(reverse('tabulator_results'),
+                                   {'event_id': self.event.id, 'participant_id': self.cand_b.id,
+                                    'tab': 'submissions'})
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'tabulator/tabresults.html')
+        self.assertEqual(response.context['payload']['selected_participant']['candidate_id'], self.cand_b.id)
+        for section in ('Live Rankings', 'Official Results', 'Detailed Score Breakdown', 'Result verification'):
+            self.assertContains(response, section)
+        self.assertEqual(response.context['results_page']['default_tab'], 'breakdown')
+        self.assertNotContains(response, 'Back to Results')
+        self.assertNotContains(response, 'View Full Results')
+
+    def test_full_results_redirect_preserves_selections(self):
+        self.client.force_login(self.tabulator)
+        query = f'?event_id={self.event.id}&participant_id={self.cand_b.id}&tab=breakdown'
+        response = self.client.get(reverse('tabulator_full_results') + query)
+        self.assertRedirects(response, reverse('tabulator_results') + query)
+
+    def test_combined_results_preserves_match_details(self):
+        self.foreign.assigned_tabulators.add(self.tabulator)
+        self.client.force_login(self.tabulator)
+        response = self.client.get(reverse('tabulator_results'), {'event_id': self.foreign.id})
+        self.assertContains(response, 'Detailed Score Breakdown')
+        self.assertContains(response, 'Team A')
+        self.assertContains(response, 'Team B')
+
+    def test_dashboard_counts_only_assigned_judges_locked_scores(self):
+        from .models import JudgeScore
+
+        self.event.assigned_judges.add(self.tabulator)
+        criterion = self.judging.criteria.first()
+        JudgeScore.objects.create(judge=self.tabulator, candidate=self.cand_a,
+                                  criterion=criterion, score=80, is_locked=True)
+        JudgeScore.objects.create(judge=self.tabulator, candidate=self.cand_b,
+                                  criterion=criterion, score=75, is_locked=False)
+        self.client.force_login(self.tabulator)
+        response = self.client.get(reverse('tabulator_dashboard'), {'event_id': self.event.id})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['dashboard_stats'],
+                         {'submitted_scores': 1, 'pending_scores': 1})
+
+    def test_dashboard_does_not_promote_round_scores_to_overall_rankings(self):
+        self.event.rounds_config = [{'name': 'Preliminary'}, {'name': 'Final', 'is_final': True}]
+        self.event.save(update_fields=['rounds_config'])
+        self.client.force_login(self.tabulator)
+        response = self.client.get(reverse('tabulator_dashboard'), {'event_id': self.event.id})
+        self.assertFalse(response.context['dashboard_final'])
+        self.assertIn('not an overall round total', response.context['score_scope'])
+        self.assertTrue(all(row['rank'] is None for row in response.context['payload']['results']))
+
+    def test_dashboard_activity_excludes_unassigned_events(self):
+        from unittest.mock import patch
+
+        self.client.force_login(self.tabulator)
+        rows = [{'event_id': self.event.id, 'description': 'Assigned activity'},
+                {'event_id': self.foreign.id, 'description': 'Private activity'}]
+        with patch('core.views._build_official_activity_rows', return_value=rows):
+            response = self.client.get(reverse('tabulator_dashboard'))
+        self.assertEqual(response.context['recent_activity'], rows[:1])
+
+    def test_dashboard_no_assignment_empty_state(self):
+        self.event.assigned_tabulators.remove(self.tabulator)
+        self.client.force_login(self.tabulator)
+        response = self.client.get(reverse('tabulator_dashboard'))
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.context['event'])
+        self.assertEqual(response.context['recent_activity'], [])
+
     def setUp(self):
         User = get_user_model()
         self.tabulator = User.objects.create_user(
@@ -1678,7 +1748,7 @@ class TabulatorResultsPortalTests(TestCase):
         self.assertEqual(self.client.get('/tabulator/categories/').status_code, 404)
         self.assertContains(response, 'Alice')
         for page_name in ('tabulator_dashboard', 'tabulator_my_events', 'tabulator_results',
-                          'tabulator_full_results', 'tabulator_profile'):
+                          'tabulator_profile'):
             response = self.client.get(reverse(page_name), {'event_id': self.event.id})
             self.assertEqual(response.status_code, 200)
             self.assertNotContains(response, '/tabulator/participants/')

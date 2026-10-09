@@ -5,10 +5,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Scoresheet Templates · EventTab</title>
+  {% include 'admindash/_bootstrap.html' %}
   <link rel="stylesheet" href="{% static 'admindash/scoresheet.css' %}?v=20260822h">
+  <link rel="stylesheet" href="{% static 'admindash/bootstrap-admin.css' %}?v=1">
 </head>
 <body class="admin-dashboard-page admin-dashboard-v2 ss-page">
-  <div class="dashboard-shell">
+  <div class="dashboard-shell d-flex flex-column flex-lg-row">
     {% include 'admindash/_sidebar.html' with active='scoresheets' %}
     <div class="content-area v2-content">
       <header class="v2-topbar ss-topbar">
@@ -22,12 +24,12 @@
           <p class="ss-lead">Create scoresheets from Match-Based Events, then customize header, event details, and participants.</p>
         </div>
         <div class="ss-topbar-actions">
-          <a class="ss-btn ss-btn-secondary" href="{% url 'admin_match_events' %}">+ New Match Event</a>
-          <button type="button" class="ss-btn ss-btn-primary" id="btn-create-template">+ Blank Template</button>
+          <a class="btn btn-outline-secondary ss-btn ss-btn-secondary" href="{% url 'admin_match_events' %}">+ New Match Event</a>
+          <button type="button" class="btn btn-primary ss-btn ss-btn-primary" id="btn-create-template">+ Blank Template</button>
         </div>
       </header>
 
-      <main class="v2-main ss-main">
+      <main class="container-fluid v2-main ss-main">
         <!-- LIST -->
         <section class="ss-panel is-active" data-panel="list" aria-label="Scoresheet Template List">
           <article class="ss-card">
@@ -38,10 +40,10 @@
               </div>
             </header>
             <form class="ss-toolbar" method="get" id="event-list-filters" onsubmit="return false;">
-              <input type="search" id="event-search" placeholder="Search event name, venue, division…" aria-label="Search events">
+              <input class="form-control" type="search" id="event-search" placeholder="Search event name, venue, division…" aria-label="Search events">
             </form>
-            <div class="ss-table-wrap">
-              <table class="ss-table" id="events-table">
+            <div class="table-responsive ss-table-wrap">
+              <table class="table table-hover align-middle ss-table" id="events-table">
                 <thead>
                   <tr>
                     <th>Event Name</th>
@@ -70,35 +72,35 @@
               </div>
               <div class="ss-bulk-bar" id="ss-bulk-bar" hidden>
                 <span id="ss-bulk-count">0 selected</span>
-                <button type="button" class="ss-btn ss-btn-danger" id="btn-bulk-delete" disabled>Delete Selected</button>
+                <button type="button" class="btn btn-danger ss-btn ss-btn-danger" id="btn-bulk-delete" disabled>Delete Selected</button>
               </div>
             </header>
             <form class="ss-toolbar" method="get" id="list-filters">
-              <input type="search" name="q" value="{{ filters.q }}" placeholder="Search template name…" aria-label="Search">
-              <select name="event_type" aria-label="Event type">
+              <input class="form-control" type="search" name="q" value="{{ filters.q }}" placeholder="Search template name…" aria-label="Search">
+              <select class="form-select" name="event_type" aria-label="Event type">
                 <option value="">All event types</option>
                 <option value="match" {% if filters.event_type == 'match' %}selected{% endif %}>Match-Based</option>
                 <option value="criteria" {% if filters.event_type == 'criteria' %}selected{% endif %}>Criteria-Based</option>
               </select>
-              <select name="status" aria-label="Status">
+              <select class="form-select" name="status" aria-label="Status">
                 <option value="">All statuses</option>
                 <option value="active" {% if filters.status == 'active' %}selected{% endif %}>Active</option>
                 <option value="archived" {% if filters.status == 'archived' %}selected{% endif %}>Archived</option>
               </select>
-              <select name="sort" aria-label="Sort">
+              <select class="form-select" name="sort" aria-label="Sort">
                 <option value="-updated_at" {% if filters.sort == '-updated_at' %}selected{% endif %}>Newest updated</option>
                 <option value="updated_at" {% if filters.sort == 'updated_at' %}selected{% endif %}>Oldest updated</option>
                 <option value="name" {% if filters.sort == 'name' %}selected{% endif %}>Name A–Z</option>
                 <option value="-name" {% if filters.sort == '-name' %}selected{% endif %}>Name Z–A</option>
               </select>
-              <button type="submit" class="ss-btn ss-btn-secondary">Apply</button>
+              <button type="submit" class="btn btn-outline-secondary ss-btn ss-btn-secondary">Apply</button>
             </form>
-            <div class="ss-table-wrap">
-              <table class="ss-table" id="templates-table">
+            <div class="table-responsive ss-table-wrap">
+              <table class="table table-hover align-middle ss-table" id="templates-table">
                 <thead>
                   <tr>
                     <th class="ss-col-check" scope="col">
-                      <input type="checkbox" id="ss-select-all" aria-label="Select all templates">
+                      <input class="form-check-input" type="checkbox" id="ss-select-all" aria-label="Select all templates">
                     </th>
                     <th>Template Name</th>
                     <th>Linked Event</th>
@@ -111,7 +113,7 @@
                   {% for t in templates %}
                   <tr data-id="{{ t.id }}">
                     <td class="ss-col-check">
-                      <input type="checkbox" class="ss-row-check" value="{{ t.id }}" data-name="{{ t.name }}" data-assigned="{{ t.assigned_event_count }}" aria-label="Select {{ t.name }}">
+                      <input type="checkbox" class="form-check-input ss-row-check" value="{{ t.id }}" data-name="{{ t.name }}" data-assigned="{{ t.assigned_event_count }}" aria-label="Select {{ t.name }}">
                     </td>
                     <td><strong>{{ t.name }}</strong></td>
                     <td>{{ t.bound_event_name|default:"—" }}</td>
@@ -136,10 +138,10 @@
               <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }} · {{ page_obj.paginator.count }} template{{ page_obj.paginator.count|pluralize }}</span>
               <div class="ss-pager">
                 {% if page_obj.has_previous %}
-                <a class="ss-btn ss-btn-secondary" href="?page={{ page_obj.previous_page_number }}&q={{ filters.q|urlencode }}&event_type={{ filters.event_type }}&status={{ filters.status }}&sort={{ filters.sort }}">‹ Prev</a>
+                <a class="btn btn-outline-secondary ss-btn ss-btn-secondary" href="?page={{ page_obj.previous_page_number }}&q={{ filters.q|urlencode }}&event_type={{ filters.event_type }}&status={{ filters.status }}&sort={{ filters.sort }}">‹ Prev</a>
                 {% endif %}
                 {% if page_obj.has_next %}
-                <a class="ss-btn ss-btn-secondary" href="?page={{ page_obj.next_page_number }}&q={{ filters.q|urlencode }}&event_type={{ filters.event_type }}&status={{ filters.status }}&sort={{ filters.sort }}">Next ›</a>
+                <a class="btn btn-outline-secondary ss-btn ss-btn-secondary" href="?page={{ page_obj.next_page_number }}&q={{ filters.q|urlencode }}&event_type={{ filters.event_type }}&status={{ filters.status }}&sort={{ filters.sort }}">Next ›</a>
                 {% endif %}
               </div>
             </footer>
@@ -154,7 +156,7 @@
 
             <header class="ss-editor-topbar">
               <div class="ss-editor-top-left">
-                <button type="button" class="ss-btn ss-btn-secondary" id="btn-cancel-wizard">← Back</button>
+                <button type="button" class="btn btn-outline-secondary ss-btn ss-btn-secondary" id="btn-cancel-wizard">← Back</button>
                 <div>
                   <h3 id="wizard-title">Edit Template</h3>
                   <p class="ss-editor-subtitle" id="wizard-subtitle">Configure sections, columns, and live preview.</p>
@@ -162,28 +164,28 @@
               </div>
               <div class="ss-editor-top-actions">
                 <label class="ss-inline-field">Template Name
-                  <input type="text" id="tpl-name" maxlength="200" required placeholder="Scoresheet name">
+                  <input class="form-control" type="text" id="tpl-name" maxlength="200" required placeholder="Scoresheet name">
                 </label>
                 <fieldset class="ss-inline-type">
                   <legend class="sr-only">Event Type</legend>
-                  <label><input type="radio" name="event_type" value="match" checked> Match</label>
-                  <label><input type="radio" name="event_type" value="criteria"> Criteria</label>
+                  <label><input class="form-check-input" type="radio" name="event_type" value="match" checked> Match</label>
+                  <label><input class="form-check-input" type="radio" name="event_type" value="criteria"> Criteria</label>
                 </fieldset>
-                <select id="tpl-paper" aria-label="Paper size" hidden>
+                <select class="form-select" id="tpl-paper" aria-label="Paper size" hidden>
                   <option value="a4" selected>A4</option>
                   <option value="letter">Letter</option>
                 </select>
-                <select id="tpl-orientation" aria-label="Orientation" hidden>
+                <select class="form-select" id="tpl-orientation" aria-label="Orientation" hidden>
                   <option value="portrait" selected>Portrait</option>
                   <option value="landscape">Landscape</option>
                 </select>
-                <button type="button" class="ss-btn ss-btn-secondary" id="btn-preview-jump">
+                <button type="button" class="btn btn-outline-secondary ss-btn ss-btn-secondary" id="btn-preview-jump">
                   <span aria-hidden="true">👁</span> Preview
                 </button>
-                <button type="button" class="ss-btn ss-btn-secondary" id="btn-download-sample">
+                <button type="button" class="btn btn-outline-secondary ss-btn ss-btn-secondary" id="btn-download-sample">
                   <span aria-hidden="true">📄</span> PDF Preview
                 </button>
-                <button type="button" class="ss-btn ss-btn-primary" id="btn-save-template">
+                <button type="button" class="btn btn-primary ss-btn ss-btn-primary" id="btn-save-template">
                   <span aria-hidden="true">💾</span> Save Template
                 </button>
               </div>
@@ -197,7 +199,7 @@
                   <p>Drag to reorder. Use edit or remove on each section.</p>
                 </header>
                 <ol class="ss-section-list" id="section-list" aria-label="Template sections"></ol>
-                <button type="button" class="ss-btn ss-btn-secondary ss-add-section" id="btn-add-section">+ Add Section</button>
+                <button type="button" class="btn btn-outline-secondary ss-btn ss-btn-secondary ss-add-section" id="btn-add-section">+ Add Section</button>
               </aside>
 
               <!-- MIDDLE: Edit Component -->
@@ -243,8 +245,8 @@
       </div>
     </div>
     <footer class="ss-dialog-actions">
-      <button type="button" class="ss-btn ss-btn-secondary" id="view-edit-btn">Edit</button>
-      <button type="button" class="ss-btn ss-btn-primary" data-close-view>Done</button>
+      <button type="button" class="btn btn-outline-secondary ss-btn ss-btn-secondary" id="view-edit-btn">Edit</button>
+      <button type="button" class="btn btn-primary ss-btn ss-btn-primary" data-close-view>Done</button>
     </footer>
   </dialog>
 

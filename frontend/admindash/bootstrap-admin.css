@@ -1,0 +1,204 @@
+/* Shared Bootstrap component theme for the admin portal. */
+.admin-dashboard-v2 {
+  --bs-primary: #2563eb;
+  --bs-primary-rgb: 37, 99, 235;
+  --bs-body-color: #13243d;
+  --bs-border-color: #dbe4ee;
+  --bs-border-radius: .5rem;
+  --bs-link-color: #2563eb;
+  --bs-link-hover-color: #1d4ed8;
+}
+
+.admin-dashboard-v2 .content-area { min-width: 0; }
+.admin-dashboard-v2 .container-fluid { min-width: 0; }
+.admin-dashboard-v2 .table-responsive { max-width: 100%; }
+
+.admin-dashboard-v2 .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .5rem;
+  padding: .55rem .9rem;
+  border: 1px solid var(--bs-btn-border-color);
+  border-radius: var(--bs-border-radius);
+  font-size: .8125rem;
+  font-weight: 600;
+  line-height: 1.35;
+  text-decoration: none;
+  transition: background-color .15s, border-color .15s, box-shadow .15s;
+}
+
+.admin-dashboard-v2 .btn-primary {
+  --bs-btn-bg: #2563eb;
+  --bs-btn-border-color: #2563eb;
+  --bs-btn-hover-bg: #1d4ed8;
+  --bs-btn-hover-border-color: #1d4ed8;
+  --bs-btn-active-bg: #1e40af;
+  --bs-btn-active-border-color: #1e40af;
+  color: #fff;
+  background-color: var(--bs-btn-bg);
+}
+
+.admin-dashboard-v2 .btn-outline-secondary {
+  --bs-btn-color: #475569;
+  --bs-btn-border-color: #cbd5e1;
+  --bs-btn-hover-color: #13243d;
+  --bs-btn-hover-bg: #f1f5f9;
+  --bs-btn-hover-border-color: #94a3b8;
+  --bs-btn-active-color: #13243d;
+  --bs-btn-active-bg: #e2e8f0;
+  --bs-btn-active-border-color: #94a3b8;
+  color: var(--bs-btn-color);
+  background-color: #fff;
+}
+
+.admin-dashboard-v2 .btn-danger {
+  color: #fff;
+  background-color: var(--bs-btn-bg);
+}
+
+.admin-dashboard-v2 .btn:hover {
+  color: var(--bs-btn-hover-color);
+  background-color: var(--bs-btn-hover-bg);
+  border-color: var(--bs-btn-hover-border-color);
+}
+
+.admin-dashboard-v2 .btn:disabled {
+  pointer-events: none;
+  opacity: var(--bs-btn-disabled-opacity);
+}
+
+.admin-dashboard-v2 .btn:focus-visible {
+  outline: 3px solid #93c5fd;
+  outline-offset: 2px;
+}
+
+.admin-dashboard-v2 .form-control,
+.admin-dashboard-v2 .form-select {
+  min-width: 0;
+  max-width: 100%;
+  min-height: 38px;
+  border: 1px solid var(--bs-border-color);
+  border-radius: var(--bs-border-radius);
+  color: var(--bs-body-color);
+  background-color: #fff;
+  font-size: .8125rem;
+  line-height: 1.5;
+}
+
+.admin-dashboard-v2 .form-select {
+  padding-right: 2.25rem;
+  background-image: var(--bs-form-select-bg-img);
+  background-repeat: no-repeat;
+  background-position: right .75rem center;
+  background-size: 16px 12px;
+}
+
+.admin-dashboard-v2 .account-filters .form-select { width: auto; }
+
+.admin-dashboard-v2 .form-control:focus,
+.admin-dashboard-v2 .form-select:focus {
+  border-color: #86b7fe;
+  outline: 0;
+  box-shadow: 0 0 0 .2rem rgba(37, 99, 235, .15);
+}
+
+.admin-dashboard-v2 .form-control:disabled,
+.admin-dashboard-v2 .form-select:disabled {
+  background-color: #f1f5f9;
+  opacity: 1;
+}
+
+.admin-dashboard-v2 .form-check-input {
+  flex-shrink: 0;
+  width: 1rem;
+  height: 1rem;
+  min-height: 0;
+  margin-top: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+.admin-dashboard-v2 .form-check-input:checked {
+  background-color: #2563eb;
+  border-color: #2563eb;
+}
+
+.admin-dashboard-v2 .table {
+  --bs-table-color: #334155;
+  --bs-table-bg: transparent;
+  --bs-table-border-color: #e2e8f0;
+  --bs-table-hover-bg: #f8fafc;
+  --bs-table-hover-color: #13243d;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-dashboard-v2 .table > :not(caption) > * > * {
+  color: var(--bs-table-color);
+  border-bottom-color: var(--bs-table-border-color);
+}
+
+.admin-dashboard-v2 .table > thead > tr > th {
+  color: #64748b;
+  background-color: #f8fafc;
+}
+
+/* Existing dialogs own their visibility and stacking, rather than Bootstrap JS. */
+.admin-dashboard-v2 .modal-backdrop { z-index: 0; }
+.admin-dashboard-v2 .modal-panel,
+.admin-dashboard-v2 .teams-modal-panel { z-index: 1; }
+.admin-dashboard-v2 .assignment-modal .modal-header {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+@media (max-width: 991.98px) {
+  .admin-dashboard-v2 .v2-sidebar.sidebar {
+    width: 100%;
+    min-height: 0;
+    height: auto;
+    position: static;
+    padding: 14px 12px;
+    overflow: visible;
+  }
+
+  .admin-dashboard-v2 .v2-sidebar .v2-brand {
+    padding: 0 8px 12px;
+    margin-bottom: 10px;
+  }
+
+  .admin-dashboard-v2 .v2-sidebar .v2-nav {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    flex-direction: initial;
+    gap: 4px;
+    padding: 0;
+    overflow: visible;
+  }
+
+  .admin-dashboard-v2 .v2-sidebar .v2-nav-group { display: block; min-width: 0; }
+  .admin-dashboard-v2 .v2-sidebar .v2-nav-section { display: block; grid-column: 1 / -1; }
+  .admin-dashboard-v2 .v2-sidebar .v2-nav a,
+  .admin-dashboard-v2 .v2-sidebar .v2-nav-toggle { white-space: normal; }
+  .admin-dashboard-v2 .v2-sidebar .v2-user-card { display: none; }
+  .admin-dashboard-v2 .v2-sidebar .v2-logout { display: flex; margin-top: 12px; }
+  .admin-dashboard-v2 .content-area { width: 100%; }
+}
+
+@media (max-width: 640px) {
+  .admin-dashboard-v2 .account-hero,
+  .admin-dashboard-v2 .dept-stats-grid,
+  .admin-dashboard-v2 .v2-mid-row,
+  .admin-dashboard-v2 .v2-bottom-row { grid-template-columns: minmax(0, 1fr); }
+  .admin-dashboard-v2 .v2-card { min-width: 0; }
+  .admin-dashboard-v2 .users-card,
+  .admin-dashboard-v2 .new-account-btn { width: 100%; min-width: 0; }
+  .admin-dashboard-v2 .account-hero .new-account-btn { grid-column: auto; }
+  .admin-dashboard-v2 .dept-page-header { flex-direction: column; align-items: flex-start; }
+  .admin-dashboard-v2 .btn { white-space: normal; }
+  .admin-dashboard-v2 .account-filters,
+  .admin-dashboard-v2 .match-toolbar,
+  .admin-dashboard-v2 .ss-toolbar { flex-wrap: wrap; }
+  .admin-dashboard-v2 .account-filters .form-select { width: 100%; }
+}

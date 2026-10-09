@@ -5,10 +5,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Match-Based Events · EventTab</title>
+  {% include 'admindash/_bootstrap.html' %}
   <link rel="stylesheet" href="{% static 'admindash/matchbasedevent.css' %}?v=20260806h">
+  <link rel="stylesheet" href="{% static 'admindash/bootstrap-admin.css' %}?v=1">
 </head>
 <body class="admin-dashboard-page admin-dashboard-v2 match-events-page">
-  <div class="dashboard-shell">
+  <div class="dashboard-shell d-flex flex-column flex-lg-row">
     {% include 'admindash/_sidebar.html' with active='events_match' %}
     <div class="content-area v2-content">
       <header class="v2-topbar match-topbar">
@@ -17,7 +19,7 @@
           <h2 class="v2-welcome">Tournament operations</h2>
         </div>
       </header>
-      <main class="v2-main match-main">
+      <main class="container-fluid v2-main match-main">
         {% if messages %}
         <div class="match-messages" aria-live="polite">
           {% for message in messages %}<p class="match-message match-message--{{ message.tags }}">{{ message }}</p>{% endfor %}
@@ -30,7 +32,7 @@
             <h1>Match-Based Events</h1>
             <p>Build tournament brackets, assign officials, and publish match schedules.</p>
           </div>
-          <button class="match-primary" type="button" id="open-wizard">+ Create Event</button>
+          <button class="btn btn-primary match-primary" type="button" id="open-wizard">+ Create Event</button>
         </section>
 
         <section class="match-stats" aria-label="Event status overview">
@@ -41,18 +43,18 @@
 
         <section class="match-table-card">
           <form class="match-toolbar" method="get">
-            <label class="match-search"><span class="sr-only">Search events</span><input name="q" type="search" value="{{ search_query }}" placeholder="Search event, division, or venue"></label>
+            <label class="match-search"><span class="sr-only">Search events</span><input class="form-control" name="q" type="search" value="{{ search_query }}" placeholder="Search event, division, or venue"></label>
             <label><span class="sr-only">Filter status</span>
-              <select name="status">
+              <select class="form-select" name="status">
                 <option value="all">All statuses</option>
                 <option value="published" {% if status_filter == 'published' %}selected{% endif %}>Published</option>
                 <option value="draft" {% if status_filter == 'draft' %}selected{% endif %}>Draft</option>
               </select>
             </label>
-            <button type="submit" class="match-secondary">Filter</button>
+            <button type="submit" class="btn btn-outline-secondary match-secondary">Filter</button>
           </form>
-          <div class="match-table-wrap">
-            <table class="match-table">
+          <div class="table-responsive match-table-wrap">
+            <table class="table table-hover align-middle match-table">
               <thead><tr><th>Event Name</th><th>Category</th><th>Division</th><th>Event Type</th><th>Status</th><th>Event Date</th><th>Actions</th></tr></thead>
               <tbody>
                 {% for event in event_rows %}
@@ -106,7 +108,7 @@
           <div class="wizard-section-title"><span>01</span><div><h3>Basic information</h3><p>Define where this event sits in the intramural program.</p></div></div>
           <div class="wizard-grid">
             <label>Sport/Game Type
-              <select name="sport_type" id="sport-type" required>
+              <select class="form-select" name="sport_type" id="sport-type" required>
                 <option value="">Select sport or game</option>
                 <option>Basketball</option>
                 <option>Volleyball</option>
@@ -119,41 +121,41 @@
               </select>
               <small class="field-hint">Controls sport rules, result-entry format, bracket behavior, and scoresheet recommendation.</small>
             </label>
-            <label id="sport-custom-wrap" hidden>Custom Sport/Game Name <input name="sport_custom_name" id="sport-custom-name" maxlength="120" placeholder="Enter custom sport or game"></label>
-            <label>Division <select name="division" id="event-division" required><option value="">Select division</option><option>Men</option><option>Women</option><option>Mixed</option><option>Open</option></select></label>
+            <label id="sport-custom-wrap" hidden>Custom Sport/Game Name <input class="form-control" name="sport_custom_name" id="sport-custom-name" maxlength="120" placeholder="Enter custom sport or game"></label>
+            <label>Division <select class="form-select" name="division" id="event-division" required><option value="">Select division</option><option>Men</option><option>Women</option><option>Mixed</option><option>Open</option></select></label>
             <label class="wide">Event Name
-              <input name="event_name" id="event-name" required maxlength="200" autocomplete="off">
+              <input class="form-control" name="event_name" id="event-name" required maxlength="200" autocomplete="off">
               <small class="field-hint" id="event-name-hint">Auto-generated from Sport/Game Type and Division (for example, Men’s Basketball or Chess – Open Division). Edit anytime for a custom title. Must be unique in the current intramurals season.</small>
             </label>
-            <label>Category <select name="category" disabled><option>Sports</option></select><small class="field-hint">Automatically set to Sports for match-based events.</small></label>
-            <label>Event Classification <select name="event_classification" id="event-classification" required><option value="">Select classification</option><option value="major">Major Event</option><option value="minor">Minor Event</option></select></label>
-            <label>Venue <input name="venue" required maxlength="200"></label>
-            <label>Start Date <input name="start_date" type="date" required></label>
-            <label>End Date <input name="end_date" type="date" required></label>
+            <label>Category <select class="form-select" name="category" disabled><option>Sports</option></select><small class="field-hint">Automatically set to Sports for match-based events.</small></label>
+            <label>Event Classification <select class="form-select" name="event_classification" id="event-classification" required><option value="">Select classification</option><option value="major">Major Event</option><option value="minor">Minor Event</option></select></label>
+            <label>Venue <input class="form-control" name="venue" required maxlength="200"></label>
+            <label>Start Date <input class="form-control" name="start_date" type="date" required></label>
+            <label>End Date <input class="form-control" name="end_date" type="date" required></label>
           </div>
         </section>
 
         <section class="wizard-panel" data-step="2">
           <div class="wizard-section-title"><span>02</span><div><h3>Participation &amp; tournament format</h3><p>Choose competitors and generate the tournament structure.</p></div></div>
           <fieldset class="team-picker"><legend>Participating Teams / Participants <span id="selected-team-count" class="selected-count">0 selected</span></legend>
-            <input type="search" id="team-search" placeholder="Search active teams">
+            <input class="form-control" type="search" id="team-search" placeholder="Search active teams">
             <div class="team-options">
               {% for team in teams %}
-              <label data-team-search="{{ team.name|lower }} {{ team.code|lower }}"><input type="checkbox" class="team-check" value="{{ team.id }}" data-name="{{ team.name }}"><span><strong>{{ team.name }}</strong><small>{{ team.code }}{% if team.department %} · {{ team.department.name }}{% endif %}</small></span></label>
+              <label data-team-search="{{ team.name|lower }} {{ team.code|lower }}"><input type="checkbox" class="form-check-input team-check" value="{{ team.id }}" data-name="{{ team.name }}"><span><strong>{{ team.name }}</strong><small>{{ team.code }}{% if team.department %} · {{ team.department.name }}{% endif %}</small></span></label>
               {% empty %}<p>No active teams are available. Add teams before creating a match event.</p>{% endfor %}
             </div>
             <p class="field-hint" id="min-participants-hint">Select at least 2 participants for the chosen tournament format.</p>
           </fieldset>
           <fieldset><legend>Tournament Format</legend>
             <div class="format-cards">
-              <label><input type="radio" name="tournament_type" value="single_elimination" checked><span><strong>Single Elimination</strong><small>A participant is eliminated after one loss.</small></span></label>
-              <label><input type="radio" name="tournament_type" value="double_elimination"><span><strong>Double Elimination</strong><small>A participant is eliminated after two losses via Winners and Losers brackets.</small></span></label>
-              <label><input type="radio" name="tournament_type" value="round_robin"><span><strong>Round Robin</strong><small>Each participant competes against every other participant once.</small></span></label>
+              <label><input class="form-check-input" type="radio" name="tournament_type" value="single_elimination" checked><span><strong>Single Elimination</strong><small>A participant is eliminated after one loss.</small></span></label>
+              <label><input class="form-check-input" type="radio" name="tournament_type" value="double_elimination"><span><strong>Double Elimination</strong><small>A participant is eliminated after two losses via Winners and Losers brackets.</small></span></label>
+              <label><input class="form-check-input" type="radio" name="tournament_type" value="round_robin"><span><strong>Round Robin</strong><small>Each participant competes against every other participant once.</small></span></label>
             </div>
             <div class="legacy-format-notice" id="legacy-format-notice" hidden role="alert">
               <strong>Legacy Double Elimination event</strong>
               <p>This stored event uses the retired winners-only fallback. Regenerate with Double Elimination (or choose another format) to build a full Winners/Losers bracket.</p>
-              <button type="button" class="match-secondary" id="change-legacy-format">Regenerate as Double Elimination</button>
+              <button type="button" class="btn btn-outline-secondary match-secondary" id="change-legacy-format">Regenerate as Double Elimination</button>
             </div>
           </fieldset>
           <fieldset>
@@ -167,7 +169,7 @@
             </div>
           </fieldset>
           <label class="inline-check" id="third-place-wrap">
-            <input type="checkbox" name="include_third_place" id="include-third-place">
+            <input class="form-check-input" type="checkbox" name="include_third_place" id="include-third-place">
             Include Third-Place Match
           </label>
           <p class="config-hint" id="third-place-hint">Creates Loser of Semifinal Game 1 vs Loser of Semifinal Game 2. Shown for Single Elimination only.</p>
@@ -177,15 +179,15 @@
               <p>Generate the tournament structure from the selected participants.</p>
             </div>
             <div class="bracket-actions">
-              <button type="button" class="match-secondary" id="generate-bracket">Generate Bracket</button>
-              <button type="button" class="match-secondary" id="regenerate-bracket">Regenerate Bracket</button>
-              <button type="button" class="match-secondary" id="reset-bracket">Reset Bracket</button>
+              <button type="button" class="btn btn-outline-secondary match-secondary" id="generate-bracket">Generate Bracket</button>
+              <button type="button" class="btn btn-outline-secondary match-secondary" id="regenerate-bracket">Regenerate Bracket</button>
+              <button type="button" class="btn btn-outline-secondary match-secondary" id="reset-bracket">Reset Bracket</button>
             </div>
             <div id="bracket-stats" class="bracket-stats" hidden></div>
             <div class="tb-toolbar" id="bracket-toolbar" hidden>
-              <button type="button" class="match-secondary" id="bracket-zoom-out" title="Zoom out">−</button>
-              <button type="button" class="match-secondary" id="bracket-zoom-reset" title="Fit to screen">Fit</button>
-              <button type="button" class="match-secondary" id="bracket-zoom-in" title="Zoom in">+</button>
+              <button type="button" class="btn btn-outline-secondary match-secondary" id="bracket-zoom-out" title="Zoom out">−</button>
+              <button type="button" class="btn btn-outline-secondary match-secondary" id="bracket-zoom-reset" title="Fit to screen">Fit</button>
+              <button type="button" class="btn btn-outline-secondary match-secondary" id="bracket-zoom-in" title="Zoom in">+</button>
               <span id="bracket-zoom-label" class="tb-zoom-label">100%</span>
             </div>
             <div id="bracket-preview" class="bracket-preview" aria-live="polite"><p>Select teams, then generate a preview.</p></div>
@@ -196,21 +198,21 @@
           <div class="wizard-section-title"><span>03</span><div><h3>Schedule setup</h3><p>Turn generated matchups into an operational timetable.</p></div></div>
           <fieldset><legend>Schedule Generation</legend>
             <div class="schedule-modes">
-              <label><input type="radio" name="schedule_mode" value="auto" checked> <span><strong>Auto Generate Schedule</strong><small>Place actual matches across the event date range using daily hours.</small></span></label>
-              <label><input type="radio" name="schedule_mode" value="manual"> <span><strong>Manual Scheduling</strong><small>Edit every date, time, and venue.</small></span></label>
+              <label><input class="form-check-input" type="radio" name="schedule_mode" value="auto" checked> <span><strong>Auto Generate Schedule</strong><small>Place actual matches across the event date range using daily hours.</small></span></label>
+              <label><input class="form-check-input" type="radio" name="schedule_mode" value="manual"> <span><strong>Manual Scheduling</strong><small>Edit every date, time, and venue.</small></span></label>
             </div>
           </fieldset>
           <div class="wizard-grid" id="auto-settings">
-            <label>First Match Date <input name="first_match_date" type="date"></label>
-            <label>Daily Start Time <input name="daily_start_time" type="time" value="08:00"></label>
-            <label>Daily End Time <input name="daily_end_time" type="time" value="17:00"></label>
+            <label>First Match Date <input class="form-control" name="first_match_date" type="date"></label>
+            <label>Daily Start Time <input class="form-control" name="daily_start_time" type="time" value="08:00"></label>
+            <label>Daily End Time <input class="form-control" name="daily_end_time" type="time" value="17:00"></label>
           </div>
           <input type="hidden" name="match_duration_minutes" value="60">
           <input type="hidden" name="break_between_matches_minutes" value="10">
           <input type="hidden" name="min_rest_minutes" value="30">
           <input type="hidden" name="playing_area_count" value="1">
           <input type="hidden" name="playing_areas" id="playing-areas" value="[]">
-          <button type="button" class="match-secondary" id="generate-schedule">Generate Schedule</button>
+          <button type="button" class="btn btn-outline-secondary match-secondary" id="generate-schedule">Generate Schedule</button>
           <div id="schedule-conflicts" class="schedule-conflicts" hidden role="alert"></div>
           <div id="schedule-preview" class="schedule-preview"><p>Generate the bracket first, then create its schedule.</p></div>
         </section>
@@ -221,7 +223,7 @@
           <fieldset>
             <legend>Faculty and Personnel</legend>
             <label class="field-block">Faculty In Charge
-              <select name="faculty_account" required>
+              <select class="form-select" name="faculty_account" required>
                 <option value="">Select a faculty account</option>
                 {% for user in faculty_options %}
                 <option value="{{ user.id }}">{{ user.get_full_name|default:user.username }} · {{ user.username }}</option>
@@ -232,7 +234,7 @@
               <small class="field-hint">Can view assigned events and confirm winners from paper scoresheets.</small>
             </label>
             <label class="field-block">Tabulator In Charge
-              <select name="tabulator_account" required>
+              <select class="form-select" name="tabulator_account" required>
                 <option value="">Select a tabulator account</option>
                 {% for user in tabulator_options %}
                 <option value="{{ user.id }}">
@@ -253,11 +255,11 @@
           <fieldset id="points-fieldset">
             <legend>Championship Points</legend>
             <label class="inline-check">
-              <input type="checkbox" name="apply_championship_points" checked>
+              <input class="form-check-input" type="checkbox" name="apply_championship_points" checked>
               Apply Championship Points
             </label>
             <div class="criteria-editor-actions points-editor-actions">
-              <button type="button" id="add-points-row" class="match-secondary">+ Add Place</button>
+              <button type="button" id="add-points-row" class="btn btn-outline-secondary match-secondary">+ Add Place</button>
             </div>
             <div class="points-editor" id="points-editor" aria-live="polite"></div>
             <p class="points-editor-hint">Defaults load from Event Classification (Major/Minor). Edit before publishing if authorized.</p>
@@ -271,11 +273,11 @@
         </section>
       </div>
       <footer class="wizard-footer">
-        <button type="button" class="match-secondary" id="wizard-back">Back</button>
+        <button type="button" class="btn btn-outline-secondary match-secondary" id="wizard-back">Back</button>
         <span class="wizard-error" id="wizard-error" role="alert"></span>
-        <button type="button" class="match-primary" id="wizard-next">Next</button>
-        <button type="submit" id="save-draft-action" class="match-secondary final-action" data-status="draft">Save as Draft</button>
-        <button type="submit" id="publish-action" class="match-primary final-action" data-status="published">Publish Event</button>
+        <button type="button" class="btn btn-primary match-primary" id="wizard-next">Next</button>
+        <button type="submit" id="save-draft-action" class="btn btn-outline-secondary match-secondary final-action" data-status="draft">Save as Draft</button>
+        <button type="submit" id="publish-action" class="btn btn-primary match-primary final-action" data-status="published">Publish Event</button>
       </footer>
     </form>
   </dialog>
@@ -295,8 +297,8 @@
         <p>This permanently removes <strong id="delete-name"></strong>, its bracket, and schedule. This action cannot be undone.</p>
       </div>
       <div class="confirm-dialog__actions">
-        <button type="button" class="match-secondary" data-cancel-delete>Cancel</button>
-        <button class="match-danger" type="submit">Delete event</button>
+        <button type="button" class="btn btn-outline-secondary match-secondary" data-cancel-delete>Cancel</button>
+        <button class="btn btn-danger match-danger" type="submit">Delete event</button>
       </div>
     </form>
   </dialog>
@@ -310,8 +312,8 @@
       <p id="bracket-confirm-message">Regenerating or resetting will replace unconfirmed matches. Confirmed results are preserved unless you choose a controlled reset.</p>
     </div>
     <div class="confirm-dialog__actions">
-      <button type="button" class="match-secondary" id="bracket-confirm-cancel">Cancel</button>
-      <button type="button" class="match-danger" id="bracket-confirm-ok">Continue</button>
+      <button type="button" class="btn btn-outline-secondary match-secondary" id="bracket-confirm-cancel">Cancel</button>
+      <button type="button" class="btn btn-danger match-danger" id="bracket-confirm-ok">Continue</button>
     </div>
   </dialog>
 

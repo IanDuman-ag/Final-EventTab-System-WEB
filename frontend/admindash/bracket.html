@@ -5,10 +5,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Tournament Brackets - EventTab</title>
+  {% include 'admindash/_bootstrap.html' %}
   <link rel="stylesheet" href="{% static 'admindash/bracket.css' %}?v=20260806k">
+  <link rel="stylesheet" href="{% static 'admindash/bootstrap-admin.css' %}?v=1">
 </head>
 <body class="admin-dashboard-page bracket-page admin-dashboard-v2">
-  <div class="dashboard-shell">
+  <div class="dashboard-shell d-flex flex-column flex-lg-row">
     {% include 'admindash/_sidebar.html' with active='brackets' %}
 
     <div class="content-area v2-content">
@@ -22,7 +24,7 @@
         </div>
       </header>
 
-      <main class="main-content">
+      <main class="container-fluid main-content">
         <section class="bracket-page-head">
           <div>
             <h1>Tournament Brackets</h1>
@@ -61,11 +63,11 @@
           <form class="bracket-toolbar" id="bracket-filters" action="#" onsubmit="return false;">
             <label class="bracket-search">
               <span class="sr-only">Search by event name or sport</span>
-              <input type="search" id="filter-q" placeholder="Search event or sport/game" autocomplete="off">
+              <input class="form-control" type="search" id="filter-q" placeholder="Search event or sport/game" autocomplete="off">
             </label>
             <label>
               <span class="sr-only">Sport/Game Type</span>
-              <select id="filter-sport">
+              <select class="form-select" id="filter-sport">
                 <option value="">All sports</option>
                 {% for sport in filter_options.sports %}
                 <option value="{{ sport }}">{{ sport }}</option>
@@ -74,7 +76,7 @@
             </label>
             <label>
               <span class="sr-only">Division</span>
-              <select id="filter-division">
+              <select class="form-select" id="filter-division">
                 <option value="">All divisions</option>
                 {% for division in filter_options.divisions %}
                 <option value="{{ division }}">{{ division }}</option>
@@ -83,7 +85,7 @@
             </label>
             <label>
               <span class="sr-only">Tournament Format</span>
-              <select id="filter-format">
+              <select class="form-select" id="filter-format">
                 <option value="">All formats</option>
                 {% for fmt in filter_options.formats %}
                 <option value="{{ fmt.value }}">{{ fmt.label }}</option>
@@ -92,7 +94,7 @@
             </label>
             <label>
               <span class="sr-only">Bracket Status</span>
-              <select id="filter-bracket-status">
+              <select class="form-select" id="filter-bracket-status">
                 <option value="">All bracket statuses</option>
                 <option value="not_generated">Not Generated</option>
                 <option value="generated">Generated</option>
@@ -101,7 +103,7 @@
             </label>
             <label>
               <span class="sr-only">Tournament Status</span>
-              <select id="filter-tournament-status">
+              <select class="form-select" id="filter-tournament-status">
                 <option value="">All tournament statuses</option>
                 <option value="upcoming">Upcoming</option>
                 <option value="ongoing">Ongoing</option>
@@ -110,11 +112,11 @@
                 <option value="cancelled">Cancelled</option>
               </select>
             </label>
-            <button type="button" class="match-secondary bracket-clear-filters" id="clear-bracket-filters">Clear Filters</button>
+            <button type="button" class="btn btn-outline-secondary match-secondary bracket-clear-filters" id="clear-bracket-filters">Clear Filters</button>
           </form>
 
-          <div class="bracket-table-wrap" id="bracket-table-wrap">
-            <table class="bracket-events-table" id="bracket-events-table">
+          <div class="table-responsive bracket-table-wrap" id="bracket-table-wrap">
+            <table class="table table-hover align-middle bracket-events-table" id="bracket-events-table">
               <thead>
                 <tr>
                   <th scope="col">Event</th>
@@ -172,9 +174,9 @@
                     <td class="bracket-actions-cell" data-label="Actions">
                       <div class="bracket-row-actions">
                         {% if row.has_bracket %}
-                        <button type="button" class="btn-bracket-details btn-view-bracket" data-listing-action="view" data-id="{{ row.id }}" aria-label="View bracket for {{ row.name }}">View Bracket</button>
+                        <button type="button" class="btn btn-outline-secondary btn-bracket-details btn-view-bracket" data-listing-action="view" data-id="{{ row.id }}" aria-label="View bracket for {{ row.name }}">View Bracket</button>
                         {% else %}
-                        <a class="btn-bracket-details" href="{{ row.edit_url }}">Complete Event Setup</a>
+                        <a class="btn btn-outline-secondary btn-bracket-details" href="{{ row.edit_url }}">Complete Event Setup</a>
                         {% endif %}
                       </div>
                     </td>
@@ -192,11 +194,11 @@
             </table>
             <div class="bracket-empty-state bracket-filtered-empty" id="bracket-filtered-empty" hidden>
               <strong>No tournaments match the selected filters.</strong>
-              <button type="button" class="match-secondary" id="clear-filters-empty">Clear Filters</button>
+              <button type="button" class="btn btn-outline-secondary match-secondary" id="clear-filters-empty">Clear Filters</button>
             </div>
             <div class="bracket-empty-state bracket-error-state" id="bracket-error-state" hidden>
               <strong>We couldn’t load the tournament brackets. Please try again.</strong>
-              <button type="button" class="match-secondary" id="retry-bracket-load">Retry</button>
+              <button type="button" class="btn btn-outline-secondary match-secondary" id="retry-bracket-load">Retry</button>
             </div>
           </div>
         </section>
@@ -234,7 +236,7 @@
             <div class="form-row">
               <div class="form-group full-width">
                 <label for="bracket_event">Event <span class="required">*</span></label>
-                <select id="bracket_event" name="event" required>
+                <select class="form-select" id="bracket_event" name="event" required>
                   <option value="">Select Event</option>
                   {% for row in event_rows %}
                   <option value="{{ row.id }}"
@@ -252,22 +254,22 @@
             <div class="form-row">
               <div class="form-group">
                 <label for="event_category">Category</label>
-                <input type="text" id="event_category" name="category" placeholder="Auto-filled from Event" readonly>
+                <input class="form-control" type="text" id="event_category" name="category" placeholder="Auto-filled from Event" readonly>
               </div>
               <div class="form-group">
                 <label for="event_division">Division</label>
-                <input type="text" id="event_division" name="division" placeholder="Auto-filled from Event" readonly>
+                <input class="form-control" type="text" id="event_division" name="division" placeholder="Auto-filled from Event" readonly>
               </div>
             </div>
 
             <div class="form-row">
               <div class="form-group">
                 <label for="event_tournament_type">Tournament Type</label>
-                <input type="text" id="event_tournament_type" placeholder="Auto-filled from Event" readonly>
+                <input class="form-control" type="text" id="event_tournament_type" placeholder="Auto-filled from Event" readonly>
               </div>
               <div class="form-group">
                 <label for="event_participants">Participants / Teams</label>
-                <input type="text" id="event_participants" placeholder="Auto-filled from Event" readonly>
+                <input class="form-control" type="text" id="event_participants" placeholder="Auto-filled from Event" readonly>
               </div>
             </div>
 
@@ -280,7 +282,7 @@
             <div class="form-row">
               <div class="form-group">
                 <label for="draw_type">DRAW METHOD <span class="required">*</span> <span class="info-icon-inline" title="Random Draw shuffles teams; Seeded Draw pairs by seed (1 vs N)">ⓘ</span></label>
-                <select id="draw_type" name="draw_type">
+                <select class="form-select" id="draw_type" name="draw_type">
                   <option value="seeded" selected>Seeded Draw</option>
                   <option value="random">Random Draw</option>
                 </select>
@@ -301,8 +303,8 @@
                 </span>
               </div>
 
-              <div class="teams-table-wrap">
-                <table class="teams-table">
+              <div class="table-responsive teams-table-wrap">
+                <table class="table table-hover align-middle teams-table">
                   <thead>
                     <tr>
                       <th>SEED</th>
@@ -393,10 +395,10 @@
         </div>
 
         <div class="bracket-modal-footer bracket-modal-footer--split">
-          <button type="button" class="btn-cancel" id="cancelBracketBtn">Cancel</button>
+          <button type="button" class="btn btn-outline-secondary btn-cancel" id="cancelBracketBtn">Cancel</button>
           <div class="footer-right">
             <button type="button" class="btn-secondary" id="saveDraftBtn">Save as Draft</button>
-            <button type="submit" class="btn-save btn-save--icon">
+            <button type="submit" class="btn btn-primary btn-save btn-save--icon">
               <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M12 2 4 6v6c0 4.5 3.4 8.5 8 9 4.6-.5 8-4.5 8-9V6l-8-4Zm-1 14-4-4 1.4-1.4 2.6 2.6 5.6-5.6L18 9l-7 7Z"/></svg>
               Generate Bracket
             </button>

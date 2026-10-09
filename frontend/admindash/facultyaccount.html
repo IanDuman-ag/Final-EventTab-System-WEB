@@ -5,10 +5,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Faculty and Tabulator Accounts - EventTab</title>
+  {% include 'admindash/_bootstrap.html' %}
   <link rel="stylesheet" href="{% static 'admindash/facultyaccount.css' %}?v=20260805a">
+  <link rel="stylesheet" href="{% static 'admindash/bootstrap-admin.css' %}?v=1">
 </head>
 <body class="admin-dashboard-page manage-account-page admin-dashboard-v2" data-account-page="faculty_tabulator" data-default-role="Faculty">
-  <div class="dashboard-shell">
+  <div class="dashboard-shell d-flex flex-column flex-lg-row">
     {% include 'admindash/_sidebar.html' with active='accounts_tabulator' %}
 
     <div class="content-area v2-content">
@@ -24,7 +26,7 @@
         </div>
       </header>
 
-      <main class="main-content">
+      <main class="container-fluid main-content">
         <section class="account-hero" aria-label="Faculty and Tabulator account overview">
           <div class="account-title">
             <h2>Faculty and<br>Tabulator Accounts</h2>
@@ -38,7 +40,7 @@
           </article>
 
           <button
-            class="new-account-btn"
+            class="btn btn-primary new-account-btn"
             type="button"
             id="open-assignment-modal"
             data-create-url="{% url 'create_assignment_account' %}"
@@ -51,8 +53,8 @@
         <section class="accounts-panel" aria-label="Faculty and Tabulator accounts table">
           <div class="account-toolbar">
             <form class="account-filters" method="get" role="search">
-              <input type="text" name="q" value="{{ search_query }}" placeholder="Search accounts" aria-label="Search accounts">
-              <select name="status" aria-label="Status">
+              <input class="form-control" type="text" name="q" value="{{ search_query }}" placeholder="Search accounts" aria-label="Search accounts">
+              <select class="form-select" name="status" aria-label="Status">
                 <option value="all" {% if selected_status == 'all' %}selected{% endif %}>All Status</option>
                 <option value="active" {% if selected_status == 'active' %}selected{% endif %}>Active</option>
                 <option value="inactive" {% if selected_status == 'inactive' %}selected{% endif %}>Deactivated</option>
@@ -72,21 +74,21 @@
             <button
               id="btn-bulk-delete"
               type="button"
-              class="bulk-delete-btn"
+              class="btn btn-danger bulk-delete-btn"
               data-bulk-delete-url="{% url 'bulk_delete_assignment_accounts' %}"
             >
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm1 7h2v8h-2v-8Zm4 0h2v8h-2v-8ZM6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7Z"/></svg>
               Delete Selected
             </button>
-            <button id="btn-bulk-cancel" type="button" class="bulk-cancel-btn">Cancel</button>
+            <button id="btn-bulk-cancel" type="button" class="btn btn-outline-secondary bulk-cancel-btn">Cancel</button>
           </div>
 
-          <div class="table-wrap">
-            <table class="accounts-table" id="accounts-table">
+          <div class="table-responsive table-wrap">
+            <table class="table table-hover align-middle accounts-table" id="accounts-table">
               <thead>
                 <tr>
                   <th class="col-check">
-                    <input type="checkbox" id="chk-select-all" aria-label="Select all">
+                    <input class="form-check-input" type="checkbox" id="chk-select-all" aria-label="Select all">
                   </th>
                   <th>Username</th>
                   <th>Gmail</th>
@@ -107,7 +109,7 @@
                     data-access-code=""
                   >
                     <td class="col-check">
-                      <input type="checkbox" class="row-checkbox" aria-label="Select {{ row.user.username }}" value="{{ row.user.id }}">
+                      <input type="checkbox" class="form-check-input row-checkbox" aria-label="Select {{ row.user.username }}" value="{{ row.user.id }}">
                     </td>
                     <td data-label="Username">
                       <div class="person-cell">

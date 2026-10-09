@@ -6,6 +6,7 @@ import io
 import json
 from collections import defaultdict
 from datetime import datetime
+from types import SimpleNamespace
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
@@ -14,6 +15,7 @@ from django.core.paginator import Paginator
 from django.db.models import Max, Q
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 from django.views.decorators.cache import never_cache
@@ -50,6 +52,7 @@ from events.models import (
     BracketTeam,
     Candidate,
     Criterion,
+    CriteriaScoreSubmission,
     Event,
     EventScoringCategory,
     JudgeActivityLog,
@@ -407,11 +410,11 @@ def _event_is_ranking_mode(event) -> bool:
         return False
     if (event.scoring_method or '').lower() == 'match':
         return True
+    if event.scoring_categories.exists():
+        return False
     if (event.category or '').lower() == 'sports':
         return True
     if event.bracket_teams.exists():
-        return True
-    if event.scoring_categories.filter(judge_mode=EventScoringCategory.JUDGE_MODE_RANKING).exists():
         return True
     label = event_type_label(event)
     return label == 'Match-Based'
@@ -421,6 +424,25 @@ def _judge_completion(event):
     """Count a submission only when every participant and criterion is locked."""
     judges = list(event.assigned_judges.all())
     judging = event.judging_event
+    if event.scoring_categories.exists() and not _event_is_ranking_mode(event):
+        requirements = set(event.scoring_categories.filter(purpose='official').values_list(
+            'assigned_round_id', 'criteria__id'))
+        requirements = {(rid, cid) for rid, cid in requirements if cid is not None}
+        expected_keys = {(rid, cid, pid) for rid, cid in requirements for pid in event.participant_ids}
+        submissions = event.criteria_score_submissions.filter(
+            is_active=True, participant_id__in=event.participant_ids,
+            status__in=['SUBMITTED', 'NEEDS_REVIEW', 'VERIFIED', 'APPROVED'],
+        ).values_list('judge_id', 'assigned_round_id', 'criterion_id', 'participant_id')
+        by_judge = defaultdict(set)
+        for jid, rid, cid, pid in submissions:
+            by_judge[jid].add((rid, cid, pid))
+        rows = [{
+            'name': judge.get_full_name() or judge.username,
+            'complete': bool(expected_keys) and expected_keys <= by_judge[judge.pk],
+            'locked': len(expected_keys & by_judge[judge.pk]), 'expected': len(expected_keys),
+        } for judge in judges]
+        return {'rows': rows, 'submitted': sum(row['complete'] for row in rows),
+                'total': len(judges), 'expected_per_judge': len(expected_keys)}
     candidates = judging.candidates.count() if judging else 0
     criteria = judging.criteria.count() if judging else 0
     expected = candidates * criteria
@@ -863,7 +885,7 @@ def _criteria_result_rows(event, category='', q='') -> list[dict]:
             continue
         rank = int(r.get('rank') or 0)
         cand_id = r.get('candidate_id')
-        has_score = cand_id in locked_candidate_ids and float(r.get('final_score') or 0) > 0
+        has_score = cand_id in locked_candidate_ids
         # Patched unit-test rows may omit DB scores but still supply positive finals.
         if not locked_candidate_ids and float(r.get('final_score') or 0) > 0:
             has_score = True
@@ -1129,7 +1151,7 @@ def _tabulator_results_payload(user, event_id=None, category='', tab='overall', 
         upcoming_matches = []
         match_results = []
     result_cfg = dict(event.result_processing_config or {})
-    return {
+    payload = {
         'event': portal,
         'event_kind': portal['event_kind'],
         'events': events,
@@ -1180,6 +1202,23 @@ def _tabulator_results_payload(user, event_id=None, category='', tab='overall', 
         },
         'q': q or '',
     }
+    if mode == 'scoring' and event.scoring_categories.exists():
+        from .tabulator_result_page import build_results_page
+        page = build_results_page(SimpleNamespace(GET={}), event, payload)
+        rows = []
+        for source in page['live_rows']:
+            row = dict(source)
+            row.update(candidate_id=row['participant_id'], final_visible=row['complete'],
+                       average_score=None, weighted_score=row['final_score'],
+                       judges_submitted=row.get('approved_judges', 0), judge_count=judge_count)
+            rows.append(row)
+        payload.update(results=rows, participants=rows, winner=None,
+                       status_message=page['scope_notice'] or page['status_message'],
+                       criteria_round_name=page['round_name'], is_finalized=page['is_published'])
+        payload['stats'].update(participant_count=len(set(event.participant_ids)),
+                                scored_count=sum(row['complete'] for row in rows))
+    return payload
+
 
 
 def _portal_context(request, active, payload):
@@ -1201,6 +1240,66 @@ def tabulator_dashboard(request):
     event_id = request.GET.get('event_id')
     payload = _tabulator_results_payload(request.user, event_id=event_id)
     ctx = _portal_context(request, 'dashboard', payload)
+    event = _resolve_portal_event(request.user, event_id)
+    ctx['dashboard_stats'] = {'submitted_scores': 0, 'pending_scores': 0}
+    ctx['score_scope'] = 'Linked judging event · individual criterion scores'
+    ctx['standings_scope'] = 'Official standings' if payload['is_finalized'] else 'Provisional standings'
+    ctx['dashboard_final'] = payload['is_finalized']
+    if event:
+        portal = payload['event']
+        if not event.results_finalized and (event.result_processing_config or {}).get('tabulation_confirmed_at'):
+            portal.update(status='Pending Confirmation', status_label='Pending Confirmation',
+                          status_key='ready_for_review')
+            payload['status_message'] = 'Tabulation has been verified. Waiting for authorized confirmation and publication.'
+        elif portal['status_key'] == 'upcoming':
+            payload['status_message'] = 'This event has not started. Standings will appear once valid results are available.'
+        elif portal['status_key'] == 'ongoing':
+            payload['status_message'] = 'Scoring is currently ongoing. Live rankings are provisional.'
+    if event and payload['event_kind'] == 'criteria':
+        judging = event.judging_event
+        if judging:
+            judge_ids = event.assigned_judges.values_list('pk', flat=True)
+            criterion_ids = judging.criteria.values_list('pk', flat=True)
+            expected = judging.candidates.count() * judging.criteria.count() * event.assigned_judges.count()
+            submitted = JudgeScore.objects.filter(
+                candidate__event=judging, criterion_id__in=criterion_ids,
+                judge_id__in=judge_ids, is_locked=True,
+            ).count()
+            ctx['dashboard_stats'] = {
+                'submitted_scores': submitted,
+                'pending_scores': max(0, expected - submitted),
+            }
+        if event.scoring_categories.exists():
+            completion = _judge_completion(event)
+            submitted = sum(row['locked'] for row in completion['rows'])
+            expected = completion['expected_per_judge'] * completion['total']
+            ctx['dashboard_stats'] = {'submitted_scores': submitted,
+                                      'pending_scores': max(0, expected - submitted)}
+            ctx['score_scope'] = 'All configured rounds ? individual criterion submissions'
+            ctx['standings_scope'] = f"{payload.get('criteria_round_name', 'Selected round')} ? round standings"
+            ctx['dashboard_final'] = payload['is_finalized']
+        elif len(stage_panels(event)) > 1:
+            ctx['score_scope'] = 'Linked judging event only · not an overall round total'
+            ctx['standings_scope'] = 'Linked judging event scores · overall round aggregation unavailable'
+            ctx['dashboard_final'] = False
+            # The existing service has no verified cross-round aggregate. Do not
+            # promote its linked-event scores to official overall standings.
+            for row in payload['results']:
+                row['rank'] = None
+                row['final_visible'] = False
+    # Reuse the existing activity serializer and enforce assignment scope before
+    # exposing any rows. It already sorts activity by the source timestamps.
+    from .views import _build_official_activity_rows
+    assigned_ids = set(_tabulator_event_qs(request.user).values_list('pk', flat=True))
+    ctx['recent_activity'] = [
+        row for row in _build_official_activity_rows()
+        if row.get('event_id') in assigned_ids
+    ][:6]
+    for row in ctx['recent_activity']:
+        if row.get('sort_dt'):
+            local_time = timezone.localtime(row['sort_dt'])
+            row['date'] = local_time.strftime('%b %d, %Y')
+            row['time'] = local_time.strftime('%I:%M %p')
     return render(request, 'tabulator/tabulatordashboard.html', ctx)
 
 
@@ -1239,20 +1338,29 @@ def tabulator_live_rankings(request):
     return render(request, 'tabulator/tabliverankings.html', ctx)
 
 
+@never_cache
 @_tabulator_portal_required
 def tabulator_results(request):
-    payload = _tabulator_results_payload(request.user, event_id=request.GET.get('event_id'))
-    return render(request, 'tabulator/tabresults.html', _portal_context(request, 'results', payload))
-
-
-@_tabulator_portal_required
-def tabulator_full_results(request):
     payload = _tabulator_results_payload(
         request.user,
         event_id=request.GET.get('event_id'),
         participant_id=request.GET.get('participant_id'),
     )
-    return render(request, 'tabulator/tabfullresults.html', _portal_context(request, 'results', payload))
+    from .tabulator_result_page import build_results_page
+    ctx = _portal_context(request, 'results', payload)
+    ctx['results_page'] = build_results_page(
+        request, _resolve_portal_event(request.user, request.GET.get('event_id')), payload,
+    )
+    template = 'tabulator/results-report.html' if request.GET.get('print') == '1' else 'tabulator/tabresults.html'
+    return render(request, template, ctx)
+
+
+@_tabulator_portal_required
+def tabulator_full_results(request):
+    # Preserve bookmarked event, participant and tab selections on the old URL.
+    query = request.GET.urlencode()
+    url = reverse('tabulator_results')
+    return redirect(f'{url}?{query}' if query else url)
 
 
 @_tabulator_portal_required
@@ -1275,7 +1383,7 @@ def tabulator_confirm_results(request, event_id):
         messages.error(request, str(exc))
     else:
         messages.success(request, 'Tabulation confirmed. Results are ready for the configured approval workflow.')
-    return redirect(f'/tabulator/results/full/?event_id={event.id}')
+    return redirect(f"{reverse('tabulator_results')}?event_id={event.id}")
 
 
 @_tabulator_portal_required
@@ -1310,51 +1418,65 @@ def tabulator_rankings_data(request):
     })
 
 
+@never_cache
 @_tabulator_portal_required
 def tabulator_results_csv(request):
     event = _resolve_portal_event(request.user, request.GET.get('event_id'))
     if event is None:
         return HttpResponse('No assigned event selected.', status=404)
-    if not event.results_finalized:
+    if not event.results_finalized and request.GET.get('tab') not in {'live', 'breakdown'}:
         return HttpResponse('Final results are not available yet.', status=409)
     payload = _tabulator_results_payload(
         request.user,
         event_id=request.GET.get('event_id'),
-        category=request.GET.get('category') or '',
-        tab=request.GET.get('tab') or 'overall',
-        q=request.GET.get('q') or '',
     )
-    event = payload['event']
-
+    from .tabulator_result_page import build_results_page
+    page = build_results_page(request, event, payload)
+    if page['error']:
+        return HttpResponse(page['error'], status=400)
+    if page['default_tab'] == 'official' and not page['is_published']:
+        return HttpResponse('Official results are awaiting verification and publication.', status=409)
     buf = io.StringIO()
     writer = csv.writer(buf)
-    mode = payload.get('mode')
-    if mode == 'ranking':
-        writer.writerow(['Rank', 'Team', 'Department', 'Wins', 'Losses', 'Points', 'PF', 'PA', 'Prize'])
-        for row in payload.get('results') or []:
-            writer.writerow([
-                row.get('rank'),
-                row.get('name'),
-                row.get('department'),
-                row.get('wins'),
-                row.get('losses'),
-                row.get('points'),
-                row.get('pf'),
-                row.get('pa'),
-                row.get('prize'),
-            ])
+    # Prevent user-controlled labels being interpreted as spreadsheet formulas.
+    def safe_cell(value):
+        if isinstance(value, str) and value.lstrip().startswith(('=', '+', '-', '@')):
+            return "'" + value
+        return value
+
+    def write(values):
+        writer.writerow([safe_cell(value) for value in values])
+
+    write(['Event', event.name, 'Round', page['round_name'], 'Category', page['category_name']])
+    write(['Report status', 'Published' if page['is_published'] and page['default_tab'] == 'official' else 'Unofficial / provisional',
+           'Generated', page['generated_at_iso']])
+    if page['default_tab'] == 'breakdown' and page['event_kind'] == 'criteria':
+        write(['Participant', 'Number', 'Criterion', 'Category', 'Maximum', 'Weight']
+              + [judge['name'] for judge in page['judges']] + ['Average', 'Contribution'])
+        for group in page['breakdown_groups']:
+            for row in group['rows']:
+                write([group['name'], group['number'], row['name'], row.get('category', ''), row['max_score'], row['weight']]
+                      + [cell['value'] if cell['value'] is not None else cell['status'] for cell in row['cells']]
+                      + [row['average'], row['contribution']])
+    elif page['default_tab'] == 'breakdown' and page['event_kind'] == 'match':
+        write(['Match', 'Team A', 'Team B', 'Score A', 'Score B', 'Winner', 'Status'])
+        for row in page['match_results']:
+            write([row['match_number'], row['team_a'], row['team_b'], row['score_a'], row['score_b'], row['winner'], row['status']])
     else:
-        writer.writerow(['Rank', 'Number', 'Name', 'Category', 'Score', 'Prize'])
-        for row in payload.get('results') or []:
-            writer.writerow([
-                row.get('rank') or '',
-                row.get('number') or '',
-                row.get('name'),
-                row.get('department'),
-                row.get('final_score'),
-                row.get('prize'),
-            ])
-    filename = f"results-{event.get('id')}-{datetime.now().strftime('%Y%m%d')}.csv"
+        rows = page['official_rows'] if page['default_tab'] == 'official' else page['live_rows']
+        if not rows:
+            return HttpResponse('No standings are available for the selected filters.', status=409)
+        if page['event_kind'] == 'match':
+            write(['Rank', 'Team', 'Department', 'Played', 'Wins', 'Losses', 'Points', 'Result', 'Status'])
+            for row in rows:
+                write([row.get('rank'), row['name'], row.get('department'), row['played'], row['wins'], row['losses'],
+                       row['points'], row.get('prize') if page['is_published'] else '', row['status']])
+        else:
+            write(['Rank', 'Number', 'Name', 'Category', 'Score', 'Result', 'Status'])
+            for row in rows:
+                write([row.get('rank'), row.get('number'), row['name'], row.get('department'), row['final_score'],
+                       row.get('prize') if page['is_published'] else '', row['status']])
+    filename = f"results-{event.pk}-{timezone.localdate().strftime('%Y%m%d')}.csv"
     response = HttpResponse(buf.getvalue(), content_type='text/csv')
     response['Content-Disposition'] = f'attachment; filename="{filename}"'
     return response

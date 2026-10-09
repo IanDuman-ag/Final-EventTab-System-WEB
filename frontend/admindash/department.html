@@ -5,10 +5,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Departments - EventTab</title>
+  {% include 'admindash/_bootstrap.html' %}
   <link rel="stylesheet" href="{% static 'admindash/department.css' %}?v=20260616c">
+  <link rel="stylesheet" href="{% static 'admindash/bootstrap-admin.css' %}?v=1">
 </head>
 <body class="admin-dashboard-page department-page admin-dashboard-v2">
-  <div class="dashboard-shell">
+  <div class="dashboard-shell d-flex flex-column flex-lg-row">
     {% include 'admindash/_sidebar.html' with active='departments' %}
 
     <div class="content-area v2-content">
@@ -24,7 +26,7 @@
         </div>
       </header>
 
-      <main class="main-content dept-main">
+      <main class="container-fluid main-content dept-main">
 
         <!-- ── Page header ─────────────────────────────────────────────── -->
         <div class="dept-page-header">
@@ -32,7 +34,7 @@
             <h2>Department Registry</h2>
             <p>Review academic units, deans, and member counts.<br>Departments are synced from user groups.</p>
           </div>
-          <button class="btn-add-dept" id="openModalBtn" type="button">
+          <button class="btn btn-primary btn-add-dept" id="openModalBtn" type="button">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2Z"/></svg>
             Add Department
           </button>
@@ -82,26 +84,26 @@
           <div class="dept-filter-bar">
             <div class="dept-search-wrap">
               <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5Zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14Z"/></svg>
-              <input type="text" id="deptSearchInput" placeholder="Search department name, dean, code…" value="{{ search_query }}" autocomplete="off">
+              <input class="form-control" type="text" id="deptSearchInput" placeholder="Search department name, dean, code…" value="{{ search_query }}" autocomplete="off">
             </div>
-            <select id="filterStatus" class="dept-filter-select">
+            <select id="filterStatus" class="form-select dept-filter-select">
               <option value="">Filter by Status</option>
               <option value="active">Active</option>
               <option value="inactive">Inactive</option>
               <option value="archived">Archived</option>
             </select>
-            <select id="filterDean" class="dept-filter-select">
+            <select id="filterDean" class="form-select dept-filter-select">
               <option value="">Filter by Dean</option>
               {% for dean in unique_deans %}
                 <option value="{{ dean }}">{{ dean }}</option>
               {% endfor %}
             </select>
-            <select id="sortBy" class="dept-filter-select">
+            <select id="sortBy" class="form-select dept-filter-select">
               <option value="name-az">Sort by: Name (A–Z)</option>
               <option value="name-za">Sort by: Name (Z–A)</option>
               <option value="code-az">Sort by: Code (A–Z)</option>
             </select>
-            <button type="button" id="clearFiltersBtn" class="btn-clear-filters">
+            <button type="button" id="clearFiltersBtn" class="btn btn-outline-secondary btn-clear-filters">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
               Clear Filters
             </button>
@@ -110,15 +112,15 @@
           <!-- Bulk action bar -->
           <div class="dept-bulk-bar" id="deptBulkBar">
             <label class="bulk-select-all-wrap">
-              <input type="checkbox" id="selectAllCheckbox" aria-label="Select all departments">
+              <input class="form-check-input" type="checkbox" id="selectAllCheckbox" aria-label="Select all departments">
               <span id="bulkSelectedCount" class="bulk-count-label">0 selected</span>
             </label>
             <div class="bulk-actions">
-              <button type="button" class="bulk-btn bulk-btn--delete" id="bulkDeleteBtn">
+              <button type="button" class="btn btn-danger bulk-btn bulk-btn--delete" id="bulkDeleteBtn">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm1 7h2v8h-2v-8Zm4 0h2v8h-2v-8ZM6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7Z"/></svg>
                 Delete
               </button>
-              <button type="button" class="bulk-btn bulk-btn--export" id="bulkExportBtn">
+              <button type="button" class="btn btn-outline-secondary bulk-btn bulk-btn--export" id="bulkExportBtn">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 9h-4V3H9v6H5l7 7 7-7ZM5 18v2h14v-2H5Z"/></svg>
                 Export
               </button>
@@ -126,8 +128,8 @@
           </div>
 
           <!-- Table -->
-          <div class="table-wrap">
-            <table class="departments-table" id="departmentsTable">
+          <div class="table-responsive table-wrap">
+            <table class="table table-hover align-middle departments-table" id="departmentsTable">
               <thead>
                 <tr>
                   <th class="col-check"></th>
@@ -148,7 +150,7 @@
                     data-status="{{ row.status|default:'active'|escapejs }}"
                   >
                     <td class="col-check">
-                      <input type="checkbox" class="row-checkbox" value="{{ row.id }}" data-name="{{ row.name|escapejs }}" aria-label="Select {{ row.name }}">
+                      <input type="checkbox" class="form-check-input row-checkbox" value="{{ row.id }}" data-name="{{ row.name|escapejs }}" aria-label="Select {{ row.name }}">
                     </td>
                     <td>
                       <div class="dept-cell">
@@ -253,11 +255,11 @@
           <div class="form-grid">
             <div class="form-group">
               <label for="deptName">Department Name</label>
-              <input type="text" id="deptName" name="name" placeholder="e.g. College of Engineering" required>
+              <input class="form-control" type="text" id="deptName" name="name" placeholder="e.g. College of Engineering" required>
             </div>
             <div class="form-group">
               <label for="deptCode">Department Code</label>
-              <input type="text" id="deptCode" name="code" placeholder="e.g. COE" required>
+              <input class="form-control" type="text" id="deptCode" name="code" placeholder="e.g. COE" required>
             </div>
             <div class="form-group">
               <label for="delegationColor">Delegation Color</label>
@@ -268,11 +270,11 @@
             </div>
             <div class="form-group full-width">
               <label for="deptHead">Department Head / Dean</label>
-              <input type="text" id="deptHead" name="head" placeholder="Dean's Full Name">
+              <input class="form-control" type="text" id="deptHead" name="head" placeholder="Dean's Full Name">
             </div>
             <div class="form-group full-width">
               <label for="deptStatus">Status</label>
-              <select id="deptStatus" name="status">
+              <select class="form-select" id="deptStatus" name="status">
                 <option value="active">Active</option>
                 <option value="inactive">Inactive</option>
                 <option value="archived">Archived</option>
@@ -280,17 +282,17 @@
             </div>
             <div class="form-group full-width">
               <label for="deptLogo">Department Logo</label>
-              <input type="file" id="deptLogo" name="logo" accept="image/*">
+              <input class="form-control" type="file" id="deptLogo" name="logo" accept="image/*">
             </div>
             <div class="form-group full-width">
               <label for="deptRemarks">Remarks</label>
-              <textarea id="deptRemarks" name="remarks" rows="3" placeholder="Additional notes..."></textarea>
+              <textarea class="form-control" id="deptRemarks" name="remarks" rows="3" placeholder="Additional notes..."></textarea>
             </div>
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn-cancel" id="cancelModalBtn" type="button">Cancel</button>
-          <button class="btn-save" type="submit">Create Department</button>
+          <button class="btn btn-outline-secondary btn-cancel" id="cancelModalBtn" type="button">Cancel</button>
+          <button class="btn btn-primary btn-save" type="submit">Create Department</button>
         </div>
       </form>
     </div>
@@ -309,11 +311,11 @@
           <div class="form-grid">
             <div class="form-group">
               <label for="editDeptName">Department Name</label>
-              <input type="text" id="editDeptName" name="name" required>
+              <input class="form-control" type="text" id="editDeptName" name="name" required>
             </div>
             <div class="form-group">
               <label for="editDeptCode">Department Code</label>
-              <input type="text" id="editDeptCode" name="code" required>
+              <input class="form-control" type="text" id="editDeptCode" name="code" required>
             </div>
             <div class="form-group">
               <label for="editDelegationColor">Delegation Color</label>
@@ -324,11 +326,11 @@
             </div>
             <div class="form-group full-width">
               <label for="editDeptHead">Department Head / Dean</label>
-              <input type="text" id="editDeptHead" name="head">
+              <input class="form-control" type="text" id="editDeptHead" name="head">
             </div>
             <div class="form-group full-width">
               <label for="editDeptStatus">Status</label>
-              <select id="editDeptStatus" name="status">
+              <select class="form-select" id="editDeptStatus" name="status">
                 <option value="active">Active</option>
                 <option value="inactive">Inactive</option>
                 <option value="archived">Archived</option>
@@ -336,17 +338,17 @@
             </div>
             <div class="form-group full-width">
               <label for="editDeptLogo">Department Logo</label>
-              <input type="file" id="editDeptLogo" name="logo" accept="image/*">
+              <input class="form-control" type="file" id="editDeptLogo" name="logo" accept="image/*">
             </div>
             <div class="form-group full-width">
               <label for="editDeptRemarks">Remarks</label>
-              <textarea id="editDeptRemarks" name="remarks" rows="3"></textarea>
+              <textarea class="form-control" id="editDeptRemarks" name="remarks" rows="3"></textarea>
             </div>
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn-cancel" id="cancelEditModalBtn" type="button">Cancel</button>
-          <button class="btn-save" type="submit">Save Changes</button>
+          <button class="btn btn-outline-secondary btn-cancel" id="cancelEditModalBtn" type="button">Cancel</button>
+          <button class="btn btn-primary btn-save" type="submit">Save Changes</button>
         </div>
       </form>
     </div>
@@ -363,8 +365,8 @@
         <p>Are you sure you want to delete <strong id="deleteDeptName"></strong>? This action cannot be undone.</p>
       </div>
       <div class="modal-footer">
-        <button class="btn-cancel" id="cancelDeleteModalBtn" type="button">Cancel</button>
-        <button class="btn-delete-confirm" id="confirmDeleteBtn" type="button">Delete</button>
+        <button class="btn btn-outline-secondary btn-cancel" id="cancelDeleteModalBtn" type="button">Cancel</button>
+        <button class="btn btn-danger btn-delete-confirm" id="confirmDeleteBtn" type="button">Delete</button>
       </div>
     </div>
   </div>
@@ -381,8 +383,8 @@
         <ul id="bulkDeleteList" class="bulk-delete-list"></ul>
       </div>
       <div class="modal-footer">
-        <button class="btn-cancel" id="cancelBulkDeleteBtn" type="button">Cancel</button>
-        <button class="btn-delete-confirm" id="confirmBulkDeleteBtn" type="button">Delete All</button>
+        <button class="btn btn-outline-secondary btn-cancel" id="cancelBulkDeleteBtn" type="button">Cancel</button>
+        <button class="btn btn-danger btn-delete-confirm" id="confirmBulkDeleteBtn" type="button">Delete All</button>
       </div>
     </div>
   </div>
@@ -398,7 +400,7 @@
         <div class="loading-spinner">Loading…</div>
       </div>
       <div class="modal-footer">
-        <button class="btn-cancel" id="closeViewModalFooterBtn" type="button">Close</button>
+        <button class="btn btn-outline-secondary btn-cancel" id="closeViewModalFooterBtn" type="button">Close</button>
       </div>
     </div>
   </div>

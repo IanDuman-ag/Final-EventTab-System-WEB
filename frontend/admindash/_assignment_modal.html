@@ -17,7 +17,7 @@
       <div class="form-grid form-grid--top">
         <label>
           Role
-          <select id="assignment-role" required>
+          <select class="form-select" id="assignment-role" required>
             <option value="Faculty">Faculty</option>
             <option value="Tabulator">Tabulator</option>
             <option value="Judge">Judge</option>
@@ -26,7 +26,7 @@
         </label>
         <label>
           Status
-          <select id="assignment-status" required>
+          <select class="form-select" id="assignment-status" required>
             <option value="active">Active</option>
             <option value="deactive">Deactive</option>
           </select>
@@ -36,32 +36,32 @@
       <div id="acc-standard-section" class="form-grid">
         <label class="acc-field--full">
           Username
-          <input type="text" id="assignment-username" autocomplete="username">
+          <input class="form-control" type="text" id="assignment-username" autocomplete="username">
         </label>
         <label class="acc-field--full">
           Gmail
-          <input type="email" id="assignment-email" placeholder="name@gmail.com" autocomplete="email">
+          <input class="form-control" type="email" id="assignment-email" placeholder="name@gmail.com" autocomplete="email">
           <small class="acc-field-hint">Used to notify this faculty member when they are assigned to an event.</small>
         </label>
         <label class="acc-field--full">
           Password <small>(required for new accounts)</small>
-          <input type="password" id="assignment-password" autocomplete="new-password">
+          <input class="form-control" type="password" id="assignment-password" autocomplete="new-password">
         </label>
       </div>
 
       <div id="acc-code-section" class="form-grid acc-code-section--hidden">
         <label class="acc-field--full">
           Official Name
-          <input type="text" id="assignment-name" placeholder="e.g. Juan Dela Cruz — official name for records">
+          <input class="form-control" type="text" id="assignment-name" placeholder="e.g. Juan Dela Cruz — official name for records">
           <small class="acc-field-hint">Use the person’s official full name (not a nickname). This name appears on account records.</small>
         </label>
         <label class="acc-field--full">
           Gmail
-          <input type="email" id="assignment-code-email" placeholder="name@gmail.com" autocomplete="email">
+          <input class="form-control" type="email" id="assignment-code-email" placeholder="name@gmail.com" autocomplete="email">
           <small class="acc-field-hint">The access code will be sent to this Gmail address.</small>
         </label>
         <div class="acc-code-row acc-field--full">
-          <button type="button" id="btn-generate-code" class="generate-code-btn">
+          <button type="button" id="btn-generate-code" class="btn btn-primary generate-code-btn">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 8C8 10 5.9 16.17 3.82 19.82L5.71 21l1-1.85A4.52 4.52 0 0 0 8 20c4 0 4-2 8-2s4 2 8 2v-2c-4 0-4-2-8-2-.63 0-1.17.06-1.67.14C14.43 11.22 15.06 8.07 17 8Z"/></svg>
             Generate Access Code
           </button>
@@ -89,8 +89,8 @@
       </div>
 
       <div class="modal-actions">
-        <button class="secondary-btn" type="button" data-close-modal="true">Cancel</button>
-        <button class="primary-btn" type="submit" id="assignment-submit">Create Account</button>
+        <button class="btn btn-outline-secondary secondary-btn" type="button" data-close-modal="true">Cancel</button>
+        <button class="btn btn-primary primary-btn" type="submit" id="assignment-submit">Create Account</button>
       </div>
     </form>
   </div>
@@ -135,7 +135,7 @@
       </div>
     </div>
     <div class="modal-actions">
-      <button class="primary-btn" type="button" data-close-view-modal="true">Close</button>
+      <button class="btn btn-primary primary-btn" type="button" data-close-view-modal="true">Close</button>
     </div>
   </div>
 </div>
