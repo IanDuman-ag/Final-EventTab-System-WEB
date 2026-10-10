@@ -5,7 +5,7 @@
 
   Pass `active` as one of:
     dashboard, events_match, events_criteria, accounts, accounts_tabulator, accounts_judge_scorer,
-    departments, teams, candidates, brackets, scoresheets, reports
+    departments, teams, candidates, brackets, scoresheets, reports, settings
 {% endcomment %}
 <aside class="sidebar v2-sidebar" aria-label="Admin navigation">
   <div class="brand v2-brand">
@@ -107,6 +107,10 @@
     <a class="{% if active == 'reports' %}active{% endif %}" href="{% url 'admin_generate_report' %}" {% if active == 'reports' %}aria-current="page"{% endif %}>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 4h16v16H4V4Zm2 2v12h12V6H6Zm2 2h8v2H8V8Zm0 4h5v2H8v-2Z"/></svg>
       <span>Generate Report</span>
+    </a>
+    <a class="{% if active == 'settings' %}active{% endif %}" href="{% url 'admin_settings' %}" {% if active == 'settings' %}aria-current="page"{% endif %}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm9 4-2-1 .1-2-2-2-2 .1-1-2h-4l-1 2-2-.1-2 2 .1 2-2 1v4l2 1-.1 2 2 2 2-.1 1 2h4l1-2 2 .1 2-2-.1-2 2-1v-4Zm-9 6a6 6 0 1 1 0-12 6 6 0 0 1 0 12Z"/></svg>
+      <span>Settings</span>
     </a>
   </nav>
 

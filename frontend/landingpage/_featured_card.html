@@ -1,0 +1,21 @@
+{% load static %}
+<article class="featured-card">
+  <a class="featured-banner" href="{{ event.detail_url }}" aria-label="View {{ event.name }}">
+    {% if event.image_url %}
+      <img src="{{ event.image_url }}" alt="{{ event.name }}" loading="lazy" {% if event.banner_key %}data-banner-fallback="{% static 'landingpage/assets/competitions/' %}{{ event.banner_key }}.webp"{% else %}data-featured-generic="true"{% endif %}>
+    {% elif event.banner_key %}
+      <img src="{% static 'landingpage/assets/competitions/' %}{{ event.banner_key }}.webp" alt="" loading="lazy">
+    {% else %}
+      <span class="featured-generic-art" aria-hidden="true">{% include "landingpage/_category_icon.html" %}</span>
+    {% endif %}
+    <span class="featured-banner-shade" aria-hidden="true"></span>
+    <span class="featured-category"><span class="featured-category-icon">{% include "landingpage/_category_icon.html" %}</span>{{ event.category }}</span>
+  </a>
+  <div class="featured-card-body">
+    <div class="featured-meta"><span>{{ event.type_label }}</span><span class="status status-{{ event.status }}">{{ event.status_label }}</span></div>
+    <h3><a href="{{ event.detail_url }}">{{ event.name }}</a></h3>
+    <p class="featured-date"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4m8-4v4M4 11h16"/></svg><span>{% if event.date %}{{ event.date|date:"M j, Y" }}{% else %}Date to be announced{% endif %}{% if event.time %} &middot; {{ event.time|time:"g:i A" }}{% endif %}</span></p>
+    <p class="featured-venue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 1 1 14 0Z"/><circle cx="12" cy="10" r="2.5"/></svg><span>{{ event.venue|default:"Venue to be announced" }}</span></p>
+    <a class="featured-card-link" href="{{ event.detail_url }}">View Details <span aria-hidden="true">&#8594;</span></a>
+  </div>
+</article>

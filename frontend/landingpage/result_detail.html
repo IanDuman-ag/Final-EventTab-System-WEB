@@ -1,0 +1,93 @@
+{% extends "landingpage/base.html" %}{% block content %}{% if not data_error %}
+<section class="page-intro detail-intro">
+<div class="container">
+<a class="breadcrumb-link" href="{% url 'public_results' %}">&#8592; Official Results</a>
+<div class="detail-title">
+<div>
+<p class="eyebrow">
+{{ event.type_label }} &middot; {{ event.category }}
+</p>
+<h1>
+{{ event.name }}
+</h1>
+<p>
+{% if published_date %}Published {{ published_date|date:"F j, Y" }}{% else %}Official published competition outcomes{% endif %}
+</p>
+</div>
+<span class="status status-completed">Official / Published</span>
+</div>
+</div>
+</section>
+<section class="container page-content">
+<div class="publication-note">
+<span aria-hidden="true">&#10003;</span>
+<div>
+<strong>Official competition outcomes</strong>
+<p>
+{{ result_notice|default:"These results have completed the authorized approval and publication workflow." }}
+</p>
+</div>
+</div>
+<div class="section-heading">
+<div>
+<p class="eyebrow">
+{% if result_rounds|length > 1 %}PUBLISHED ROUND RANKINGS{% else %}THE FINAL PLACEMENTS{% endif %}
+</p>
+<h2>
+{% if result_rounds|length > 1 %}Official outcomes, round by round.{% else %}Every achievement deserves its moment.{% endif %}
+</h2>
+</div>
+<a class="text-link" href="{{ event.detail_url }}">Competition details &#8599;</a>
+</div>
+{% if result_rounds %}
+<form class="filter-panel round-filter" method="get">
+<label for="result-round">Competition round</label>
+<div class="round-picker">
+<select class="form-select" id="result-round" name="round_id">
+{% for round in result_rounds %}
+<option value="{{ round.id }}" {% if selected_round == round.id %}selected{% endif %}>{{ round.name }}</option>
+{% endfor %}
+</select><button class="btn btn-navy" type="submit">View round</button>
+</div>
+</form>
+{% endif %}{% if result_rows %}
+<div class="table-responsive standings-table">
+<table class="table">
+<caption class="visually-hidden">
+{% if result_rounds|length > 1 %}Published round-specific competition placements{% else %}Published final competition placements{% endif %}
+</caption>
+<thead>
+<tr>
+{% if result_kind == "criteria" %}<th scope="col">Rank</th>{% endif %}<th scope="col">{% if result_kind == 'match' %}Team{% else %}Contestant / Group{% endif %}</th><th scope="col">Department</th><th scope="col">{% if result_kind == "match" %}Confirmed champion{% else %}Placement{% endif %}</th>{% if result_kind == "match" %}<th scope="col">Championship Points</th>{% endif %}
+</tr>
+</thead>
+<tbody>
+{% for row in result_rows %}
+<tr class="rank-{{ row.rank|default_if_none:"Not available" }}">
+<td><span class="rank-number">{{ row.rank|default_if_none:"Not available" }}</span>
+</td><td><strong>{{ row.name }}</strong>
+</td><td>{{ row.department|default:"Not available" }}</td><td>{{ row.placement|default:"Not available" }}</td>{% if result_kind == "match" %}<td>{{ row.points|default_if_none:"Not available" }}</td>{% endif %}
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+{% else %}
+<div class="empty-state compact">
+<h3>
+No public placements are available.
+</h3>
+<p>
+Only authorized, published competition placements are displayed.
+</p>
+</div>
+{% endif %}{% if result_kind == 'match' %}
+<section class="detail-section">
+<h2>
+Published match results
+</h2>
+{% include "landingpage/_fixtures.html" %}
+</section>
+{% endif %}{% include "landingpage/_pagination.html" %}
+</section>
+{% endif %}{% endblock %}

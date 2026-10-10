@@ -78,10 +78,20 @@ def link_bracket_advancement(event):
 def recompute_points(event):
     """Recompute each team's wins-based points, loss count, and champion flag."""
     from events.models import BracketMatch, BracketTeam
+    if (event.result_processing_config or {}).get('championship_scoring'):
+        from .points_settings_service import reconcile_championship_points
+        reconcile_championship_points(event)
+        return event.bracket_teams.filter(is_champion=True).values_list('pk', flat=True).first()
 
     completed = BracketMatch.objects.filter(
         event=event, status=BracketMatch.STATUS_COMPLETED,
     ).select_related('winner', 'loser')
+    win_points = (event.result_processing_config or {}).get('match_win_points')
+    if win_points is not None:
+        completed = BracketMatch.objects.filter(
+            event=event, is_automatic_advance=False,
+            status__in=[BracketMatch.STATUS_COMPLETED, BracketMatch.STATUS_FORFEIT],
+        ).select_related('winner', 'loser')
 
     wins = {}
     losses = {}
@@ -97,7 +107,10 @@ def recompute_points(event):
     for team in BracketTeam.objects.filter(event=event):
         w = wins.get(team.id, 0)
         team.loss_count = losses.get(team.id, 0)
-        team.points = w * WIN_POINTS + (CHAMPION_BONUS if team.id == champion_id else 0)
+        team.points = (
+            w * win_points if win_points is not None
+            else w * WIN_POINTS + (CHAMPION_BONUS if team.id == champion_id else 0)
+        )
         team.is_champion = (team.id == champion_id)
         team.save(update_fields=['loss_count', 'points', 'is_champion'])
 
@@ -142,6 +155,7 @@ def _auto_complete_lone_team_match(match, depth=0):
     if depth > 16 or match is None:
         return
     match.refresh_from_db()
+
     if match.status == BracketMatch.STATUS_COMPLETED:
         return
     seated = [team for team in (match.team_a, match.team_b) if team is not None]
@@ -190,6 +204,12 @@ def apply_scoresheet_to_bracket(scoresheet):
     # Make sure advancement links exist (idempotent) before we push winners.
     link_bracket_advancement(match.event)
     match.refresh_from_db()
+
+    cfg = match.event.result_processing_config or {}
+    if cfg.get('championship_scoring') and (cfg.get('approved') or cfg.get('published_at')):
+        from .points_settings_service import invalidate_scoring_publication
+        invalidate_scoring_publication(match.event, getattr(scoresheet, 'tabulator', None),
+                                      'Confirmed match results changed; final approval must be renewed.')
 
     # 1. Sync scores + winner/loser onto the match.
     try:

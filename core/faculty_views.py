@@ -745,6 +745,17 @@ def _match_standings(event) -> list[dict]:
     for idx, row in enumerate(rows, start=1):
         row['rank'] = idx if completed else None
         row['prize'] = _prize_label(idx) if completed else '—'
+    rules = (event.result_processing_config or {}).get('championship_scoring')
+    if rules:
+        from events.points_settings_service import _match_placements
+        actual = list(event.bracket_matches.filter(is_automatic_advance=False).order_by('match_number'))
+        final_ranks = {}
+        if actual and all(match.status in {BracketMatch.STATUS_COMPLETED, BracketMatch.STATUS_FORFEIT} for match in actual):
+            final_ranks, _ = _match_placements(event, teams, actual, rules)
+        for row in rows:
+            row['rank'] = final_ranks.get(row['team_id'])
+            row['prize'] = _prize_label(row['rank']) if row['rank'] else '—'
+        rows.sort(key=lambda row: (row['rank'] or 1000000, -row['wins'], row['name']))
     return rows
 
 

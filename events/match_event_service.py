@@ -1404,13 +1404,35 @@ def _notify_faculty(event, actor, created):
     transaction.on_commit(_send)
 
 
+def validate_event_image(upload):
+    """Validate actual image content rather than trusting its filename or MIME type."""
+    from PIL import Image, UnidentifiedImageError
+    if upload is None:
+        return
+    if upload.size > 5 * 1024 * 1024:
+        raise MatchEventValidationError('Event image must be 5 MB or smaller.')
+    try:
+        with Image.open(upload) as image:
+            if image.format not in {'JPEG', 'PNG', 'WEBP'}:
+                raise MatchEventValidationError('Upload a JPEG, PNG, or WebP event image.')
+            image.verify()
+    except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError) as exc:
+        raise MatchEventValidationError('Upload a valid JPEG, PNG, or WebP event image.') from exc
+    finally:
+        upload.seek(0)
+
+
 @transaction.atomic
-def save_match_event(data, actor, instance=None):
+def save_match_event(data, actor, instance=None, files=None):
     """Create or update a match event and atomically rebuild its pending blueprint."""
     from django.contrib.auth import get_user_model
 
     created = instance is None
     event = instance or Event(created_by=actor)
+    image = files.get('event_image') if files else None
+    validate_event_image(image)
+    if image is not None:
+        event.image = image
     classification = _required(data, 'event_classification', 'Event Classification')
     division = _required(data, 'division', 'Division')
     venue = _required(data, 'venue', 'Venue')
@@ -1569,6 +1591,18 @@ def save_match_event(data, actor, instance=None):
     event.require_faculty_confirmation = True
     event.apply_championship_points = data.get('apply_championship_points') == 'on'
     event.championship_points_config = points
+    if instance is None:
+        from .points_settings_service import event_snapshot
+        cfg = dict(event.result_processing_config or {})
+        cfg['championship_scoring'] = event_snapshot(event)
+        event.result_processing_config = cfg
+    if 'championship_scoring' in (event.result_processing_config or {}):
+        from .points_settings_service import placement_schedule
+        snapshot = event.result_processing_config['championship_scoring']
+        event.championship_points_config = placement_schedule(snapshot, snapshot['classification'])
+        event.apply_championship_points = False
+    elif 'match_win_points' in (event.result_processing_config or {}):
+        event.apply_championship_points = False
     event.num_teams = len(teams)
 
     raw_tpl = (data.get('scoresheet_template') or '').strip()
@@ -1609,6 +1643,11 @@ def save_match_event(data, actor, instance=None):
                 f'Select at least {min_participants} participants before publishing.'
             )
 
+    if image is not None:
+        try:
+            event.image.save(image.name, image, save=False)
+        except Exception as exc:
+            raise MatchEventValidationError('The event image could not be uploaded. Please try again.') from exc
     event.save()
     if faculty and event.faculty_account_id != faculty.id:
         Event.objects.filter(pk=event.pk).update(

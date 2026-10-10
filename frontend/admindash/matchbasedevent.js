@@ -7,6 +7,32 @@
   const wizard = $('#event-wizard');
   const form = $('#wizard-form');
   const error = $('#wizard-error');
+  let imagePreviewUrl = null;
+  let savedImageUrl = '';
+  function previewEventImage(url) {
+    if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
+    imagePreviewUrl = null;
+    const preview = $('#event-image-preview');
+    preview.hidden = !url;
+    if (url) preview.src = url;
+    else preview.removeAttribute('src');
+  }
+  $('#event-image').addEventListener('change', () => {
+    const input = $('#event-image');
+    const file = input.files[0];
+    const message = $('#event-image-error');
+    message.textContent = '';
+    previewEventImage(savedImageUrl);
+    if (!file) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) {
+      message.textContent = 'Choose a JPEG, PNG, or WebP image up to 5 MB.';
+      input.value = '';
+      return;
+    }
+    imagePreviewUrl = URL.createObjectURL(file);
+    $('#event-image-preview').src = imagePreviewUrl;
+    $('#event-image-preview').hidden = false;
+  });
   let step = 1;
   let matchPreview = [];
   let drawOrder = [];
@@ -17,6 +43,9 @@
   let pendingBracketAction = null;
   let eventNameManual = false;
   let editingEventId = null;
+  const scoringDefaults = JSON.parse($('#championship-scoring-defaults').textContent);
+  let savedWinPoints = null;
+  let savedScoringRules = null;
   let bracketZoom = 1;
   let lastBracketEdges = [];
   let connectorResizeObserver = null;
@@ -675,6 +704,20 @@
   }
 
   function updatePointsState() {
+    const rules = editingEventId === null ? scoringDefaults : savedScoringRules;
+    const configured = Boolean(rules) || savedWinPoints !== null;
+    $('#points-fieldset').hidden = true;
+    $('#match-win-points-notice').hidden = !configured;
+    if (configured) {
+      form.elements.apply_championship_points.checked = false;
+      const classification = rules?.classification || form.elements.event_classification.value || 'major';
+      const method = rules?.method || 'per_win';
+      const pieces = [];
+      if (method !== 'placement') pieces.push(`${rules ? rules.win_points[classification] : savedWinPoints} points per confirmed win`);
+      if (method !== 'per_win') pieces.push(rules.placements.map(row => `Rank ${row.rank}: ${row[classification]} points`).join(', '));
+      $('#match-win-points-summary').textContent = `${pieces.join(' + ')}. Saved with this event; no win points for BYEs. Official points require authorized publication.`;
+      $('#championship-settings-link').href = editingEventId === null ? '/admin/settings/' : `/admin/settings/?event=${editingEventId}`;
+    }
     const enabled = form.elements.apply_championship_points.checked;
     $('#points-fieldset').classList.toggle('points-disabled', !enabled);
     $$('#points-editor input, #points-editor button').forEach(input => { input.disabled = !enabled; });
@@ -1029,7 +1072,9 @@
       ['Schedule', $('#schedule-preview tbody') ? `${actual.length} scheduled actual matches · ${valueText('schedule_mode')}` : 'Not generated'],
       ['Faculty In Charge', valueText('faculty_account')],
       ['Tabulator In Charge', valueText('tabulator_account')],
-      ['Championship Points', form.elements.apply_championship_points.checked
+      ['Department Points', !$('#match-win-points-notice').hidden
+        ? $('#match-win-points-summary').textContent
+        : form.elements.apply_championship_points.checked
         ? pointsRows.map(point => `${point.label}: ${point.points}`).join(' · ')
         : 'Disabled']
     ];
@@ -1127,7 +1172,12 @@
   }
 
   function resetWizard() {
+    savedWinPoints = null;
+    savedScoringRules = null;
     form.reset();
+    savedImageUrl = '';
+    previewEventImage('');
+    $('#event-image-error').textContent = '';
     form.action = '/admin/events/match/';
     $('#wizard-title').textContent = 'Create match event';
     $('#team-ids').value = '[]';
@@ -1168,6 +1218,10 @@
   function fillEditor(event) {
     resetWizard();
     editingEventId = event.id;
+    savedImageUrl = event.image_url || '';
+    previewEventImage(savedImageUrl);
+    savedWinPoints = event.match_win_points ?? null;
+    savedScoringRules = event.championship_scoring || null;
     form.action = `/admin/events/match/${event.id}/edit/`;
     $('#wizard-title').textContent = `Edit ${event.name}`;
     if (form.elements.sport_type) form.elements.sport_type.value = event.sport_type || '';
@@ -1355,7 +1409,6 @@
     renderPointsEditor();
   });
   form.elements.apply_championship_points.addEventListener('change', updatePointsState);
-  $('#add-points-row').addEventListener('click', addPointsRow);
   renderPointsEditor();
   syncThirdPlaceVisibility();
   syncSportCustom();

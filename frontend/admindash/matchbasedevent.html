@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Match-Based Events · EventTab</title>
   {% include 'admindash/_bootstrap.html' %}
-  <link rel="stylesheet" href="{% static 'admindash/matchbasedevent.css' %}?v=20260806h">
+  <link rel="stylesheet" href="{% static 'admindash/matchbasedevent.css' %}?v=20261009a">
   <link rel="stylesheet" href="{% static 'admindash/bootstrap-admin.css' %}?v=1">
 </head>
 <body class="admin-dashboard-page admin-dashboard-v2 match-events-page">
@@ -85,7 +85,7 @@
   </div>
 
   <dialog id="event-wizard" class="wizard" aria-labelledby="wizard-title">
-    <form method="post" id="wizard-form" action="{% url 'admin_match_events' %}" novalidate>
+    <form method="post" id="wizard-form" action="{% url 'admin_match_events' %}" enctype="multipart/form-data" novalidate>
       {% csrf_token %}
       <input type="hidden" name="team_ids" id="team-ids" value="[]">
       <input type="hidden" name="draw_order" id="draw-order" value="[]">
@@ -158,16 +158,7 @@
               <button type="button" class="btn btn-outline-secondary match-secondary" id="change-legacy-format">Regenerate as Double Elimination</button>
             </div>
           </fieldset>
-          <fieldset>
-            <legend>Pairing Method</legend>
-            <input type="hidden" name="pairing_method" value="random_draw">
-            <div class="blueprint-box" style="margin:0">
-              <div>
-                <strong>Random Draw</strong>
-                <p>The system randomly assigns participants to match slots. Automatic Advance (BYE) slots are not actual matches and are excluded from game numbering and schedules.</p>
-              </div>
-            </div>
-          </fieldset>
+          <input type="hidden" name="pairing_method" value="random_draw">
           <label class="inline-check" id="third-place-wrap">
             <input class="form-check-input" type="checkbox" name="include_third_place" id="include-third-place">
             Include Third-Place Match
@@ -218,7 +209,7 @@
         </section>
 
         <section class="wizard-panel" data-step="4">
-          <div class="wizard-section-title"><span>04</span><div><h3>Configuration</h3><p>Assign faculty, tabulator, scoresheet, and championship points.</p></div></div>
+          <div class="wizard-section-title"><span>04</span><div><h3>Configuration</h3><p>Assign faculty, tabulator, and scoresheet.</p></div></div>
 
           <fieldset>
             <legend>Faculty and Personnel</legend>
@@ -248,22 +239,28 @@
             </label>
           </fieldset>
 
+          <fieldset>
+            <legend>Event Image</legend>
+            <label class="btn btn-outline-secondary match-secondary" for="event-image">Upload Event Image</label>
+            <input class="form-control mt-2" type="file" id="event-image" name="event_image" accept="image/jpeg,image/png,image/webp" aria-describedby="event-image-help event-image-error">
+            <p id="event-image-help" class="points-editor-hint">JPEG, PNG, or WebP, up to 5 MB. Leave empty to keep the current image.</p>
+            <p id="event-image-error" class="wizard-error" role="alert"></p>
+            <img id="event-image-preview" alt="Event image preview" hidden style="max-width:100%;width:320px;max-height:200px;object-fit:contain;border-radius:8px">
+          </fieldset>
+
           <input type="hidden" name="assigned_scorer" value="">
           <input type="hidden" name="result_entry_format" id="result-entry-format" value="team_final_score">
           <input type="hidden" name="tie_break_rules" id="tie-break-rules" value='["head_to_head","score_difference","points_scored"]'>
 
-          <fieldset id="points-fieldset">
-            <legend>Championship Points</legend>
-            <label class="inline-check">
-              <input class="form-check-input" type="checkbox" name="apply_championship_points" checked>
-              Apply Championship Points
-            </label>
-            <div class="criteria-editor-actions points-editor-actions">
-              <button type="button" id="add-points-row" class="btn btn-outline-secondary match-secondary">+ Add Place</button>
-            </div>
-            <div class="points-editor" id="points-editor" aria-live="polite"></div>
-            <p class="points-editor-hint">Defaults load from Event Classification (Major/Minor). Edit before publishing if authorized.</p>
-          </fieldset>
+          <div id="match-win-points-notice" class="blueprint-box" hidden>
+            <strong>Championship scoring rules</strong>
+            <p id="match-win-points-summary"></p>
+            <a id="championship-settings-link" href="{% url 'admin_settings' %}">Manage scoring rules in Settings</a>
+          </div>
+          <div id="points-fieldset" hidden style="display: none" aria-hidden="true">
+            <input type="checkbox" name="apply_championship_points" checked tabindex="-1">
+            <div id="points-editor"></div>
+          </div>
         </section>
 
         <section class="wizard-panel" data-step="5">
@@ -318,12 +315,13 @@
   </dialog>
 
   {{ event_rows_json|json_script:"match-events-data" }}
+  {{ championship_scoring_defaults|json_script:"championship-scoring-defaults" }}
   <script>
     window.MATCH_EVENT_EDIT_ID = "{{ edit_event_id|escapejs }}";
     window.MATCH_EVENT_PREVIEW_URL = "{% url 'admin_match_event_preview' %}";
     window.MATCH_EVENT_ACADEMIC_YEAR = "{{ academic_year|escapejs }}";
     window.MATCH_EVENT_SEASON_NAMES = {{ season_event_names_json|safe }};
   </script>
-  <script src="{% static 'admindash/matchbasedevent.js' %}?v=20260829a"></script>
+  <script src="{% static 'admindash/matchbasedevent.js' %}?v=20261010d"></script>
 </body>
 </html>

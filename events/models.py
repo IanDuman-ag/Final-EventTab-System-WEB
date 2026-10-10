@@ -980,6 +980,7 @@ class SystemSettings(models.Model):
     mobile_notifications = models.BooleanField(default=True)
     system_notifications = models.BooleanField(default=True)
     notification_config = models.JSONField(default=dict, blank=True)
+    championship_points_config = models.JSONField(default=dict, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(
         User,

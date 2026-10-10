@@ -1,0 +1,42 @@
+{% if fixtures %}
+<div class="fixture-grid">
+{% for fixture in fixtures %}
+<article class="fixture">
+<div class="fixture-top">
+<strong>{{ fixture.round|default:"Match" }}</strong><span class="status status-{{ fixture.status }}">{{ fixture.status_label }}</span>
+</div>
+<div class="fixture-team">
+<span>{{ fixture.name_a|default:"To be determined" }}</span><strong>{% if fixture.is_official %}{% if fixture.score_a == "" or fixture.score_a == None %}Not available{% else %}{{ fixture.score_a }}{% endif %}{% else %}&mdash;{% endif %}</strong>
+</div>
+<div class="fixture-team">
+<span>{{ fixture.name_b|default:"To be determined" }}</span><strong>{% if fixture.is_official %}{% if fixture.score_b == "" or fixture.score_b == None %}Not available{% else %}{{ fixture.score_b }}{% endif %}{% else %}&mdash;{% endif %}</strong>
+</div>
+<p class="fixture-meta">
+{% if fixture.date %}{{ fixture.date|date:"M j, Y" }}{% else %}Date TBA{% endif %}{% if fixture.time %} &middot; {{ fixture.time|time:"g:i A" }}{% endif %}<br>{{ fixture.venue|default:"Venue to be announced" }}
+</p>
+{% if fixture.is_official and fixture.winner %}
+<p class="fixture-winner">
+Official winner: {{ fixture.winner }}
+</p>
+{% elif fixture.is_official %}
+<p class="fixture-unpublished">
+Winner not recorded.
+</p>
+{% else %}
+<p class="fixture-unpublished">
+Final scores appear after publication.
+</p>
+{% endif %}
+</article>
+{% endfor %}
+</div>
+{% else %}
+<div class="empty-state compact">
+<h3>
+Fixtures are being prepared.
+</h3>
+<p>
+Public matches will appear here when the tournament schedule is ready.
+</p>
+</div>
+{% endif %}

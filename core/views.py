@@ -2963,6 +2963,7 @@ def _serialize_match_event(event):
         'academic_year': event.academic_year or '',
         'category': event.category or 'Sports',
         'classification': event.event_classification,
+        'image_url': event.image.url if event.image else '',
         'classification_label': event.get_event_classification_display() or '—',
         'division': event.division,
         'venue': event.venue,
@@ -2992,6 +2993,8 @@ def _serialize_match_event(event):
         'require_faculty_confirmation': event.require_faculty_confirmation,
         'apply_championship_points': event.apply_championship_points,
         'points_config': event.championship_points_config or [],
+        'match_win_points': (event.result_processing_config or {}).get('match_win_points'),
+        'championship_scoring': (event.result_processing_config or {}).get('championship_scoring'),
         'actual_match_count': sum(1 for match in matches if not match.is_automatic_advance),
         'automatic_advance_count': sum(1 for match in matches if match.is_automatic_advance),
         'team_ids': [
@@ -3092,7 +3095,7 @@ def admin_match_events(request, event_id=None):
         instance = get_object_or_404(_match_event_queryset(), pk=event_id)
     if request.method == 'POST':
         try:
-            event = save_match_event(request.POST, request.user, instance=instance)
+            event = save_match_event(request.POST, request.user, instance=instance, files=request.FILES)
         except MatchEventValidationError as exc:
             messages.error(request, str(exc))
             target = f"{request.path}?edit={event_id}" if event_id else request.path
@@ -3134,6 +3137,7 @@ def admin_match_events(request, event_id=None):
     teams = Team.objects.filter(status=Team.STATUS_ACTIVE).select_related('department').order_by('name')
     all_match_events = _match_event_queryset()
     from events.match_event_service import current_intramurals_season
+    from events.points_settings_service import scoring_rules
     academic_year = current_intramurals_season()
     season_qs = all_match_events
     if academic_year:
@@ -3153,6 +3157,7 @@ def admin_match_events(request, event_id=None):
         'edit_event_id': request.GET.get('edit', ''),
         'academic_year': academic_year,
         'season_event_names_json': json.dumps(season_event_names),
+        'championship_scoring_defaults': scoring_rules(),
     })
 
 
@@ -3687,7 +3692,9 @@ def admin_criteria_events(request, event_id=None):
         .order_by('first_name', 'last_name', 'username')
     )
     all_events = _criteria_event_queryset()
+    from events.points_settings_service import scoring_rules
     return render(request, 'admindash/criteriabasedevent.html', {
+        'championship_scoring_defaults': scoring_rules(),
         'event_rows': rows,
         'event_rows_json': rows,
         'page_obj': page_obj,

@@ -1,0 +1,41 @@
+<form class="filter-panel" method="get" aria-label="Filter competitions">
+<div class="filter-grid">
+<div class="filter-search">
+<label for="search">Search</label><input class="form-control" id="search" type="search" name="q" value="{{ filters.q }}" placeholder="Search by event name">
+</div>
+<div>
+<label for="competition-type">Competition type</label><select class="form-select" id="competition-type" name="type"><option value="all">All competitions</option><option value="match" {% if filters.type == 'match' %}selected{% endif %}>Match-Based</option><option value="criteria" {% if filters.type == 'criteria' %}selected{% endif %}>Criteria-Based</option>
+</select>
+</div>
+<div>
+<label for="category">Category</label><select class="form-select" id="category" name="category"><option value="">All categories</option>
+{% for category in categories %}
+<option {% if filters.category == category %}selected{% endif %} value="{{ category }}">{{ category }}</option>
+{% endfor %}
+</select>
+</div>
+{% if active == 'schedules' %}
+<div>
+<label for="schedule-date">Date</label><input class="form-control" id="schedule-date" name="date" type="date" value="{{ filters.date }}">
+</div>
+<div>
+<label for="venue">Venue</label><select class="form-select" id="venue" name="venue"><option value="">All venues</option>
+{% for venue in venues %}
+<option value="{{ venue }}" {% if filters.venue == venue %}selected{% endif %}>{{ venue }}</option>
+{% endfor %}
+</select>
+</div>
+{% endif %}
+<div class="filter-actions">
+<a class="reset-link" href="{{ request.path }}">Clear</a>
+</div>
+</div>
+{% if active == 'schedules' %}
+<div class="filter-status">
+<span>Status</span><label><input type="radio" name="status" value="all" {% if filters.status == "all" %}checked{% endif %}> All</label><label><input type="radio" name="status" value="upcoming" {% if filters.status == "upcoming" %}checked{% endif %}> Upcoming</label><label><input type="radio" name="status" value="ongoing" {% if filters.status == "ongoing" %}checked{% endif %}> Ongoing</label><label><input type="radio" name="status" value="completed" {% if filters.status == "completed" %}checked{% endif %}> Completed</label>
+</div>
+{% endif %}
+<p class="filter-loading" hidden role="status">
+Loading matching events...
+</p>
+</form>

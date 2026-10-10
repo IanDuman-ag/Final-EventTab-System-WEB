@@ -20,6 +20,8 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.views.generic import RedirectView
 from .api_views import health_check
+from . import public_views
+from .admin_settings_views import admin_settings
 from .views import (
     admin_brackets,
     admin_generate_bracket,
@@ -135,10 +137,17 @@ from .superadmin_views import (
 )
 
 urlpatterns = [
+    path('admin/settings/', admin_settings, name='admin_settings'),
     path('api/health/', health_check, name='health_check'),
     path('api/auth/', include('accounts.urls')),
     path('api/events/', include('events.api_urls')),
-    path('', login_view, name='home'),
+    path('', public_views.home, name='home'),
+    path('schedules/', public_views.schedules, name='public_schedules'),
+    path('games/', public_views.games, name='public_games'),
+    path('games/<int:pk>/', public_views.event_detail, name='public_event_detail'),
+    path('leaderboard/', public_views.leaderboard, name='public_leaderboard'),
+    path('results/', public_views.results, name='public_results'),
+    path('results/<int:pk>/', public_views.result_detail, name='public_result_detail'),
     path('login/', login_view, name='login'),
     path('faculty/dashboard/', faculty_dashboard, name='faculty_dashboard'),
     path('faculty/events/', faculty_my_events, name='faculty_my_events'),

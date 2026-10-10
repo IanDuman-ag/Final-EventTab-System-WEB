@@ -1,0 +1,130 @@
+{% extends "landingpage/base.html" %}{% block content %}{% if not data_error %}
+<section class="page-intro detail-intro">
+<div class="container">
+<a class="breadcrumb-link" href="{% url 'public_games' %}">&#8592; Games &amp; Events</a>
+<div class="detail-title">
+<div>
+<p class="eyebrow">
+{{ event.type_label }} &middot; {{ event.category }}
+</p>
+<h1>
+{{ event.name }}
+</h1>
+</div>
+<span class="status status-{{ event.status }}">{{ event.status_label }}</span>
+</div>
+</div>
+</section>
+<section class="container page-content">
+<div class="event-facts">
+<div>
+<span>Date</span><strong>{% if event.date %}{{ event.date|date:"F j, Y" }}{% else %}To be announced{% endif %}</strong>
+</div>
+<div>
+<span>Time &middot; {{ timezone_label }}</span><strong>{% if event.time %}{{ event.time|time:"g:i A" }}{% else %}To be announced{% endif %}</strong>
+</div>
+<div>
+<span>Venue</span><strong>{{ event.venue|default:"To be announced" }}</strong>
+</div>
+<div>
+<span>Format / Division</span><strong>{{ event.format_label|default:event.type_label }}{% if event.division %} &middot; {{ event.division }}{% endif %}</strong>
+</div>
+</div>
+<div class="detail-overview">
+<div>
+<p class="eyebrow">
+ABOUT THE COMPETITION
+</p>
+<h2>
+Made for the moment.
+</h2>
+<div class="event-description">
+{{ event.description|default:"Competition information will be available when announced."|linebreaks }}
+</div>
+</div>
+{% if event.has_results %}
+<aside class="published-callout">
+<span class="status status-completed">Published results</span>
+<h3>
+The results are in.
+</h3>
+<p>
+Explore this competition's official, approved outcomes.
+</p>
+<a class="btn btn-yellow" href="{{ event.result_url }}">View Official Results &#8599;</a>
+</aside>
+{% else %}
+<aside class="published-callout">
+<p class="eyebrow">
+OFFICIAL RESULTS
+</p>
+<h3>
+Follow the competition.
+</h3>
+<p>
+Final outcomes will appear after authorized approval and publication.
+</p>
+</aside>
+{% endif %}
+</div>
+<section class="detail-section">
+<div class="section-heading">
+<div>
+<p class="eyebrow">
+THE COMMUNITY IN COMPETITION
+</p>
+<h2>
+{% if event.type == 'match' %}Participating teams{% else %}Contestants &amp; groups{% endif %}
+</h2>
+</div>
+</div>
+<div class="participant-grid">
+{% for participant in participants %}
+<article class="participant">
+<span class="participant-symbol">{% if participant.logo_url %}<img src="{{ participant.logo_url }}" alt="" loading="lazy" data-fallback="{{ participant.name|slice:':1' }}">{% else %}{{ participant.name|slice:":1" }}{% endif %}</span>
+<div>
+<h3>
+{{ participant.name }}
+</h3>
+<p>
+{{ participant.department|default:"Department not listed" }}
+</p>
+</div>
+</article>
+{% empty %}
+<p class="inline-empty">
+Public participant information has not been announced.
+</p>
+{% endfor %}
+</div>
+</section>
+{% if rounds %}
+<section class="detail-section">
+<h2>
+Competition rounds
+</h2>
+<ol class="round-list">
+{% for round in rounds %}
+<li>
+<strong>{{ round.name }}</strong><span>{{ round.status_label }}</span>
+</li>
+{% endfor %}
+</ol>
+</section>
+{% endif %}{% if event.type == 'match' %}
+<section class="detail-section">
+<div class="section-heading">
+<div>
+<p class="eyebrow">
+THE ROAD TO THE FINAL
+</p>
+<h2>
+Matches &amp; fixtures
+</h2>
+</div>
+</div>
+{% include "landingpage/_fixtures.html" %}{% include "landingpage/_pagination.html" %}
+</section>
+{% endif %}
+</section>
+{% endif %}{% endblock %}

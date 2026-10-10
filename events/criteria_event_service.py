@@ -1174,6 +1174,21 @@ def _notify_assignees(event, recipients):
             continue
 
 
+def _save_event_image(event, files):
+    from .match_event_service import MatchEventValidationError, validate_event_image
+    image = files.get('event_image') if files else None
+    if image is None:
+        return
+    try:
+        validate_event_image(image)
+    except MatchEventValidationError as exc:
+        raise CriteriaEventValidationError(str(exc)) from exc
+    try:
+        event.image.save(image.name, image, save=False)
+    except Exception as exc:
+        raise CriteriaEventValidationError('The event image could not be uploaded. Please try again.') from exc
+
+
 def _save_pageant_event(data, user, files=None, instance=None):
     """Persist a Special Event / Pageant with draft-lenient / publish-strict rules."""
     User = get_user_model()
@@ -1349,6 +1364,8 @@ def _save_pageant_event(data, user, files=None, instance=None):
     event.score_settings = score_settings
     event.deductions_enabled = deductions_enabled
     event.deductions_config = deductions
+    from .points_settings_service import inherit_criteria_snapshot
+    inherit_criteria_snapshot(event, result_processing, creating)
     event.result_processing_config = result_processing
     event.judge_settings = judge_settings
     event.tie_break_rules = tie_breaks
@@ -1375,13 +1392,16 @@ def _save_pageant_event(data, user, files=None, instance=None):
         event.scoresheet_template = None
 
     event.apply_championship_points = _boolish(data, 'apply_championship_points', True)
-    event.championship_points_config = points
+    from .points_settings_service import placement_schedule
+    snapshot = result_processing.get('championship_scoring')
+    event.championship_points_config = placement_schedule(snapshot, snapshot['classification']) if snapshot else points
     event.allow_result_editing = bool(result_processing.get('allow_result_editing', True))
     event.require_faculty_confirmation = bool(
         result_processing.get('require_faculty_confirmation', False)
     )
     if creating:
         event.created_by = user
+    _save_event_image(event, files)
     event.save()
     if judges:
         event.assigned_judges.set(judges)
@@ -1548,6 +1568,8 @@ def save_criteria_event(data, user, files=None, instance=None):
     event.score_settings = score_settings
     event.deductions_enabled = deductions_enabled
     event.deductions_config = deductions
+    from .points_settings_service import inherit_criteria_snapshot
+    inherit_criteria_snapshot(event, result_processing, creating)
     event.result_processing_config = result_processing
     event.judge_settings = judge_settings
     event.tie_break_rules = tie_breaks
@@ -1567,11 +1589,14 @@ def save_criteria_event(data, user, files=None, instance=None):
     else:
         event.scoresheet_template = None
     event.apply_championship_points = _boolish(data, 'apply_championship_points', True)
-    event.championship_points_config = points
+    from .points_settings_service import placement_schedule
+    snapshot = result_processing.get('championship_scoring')
+    event.championship_points_config = placement_schedule(snapshot, snapshot['classification']) if snapshot else points
     event.allow_result_editing = bool(result_processing.get('allow_result_editing', True))
     event.require_faculty_confirmation = bool(result_processing.get('require_faculty_confirmation', False))
     if creating:
         event.created_by = user
+    _save_event_image(event, files)
     event.save()
     saved_entries, roster_replaced = _sync_event_entries(event, event_entries, data)
     participant_ids = [entry.id for entry in saved_entries]
@@ -1696,6 +1721,7 @@ def serialize_criteria_event(event):
         'competition_categories': pageant_config.get('competition_categories') or [],
         'scoring_categories': scoring_categories,
         'classification': event.event_classification,
+        'image_url': event.image.url if event.image else '',
         'classification_label': event.get_event_classification_display() or '—',
         'division': event.division or '—',
         'participation_type': 'team' if event.participation_type == 'group' else (event.participation_type or 'team'),
@@ -1752,6 +1778,7 @@ def serialize_criteria_event(event):
         'judge_names': [judge_map.get(i, str(i)) for i in judge_ids],
         'apply_championship_points': event.apply_championship_points,
         'points_config': event.championship_points_config or [],
+        'championship_scoring': (event.result_processing_config or {}).get('championship_scoring'),
         'results_finalized': event.results_finalized,
         'next_actions': (
             [

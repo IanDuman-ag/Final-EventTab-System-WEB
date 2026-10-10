@@ -1,0 +1,18 @@
+<article class="event-card">
+{% if event.image_url %}<a href="{{ event.detail_url }}" class="event-art" aria-label="View {{ event.name }}"><img src="{{ event.image_url }}" alt="{{ event.name }}" loading="lazy" data-category="{{ event.category|default:event.type_label }}">
+</a>{% else %}<a href="{{ event.detail_url }}" class="event-art category-art {% if event.type == 'criteria' %}criteria-art{% endif %}" aria-label="View {{ event.name }}">{% include "landingpage/_category_icon.html" %}<span>{{ event.category|default:event.type_label }}</span>
+</a>{% endif %}
+<div class="event-body">
+<div class="event-meta">
+<span>{{ event.type_label }}</span><span class="status status-{{ event.status }}">{{ event.status_label }}</span>
+</div>
+<h3>
+<a href="{{ event.detail_url }}">{{ event.name }}</a>
+</h3>
+<p class="event-date">
+{% if event.date %}{{ event.date|date:"M j, Y" }}{% else %}Schedule to be announced{% endif %}{% if event.division %} <span>&middot; {{ event.division }}</span>{% endif %}
+</p>
+<a class="card-link" href="{{ event.detail_url }}">View Details <span aria-hidden="true">&#8599;</span>
+</a>
+</div>
+</article>

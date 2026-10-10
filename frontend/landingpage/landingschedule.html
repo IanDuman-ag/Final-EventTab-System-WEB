@@ -1,0 +1,36 @@
+{% extends "landingpage/base.html" %}{% block content %}
+<section class="page-intro">
+<div class="container">
+<p class="eyebrow">
+DON'T MISS YOUR MOMENT
+</p>
+<h1>
+Event Schedules
+</h1>
+<p>
+Stay updated with upcoming, ongoing, and completed competitions.
+</p>
+</div>
+</section>
+<section class="container page-content">
+{% include "landingpage/_filters.html" %}
+<p class="timezone-note">
+Dates and times in {{ timezone_label }}. Unannounced schedules are marked accordingly.
+</p>
+<div class="schedule-list">
+{% for item in schedules %}{% include "landingpage/_schedule_row.html" %}{% empty %}
+<div class="empty-state">
+<span class="empty-icon">{% include "landingpage/_icon.html" with icon="calendar" %}</span>
+<h2>
+No schedules found.
+</h2>
+<p>
+Try adjusting your filters. Confirmed event dates will appear here when available.
+</p>
+<a class="btn btn-outline-navy" href="{% url 'public_schedules' %}">Clear filters</a>
+</div>
+{% endfor %}
+</div>
+{% include "landingpage/_pagination.html" %}
+</section>
+{% endblock %}

@@ -1,0 +1,20 @@
+{% with name=event.name|lower category=event.category|lower %}
+<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+{% if 'basketball' in name or 'volleyball' in name or 'football' in name %}
+  <circle cx="32" cy="32" r="22"/>
+  <path d="M10 32h44M32 10v44M17 16c20 8 20 24 0 32M47 16c-20 8-20 24 0 32"/>
+{% elif 'sing' in name or 'music' in name %}
+  <rect x="24" y="9" width="16" height="30" rx="8"/>
+  <path d="M17 30v2c0 9 6 15 15 15s15-6 15-15v-2M32 47v8M22 55h20"/>
+{% elif 'dance' in name or 'pageant' in name or 'talent' in name or event.type == 'criteria' %}
+  <path d="m32 9 7 15 17 2-12 12 3 17-15-8-15 8 3-17L8 26l17-2 7-15Z"/>
+{% elif 'badminton' in name %}
+  <ellipse cx="36" cy="23" rx="13" ry="17" transform="rotate(35 36 23)"/>
+  <path d="m25 36-13 18M29 12l12 22M26 20l16 9M31 37l10-26"/>
+{% elif 'chess' in name %}
+  <path d="M19 53h28M22 47h22l-2-10 3-11-8-15h-9l-8 16 12 3-7 8-3 9ZM28 11l1-5M35 22h1"/>
+{% else %}
+  <path d="M20 12h24v14c0 10-5 16-12 16s-12-6-12-16V12ZM20 17H10v6c0 9 6 13 13 13M44 17h10v6c0 9-6 13-13 13M32 42v10M22 54h20"/>
+{% endif %}
+</svg>
+{% endwith %}

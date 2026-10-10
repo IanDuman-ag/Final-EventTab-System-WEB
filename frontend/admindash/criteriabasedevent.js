@@ -6,11 +6,37 @@
 
   var form = $('#wizard-form');
   var wizard = $('#event-wizard');
+  var imagePreviewUrl = null;
+  var savedImageUrl = '';
+  function previewEventImage(url) {
+    if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
+    imagePreviewUrl = null;
+    var preview = $('#event-image-preview');
+    preview.hidden = !url;
+    if (url) preview.src = url;
+    else preview.removeAttribute('src');
+  }
+  $('#event-image').addEventListener('change', function () {
+    var file = this.files[0];
+    $('#event-image-error').textContent = '';
+    previewEventImage(savedImageUrl);
+    if (!file) return;
+    if (['image/jpeg', 'image/png', 'image/webp'].indexOf(file.type) === -1 || file.size > 5 * 1024 * 1024) {
+      $('#event-image-error').textContent = 'Choose a JPEG, PNG, or WebP image up to 5 MB.';
+      this.value = '';
+      return;
+    }
+    imagePreviewUrl = URL.createObjectURL(file);
+    $('#event-image-preview').src = imagePreviewUrl;
+    $('#event-image-preview').hidden = false;
+  });
   var activeStep = 1;
   var mode = 'standard';
   var criteria = [];
   var deductions = [];
   var points = [];
+  var championshipDefaults = JSON.parse($('#championship-scoring-defaults').textContent);
+  var pointsSnapshotLocked = true;
   var stages = [];
   var mobileApprovalRequired = true;
   var expandedRoundId = null;
@@ -841,6 +867,11 @@
   }
 
   function defaultPoints(classification) {
+    if (championshipDefaults) {
+      return championshipDefaults.placements.map(function (row) {
+        return { label: row.rank + ' Place', points: row[classification || 'major'] };
+      });
+    }
     if (classification === 'minor') {
       return [
         { label: '1st Place', points: 10 },
@@ -1013,6 +1044,9 @@
     $$('#points-editor input').forEach(function (input) {
       input.addEventListener('input', syncPointsFromDom);
     });
+    $$('#points-editor input, #points-editor button').forEach(function (input) { input.disabled = pointsSnapshotLocked; });
+    $('#add-points-row').disabled = pointsSnapshotLocked;
+    $('#championship-snapshot-note').hidden = !pointsSnapshotLocked;
   }
 
   function syncPointsFromDom() {
@@ -1570,8 +1604,12 @@
   }
 
   function resetWizard() {
+    pointsSnapshotLocked = true;
     mobileApprovalRequired = true;
     form.reset();
+    savedImageUrl = '';
+    previewEventImage('');
+    $('#event-image-error').textContent = '';
     pairEntries = [];
     lastParticipationType = participationType();
     $('#confirm-entry-replacement').value = '';
@@ -1676,6 +1714,10 @@
   }
 
   function fillEditor(event) {
+    $('#event-image').value = '';
+    $('#event-image-error').textContent = '';
+    savedImageUrl = event.image_url || '';
+    previewEventImage(savedImageUrl);
     form.action = '/admin/events/criteria/' + event.id + '/edit/';
     $('#wizard-title').textContent = 'Edit criteria event';
     form.event_name.value = event.name || '';
@@ -1773,6 +1815,7 @@
     $('#advanced-default-max').value = js.default_max_score || settings.max_score || 100;
     $('#advanced-carry-scores').checked = stages.some(function (round, index) { return index > 0 && round.carry_previous_scores; });
     $('#advanced-tie-rule').value = stageTie === 'highest_selected_criterion' || stageTie === 'manual_decision' ? stageTie : 'highest_final_round';
+    pointsSnapshotLocked = Boolean(event.championship_scoring);
     points = event.points_config && event.points_config.length
       ? event.points_config.slice()
       : defaultPoints(event.classification);

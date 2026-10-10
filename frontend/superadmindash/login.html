@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="{% static 'login.css' %}?v=20261001a">
 </head>
 <body class="login-page">
+  <a class="public-home-link" href="{% url 'home' %}" style="position:absolute;top:22px;left:24px;z-index:10;color:#081a35;background:#fff;padding:9px 15px;border-radius:5px;font-size:13px;font-weight:600;text-decoration:none;box-shadow:0 2px 8px #081a3514">&#8592; Public website</a>
   <main class="login-shell">
     <div class="login-campus" aria-hidden="true">
       <img src="{% static 'loginlogo/ustpentrance.png' %}" alt="">

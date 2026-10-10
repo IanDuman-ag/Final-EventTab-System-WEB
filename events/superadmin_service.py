@@ -613,19 +613,16 @@ def serialize_monitoring_row(event):
 def championship_standings():
     """Department standings with major/minor split from BracketTeam points."""
     totals = defaultdict(lambda: {'total': 0, 'major': 0, 'minor': 0})
-    teams = BracketTeam.objects.select_related('department', 'event').filter(points__gt=0)
-    for team in teams:
-        if not team.department_id:
-            continue
-        pts = int(team.points or 0)
-        totals[team.department_id]['total'] += pts
-        cls = (team.event.event_classification if team.event_id else '') or ''
+    from .points_settings_service import official_department_awards
+    for event, department_id, pts in official_department_awards():
+        totals[department_id]['total'] += pts
+        cls = event.event_classification or ''
         if cls == Event.CLASSIFICATION_MAJOR:
-            totals[team.department_id]['major'] += pts
+            totals[department_id]['major'] += pts
         elif cls == Event.CLASSIFICATION_MINOR:
-            totals[team.department_id]['minor'] += pts
+            totals[department_id]['minor'] += pts
         else:
-            totals[team.department_id]['major'] += pts
+            totals[department_id]['major'] += pts
 
     depts = {d.id: d for d in Department.objects.filter(id__in=totals.keys())}
     rows = []

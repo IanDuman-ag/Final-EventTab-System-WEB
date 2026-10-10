@@ -1,0 +1,78 @@
+{% extends "landingpage/base.html" %}{% block content %}
+<section class="page-intro">
+<div class="container">
+<p class="eyebrow">
+EVERY ACHIEVEMENT COUNTS
+</p>
+<h1>
+Team Standings
+</h1>
+<p>
+Track official department rankings and championship points.
+</p>
+</div>
+</section>
+<section class="container page-content">
+<form class="standings-tabs" method="get" aria-label="Standings category">
+<input type="hidden" name="category" value="{{ filters.category }}"><button class="{% if filters.type == 'all' %}selected{% endif %}" name="type" value="all">Overall</button><button class="{% if filters.type == 'match' %}selected{% endif %}" name="type" value="match">Sports</button><button class="{% if filters.type == 'criteria' %}selected{% endif %}" name="type" value="criteria">Criteria-Based</button>
+</form>
+<form class="filter-panel" method="get">
+<input type="hidden" name="type" value="{{ filters.type }}">
+<div class="round-picker">
+<label for="standings-category" class="visually-hidden">Competition category</label><select class="form-select" id="standings-category" name="category"><option value="">All categories</option>
+{% for category in categories %}
+<option value="{{ category }}" {% if filters.category == category %}selected{% endif %}>{{ category }}</option>
+{% endfor %}
+</select>
+</div>
+</form>
+<div class="publication-note">
+<span aria-hidden="true">&#10003;</span>
+<div>
+<strong>Official standings, earned together.</strong>
+<p>
+Only finalized and published competition outcomes contribute to these standings. Points follow EventTab's existing championship scoring rules.
+</p>
+</div>
+</div>
+{% if standings %}
+<div class="table-responsive standings-table">
+<table class="table">
+<caption class="visually-hidden">
+Official department championship rankings
+</caption>
+<thead>
+<tr>
+<th scope="col">Rank</th><th scope="col">Department</th><th scope="col" class="points-cell">Official Points</th><th scope="col">Published Results</th>
+</tr>
+</thead>
+<tbody>
+{% for team in standings %}
+<tr class="rank-{{ team.rank }}">
+<td><span class="rank-number">{{ team.rank|stringformat:"02d" }}</span>
+</td><td>
+<div class="team-name">
+{% if team.logo_url %}<img src="{{ team.logo_url }}" alt="" loading="lazy" data-fallback="{{ team.department|slice:':1' }}">{% else %}<span class="team-initial" aria-hidden="true">{{ team.department|slice:":1" }}</span>{% endif %}<strong>{{ team.department }}</strong>{% if team.rank == 1 %}<span class="leader-tag">LEADING</span>{% endif %}
+</div>
+</td><td class="points-cell"><strong>{{ team.points }}</strong>
+</td><td><a class="text-link" href="{{ team.result_url }}">View results &#8599;</a>
+</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+{% else %}
+<div class="empty-state">
+<span class="empty-icon">{% include "landingpage/_icon.html" with icon="chart" %}</span>
+<h2>
+Awaiting official standings.
+</h2>
+<p>
+Department rankings will be available after competition outcomes are approved and published.
+</p>
+<a class="btn btn-outline-navy" href="{% url 'public_games' %}">Explore competitions</a>
+</div>
+{% endif %}{% include "landingpage/_pagination.html" %}
+</section>
+{% endblock %}

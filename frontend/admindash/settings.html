@@ -1,0 +1,112 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Championship Scoring Rules &middot; EventTab</title>
+  {% include 'admindash/_bootstrap.html' %}
+  <link rel="stylesheet" href="{% static 'admindash/matchbasedevent.css' %}?v=20261009a">
+  <link rel="stylesheet" href="{% static 'admindash/bootstrap-admin.css' %}?v=1">
+  <link rel="stylesheet" href="{% static 'admindash/settings.css' %}?v=20261010a">
+  <script defer src="{% static 'admindash/settings.js' %}?v=20261010a"></script>
+</head>
+<body class="admin-dashboard-page admin-dashboard-v2 match-events-page scoring-settings-page">
+  <div class="dashboard-shell d-flex flex-column flex-lg-row">
+    {% include 'admindash/_sidebar.html' with active='settings' %}
+    <div class="content-area v2-content">
+      <header class="v2-topbar match-topbar"><h2 class="v2-welcome">Settings</h2><span class="scoring-topbar-note">ADMIN CONFIGURATION</span></header>
+      <main class="container-fluid v2-main match-main">
+        <section class="match-page-head scoring-page-head">
+          <div><span class="match-kicker">CHAMPIONSHIP CONFIGURATION</span><h1>Championship Scoring Rules</h1><p>Configure how championship points are awarded to departments in Major and Minor events.</p></div>
+          <span class="scoring-scope-badge">{% if override_event %}Event override{% else %}Global defaults{% endif %}</span>
+        </section>
+        {% for message in messages %}<div class="alert alert-success" role="status">{{ message }}</div>{% endfor %}
+        {% if error %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endif %}
+        {% if field_errors %}<div class="alert alert-danger" role="alert"><strong>Review the highlighted settings.</strong><ul class="mb-0 mt-2">{% for field,message in field_errors.items %}<li>{{ message }}</li>{% endfor %}</ul></div>{% endif %}
+        <div class="scoring-context"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg><div>{% if override_event %}<strong>Editing the saved rules for {{ override_event.name }}</strong><p>This audited override affects this event only. A reason is required. Published standings still follow the authorized correction and publication workflow.</p><a href="{% url 'admin_settings' %}">Return to global defaults &rarr;</a>{% else %}<strong>Existing events keep their saved rules.</strong><p>Global changes apply to newly created events. Match scores, tournament placements, and championship points remain separate.</p>{% endif %}</div></div>
+        {{ config|json_script:"scoring-config" }}
+        {{ saved_config|json_script:"scoring-saved" }}
+        {{ entered_placements|json_script:"entered-placements" }}
+        {{ field_errors|json_script:"scoring-errors" }}
+        {{ default_config|json_script:"scoring-defaults" }}
+        {{ official_placements|json_script:"official-placements" }}
+        <form id="scoring-form" method="post" action="{% if override_url %}{{ override_url }}{% else %}{% url 'admin_settings' %}{% endif %}" novalidate>
+          {% csrf_token %}
+          <input type="hidden" name="placements" id="placements-json">
+          <div class="scoring-layout">
+            <div class="scoring-main-column">
+              <section class="scoring-card" aria-labelledby="method-heading">
+                <div class="scoring-card-heading"><span class="scoring-step">01</span><div><h2 id="method-heading">Point Calculation Method</h2><p>Choose how championship points are awarded for match-based events.</p></div></div>
+                <fieldset class="scoring-methods"><legend class="visually-hidden">Point calculation method</legend>
+                  <label class="scoring-method"><input type="radio" name="method" value="placement" {% if config.method == 'placement' %}checked{% endif %}><span><span class="scoring-method-title">Final Placement Based <span class="recommended-badge">Recommended</span></span><span class="scoring-method-description">Award points after the event is completed and final placements are officially confirmed.</span></span></label>
+                  <label class="scoring-method"><input type="radio" name="method" value="per_win" {% if override_event.scoring_method == "criteria" %}disabled{% endif %} {% if config.method == 'per_win' %}checked{% endif %}><span><span class="scoring-method-title">Per Match Win</span><span class="scoring-method-description">Each confirmed match victory earns championship points. No placement bonus is added.</span></span></label>
+                  <label class="scoring-method"><input type="radio" name="method" value="combined" {% if override_event.scoring_method == "criteria" %}disabled{% endif %} {% if config.method == 'combined' %}checked{% endif %}><span><span class="scoring-method-title">Combined</span><span class="scoring-method-description">Add points for confirmed match victories and final event placement.</span></span></label>
+                </fieldset>
+                <p class="scoring-field-error" id="method-error"></p>
+                {% if override_event.scoring_method == "criteria" %}<p class="scoring-inset scoring-help">Criteria-based events use final placement awards. Judge scores and criteria weights keep their existing calculation rules.</p>{% endif %}
+                <p class="scoring-help scoring-method-note" id="method-note">Official points reach the department leaderboard only after authorized approval and publication.</p>
+              </section>
+              <section class="scoring-card" id="win-configuration" aria-labelledby="win-heading" {% if config.method == 'placement' %}hidden{% endif %}>
+                <div class="scoring-card-heading"><span class="scoring-step">02</span><div><h2 id="win-heading">Match Win Points Configuration</h2><p>Set the award for each confirmed victory.</p></div></div>
+                <div class="scoring-win-grid">
+                  <div class="scoring-field"><label for="major-win">Major Event &mdash; Points per Win</label><input class="form-control" id="major-win" name="major_win" type="number" min="0" max="1000000" step="1" value="{{ config.win_points.major }}" aria-describedby="major-win-error"><span class="scoring-field-error" id="major-win-error"></span></div>
+                  <div class="scoring-field"><label for="minor-win">Minor Event &mdash; Points per Win</label><input class="form-control" id="minor-win" name="minor_win" type="number" min="0" max="1000000" step="1" value="{{ config.win_points.minor }}" aria-describedby="minor-win-error"><span class="scoring-field-error" id="minor-win-error"></span></div>
+                </div>
+                <p class="scoring-help scoring-inset">Losses, draws, pending results, and automatic advancements (BYEs) earn no win points. Corrections replace previous awards without duplicating points.</p>
+              </section>
+              <section class="scoring-card" id="placement-configuration" aria-labelledby="placement-heading" {% if config.method == 'per_win' %}hidden{% endif %}>
+                <div class="scoring-card-heading"><span class="scoring-step">02</span><div><h2 id="placement-heading">Placement Points Configuration</h2><p>Configure championship points awarded for each final placement.</p></div></div>
+                <div class="table-responsive scoring-placement-table"><table class="table"><caption class="visually-hidden">Editable Major and Minor final placement awards</caption><thead><tr><th scope="col">Placement</th><th scope="col">Major Event Points</th><th scope="col">Minor Event Points</th><th scope="col"><span class="visually-hidden">Remove</span></th></tr></thead><tbody id="placement-rows">{% for row in placements %}<tr><td><input type="number" class="form-control" value="{{ row.rank }}" min="1" max="100" aria-label="Placement position"></td><td><input type="number" class="form-control" value="{{ row.major }}" min="0" max="1000000" aria-label="Major points"></td><td><input type="number" class="form-control" value="{{ row.minor }}" min="0" max="1000000" aria-label="Minor points"></td><td></td></tr>{% endfor %}</tbody></table></div>
+                <div class="scoring-placement-bottom"><button class="scoring-add-row" id="add-placement" type="button"><span aria-hidden="true">+</span> Add placement</button><span class="scoring-help">Zero points are allowed.</span></div>
+                <p class="scoring-field-error" id="placement-error" role="alert"></p>
+                <div class="scoring-order-warning" id="order-warning" hidden><strong>Some lower placements receive higher points.</strong><p>Check both award columns. You can keep this exception by explicitly confirming it.</p><label><input type="checkbox" name="confirm_nonmonotonic" id="confirm-nonmonotonic"> I confirm this placement point exception.</label></div>
+              </section>
+              {% if override_event %}<section class="scoring-card"><h2>Reason for event override</h2><div class="scoring-field"><label for="override-reason">Explain why these saved event rules need to change.</label><textarea class="form-control" id="override-reason" name="reason" rows="3" maxlength="2000" required>{{ override_reason }}</textarea><span class="scoring-field-error" id="reason-error"></span></div></section>{% endif %}
+            </div>
+            <aside class="scoring-preview-column">
+              <section class="scoring-card scoring-preview" aria-labelledby="preview-heading">
+                <div class="scoring-preview-header"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M8 3h8v6c0 4-2 6-4 6s-4-2-4-6V3ZM8 5H3v3c0 4 3 5 6 5m7-8h5v3c0 4-3 5-6 5m-3 2v5m-5 1h10"/></svg><span>LIVE SAMPLE</span></div>
+                <h2 id="preview-heading">Points Preview</h2><p class="scoring-help">See how championship points will be calculated using the current configuration.</p>
+                <div class="scoring-field"><label for="preview-classification">Sample classification</label><select class="form-select" id="preview-classification"><option value="major">Major Event</option><option value="minor">Minor Event</option></select></div>
+                <div class="scoring-field" id="preview-wins-field"><label for="preview-wins">Sample confirmed wins</label><input class="form-control" id="preview-wins" type="number" min="0" max="1000" step="1" value="3"></div>
+                <div class="scoring-field" id="preview-rank-field"><label for="preview-rank">Sample final placement</label><select class="form-select" id="preview-rank"></select></div>
+                <div class="scoring-preview-awards" id="preview-awards"></div>
+                <div class="scoring-preview-calculation" aria-live="polite" aria-atomic="true"><span id="preview-formula">Sample championship points</span><strong id="preview-total">&mdash;</strong><span class="scoring-preview-unit">championship points</span></div>
+                <p class="scoring-preview-disclaimer">Sample preview only. It does not change event records, results, or department standings.</p>
+              </section>
+              <div class="scoring-publication-note"><span aria-hidden="true">&#10003;</span><p>Calculation and publication are separate. Only eligible, approved and published awards count as official public points.</p></div>
+            </aside>
+          </div>
+          <div hidden aria-hidden="true">
+            <input type="checkbox" name="approval_required" id="approval-required" {% if config.approval_required %}checked{% endif %}>
+            <input type="checkbox" name="automatic_calculation" id="automatic-calculation" {% if config.automatic_calculation %}checked{% endif %}>
+            <input type="hidden" name="tie_policy" id="tie-policy" value="{{ config.tie_policy }}">
+          </div>
+          {% if override_event %}
+          <details class="scoring-card scoring-advanced scoring-event-resolution">
+            <summary><span>Final placement resolution</span><span class="scoring-summary-hint">Authorized event decisions</span></summary>
+            <div class="scoring-advanced-content">
+              {% if override_event.result_processing_config.championship_pending %}<div class="scoring-pending-note" role="status">{{ override_event.result_processing_config.championship_pending }}</div>{% endif %}
+              <p class="scoring-field-error" id="resolution-error"></p>
+              <p class="scoring-help mt-3">Record official positions only when the tournament cannot resolve placements automatically. Leave every position blank to use automatic resolution. If you record positions, include every team. Tied positions require the Shared placement points policy.</p>
+              {% if placement_teams %}
+              <div class="table-responsive scoring-resolution-table mt-3"><table class="table"><caption class="visually-hidden">Official team placement resolution</caption><thead><tr><th scope="col">Participating team</th><th scope="col">Official position</th></tr></thead><tbody>
+                {% for team in placement_teams %}<tr><td><label for="official-placement-{{ team.id }}">{{ team.name }}</label></td><td><input class="form-control" type="number" min="1" max="100" step="1" name="placement_{{ team.id }}" id="official-placement-{{ team.id }}" data-team-id="{{ team.id }}" aria-describedby="official-placement-error-{{ team.id }}"><span class="scoring-field-error" id="official-placement-error-{{ team.id }}"></span></td></tr>{% endfor %}
+              </tbody></table></div>
+              {% endif %}
+              <div class="scoring-manual-action"><div><strong>Recalculate championship points</strong><p class="scoring-help">Reconcile this event's awards using saved rules and eligible confirmed results. This does not publish results. Provide an audit reason above.</p></div><button class="match-secondary" type="submit" name="operation" value="recalculate" id="recalculate-scoring">Recalculate Points</button></div>
+              {% if correction_matches %}
+              <div class="scoring-correction-action"><strong>Reopen a match for correction</strong><p class="scoring-help">This withdraws the event's publication and reopens the selected confirmed match. Results need authorized review and publication again. Downstream confirmed matches may prevent reopening.</p><label for="correction-match">Confirmed match</label><select class="form-select" name="correction_match" id="correction-match" aria-describedby="correction-match-error"><option value="">Select a match to correct</option>{% for match in correction_matches %}<option value="{{ match.pk }}" {% if correction_selector == match.pk|stringformat:"s" %}selected{% endif %}>{{ match.round_name|default:"Match" }} &middot; {{ match.team_a.name|default:"TBD" }} vs {{ match.team_b.name|default:"TBD" }}</option>{% endfor %}</select><span class="scoring-field-error" id="correction-match-error"></span><button class="scoring-correction-button" type="submit" name="operation" value="reopen">Reopen Match for Correction</button></div>
+              {% endif %}
+            </div>
+          </details>
+          {% endif %}
+          <div class="scoring-actions"><div><span class="scoring-dirty-dot" id="dirty-dot" hidden></span><span id="save-state" role="status">No unsaved changes</span></div><div class="scoring-action-buttons"><button type="button" class="match-secondary" id="reset-scoring">Reset to Default</button><button type="button" class="scoring-discard" id="discard-scoring">Discard Changes</button><button type="submit" class="match-primary" id="save-scoring" name="operation" value="{% if override_event %}override{% else %}save{% endif %}">{% if override_event %}Save Event Override{% else %}Save Configuration{% endif %}</button></div></div>
+        </form>
+        <noscript><div class="alert alert-warning">JavaScript is required to edit dynamic placement rules and calculate the sample preview.</div></noscript>
+      </main>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,57 @@
+{% extends "landingpage/base.html" %}{% block content %}
+<section class="page-intro">
+<div class="container">
+<p class="eyebrow">
+THE ACHIEVEMENTS. THE CHAMPIONS.
+</p>
+<h1>
+Event Results
+</h1>
+<p>
+View official winners and final scores of completed competitions.
+</p>
+</div>
+</section>
+<section class="container page-content">
+{% include "landingpage/_filters.html" %}
+<div class="publication-note">
+<span aria-hidden="true">&#10003;</span>
+<div>
+<strong>Approved. Published. Official.</strong>
+<p>
+Results appear here only after the authorized approval and publication workflow is complete.
+</p>
+</div>
+</div>
+<div class="result-grid">
+{% for event in events %}
+<article class="result-card">
+<div class="result-top">
+<span class="mini-label">{{ event.category }} &middot; {{ event.type_label }}</span><span class="status status-completed">Official / Published</span>
+</div>
+<h2>
+{{ event.name }}
+</h2>
+<p>
+{{ event.summary|default:"Official competition outcomes are available to view." }}
+</p>
+<div class="result-bottom">
+<span>{% if event.published_date %}Published {{ event.published_date|date:"M j, Y" }}{% else %}Publication date not available{% endif %}</span><a class="text-link" href="{{ event.result_url }}">View Full Results &#8599;</a>
+</div>
+</article>
+{% empty %}
+<div class="empty-state">
+<span class="empty-icon">{% include "landingpage/_icon.html" with icon="flag" %}</span>
+<h2>
+The champions' stories are still unfolding.
+</h2>
+<p>
+No published results match your filters. Official outcomes will appear after approval and publication.
+</p>
+<a class="btn btn-outline-navy" href="{% url 'public_results' %}">Clear filters</a>
+</div>
+{% endfor %}
+</div>
+{% include "landingpage/_pagination.html" %}
+</section>
+{% endblock %}

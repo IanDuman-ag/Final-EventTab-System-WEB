@@ -777,6 +777,15 @@ def save_match_result(event, match, user, *, score_a, score_b, winner_id, remark
 
 
 def _apply_championship_points(event):
+    if (event.result_processing_config or {}).get('championship_scoring'):
+        from .points_settings_service import reconcile_championship_points
+        reconcile_championship_points(event)
+        return
+    if 'match_win_points' in (event.result_processing_config or {}):
+        return
+    cfg = dict(event.result_processing_config or {})
+    if cfg.get('legacy_championship_awarded') or (event.results_finalized and cfg.get('published_at')):
+        return
     if not event.apply_championship_points:
         return
     config = event.championship_points_config or []
@@ -791,6 +800,9 @@ def _apply_championship_points(event):
         # Store on team points as championship award overlay
         team.points = (team.points or 0) + pts
         team.save(update_fields=['points'])
+    cfg['legacy_championship_awarded'] = True
+    event.result_processing_config = cfg
+    event.save(update_fields=['result_processing_config'])
 
 
 @transaction.atomic
@@ -802,6 +814,9 @@ def return_for_correction(event, user, judge_ids=None):
     if judge_ids:
         qs = qs.filter(judge_id__in=judge_ids)
     qs.update(is_locked=False)
+    if (event.result_processing_config or {}).get('championship_scoring'):
+        from .points_settings_service import invalidate_scoring_publication
+        invalidate_scoring_publication(event, user, 'Results returned for authorized correction.')
     _patch_result_config(event, ready_for_publication=False, approved=False)
     _notify_judges(event, judge_ids)
     LogEntry.objects.create(
@@ -828,6 +843,10 @@ def return_for_correction(event, user, judge_ids=None):
 @transaction.atomic
 def approve_results(event, user):
     cfg = dict(event.result_processing_config or {})
+    if cfg.get('championship_scoring') and event.scoring_method == 'match':
+        actual = event.bracket_matches.filter(is_automatic_advance=False)
+        if not actual.exists() or actual.exclude(status__in=[BracketMatch.STATUS_COMPLETED, BracketMatch.STATUS_FORFEIT]).exists():
+            raise FacultyServiceError('Confirm all actual matches before approving final results.')
     if cfg.get('verification_mode') == 'tabulator_admin_approval' and not cfg.get('tabulation_confirmed_at'):
         raise FacultyServiceError('The assigned Tabulation Officer must confirm the tabulation first.')
     _patch_result_config(event, approved=True, ready_for_publication=True)
@@ -912,6 +931,21 @@ def confirm_tabulation(event, user):
 @transaction.atomic
 def publish_results(event, user):
     cfg = dict(event.result_processing_config or {})
+    rules = cfg.get('championship_scoring')
+    if rules:
+        from .points_settings_service import reconcile_championship_points
+        if rules['approval_required'] and not cfg.get('approved'):
+            raise FacultyServiceError('Authorized result approval is required before publication.')
+        if event.scoring_method == 'match':
+            actual = event.bracket_matches.filter(is_automatic_advance=False)
+            if not actual.exists() or actual.exclude(status__in=[BracketMatch.STATUS_COMPLETED, BracketMatch.STATUS_FORFEIT]).exists():
+                raise FacultyServiceError('All actual matches must be confirmed before publication.')
+        reconcile_championship_points(event, publishing=True)
+        cfg = dict(event.result_processing_config)
+        if cfg.get('championship_pending') and event.scoring_method == 'match':
+            raise FacultyServiceError(cfg['championship_pending'])
+        cfg['published_championship_awards'] = dict(cfg.get('championship_awards', {}))
+        cfg.pop('championship_requires_republication', None)
     mode = cfg.get('verification_mode') or 'admin_only'
     if mode in {'tabulator_verification', 'tabulator_admin_approval'} and not cfg.get('tabulation_confirmed_at'):
         raise FacultyServiceError('Tabulation must be confirmed before publishing results.')
@@ -929,7 +963,8 @@ def publish_results(event, user):
     cfg['published_by'] = user.id
     event.result_processing_config = cfg
     event.save()
-    _apply_championship_points(event)
+    if not rules:
+        _apply_championship_points(event)
     try:
         from .mobile_sync import sync_event_to_mobile
         sync_event_to_mobile(event)
@@ -1064,13 +1099,13 @@ def confirm_stage_advancement(event, user, stage_index, qualifier_ids):
     }
 
 
-def leaderboard_rows():
+def leaderboard_rows(event_ids=None):
     """Overall championship standings by department from bracket team points."""
     from .models import Department
     dept_points = defaultdict(int)
-    for team in BracketTeam.objects.select_related('department').filter(points__gt=0):
-        if team.department_id:
-            dept_points[team.department_id] += int(team.points or 0)
+    from .points_settings_service import official_department_awards
+    for event, department_id, points in official_department_awards(event_ids):
+        dept_points[department_id] += points
     depts = {d.id: d for d in Department.objects.filter(id__in=dept_points.keys())}
     rows = []
     for dept_id, pts in dept_points.items():
@@ -1091,12 +1126,10 @@ def leaderboard_by_game():
 
     by_event = defaultdict(lambda: defaultdict(int))
     event_meta = {}
-    for team in BracketTeam.objects.select_related('department', 'event').filter(points__gt=0):
-        if not team.department_id or not team.event_id:
-            continue
-        by_event[team.event_id][team.department_id] += int(team.points or 0)
-        if team.event_id not in event_meta:
-            event_meta[team.event_id] = team.event
+    from .points_settings_service import official_department_awards
+    for event, department_id, points in official_department_awards():
+        by_event[event.pk][department_id] += points
+        event_meta[event.pk] = event
 
     all_dept_ids = {dept_id for bucket in by_event.values() for dept_id in bucket}
     depts = {d.id: d for d in Department.objects.filter(id__in=all_dept_ids)}

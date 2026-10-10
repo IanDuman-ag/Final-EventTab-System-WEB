@@ -126,7 +126,7 @@
   </div>
 
   <dialog id="event-wizard" class="wizard" aria-labelledby="wizard-title" aria-describedby="wizard-subtitle">
-    <form method="post" id="wizard-form" action="{% url 'admin_criteria_events' %}" novalidate>
+    <form method="post" id="wizard-form" action="{% url 'admin_criteria_events' %}" enctype="multipart/form-data" novalidate>
       {% csrf_token %}
       <input type="hidden" name="participant_ids" id="participant-ids" value="[]">
       <input type="hidden" name="event_entries" id="event-entries" value="[]">
@@ -203,8 +203,15 @@
             <label>Time <input class="form-control" id="event-time" type="time"></label>
             <select class="form-select" id="status-preview" hidden><option value="draft" selected>Draft</option><option value="published">Published</option></select>
           </div>
+        <fieldset>
+          <legend>Event Image</legend>
+          <label class="btn btn-outline-secondary match-secondary" for="event-image">Upload Event Image</label>
+          <input class="form-control mt-2" type="file" id="event-image" name="event_image" accept="image/jpeg,image/png,image/webp" aria-describedby="event-image-help event-image-error">
+          <p id="event-image-help" class="points-editor-hint">JPEG, PNG, or WebP, up to 5 MB. Leave empty to keep the current image.</p>
+          <p id="event-image-error" class="wizard-error" role="alert"></p>
+          <img id="event-image-preview" alt="Event image preview" hidden style="max-width:100%;width:320px;max-height:200px;object-fit:contain;border-radius:8px">
+        </fieldset>
         </section>
-
         <section class="wizard-panel" data-step="2">
           <div class="wizard-section-title"><span>02</span><div><h3>Participants</h3><p>Select the teams or individuals who will compete in this event.</p></div></div>
           <fieldset class="team-picker" id="team-picker">
@@ -607,6 +614,7 @@
           </div>
           <fieldset id="points-fieldset">
             <legend>Championship Points</legend>
+            <p id="championship-snapshot-note">New events inherit placement points from <a href="{% url 'admin_settings' %}">Championship Scoring Rules</a>. Judge scores remain separate from championship points.</p>
             <label class="inline-check"><input class="form-check-input" type="checkbox" name="apply_championship_points" checked> Apply Championship Points Automatically</label>
             <div class="criteria-editor-actions">
               <button type="button" id="add-points-row">+ Add Rank</button>
@@ -891,6 +899,7 @@
   </dialog>
 
   {{ event_rows_json|json_script:"criteria-events-data" }}
+  {{ championship_scoring_defaults|json_script:"championship-scoring-defaults" }}
   <script>
     window.CRITERIA_EVENT_EDIT_ID = "{{ edit_event_id|escapejs }}";
     window.CRITERIA_OPEN_CREATE = {{ open_create|yesno:"true,false" }};
@@ -906,6 +915,6 @@
     <option value="Production Number"></option>
     <option value="Question and Answer"></option>
   </datalist>
-  <script src="{% static 'admindash/criteriabasedevent.js' %}?v=20260927b"></script>
+  <script src="{% static 'admindash/criteriabasedevent.js' %}?v=20261010b"></script>
 </body>
 </html>

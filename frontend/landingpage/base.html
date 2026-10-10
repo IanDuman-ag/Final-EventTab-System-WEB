@@ -1,0 +1,67 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="The official EventTab intramural community portal. Explore competitions, schedules, team standings and published results."><title>{{ page_title|default:"EventTab" }}</title><link rel="stylesheet" href="{% static 'admindash/vendor/bootstrap-5.3.8.min.css' %}"><link rel="stylesheet" href="{% static 'landingpage/public.css' %}"><script defer src="{% static 'landingpage/public.js' %}?v=20261010a">
+</script>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="site-header">
+<nav class="container portal-nav" aria-label="Main navigation">
+<a class="brand" href="{% url 'home' %}"><img class="brand-mark" src="{% get_media_prefix %}landingpagelogo/logoeventtab%20(1).png" alt="" width="44" height="44">Event<span>Tab</span>
+</a>
+<button class="menu-toggle" type="button" aria-controls="public-menu" aria-expanded="false" aria-label="Toggle navigation"><span>
+</span><span>
+</span><span>
+</span>
+</button>
+<div class="nav-menu" id="public-menu">
+<a {% if active == 'home' %}class="active" aria-current="page"{% endif %} href="{% url 'home' %}">Home</a><a {% if active == 'schedules' %}class="active" aria-current="page"{% endif %} href="{% url 'public_schedules' %}">Schedules</a><a {% if active == 'games' %}class="active" aria-current="page"{% endif %} href="{% url 'public_games' %}">Games</a><a {% if active == 'leaderboard' %}class="active" aria-current="page"{% endif %} href="{% url 'public_leaderboard' %}">Leaderboard</a><a {% if active == 'results' %}class="active" aria-current="page"{% endif %} href="{% url 'public_results' %}">Results</a><a class="btn btn-yellow nav-login" href="{% url 'login' %}">Login <span aria-hidden="true">&#8599;</span>
+</a>
+</div>
+</nav>
+</header>
+<main id="main">
+{% if data_error %}
+<div class="container pt-4">
+<div class="alert alert-danger" role="alert">
+{{ data_error }} <a href="{{ retry_url|default:request.path }}">Try again</a>
+</div>
+</div>
+{% endif %}{% block content %}{% endblock %}
+</main>
+<footer class="site-footer">
+<div class="container footer-top">
+<div>
+<a class="brand" href="{% url 'home' %}"><img class="brand-mark" src="{% get_media_prefix %}landingpagelogo/logoeventtab%20(1).png" alt="" width="44" height="44">Event<span>Tab</span>
+</a>
+<p>
+One event. One community.<br>Every achievement, together.
+</p>
+{% include "landingpage/_partner_logos.html" %}
+</div>
+<div>
+<p class="footer-label">
+EXPLORE THE COMPETITION
+</p>
+<div class="footer-links">
+<a href="{% url 'public_games' %}">Games &amp; Events</a><a href="{% url 'public_schedules' %}">Schedules</a><a href="{% url 'public_leaderboard' %}">Team Standings</a><a href="{% url 'public_results' %}">Official Results</a>
+</div>
+</div>
+<div>
+<p class="footer-label">
+FOR AUTHORIZED STAFF
+</p>
+<a class="staff-link" href="{% url 'login' %}">Staff login <span aria-hidden="true">&#8599;</span>
+</a>
+<p class="footer-small">
+Public viewing requires no account.
+</p>
+</div>
+</div>
+<div class="container footer-bottom">
+<span>&copy; {% now "Y" %} EventTab. Built for our community.</span>
+</div>
+</footer>
+</body>
+</html>

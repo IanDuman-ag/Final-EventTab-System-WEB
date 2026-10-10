@@ -1,0 +1,21 @@
+<article class="schedule-row">
+<div class="schedule-date">
+{% if item.date %}<strong>{{ item.date|date:"d" }}</strong><span>{{ item.date|date:"M" }}</span><small>{{ item.date|date:"Y" }}</small>{% else %}<strong>&mdash;</strong><span>TBA</span>{% endif %}
+</div>
+<div class="schedule-title">
+<span class="mini-label">{{ item.type_label }}{% if item.round %} &middot; {{ item.round }}{% endif %}</span>
+<h3>
+<a href="{{ item.detail_url }}">{{ item.event_name }}</a>
+</h3>
+{% if item.participants %}
+<p>
+{{ item.participants }}
+</p>
+{% endif %}
+</div>
+<div class="schedule-location">
+<strong>{% if item.time %}{{ item.time|time:"g:i A" }}{% else %}Time to be announced{% endif %}</strong><span>{{ item.venue|default:"Venue to be announced" }}</span>
+</div>
+<span class="status status-{{ item.status }}">{{ item.status_label }}</span><a class="schedule-detail" href="{{ item.detail_url }}">View Details <span aria-hidden="true">&#8599;</span>
+</a>
+</article>

@@ -1,4 +1,5 @@
 from decouple import config
+from django.conf import settings
 from django.http import HttpResponse
 
 
@@ -15,7 +16,7 @@ class LocalDevelopmentCorsMiddleware:
     def __init__(self, get_response):
         self.get_response = get_response
         self.allowed_origins = set(config('CORS_ALLOWED_ORIGINS', default='', cast=_csv))
-        self.allow_localhost = config('DEBUG', default=True, cast=bool)
+        self.allow_localhost = settings.DEBUG
 
     def __call__(self, request):
         if request.method == 'OPTIONS':

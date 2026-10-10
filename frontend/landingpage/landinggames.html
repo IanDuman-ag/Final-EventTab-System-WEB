@@ -1,0 +1,33 @@
+{% extends "landingpage/base.html" %}{% block content %}
+<section class="page-intro">
+<div class="container">
+<p class="eyebrow">
+THE COURT. THE STAGE. YOUR COMMUNITY.
+</p>
+<h1>
+Games &amp; Events
+</h1>
+<p>
+Explore all intramural competitions.
+</p>
+</div>
+</section>
+<section class="container page-content">
+{% include "landingpage/_filters.html" %}
+<div class="event-grid">
+{% for event in events %}{% include "landingpage/_event_card.html" %}{% empty %}
+<div class="empty-state">
+<span class="empty-icon">{% include "landingpage/_icon.html" with icon="trophy" %}</span>
+<h2>
+No competitions found.
+</h2>
+<p>
+Try another search or clear your filters. Newly announced competitions will appear here.
+</p>
+<a class="btn btn-outline-navy" href="{% url 'public_games' %}">Show all events</a>
+</div>
+{% endfor %}
+</div>
+{% include "landingpage/_pagination.html" %}
+</section>
+{% endblock %}
