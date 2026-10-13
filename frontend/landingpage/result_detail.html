@@ -58,7 +58,7 @@
 </caption>
 <thead>
 <tr>
-{% if result_kind == "criteria" %}<th scope="col">Rank</th>{% endif %}<th scope="col">{% if result_kind == 'match' %}Team{% else %}Contestant / Group{% endif %}</th><th scope="col">Department</th><th scope="col">{% if result_kind == "match" %}Confirmed champion{% else %}Placement{% endif %}</th>{% if result_kind == "match" %}<th scope="col">Championship Points</th>{% endif %}
+<th scope="col">Rank</th><th scope="col">{% if result_kind == 'match' %}Team{% else %}Contestant / Group{% endif %}</th><th scope="col">Department</th><th scope="col">Placement</th>{% if result_kind == "match" %}<th scope="col">Championship Points</th>{% endif %}
 </tr>
 </thead>
 <tbody>

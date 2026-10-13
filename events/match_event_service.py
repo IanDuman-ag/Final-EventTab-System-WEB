@@ -817,7 +817,7 @@ def _build_double_elimination_matches(ordered_ids):
             if not match or key == wb_final_key:
                 continue
             if lb_cursor < len(lb_keys):
-                match['next_loser_key'] = lb_keys[lb_cursor]
+                match['next_loser_key'] = lb_keys[max(0, lb_cursor - 1)]
                 lb_cursor += 1
 
     return _attach_synthetic_advances(_finalize_blueprint(matches), advances)
@@ -1023,8 +1023,7 @@ def build_match_blueprint(
             random.SystemRandom().shuffle(ordered_ids)
     if len(ordered_ids) < 2:
         raise MatchEventValidationError('Select at least two active teams.')
-    if include_third_place and tournament_type == 'single_elimination' and len(ordered_ids) < 4:
-        raise MatchEventValidationError('A third place match requires at least four teams.')
+    include_third_place = tournament_type == 'single_elimination' and len(ordered_ids) >= 4
 
     matches = []
     if tournament_type == 'round_robin':
@@ -1506,8 +1505,6 @@ def save_match_event(data, actor, instance=None, files=None):
 
     publishing = publication == Event.PUBLICATION_PUBLISHED
     min_participants = 2
-    if tournament_type == 'single_elimination' and data.get('include_third_place') == 'on':
-        min_participants = 4
     try:
         teams = _validated_team_ids(data)
     except MatchEventValidationError:
@@ -1572,10 +1569,8 @@ def save_match_event(data, actor, instance=None, files=None):
     event.schedule_config = schedule_config
     event.assigned_scorer = scorer
     requested_third_place = (
-        data.get('include_third_place') == 'on' and tournament_type == 'single_elimination'
+        tournament_type == 'single_elimination' and len(teams) >= 4
     )
-    if requested_third_place and len(teams) < 4 and publishing:
-        raise MatchEventValidationError('A third place match requires at least four teams.')
     event.include_third_place = requested_third_place and len(teams) >= 4
     event.seeding_method = pairing_method if pairing_method in {'random_draw', 'seeded_draw'} else 'random_draw'
     event.bracket_draw_order = draw_order

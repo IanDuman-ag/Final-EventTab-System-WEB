@@ -12,6 +12,8 @@ the bracket behaves identically no matter who approves the result.
 
 # Points model (deterministic): each win is worth WIN_POINTS, and the overall
 # champion (winner of a finals match with no further match) gets a bonus.
+from django.db import transaction
+
 WIN_POINTS = 3
 CHAMPION_BONUS = 5
 
@@ -23,7 +25,7 @@ def _is_finals_match(match):
     if match.next_match_winner_id is not None:
         return False
     name = (match.round_name or '').lower()
-    if 'semi' in name or 'quarter' in name:
+    if any(part in name for part in ('semi', 'quarter', 'third', '3rd', 'losers', 'winners')):
         return False
     if 'grand' in name:
         return True
@@ -190,6 +192,7 @@ def models_q_feeds(match):
     return Q(next_match_winner=match) | Q(next_match_loser=match)
 
 
+@transaction.atomic
 def apply_scoresheet_to_bracket(scoresheet):
     """
     Sync an approved/finalized scoresheet onto its bracket match, advance the
@@ -200,6 +203,10 @@ def apply_scoresheet_to_bracket(scoresheet):
     match = getattr(scoresheet, 'match', None)
     if match is None:
         return {'updated': False, 'reason': 'no_match'}
+
+    match.event = type(match.event).objects.select_for_update().get(pk=match.event_id)
+    if match.event.results_finalized or (match.event.result_processing_config or {}).get('published_at'):
+        raise ValueError('Published results are read-only. Reopen through an authorized, audited correction workflow.')
 
     # Make sure advancement links exist (idempotent) before we push winners.
     link_bracket_advancement(match.event)
@@ -239,14 +246,40 @@ def apply_scoresheet_to_bracket(scoresheet):
     if match.next_match_winner_id:
         _auto_complete_lone_team_match(match.next_match_winner)
 
+    # A lower-bracket finalist's first Grand Final win gives the undefeated
+    # finalist its first loss, so insert a deciding reset once, preserving scores.
+    if (match.event.tournament_type == 'double_elimination' and _is_finals_match(match)
+            and not cfg.get('published_at') and not match.event.results_finalized):
+        from django.db import transaction
+        from django.db.models import Max
+        with transaction.atomic():
+            type(match.event).objects.select_for_update().get(pk=match.event_id)
+            losses = BracketMatch.objects.filter(event=match.event, loser_id=match.loser_id,
+                is_automatic_advance=False, status__in=[BracketMatch.STATUS_COMPLETED, BracketMatch.STATUS_FORFEIT]).count()
+            if losses == 1 and not BracketMatch.objects.filter(event=match.event, round_name='Grand Final Reset').exists():
+                number = BracketMatch.objects.filter(event=match.event).aggregate(value=Max('match_number'))['value'] or 0
+                BracketMatch.objects.create(event=match.event, match_number=number + 1,
+                    round_name='Grand Final Reset', client_key='gf-reset',
+                    team_a=match.team_a, team_b=match.team_b, venue=match.venue)
+
     # 4. Recompute the event leaderboard standings.
     champion_id = recompute_points(match.event)
 
     is_championship = _is_finals_match(match)
-    if is_championship and champion_id:
-        ev = match.event
-        if ev.status != ev.STATUS_COMPLETED:
+    ev = match.event
+    if champion_id and not ev.results_finalized:
+        from .points_settings_service import _match_placements, match_championship_rules
+        actual = list(ev.bracket_matches.filter(is_automatic_advance=False))
+        complete = bool(actual) and all(row.status in {'completed', 'forfeit'} for row in actual)
+        if complete:
+            rules = match_championship_rules(ev) or {'tie_policy': 'official'}
+            _, placement_error = _match_placements(ev, list(ev.bracket_teams.all()), actual, rules)
+            complete = not placement_error
+        if complete and ev.status != ev.STATUS_COMPLETED:
             ev.status = ev.STATUS_COMPLETED
+            ev.save(update_fields=['status'])
+        elif not complete and ev.status == ev.STATUS_COMPLETED:
+            ev.status = ev.STATUS_ACTIVE
             ev.save(update_fields=['status'])
 
     return {

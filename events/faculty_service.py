@@ -45,7 +45,7 @@ def is_faculty_user(user):
     if not user or not user.is_authenticated:
         return False
     return user.groups.filter(
-        Q(name__iexact='Tabulator') | Q(name__iexact='Faculty')
+        Q(name__iexact='Tabulator') | Q(name__iexact='Faculty') | Q(name__iexact='Faculty In-Charge')
     ).exists()
 
 
@@ -434,9 +434,9 @@ def dashboard_stats(user):
     confirmed_match_ids = ScoreSheet.objects.filter(
         event__in=events, status__in=confirmed_statuses,
     ).values_list('match_id', flat=True)
-    pending = actual_matches.exclude(id__in=confirmed_match_ids).exclude(
+    pending = actual_matches.filter(scoresheets__status=ScoreSheet.STATUS_PENDING).exclude(id__in=confirmed_match_ids).exclude(
         status__in=[BracketMatch.STATUS_COMPLETED, BracketMatch.STATUS_FORFEIT]
-    ).count()
+    ).distinct().count()
     return {
         'assigned_events': events.count(),
         'todays_matches': todays,
@@ -678,7 +678,11 @@ def _patch_result_config(event, **kwargs):
 
 
 @transaction.atomic
-def save_match_result(event, match, user, *, score_a, score_b, winner_id, remarks, confirm=False):
+def save_match_result(event, match, user, *, score_a, score_b, winner_id=None, remarks=None, confirm=False):
+    Event.objects.select_for_update().get(pk=event.pk)
+    event.refresh_from_db()
+    if event.results_finalized or (event.result_processing_config or {}).get('published_at'):
+        raise FacultyServiceError('Published results are read-only. Use an authorized, audited correction workflow.')
     if match.event_id != event.id:
         raise FacultyServiceError('Match does not belong to this event.')
     match = BracketMatch.objects.select_for_update().get(pk=match.pk, event=event)
@@ -713,47 +717,33 @@ def save_match_result(event, match, user, *, score_a, score_b, winner_id, remark
         raise FacultyServiceError('Scores must be valid numbers.') from exc
     if has_extra_decimals:
         raise FacultyServiceError('Scores may have at most two decimal places.')
-    if not isinstance(remarks, str):
+    if remarks is not None and not isinstance(remarks, str):
         raise FacultyServiceError('Remarks must be text.')
-    winner = None
-    if winner_id:
-        try:
-            winner_pk = int(winner_id)
-        except (TypeError, ValueError) as exc:
-            raise FacultyServiceError('Winner selection is invalid.') from exc
-        if winner_pk not in {match.team_a_id, match.team_b_id}:
-            raise FacultyServiceError('Winner must be Team A or Team B.')
-        winner = BracketTeam.objects.filter(pk=winner_pk, event=event).first()
-    if confirm and (sa == sb or winner is None):
-        raise FacultyServiceError('Choose a winner before confirming. Tied scores cannot be confirmed.')
+    # Client-provided winner IDs cannot override the recorded scores.
+    winner = match.team_a if sa > sb else match.team_b if sb > sa else None
+    if confirm and winner is None:
+        raise FacultyServiceError('Tied scores cannot be confirmed. Resolve the tie before confirming.')
 
     sheet = existing or ScoreSheet(event=event, match=match, tabulator=user)
     sheet.tabulator = user
     sheet.score_team_a = sa
     sheet.score_team_b = sb
     sheet.winner = winner
-    sheet.remarks = (remarks or '').strip()
+    if remarks is not None:
+        sheet.remarks = remarks.strip()
     sheet.status = ScoreSheet.STATUS_FINALIZED if confirm else ScoreSheet.STATUS_PENDING
     sheet.save()
 
     if confirm:
         apply_scoresheet_to_bracket(sheet)
+        event.refresh_from_db()
         recompute_points(event)
-        actual_match_ids = BracketMatch.objects.filter(
-            event=event, is_automatic_advance=False,
-        ).values_list('id', flat=True)
-        remaining = BracketMatch.objects.filter(
-            id__in=actual_match_ids,
-        ).exclude(
-            scoresheets__status__in=[ScoreSheet.STATUS_CONFIRMED, ScoreSheet.STATUS_FINALIZED],
-        ).exclude(
-            status__in=[BracketMatch.STATUS_COMPLETED, BracketMatch.STATUS_FORFEIT],
-        ).count()
-        if remaining == 0:
+        from .publication_service import match_publication_review
+        review = match_publication_review(event)
+        if review['review_ready']:
             event.status = Event.STATUS_COMPLETED
             event.save(update_fields=['status', 'updated_at'])
-            _apply_championship_points(event)
-        _patch_result_config(event, ready_for_publication=(remaining == 0))
+        _patch_result_config(event, ready_for_publication=review['can_publish'])
         LogEntry.objects.create(
             user=user,
             content_type=ContentType.objects.get_for_model(Event),
@@ -930,7 +920,31 @@ def confirm_tabulation(event, user):
 
 @transaction.atomic
 def publish_results(event, user):
+    from .publication_service import can_publish_event, faculty_publication_workflow
+    current = Event.objects.select_for_update().get(pk=event.pk)
+    event.refresh_from_db()
+    if not can_publish_event(user, event):
+        raise FacultyServiceError('You do not have permission to publish results for this event.')
+    if current.results_finalized and (current.result_processing_config or {}).get('published_at'):
+        return
+    if event_type_label(event) == 'Match-Based':
+        from .publication_service import match_publication_review
+        from .points_settings_service import match_championship_rules
+        review = match_publication_review(event)
+        if review['errors'] or review['approval_errors']:
+            raise FacultyServiceError(' '.join(review['errors'] + review['approval_errors']))
+        if not (event.result_processing_config or {}).get('championship_scoring'):
+            cfg = dict(event.result_processing_config or {})
+            cfg['championship_scoring'] = match_championship_rules(event)
+            event.result_processing_config = cfg
+            event.save(update_fields=['result_processing_config'])
     cfg = dict(event.result_processing_config or {})
+    faculty_workflow = faculty_publication_workflow(event)
+    if faculty_workflow:
+        # The explicitly confirmed publication is the assigned faculty's final approval.
+        cfg['approved'] = True
+        event.result_processing_config = cfg
+        event.save(update_fields=['result_processing_config'])
     rules = cfg.get('championship_scoring')
     if rules:
         from .points_settings_service import reconcile_championship_points
@@ -942,14 +956,14 @@ def publish_results(event, user):
                 raise FacultyServiceError('All actual matches must be confirmed before publication.')
         reconcile_championship_points(event, publishing=True)
         cfg = dict(event.result_processing_config)
-        if cfg.get('championship_pending') and event.scoring_method == 'match':
+        if cfg.get('championship_pending'):
             raise FacultyServiceError(cfg['championship_pending'])
         cfg['published_championship_awards'] = dict(cfg.get('championship_awards', {}))
         cfg.pop('championship_requires_republication', None)
     mode = cfg.get('verification_mode') or 'admin_only'
-    if mode in {'tabulator_verification', 'tabulator_admin_approval'} and not cfg.get('tabulation_confirmed_at'):
+    if not faculty_workflow and mode in {'tabulator_verification', 'tabulator_admin_approval'} and not cfg.get('tabulation_confirmed_at'):
         raise FacultyServiceError('Tabulation must be confirmed before publishing results.')
-    if mode == 'tabulator_admin_approval' and not cfg.get('approved'):
+    if not faculty_workflow and mode == 'tabulator_admin_approval' and not cfg.get('approved'):
         raise FacultyServiceError('Admin approval is required before publishing results.')
     judging = event.judging_event
     if judging:
@@ -965,37 +979,65 @@ def publish_results(event, user):
     event.save()
     if not rules:
         _apply_championship_points(event)
-    try:
-        from .mobile_sync import sync_event_to_mobile
-        sync_event_to_mobile(event)
-    except Exception:
-        pass
+    def sync_published_event():
+        try:
+            from .mobile_sync import sync_event_to_mobile
+            sync_event_to_mobile(event)
+        except Exception:
+            pass
+    transaction.on_commit(sync_published_event)
     LogEntry.objects.create(
         user=user,
         content_type=ContentType.objects.get_for_model(Event),
         object_id=str(event.pk),
         object_repr=event.name,
         action_flag=CHANGE,
-        change_message='Faculty published official results.',
+        change_message='Authorized publisher published official results.',
     )
-    try:
-        from .audit_service import record_audit
-        record_audit(
+    from .audit_service import record_audit
+    record_audit(
             user=user,
             action='Published Official Results',
             description=f'Published official results for "{event.name}".',
             module='Results',
             event_name=event.name,
         )
-        record_audit(
+    record_audit(
             user=user,
             action='Modified Championship Points',
             description=f'Championship points / leaderboard updated after publishing "{event.name}".',
             module='Championship',
             event_name=event.name,
         )
-    except Exception:
-        pass
+@transaction.atomic
+def unpublish_results(event, user):
+    """Withdraw public results without editing confirmed matches or approvals."""
+    from .publication_service import can_publish_event
+    from .audit_service import record_audit
+    Event.objects.select_for_update().get(pk=event.pk)
+    event.refresh_from_db()
+    if not can_publish_event(user, event):
+        raise FacultyServiceError('You do not have permission to remove publication for this event.')
+    cfg = dict(event.result_processing_config or {})
+    if not event.results_finalized or not cfg.get('published_at'):
+        return
+    previous = {key: cfg.pop(key, None) for key in ('published_at', 'published_by', 'published_championship_awards')}
+    cfg['ready_for_publication'] = True
+    cfg['publication_removed_at'] = timezone.now().isoformat()
+    cfg['publication_removed_by'] = user.pk
+    event.results_finalized = False
+    event.result_processing_config = cfg
+    event.save(update_fields=['results_finalized', 'result_processing_config', 'updated_at'])
+    record_audit(user=user, action='Removed Official Results Publication', module='Results',
+                 event_name=event.name, description=f'Withdrew public results for "{event.name}".',
+                 metadata={'event_id': event.pk, 'previous_publication': previous})
+    def sync_withdrawal():
+        try:
+            from .mobile_sync import sync_event_to_mobile
+            sync_event_to_mobile(event)
+        except Exception:
+            pass
+    transaction.on_commit(sync_withdrawal)
 
 
 @transaction.atomic

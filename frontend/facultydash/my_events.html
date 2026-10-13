@@ -5,8 +5,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>My Events · Faculty · EventTab</title>
-  <link rel="stylesheet" href="{% static 'facultydash/faculty.css' %}?v=20260929b">
-  <link rel="stylesheet" href="{% static 'facultydash/pages.css' %}?v=20260929b">
+  <link href="{% static 'admindash/vendor/bootstrap-5.3.8.min.css' %}" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'facultydash/faculty.css' %}?v=20261010">
+  <link rel="stylesheet" href="{% static 'facultydash/pages.css' %}?v=20261010withdraw">
 </head>
 <body class="fac-v2 tab-v2">
 <div class="tab-shell">
@@ -20,6 +21,7 @@
       </div>
     </header>
     <main class="tab-content fac-content">
+      {% for message in messages %}<div class="alert {% if message.tags == 'error' %}alert-danger{% else %}alert-success{% endif %}" role="alert">{{ message }}</div>{% endfor %}
       <section class="fac-card">
         <form class="fac-toolbar" method="get">
           <label class="fac-sr-only" for="event-search">Search events</label>
@@ -64,8 +66,8 @@
                 <td data-label="Schedule">{{ e.schedule }}</td>
                 <td data-label="Venue">{{ e.venue }}</td>
                 <td data-label="Progress"><div class="fac-inline-progress"><span><i style="width:{{ e.progress_percent }}%"></i></span><small>{{ e.matches_completed }}/{{ e.matches_total }}</small></div></td>
-                <td data-label="Status"><span class="fac-pill">{{ e.status }}</span></td>
-                <td data-label="Action"><a class="fac-btn fac-btn-sm" href="{% url 'faculty_event_manage' e.id %}">Open Event</a></td>
+                <td data-label="Status"><span class="fac-pill fac-pill--{{ e.status_key }}">{{ e.status }}</span></td>
+                <td data-label="Action"><div class="d-flex gap-2 flex-wrap"><a class="fac-btn fac-btn-sm" href="{{ e.action_url }}">{{ e.action }}</a>{% if e.show_unpublish_button %}<button type="button" class="fac-btn fac-btn-sm fac-btn-danger" data-open-publication="remove-publication-{{ e.id }}">Remove Publish</button>{% endif %}</div></td>
               </tr>
               {% empty %}
               <tr><td colspan="8"><div class="fac-empty"><strong>No assigned events found</strong><span>Try changing the search or status filter.</span></div></td></tr>
@@ -88,8 +90,15 @@
         {% endif %}
       </section>
     </main>
+    {% for e in event_rows %}{% if e.show_unpublish_button %}
+    <dialog id="remove-publication-{{ e.id }}" class="fac-dialog" aria-labelledby="remove-publication-title-{{ e.id }}"><div class="fac-dialog-shell">
+      <header><h2 id="remove-publication-title-{{ e.id }}">Remove Published Results?</h2><button type="button" data-close-publication aria-label="Close">&times;</button></header>
+      <div class="fac-dialog-body"><p>Remove the published results for <strong>{{ e.name }}</strong>? They will disappear from public Results and stop contributing points to the Leaderboard. Confirmed match records will be preserved.</p>
+        <form method="post" action="{% url 'faculty_publication_review' e.id %}">{% csrf_token %}<input type="hidden" name="action" value="unpublish"><input type="hidden" name="confirm" value="yes"><input type="hidden" name="return_to" value="my_events"><div class="d-flex justify-content-end gap-2 mt-3"><button type="button" class="fac-btn fac-btn-secondary" data-close-publication>Cancel</button><button type="submit" class="fac-btn fac-btn-danger">Confirm Removal</button></div></form>
+      </div></div></dialog>
+    {% endif %}{% endfor %}
   </div>
 </div>
-<script src="{% static 'facultydash/faculty.js' %}?v=20260929b"></script>
+<script src="{% static 'facultydash/faculty.js' %}?v=20261010withdraw"></script>
 </body>
 </html>

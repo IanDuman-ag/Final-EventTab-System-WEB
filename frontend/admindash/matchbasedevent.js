@@ -150,8 +150,6 @@
   }
 
   function minParticipants() {
-    const format = form.elements.tournament_type.value;
-    if (format === 'single_elimination' && form.elements.include_third_place.checked) return 4;
     return 2;
   }
 
@@ -854,14 +852,13 @@
   }
 
   function syncThirdPlaceVisibility() {
-    const isSingle = form.elements.tournament_type.value === 'single_elimination';
-    const wrap = $('#third-place-wrap');
+    const format = form.elements.tournament_type.value;
     const hint = $('#third-place-hint');
-    if (wrap) wrap.hidden = !isSingle;
-    if (hint) hint.hidden = !isSingle;
-    if (!isSingle && form.elements.include_third_place) {
-      form.elements.include_third_place.checked = false;
-    }
+    if (hint) hint.textContent = format === 'single_elimination'
+      ? 'Four or more teams automatically receive a playoff between the semifinal losers. Two or three teams have no third-place playoff.'
+      : format === 'double_elimination'
+        ? 'Third place is the Losers Final loser. A Grand Final reset is played when required.'
+        : 'Third place follows the configured Round Robin standings and tiebreakers.';
     updateSelectedTeamCount();
   }
 
@@ -876,7 +873,7 @@
     const body = {
       team_ids: teams.map(team => team.id),
       tournament_type: form.elements.tournament_type.value,
-      include_third_place: form.elements.include_third_place.checked,
+      include_third_place: form.elements.tournament_type.value === 'single_elimination' && teams.length >= 4,
       pairing_method: pairingMethod()
     };
     if (reuseDraw && drawOrder.length) body.draw_order = drawOrder;
@@ -1243,7 +1240,6 @@
     legacyFormatPending = Boolean(event.legacy_double_elimination);
     $('#legacy-format-notice').hidden = !legacyFormatPending;
     $('#generate-bracket').disabled = legacyFormatPending;
-    form.elements.include_third_place.checked = event.include_third_place;
     syncThirdPlaceVisibility();
     form.elements.schedule_mode.value = event.schedule_mode;
     form.elements.daily_start_time.value = event.daily_start_time || '08:00';
@@ -1379,15 +1375,6 @@
     syncThirdPlaceVisibility();
     invalidateBlueprint('Format changed. Generate a new authoritative preview.');
   }));
-  form.elements.include_third_place.addEventListener('change', async () => {
-    updateSelectedTeamCount();
-    if (!drawOrder.length) return;
-    try {
-      await requestBlueprint(true);
-    } catch (exception) {
-      invalidateBlueprint(exception.message || 'Third-place settings changed. Generate a new authoritative preview.');
-    }
-  });
   $$('[name="schedule_mode"]').forEach(input => input.addEventListener('change', () => {
     $('#auto-settings').hidden = form.elements.schedule_mode.value === 'manual';
     $('#schedule-preview').innerHTML = '<p>Schedule mode changed. Generate the schedule again.</p>';

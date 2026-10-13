@@ -3,7 +3,6 @@
   <nav class="et-nav" aria-label="Main navigation">
     <a class="et-nav-link{% if active == 'dashboard' %} is-active{% endif %}" href="{% url 'tabulator_dashboard' %}{% if event %}?event_id={{ event.id }}{% endif %}" {% if active == 'dashboard' %}aria-current="page"{% endif %}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h8v8H3zm10 0h8v8h-8zM3 13h8v8H3zm10 0h8v8h-8z"/></svg>Dashboard</a>
     <a class="et-nav-link{% if active == 'my_events' %} is-active{% endif %}" href="{% url 'tabulator_my_events' %}" {% if active == 'my_events' %}aria-current="page"{% endif %}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2v3h10V2h2v3h2v17H3V5h2V2zm12 9H5v9h14zM5 9h14V7H5z"/></svg>My Events</a>
-    <a class="et-nav-link{% if active == 'live_rankings' %} is-active{% endif %}" href="{% url 'tabulator_live_rankings' %}{% if event %}?event_id={{ event.id }}{% endif %}" {% if active == 'live_rankings' %}aria-current="page"{% endif %}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h2v16h16v2H3zm4 12 5-5 3 3 5-7 2 1-7 10-3-3-4 4z"/></svg>Live Rankings</a>
     <a class="et-nav-link{% if active == 'results' or active == 'full_results' %} is-active{% endif %}" href="{% url 'tabulator_results' %}{% if event %}?event_id={{ event.id }}{% endif %}" {% if active == 'results' or active == 'full_results' %}aria-current="page"{% endif %}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 2h11l4 4v16H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm1 2v16h12V7h-3V4zm2 6h8v2H8zm0 4h8v2H8z"/></svg>Results</a>
   </nav>
   <div class="et-sidebar-bottom">

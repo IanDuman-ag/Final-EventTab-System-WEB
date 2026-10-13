@@ -1623,15 +1623,16 @@ def admin_create_team(request):
     is_multipart = (request.content_type or '').startswith('multipart/form-data')
     data = request.POST if is_multipart else _parse_json_request(request)
     name = (data.get('name') or '').strip()
-    code = (data.get('code') or '').strip()
+    from uuid import uuid4
+    code = (data.get('code') or '').strip() or f'TEAM-{uuid4().hex}'
     coach = (data.get('coach') or '').strip()
     members = data.get('members', '')
     status = (data.get('status') or Team.STATUS_ACTIVE).strip().lower()
     dept_id = data.get('department_id')
     image = request.FILES.get('image') if is_multipart else None
 
-    if not name or not code:
-        return JsonResponse({'success': False, 'message': 'Team name and team code are required.'}, status=400)
+    if not name:
+        return JsonResponse({'success': False, 'message': 'Team name is required.'}, status=400)
     if Team.objects.filter(code__iexact=code).exists():
         return JsonResponse({'success': False, 'message': 'Team code already exists.'}, status=400)
     if status not in (Team.STATUS_ACTIVE, Team.STATUS_INACTIVE):
@@ -1690,15 +1691,15 @@ def admin_edit_team(request, team_id):
     is_multipart = (request.content_type or '').startswith('multipart/form-data')
     data = request.POST if is_multipart else _parse_json_request(request)
     name = (data.get('name') or '').strip()
-    code = (data.get('code') or '').strip()
+    code = (data.get('code') or '').strip() or team.code
     coach = (data.get('coach') or '').strip()
     members = data.get('members', '')
     status = (data.get('status') or team.status).strip().lower()
     dept_id = data.get('department_id')
     image = request.FILES.get('image') if is_multipart else None
 
-    if not name or not code:
-        return JsonResponse({'success': False, 'message': 'Team name and team code are required.'}, status=400)
+    if not name:
+        return JsonResponse({'success': False, 'message': 'Team name is required.'}, status=400)
     if Team.objects.filter(code__iexact=code).exclude(id=team.id).exists():
         return JsonResponse({'success': False, 'message': 'Team code already exists.'}, status=400)
     if status not in (Team.STATUS_ACTIVE, Team.STATUS_INACTIVE):
@@ -2974,6 +2975,10 @@ def _serialize_match_event(event):
         'tournament_type': normalized_tournament_type,
         'tournament_type_label': _tournament_type_label(event.tournament_type or 'single_elimination'),
         'include_third_place': event.include_third_place,
+        'can_insert_playoff': normalized_tournament_type == 'single_elimination'
+            and event.bracket_teams.count() >= 4 and bool(matches)
+            and not event.results_finalized and not (event.result_processing_config or {}).get('published_at')
+            and not any('third' in m.round_name.lower() or '3rd' in m.round_name.lower() for m in matches),
         'sport_type': event.sport_type or '',
         'sport_custom_name': event.sport_custom_name or '',
         'pairing_method': event.pairing_method or event.seeding_method or 'random_draw',

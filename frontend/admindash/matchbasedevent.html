@@ -68,6 +68,7 @@
                   <td>
                     <div class="match-actions">
                       <button type="button" data-view="{{ event.id }}" title="View event" aria-label="View {{ event.name }}">View</button>
+                      {% if event.can_insert_playoff %}<form method="post" action="{% url 'faculty_publication_review' event.id %}">{% csrf_token %}<input type="hidden" name="return_to" value="admin_matches"><button type="submit" name="action" value="insert_playoff">Insert Missing Third-Place Playoff</button></form>{% endif %}
                       <button type="button" data-edit="{{ event.id }}" title="Edit event" aria-label="Edit {{ event.name }}">Edit</button>
                       <button type="button" data-delete="{{ event.id }}" data-name="{{ event.name }}" class="danger" title="Delete event" aria-label="Delete {{ event.name }}">Delete</button>
                     </div>
@@ -159,11 +160,8 @@
             </div>
           </fieldset>
           <input type="hidden" name="pairing_method" value="random_draw">
-          <label class="inline-check" id="third-place-wrap">
-            <input class="form-check-input" type="checkbox" name="include_third_place" id="include-third-place">
-            Include Third-Place Match
-          </label>
-          <p class="config-hint" id="third-place-hint">Creates Loser of Semifinal Game 1 vs Loser of Semifinal Game 2. Shown for Single Elimination only.</p>
+          <div id="third-place-wrap"><strong>Automatic Third-Place Determination</strong>
+          <p class="config-hint" id="third-place-hint"></p></div>
           <div class="blueprint-box">
             <div>
               <strong id="pairing-summary-label">Random Draw</strong>

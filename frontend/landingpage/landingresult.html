@@ -35,6 +35,7 @@ Results appear here only after the authorized approval and publication workflow 
 <p>
 {{ event.summary|default:"Official competition outcomes are available to view." }}
 </p>
+{% for placement in event.official_placements %}<p><strong>{% if placement.rank == 1 %}Champion{% elif placement.rank == 2 %}Runner-up{% elif placement.rank == 3 %}Third place{% else %}Place {{ placement.rank }}{% endif %}</strong> · {{ placement.name }}</p>{% endfor %}
 <div class="result-bottom">
 <span>{% if event.published_date %}Published {{ event.published_date|date:"M j, Y" }}{% else %}Publication date not available{% endif %}</span><a class="text-link" href="{{ event.result_url }}">View Full Results &#8599;</a>
 </div>

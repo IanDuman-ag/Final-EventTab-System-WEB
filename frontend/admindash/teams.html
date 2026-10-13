@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Teams - EventTab</title>
   {% include 'admindash/_bootstrap.html' %}
-  <link rel="stylesheet" href="{% static 'admindash/teams.css' %}?v=20260926a">
+  <link rel="stylesheet" href="{% static 'admindash/teams.css' %}?v=20261011a">
   <link rel="stylesheet" href="{% static 'admindash/bootstrap-admin.css' %}?v=1">
 </head>
 <body class="admin-dashboard-page teams-page admin-dashboard-v2">
@@ -41,17 +41,17 @@
         <section class="teams-panel" aria-label="Teams table">
           <div class="teams-toolbar">
             <form class="teams-filters" method="get" role="search">
-              <label class="teams-search"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5Zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14Z"/></svg><input class="form-control" type="text" name="q" value="{{ search_query }}" placeholder="Search teams by name or code..." aria-label="Search teams"></label>
+              <label class="teams-search"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5Zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14Z"/></svg><input class="form-control" type="text" name="q" value="{{ search_query }}" placeholder="Search teams by name..." aria-label="Search teams"></label>
               <select name="dept" class="form-select teams-select" aria-label="Department"><option value="all" {% if selected_dept == 'all' %}selected{% endif %}>All Departments</option>{% for dept in active_departments %}<option value="{{ dept.id }}" {% if selected_dept == dept.id|stringformat:"s" %}selected{% endif %}>{{ dept.name }}</option>{% endfor %}</select>
               <button type="submit" class="btn btn-outline-secondary teams-filter-btn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 18h4v-2h-4v2ZM3 6v2h18V6H3Zm3 7h12v-2H6v2Z"/></svg>Filters</button>
             </form>
           </div>
           <div class="table-responsive teams-table-wrap" id="teams-list-view">
             <table class="table table-hover align-middle teams-table" id="teams-table">
-              <thead><tr><th>Image</th><th>Team Name</th><th>Team Code</th><th>Department</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Image</th><th>Team Name</th><th>Department</th><th>Actions</th></tr></thead>
               <tbody>
                 {% for row in team_rows %}
-                  <tr data-team-id="{{ row.id }}" data-name="{{ row.name }}" data-code="{{ row.code }}" data-image-url="{{ row.image_url }}" data-department-id="{{ row.department_id|default:'' }}" data-coach="{{ row.coach }}" data-status="{{ row.status }}">
+                  <tr data-team-id="{{ row.id }}" data-name="{{ row.name }}" data-image-url="{{ row.image_url }}" data-department-id="{{ row.department_id|default:'' }}" data-coach="{{ row.coach }}" data-status="{{ row.status }}">
                     <td data-label="Image">
                       {% if row.image_url %}
                         <img src="{{ row.image_url }}" alt="{{ row.name }}" class="team-thumb">
@@ -60,10 +60,10 @@
                       {% endif %}
                     </td>
                     <td data-label="Team Name"><div class="teams-name-cell"><div><strong>{{ row.name }}</strong><small>{% if row.department_code %}{{ row.department_code }}{% else %}{{ row.department_name }}{% endif %}</small></div></div></td>
-                    <td data-label="Team Code"><span class="teams-code-pill">{{ row.code }}</span></td><td data-label="Department">{{ row.department_name }}</td>
+                    <td data-label="Department">{{ row.department_name }}</td>
                     <td data-label="Actions"><div class="teams-row-actions"><button class="teams-action-btn view-team" type="button" title="View" data-view-url="{% url 'admin_view_team' row.id %}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5C21.27 7.61 17 4.5 12 4.5Zm0 12.5a5 5 0 1 1 0-10 5 5 0 0 1 0 10Zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"/></svg></button><button class="teams-action-btn edit-team" type="button" title="Edit" data-update-url="{% url 'admin_edit_team' row.id %}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 17.25 11.06-11.06 3.75 3.75L6.75 21H3v-3.75ZM19.71 8.04 15.96 4.3l1.33-1.33a1 1 0 0 1 1.42 0l2.33 2.33a1 1 0 0 1 0 1.42l-1.33 1.33Z"/></svg></button><button class="teams-action-btn teams-action-btn--danger delete-team" type="button" title="Delete" data-delete-url="{% url 'admin_delete_team' row.id %}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm1 7h2v8h-2v-8Zm4 0h2v8h-2v-8ZM6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7Z"/></svg></button></div></td>
                   </tr>
-                {% empty %}<tr><td colspan="5" class="teams-empty">No teams found.</td></tr>{% endfor %}
+                {% empty %}<tr><td colspan="4" class="teams-empty">No teams found.</td></tr>{% endfor %}
               </tbody>
             </table>
           </div>
@@ -83,14 +83,13 @@
   <div id="team-form-modal" class="assignment-modal teams-modal hidden" aria-hidden="true">
     <div class="modal-backdrop" data-close-team-modal="true"></div>
     <div class="teams-modal-panel team-form-panel" role="dialog" aria-modal="true" aria-labelledby="team-modal-title">
-      <div class="teams-modal-header"><div><h3 id="team-modal-title">Add Team</h3><p id="team-modal-subtitle">Register a team with its name, code, department, and image.</p></div><button class="teams-modal-close" type="button" data-close-team-modal="true" aria-label="Close">&times;</button></div>
+      <div class="teams-modal-header"><div><h3 id="team-modal-title">Add Team</h3><p id="team-modal-subtitle">Register a team with its name, department, and image.</p></div><button class="teams-modal-close" type="button" data-close-team-modal="true" aria-label="Close">&times;</button></div>
       <form id="team-form" class="team-modal-form" enctype="multipart/form-data">
         {% csrf_token %}
         <input type="hidden" id="team-id">
         <div class="team-modal-body">
           <div class="team-form-grid">
-            <label class="team-field"><span class="team-field-label">Team Name <span class="ced-req">*</span></span><input class="form-control" type="text" id="team-name" required></label>
-            <label class="team-field"><span class="team-field-label">Team Code <span class="ced-req">*</span></span><input class="form-control" type="text" id="team-code" required></label>
+            <label class="team-field team-field--full"><span class="team-field-label">Team Name <span class="ced-req">*</span></span><input class="form-control" type="text" id="team-name" required></label>
             <label class="team-field team-field--full"><span class="team-field-label">Department <span class="ced-req">*</span></span><select class="form-select" id="team-department" required><option value="">Select active department</option>{% for dept in active_departments %}<option value="{{ dept.id }}">{{ dept.name }} ({{ dept.code }})</option>{% endfor %}</select></label>
             <label class="team-field team-field--full"><span class="team-field-label">Upload Image</span><input class="form-control" type="file" id="team-image" accept="image/*"><div id="team-image-preview-wrap" class="team-preview-wrap hidden"><img id="team-image-preview" class="team-preview-img" alt="Team preview"></div></label>
           </div>
@@ -99,8 +98,8 @@
       </form>
     </div>
   </div>
-  <div id="team-members-modal" class="assignment-modal teams-modal hidden" aria-hidden="true"><div class="modal-backdrop" data-close-members-modal="true"></div><div class="teams-modal-panel team-view-panel" role="dialog" aria-modal="true" aria-labelledby="team-members-title"><div class="teams-modal-header teams-modal-header--view"><div><h3 id="team-members-title">Team</h3><p id="team-members-subtitle">Code: —</p></div><button class="teams-modal-close" type="button" data-close-members-modal="true" aria-label="Close">&times;</button></div><div class="team-view-body"><div id="view-team-image-wrap" class="team-preview-wrap hidden"><img id="view-team-image" class="team-preview-img" alt="Team image"></div><dl class="team-view-details"><div class="team-view-detail"><dt>Department</dt><dd id="view-team-department">—</dd></div></dl></div><div class="teams-modal-footer teams-modal-footer--single"><button class="btn btn-primary teams-btn teams-btn--primary" type="button" data-close-members-modal="true">Close</button></div></div></div>
+  <div id="team-members-modal" class="assignment-modal teams-modal hidden" aria-hidden="true"><div class="modal-backdrop" data-close-members-modal="true"></div><div class="teams-modal-panel team-view-panel" role="dialog" aria-modal="true" aria-labelledby="team-members-title"><div class="teams-modal-header teams-modal-header--view"><div><h3 id="team-members-title">Team</h3></div><button class="teams-modal-close" type="button" data-close-members-modal="true" aria-label="Close">&times;</button></div><div class="team-view-body"><div id="view-team-image-wrap" class="team-preview-wrap hidden"><img id="view-team-image" class="team-preview-img" alt="Team image"></div><dl class="team-view-details"><div class="team-view-detail"><dt>Department</dt><dd id="view-team-department">—</dd></div></dl></div><div class="teams-modal-footer teams-modal-footer--single"><button class="btn btn-primary teams-btn teams-btn--primary" type="button" data-close-members-modal="true">Close</button></div></div></div>
   <div id="team-delete-modal" class="assignment-modal teams-modal hidden" aria-hidden="true"><div class="modal-backdrop" data-close-delete-modal="true"></div><div class="teams-modal-panel team-delete-panel" role="dialog" aria-modal="true" aria-labelledby="team-delete-title"><div class="team-delete-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm1 7h2v8h-2v-8Zm4 0h2v8h-2v-8ZM6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7Z"/></svg></div><h3 id="team-delete-title">Delete Team</h3><p class="team-delete-message">Are you sure you want to delete <strong id="delete-team-name">this team</strong>? This action cannot be undone.</p><div class="teams-modal-footer teams-modal-footer--center"><button class="btn btn-outline-secondary teams-btn teams-btn--ghost" type="button" data-close-delete-modal="true">Cancel</button><button class="btn btn-danger teams-btn teams-btn--danger" type="button" id="confirm-delete-team-btn">Delete Team</button></div></div></div>
-  <script src="{% static 'js/admin_teams.js' %}?v=20260926a"></script>
+  <script src="{% static 'js/admin_teams.js' %}?v=20261011a"></script>
 </body>
 </html>

@@ -1,6 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.db import transaction
+from django.db import transaction, DatabaseError
 from django.http import HttpResponseBadRequest, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -12,7 +12,7 @@ from events.points_settings_service import (
     ScoringRulesError, default_rules, event_snapshot, placement_schedule,
     reconcile_championship_points, scoring_rules, validate_scoring_rules,
     invalidate_scoring_publication,
-    reopen_match_for_correction,
+    reopen_match_for_correction, apply_global_rules_to_existing_events,
 )
 import json
 from copy import deepcopy
@@ -112,41 +112,46 @@ def admin_settings(request):
             error = str(exc)
             field_errors = exc.fields
         else:
-            with transaction.atomic():
-                if event:
-                    event = Event.objects.select_for_update().get(pk=event.pk)
-                    if request.POST.get('operation') == 'recalculate':
-                        reconcile_championship_points(event, force=True)
-                        action = 'Recalculated Championship Points'
+            try:
+                with transaction.atomic():
+                    if event:
+                        event = Event.objects.select_for_update().get(pk=event.pk)
+                        if request.POST.get('operation') == 'recalculate':
+                            reconcile_championship_points(event, force=True)
+                            action = 'Recalculated Championship Points'
+                        else:
+                            cfg = dict(event.result_processing_config or {})
+                            cfg['championship_scoring'] = event_snapshot(event, validated)
+                            cfg['championship_placements'] = placements
+                            cfg.pop('match_win_points', None)
+                            event.result_processing_config = cfg
+                            event.championship_points_config = placement_schedule(validated, event.event_classification)
+                            if event.scoring_method == 'match':
+                                event.apply_championship_points = False
+                            event.save()
+                            invalidate_scoring_publication(event, request.user, reason)
+                            reconcile_championship_points(event, force=True)
+                            action = 'Overrode Event Championship Rules'
+                        record_audit(user=request.user, action=action, module='Championship', request=request,
+                                     event_name=event.name, description=reason,
+                                     metadata={'event_id': event.pk, 'previous': previous or {},
+                                               'updated': event.result_processing_config['championship_scoring']})
                     else:
-                        cfg = dict(event.result_processing_config or {})
-                        cfg['championship_scoring'] = event_snapshot(event, validated)
-                        cfg['championship_placements'] = placements
-                        cfg.pop('match_win_points', None)
-                        event.result_processing_config = cfg
-                        event.championship_points_config = placement_schedule(validated, event.event_classification)
-                        if event.scoring_method == 'match':
-                            event.apply_championship_points = False
-                        event.save()
-                        invalidate_scoring_publication(event, request.user, reason)
-                        reconcile_championship_points(event, force=True)
-                        action = 'Overrode Event Championship Rules'
-                    record_audit(user=request.user, action=action, module='Championship', request=request,
-                                 event_name=event.name, description=reason,
-                                 metadata={'event_id': event.pk, 'previous': previous or {},
-                                           'updated': event.result_processing_config['championship_scoring']})
-                else:
-                    obj = SystemSettings.load()
-                    obj = SystemSettings.objects.select_for_update().get(pk=obj.pk)
-                    before = scoring_rules()
-                    obj.championship_points_config = validated
-                    obj.updated_by = request.user
-                    obj.save(update_fields=['championship_points_config', 'updated_by', 'updated_at'])
-                    record_audit(user=request.user, action='Changed Championship Scoring Rules', module='Championship',
-                                 request=request, description='Updated global scoring defaults for newly created events.',
-                                 metadata={'previous': before, 'updated': validated})
+                        obj = SystemSettings.load()
+                        obj = SystemSettings.objects.select_for_update().get(pk=obj.pk)
+                        before = scoring_rules()
+                        obj.championship_points_config = validated
+                        obj.updated_by = request.user
+                        obj.save(update_fields=['championship_points_config', 'updated_by', 'updated_at'])
+                        updated_events = apply_global_rules_to_existing_events(validated, request.user)
+                        record_audit(user=request.user, action='Changed Championship Scoring Rules', module='Championship',
+                                     request=request, description='Updated global championship rules and existing Major and Minor events.',
+                                     metadata={'previous': before, 'updated': validated, 'updated_events': updated_events})
+            except (DatabaseError, ScoringRulesError):
+                return _render_settings(request, event, config,
+                    'Unable to save championship settings. No configuration changes were applied. Please try again.', {})
             messages.success(request, 'Event scoring updated; authorized approval and republication are required.' if event
-                             else 'Championship scoring rules saved. Existing event snapshots are unchanged.')
+                             else f'Championship scoring rules saved. Updated {updated_events} existing Major and Minor events. Changed events require renewed approval and publication.')
             return redirect(reverse('admin_settings') + (f'?event={event.pk}' if event else ''))
     return _render_settings(request, event, config, error, field_errors)
 

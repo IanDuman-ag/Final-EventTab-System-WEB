@@ -149,6 +149,13 @@
 }
 
 /* Focused faculty match workspace */
+.fac-dashboard .fac-table-scroll-hint { display: none; }
+@media (max-width: 1100px) {
+  .fac-dashboard .fac-table-scroll-hint { display: block; margin: 0; padding: 10px 16px; color: #526b91; font-size: 12px; }
+}
+@media (max-width: 640px) {
+  .fac-dashboard .fac-wave { display: none; }
+}
 .tab-brand h1 span { color:#f59e0b;font-size:inherit;letter-spacing:0 }.tab-brand small { color:#718198;font-size:9px;font-weight:700;letter-spacing:.12em }.fac-nav-label { margin:4px 20px 8px;color:#5c6d87;font-size:9px;font-weight:800;letter-spacing:.14em;text-transform:uppercase }.fac-sidebar-bottom { margin-top:auto }.tab-user-avatar { width:34px;height:34px;border-radius:50%;background:#f59e0b;color:#172642;display:grid;place-items:center;font-size:11px;font-weight:800;flex:none }.tab-user-card > span:last-child { min-width:0 }.tab-user-card strong,.tab-user-card small { display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap }.tab-user-card strong { color:#f1f5f9;font-size:12px }.tab-user-card small { color:#8795aa;font-size:10px }
 .fac-section { margin-bottom: 18px; }
 .fac-card > header p { margin: 4px 0 0; color: #64778b; font-size: 13px; }
@@ -203,4 +210,151 @@
   .fac-match-table thead { display:none }.fac-match-table,.fac-match-table tbody,.fac-match-table tr,.fac-match-table td { display:block;min-width:0;width:100% }.fac-match-table tr { padding:13px;border-bottom:1px solid #e3eaf2 }.fac-match-table td { padding:5px 0;border:0 }.fac-match-table td:last-child { padding-top:11px }.fac-match-table .fac-btn { width:100%;min-height:44px }
   .fac-result-dialog,.fac-confirm-dialog { width:100vw;max-width:none;height:100dvh;max-height:none;margin:0;border-radius:0 }.fac-dialog-shell { height:100dvh;max-height:100dvh }.fac-dialog footer { flex-wrap:wrap }.fac-dialog footer .fac-btn { flex:1 1 100%;min-height:44px }.fac-score-grid { grid-template-columns:1fr }.fac-versus { text-align:center }
   .fac-readonly { grid-template-columns:1fr }.fac-toolbar > * { width:100% }.fac-toolbar .fac-btn { min-height:44px }
+}
+.fac-v2 { background: #f1f5f9; color: #0f172a; }
+.fac-v2 .tab-sidebar { background: #0b1d3a; }
+.fac-v2 .fac-card, .fac-v2 .fac-stats article { border-radius: 10px; overflow: hidden; box-shadow: 0 5px 18px #0b1d3a09; }
+.fac-v2 .fac-stats article { background: white; color: #0b1d3a; border: 1px solid #dbe5f0; }
+.fac-v2 .fac-stats span { color: #405779; }
+.fac-v2 .fac-stats strong { font-variant-numeric: tabular-nums; }
+.fac-v2 .fac-card > header h2 { text-transform: none; letter-spacing: 0; color: #0b1d3a; font-weight: 750; }
+.fac-v2 .fac-pill--ready { background: #fef3c7; color: #854d0e; }
+.fac-v2 .fac-pill--confirmed, .fac-v2 .fac-pill--published { background: #dcfce7; color: #166534; }
+.fac-v2 .fac-pill--pending { background: #ffedd5; color: #9a3412; }
+.fac-v2 .fac-btn { border-radius: 5px; transition: background .2s, transform .2s; }
+.fac-v2 .fac-btn:hover { transform: translateY(-1px); }
+.fac-v2 .fac-btn-yellow { background: #facc15; color: #0b1d3a; }
+.fac-v2 a:focus-visible, .fac-v2 button:focus-visible { outline: 3px solid #2563eb; outline-offset: 3px; }
+@media(max-width: 1100px) { .fac-stats { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+@media(max-width: 600px) { .fac-stats { grid-template-columns: 1fr; } }
+.fac-v2 .fac-stats article { min-height: 108px; padding: 18px 18px 18px 76px; gap: 4px; }
+.fac-v2 .fac-stats article > svg { left: 16px; right: auto; top: 26px; width: 23px; height: 23px; padding: 12px; border-radius: 50%; background: #e8f1ff; fill: #2563eb; }
+.fac-v2 .fac-stats article:nth-child(2) > svg, .fac-v2 .fac-stats article:nth-child(4) > svg { background: #dcfce7; fill: #166534; }
+.fac-v2 .fac-stats article:nth-child(3) > svg { background: #fef3c7; fill: #d97706; }
+.fac-v2 .fac-stats article.is-confirmed { border-left: 1px solid #dbe5f0; }
+.fac-v2 .fac-stats article small { color: #60799a; font-size: 11px; }
+@media(max-width: 600px) { .fac-v2 .tab-topbar { flex-wrap: wrap; } }
+.fac-v2 dialog[id^="publication-"], .fac-v2 dialog[id^="remove-publication-"], .fac-v2 #event-publication { position: fixed; inset: 0; margin: auto; width: min(560px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); border-radius: 12px; }
+.fac-v2 dialog[id^="publication-"] .fac-dialog-shell, .fac-v2 dialog[id^="remove-publication-"] .fac-dialog-shell, .fac-v2 #event-publication .fac-dialog-shell { max-height: calc(100dvh - 32px); }
+
+/* Reference layout, scoped to the Faculty Dashboard only. */
+body.fac-dashboard { background:#eef6ff; }
+body.fac-dashboard .tab-main { background:radial-gradient(ellipse at 85% 0, #f8fcff 0, #eef6ff 58%, #f2f8ff 100%); }
+body.fac-dashboard .tab-topbar { padding:22px 28px 14px; border:0; background:transparent; align-items:flex-start; gap:20px; }
+body.fac-dashboard .tab-topbar h1 { font-size:28px; font-weight:800; letter-spacing:-.7px; line-height:1.25; margin:0 0 6px; color:#0b1d3a; }
+body.fac-dashboard .fac-kicker { color:#0057ff; letter-spacing:.08em; }
+body.fac-dashboard .fac-lead { margin:0; color:#46668f; font-size:13px; max-width:none; }
+body.fac-dashboard .fac-wave { font-size:24px; margin-left:4px; }
+body.fac-dashboard .fac-dashboard-date { display:flex; align-items:center; gap:9px; flex-shrink:0; color:#0b1d3a; font-size:12px; padding-top:2px; }
+body.fac-dashboard .fac-dashboard-date strong, body.fac-dashboard .fac-dashboard-date div>span { display:block; }
+body.fac-dashboard .fac-dashboard-date div>span { color:#45628d; margin-top:2px; font-size:11px; }
+body.fac-dashboard .fac-date-icon { width:36px; height:36px; display:grid; place-items:center; background:#fff; border:1px solid #e1ecfa; border-radius:9px; }
+body.fac-dashboard svg:not(.fac-sr-only) { width:18px; height:18px; flex:none; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; color:#0057ff; }
+body.fac-dashboard svg.fac-icon-filled { fill:currentColor; stroke:none; }
+body.fac-dashboard .fac-content { padding:6px 24px 30px; }
+body.fac-dashboard .fac-stats { gap:14px; margin-bottom:16px; grid-template-columns:repeat(4,minmax(0,1fr)); }
+body.fac-dashboard .fac-stats article { min-height:132px; padding:20px 16px 16px 88px; border-color:#e0ecfc; border-radius:12px; gap:5px; box-shadow:0 3px 12px #2766b005; }
+body.fac-dashboard .fac-stats article>svg { left:16px; top:18px; width:28px; height:28px; padding:14px; box-sizing:content-box; border-radius:12px; fill:#0057ff; stroke:none; background:#eaf3ff; }
+body.fac-dashboard .fac-stats article:nth-child(2)>svg, body.fac-dashboard .fac-stats article:nth-child(4)>svg { fill:#04895b; background:#e4fbf1; }
+body.fac-dashboard .fac-stats article:nth-child(3)>svg { fill:#ee9400; background:#fff7dd; }
+body.fac-dashboard .fac-stats article>span { color:#3e5b8d; font-size:10px; letter-spacing:.055em; line-height:1.4; }
+body.fac-dashboard .fac-stats article>strong { font-size:30px; line-height:1.05; letter-spacing:-.5px; }
+body.fac-dashboard .fac-stats article>small { color:#486a9b; line-height:1.45; font-size:12px; }
+body.fac-dashboard .fac-card { border:1px solid #dfebfa; box-shadow:none; border-radius:12px; }
+body.fac-dashboard .fac-section { margin-bottom:16px; }
+body.fac-dashboard .fac-card>header { padding:16px; border-bottom:0; gap:15px; }
+body.fac-dashboard .fac-section-heading { display:flex; gap:14px; align-items:center; min-width:0; }
+body.fac-dashboard .fac-heading-icon { width:44px; height:44px; border-radius:11px; display:grid; place-items:center; background:#eaf3ff; flex:none; font-size:25px; }
+body.fac-dashboard .fac-heading-icon svg { width:25px; height:25px; }
+body.fac-dashboard .fac-heading-icon--gold { background:#fff4cb; }
+body.fac-dashboard .fac-card>header h2 { font-size:20px; letter-spacing:-.5px; font-weight:800; }
+body.fac-dashboard .fac-card>header p { font-size:12px; line-height:1.45; color:#486a9b; margin-top:2px; }
+body.fac-dashboard .fac-ready-count { color:#915000; background:#fff3c3; border-radius:24px; padding:9px 14px; white-space:nowrap; font-size:11px; }
+body.fac-dashboard .fac-queue-list { display:grid; gap:9px; padding:0 14px 14px; }
+body.fac-dashboard .fac-queue-event { display:grid; grid-template-columns:minmax(0,1fr) 180px 180px; align-items:center; gap:18px; border:1px solid #e1ecfb; border-radius:11px; padding:13px; background:linear-gradient(110deg,#fff,#fcfdff); }
+body.fac-dashboard .fac-event-identity { display:flex; align-items:center; gap:14px; min-width:0; }
+body.fac-dashboard .fac-event-identity>div { min-width:0; }
+body.fac-dashboard .fac-sport-tile { width:54px; height:54px; display:grid; place-items:center; background:#edf5ff; border-radius:12px; font-size:32px; flex:none; }
+body.fac-dashboard .fac-event-identity h3 { color:#0b1d3a; font-size:16px; font-weight:800; letter-spacing:-.25px; margin:0 0 6px; }
+body.fac-dashboard .fac-event-details { display:flex; align-items:center; flex-wrap:wrap; gap:7px 18px; font-size:11px; color:#46668f; }
+body.fac-dashboard .fac-event-details>span { display:flex; align-items:center; gap:6px; }
+body.fac-dashboard .fac-event-details svg { width:14px; height:14px; }
+body.fac-dashboard .fac-queue-status { text-align:center; }
+body.fac-dashboard .fac-queue-status>.fac-pill { border-radius:20px; padding:7px 11px; font-size:11px; }
+body.fac-dashboard .fac-queue-status>.fac-pill--ready { color:#087747; background:#e3faee; }
+body.fac-dashboard .fac-queue-status>.fac-pill>span { display:inline-grid; place-items:center; width:15px; height:15px; border-radius:50%; margin-right:4px; color:#fff; background:#00875a; font-size:10px; }
+body.fac-dashboard .fac-queue-status small { display:block; font-size:10px; line-height:1.4; color:#4d6d98; margin-top:4px; }
+body.fac-dashboard .fac-btn { background:#0057ff; border-radius:7px; color:#fff; box-shadow:0 4px 9px #0057ff12; gap:8px; }
+body.fac-dashboard .fac-btn svg { color:currentColor; width:16px; height:16px; }
+body.fac-dashboard .fac-btn:hover { background:#0349d5; color:#fff; }
+body.fac-dashboard .fac-queue-action { min-height:44px; font-size:12px; padding:0 12px; white-space:nowrap; }
+body.fac-dashboard .fac-action-arrow { margin-left:3px; width:13px!important; }
+body.fac-dashboard .fac-view-all { display:inline-flex; gap:8px; align-items:center; border:1px solid #d6e5fb; color:#0057ff; border-radius:8px; padding:10px 12px; font-size:12px; font-weight:750; text-decoration:none; white-space:nowrap; }
+body.fac-dashboard .fac-view-all svg { width:15px; height:15px; }
+body.fac-dashboard .fac-view-all:hover { background:#f0f6ff; }
+body.fac-dashboard .fac-dashboard-table { min-width:790px; border-collapse:separate; border-spacing:0; }
+body.fac-dashboard .fac-dashboard-table th { background:#f3f8ff; font-size:9px; padding:12px 14px; color:#3d5e8a; white-space:nowrap; }
+body.fac-dashboard .fac-dashboard-table td { padding:12px 14px; font-size:12px; background:#fcfdff; border-top:1px solid #e9f0fb; }
+body.fac-dashboard .fac-dashboard-table .fac-sport-tile { width:43px; height:43px; font-size:26px; border-radius:10px; }
+body.fac-dashboard .fac-dashboard-table .fac-event-identity { gap:11px; }
+body.fac-dashboard .fac-dashboard-table .fac-event-identity strong { font-size:13px; font-weight:800; display:block; }
+body.fac-dashboard .fac-event-subtitle { display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-size:10px; color:#4b6d9e; margin-top:4px; }
+body.fac-dashboard .fac-event-subtitle>span { color:#0054db; background:#eaf2ff; border-radius:3px; padding:2px 5px; font-size:9px; }
+body.fac-dashboard .fac-event-subtitle i { font-style:normal; }
+body.fac-dashboard .fac-cell-meta { display:flex; align-items:center; gap:8px; color:#45648e; line-height:1.45; }
+body.fac-dashboard .fac-cell-meta svg { width:15px; height:15px; }
+body.fac-dashboard .fac-dashboard-progress { min-width:120px; }
+body.fac-dashboard .fac-dashboard-progress>strong { display:block; font-size:12px; margin-bottom:5px; }
+body.fac-dashboard .fac-dashboard-progress>div { display:flex; gap:9px; align-items:center; }
+body.fac-dashboard .fac-progress-track { display:block; width:100px; height:8px; background:#dce9f7; border-radius:6px; overflow:hidden; }
+body.fac-dashboard .fac-progress-track i { display:block; height:100%; border-radius:6px; background:#0057ff; }
+body.fac-dashboard .fac-progress-track i.is-complete { background:#08975e; }
+body.fac-dashboard .fac-dashboard-progress small { margin:0; font-size:10px; color:#224d80; }
+body.fac-dashboard .fac-event-actions { display:flex; flex-wrap:wrap; gap:7px; }
+body.fac-dashboard .fac-event-actions .fac-btn { min-height:37px; font-size:11px; white-space:nowrap; }
+body.fac-dashboard .fac-event-actions .fac-btn-danger { background:#bd2c3f; }
+body.fac-dashboard .fac-btn-secondary { background:#fff; color:#30455e; border-color:#cfdbe8; box-shadow:none; }
+body.fac-dashboard .fac-btn-secondary:hover { background:#edf4fc; }
+body.fac-dashboard .fac-btn-yellow { background:#facc15; color:#0b1d3a; }
+body.fac-dashboard .fac-btn-yellow:hover { background:#edbd05; }
+body.fac-dashboard .fac-btn-danger { background:#bd2c3f; }
+@media(max-width:1250px) {
+ body.fac-dashboard .fac-stats article { padding-left:74px; }
+ body.fac-dashboard .fac-stats article>svg { padding:10px; width:24px; height:24px; }
+ body.fac-dashboard .fac-queue-event { grid-template-columns:minmax(0,1fr) 165px 164px; gap:12px; }
+ body.fac-dashboard .fac-stats article>span { font-size:9px; }
+}
+@media(max-width:1100px) {
+ body.fac-dashboard .fac-stats { grid-template-columns:repeat(2,minmax(0,1fr)); }
+ body.fac-dashboard .fac-queue-event { grid-template-columns:minmax(0,1fr) 170px; }
+ body.fac-dashboard .fac-queue-event .fac-event-identity { grid-column:1/-1; }
+ body.fac-dashboard .fac-queue-status { text-align:left; }
+ body.fac-dashboard .fac-stats article { min-height:125px; }
+}
+@media(max-width:900px) {
+ body.fac-dashboard .tab-topbar { padding-left:74px; }
+ body.fac-dashboard .fac-content { padding:6px 16px 24px; }
+ body.fac-dashboard .tab-topbar h1 { font-size:25px; }
+}
+@media(max-width:640px) {
+ body.fac-dashboard .tab-topbar { flex-direction:column; gap:10px; }
+ body.fac-dashboard .fac-dashboard-date { padding:0; }
+ body.fac-dashboard .fac-content { padding:8px 12px 20px; }
+ body.fac-dashboard .fac-stats { grid-template-columns:1fr; gap:9px; }
+ body.fac-dashboard .fac-stats article { min-height:112px; padding:17px 18px 17px 87px; }
+ body.fac-dashboard .fac-stats article>svg { top:22px; left:18px; padding:13px; }
+ body.fac-dashboard .fac-stats article>span { font-size:10px; }
+ body.fac-dashboard .fac-card>header { align-items:flex-start; flex-wrap:wrap; padding:14px; }
+ body.fac-dashboard .fac-card>header h2 { font-size:18px; }
+ body.fac-dashboard .fac-heading-icon { width:38px; height:38px; }
+ body.fac-dashboard .fac-section-heading { gap:10px; }
+ body.fac-dashboard .fac-ready-count { margin-left:48px; padding:7px 10px; }
+ body.fac-dashboard .fac-queue-event { grid-template-columns:minmax(0,1fr); gap:12px; }
+ body.fac-dashboard .fac-queue-event .fac-event-identity { grid-column:auto; align-items:flex-start; gap:10px; }
+ body.fac-dashboard .fac-sport-tile { width:45px; height:45px; font-size:28px; }
+ body.fac-dashboard .fac-event-details { flex-direction:column; align-items:flex-start; gap:5px; }
+ body.fac-dashboard .fac-queue-status { padding-left:55px; }
+ body.fac-dashboard .fac-queue-action { min-height:44px; width:100%; }
+ body.fac-dashboard .fac-view-all { margin-left:48px; }
+ body.fac-dashboard .fac-dashboard-table { min-width:800px; }
 }

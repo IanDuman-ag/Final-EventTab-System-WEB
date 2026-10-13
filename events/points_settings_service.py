@@ -109,6 +109,30 @@ def event_snapshot(event, rules=None):
     return rules
 
 
+def match_championship_rules(event):
+    """Read a saved snapshot or adapt the event's existing legacy placement table."""
+    cfg = event.result_processing_config or {}
+    if cfg.get('championship_scoring'):
+        return cfg['championship_scoring']
+    rows = event.championship_points_config
+    if not event.apply_championship_points or not isinstance(rows, list) or not rows:
+        return None
+    if event.event_classification not in {'major', 'minor'}:
+        return None
+    placements = []
+    for rank, row in enumerate(rows, 1):
+        value = row.get('points') if isinstance(row, dict) else None
+        if type(value) is not int or value < 0:
+            return None
+        placements.append({'rank': rank, 'major': value, 'minor': value})
+    # Legacy events have no snapshot-level approval switch. Their saved
+    # verification_mode continues to control tabulator/admin approvals.
+    return {'version': 2, 'method': 'placement', 'classification': event.event_classification,
+            'placements': placements, 'win_points': {'major': 0, 'minor': 0},
+            'approval_required': cfg.get('approval_required') is True,
+            'automatic_calculation': True, 'bye_policy': 'no_points', 'tie_policy': 'official'}
+
+
 def inherit_criteria_snapshot(event, result_processing, creating):
     """Scoring snapshots are server-owned, even when other result settings are editable."""
     saved = dict(event.result_processing_config or {})
@@ -127,37 +151,84 @@ def placement_schedule(rules, classification):
 
 
 def _match_placements(event, teams, matches, rules):
+    actual = [m for m in matches if not m.is_automatic_advance and m.status in TERMINAL]
     supplied = (event.result_processing_config or {}).get('championship_placements')
-    if supplied:
-        return {int(key): value for key, value in supplied.items()}, ''
     if event.tournament_type == 'round_robin':
-        return _round_robin_placements(event, teams, matches, rules)
+        pairs = {frozenset((m.team_a_id, m.team_b_id)) for m in actual}
+        if len(pairs) != len(teams) * (len(teams) - 1) // 2:
+            return {}, 'Round Robin schedule is incomplete.'
+        if supplied:
+            return {int(key): value for key, value in supplied.items()}, ''
+        return _round_robin_placements(event, teams, actual, rules)
     from .bracket_progression import _is_finals_match
-    finals = [m for m in matches if _is_finals_match(m) and m.winner_id and m.loser_id]
+    finals = [m for m in actual if _is_finals_match(m) and m.winner_id and m.loser_id]
     if not finals:
-        return {}, 'A confirmed championship final or authorized final placements are required.'
+        return {}, 'The championship Final is awaiting confirmation.'
+    if event.tournament_type == 'single_elimination' and len(finals) != 1:
+        return {}, 'Single Elimination needs one unique championship Final.'
     final = max(finals, key=lambda m: m.match_number)
-    if event.tournament_type == 'double_elimination':
-        losses = Counter(m.loser_id for m in matches if m.loser_id)
-        if losses[final.loser_id] < 2:
-            return {}, 'Double elimination requires a resolved grand-final reset or authorized final placements.'
     ranks = {final.winner_id: 1, final.loser_id: 2}
-    third = [m for m in matches if 'third' in m.round_name.lower() or '3rd' in m.round_name.lower()]
-    if third and third[-1].winner_id and third[-1].loser_id:
-        ranks.update({third[-1].winner_id: 3, third[-1].loser_id: 4})
+    bronze = [m for m in actual if 'third' in m.round_name.lower() or '3rd' in m.round_name.lower()]
+    if len(bronze) > 1:
+        return ranks, 'Duplicate Third-Place Playoff matches require administrator review.'
+    championship = [m for m in actual if m not in bronze]
+    losses = Counter(m.loser_id for m in championship if m.loser_id)
     if event.tournament_type == 'single_elimination':
-        rounds = defaultdict(list)
-        for match in matches:
-            if match.loser_id and match.loser_id not in ranks:
-                rounds[match.round_name].append(match)
-        for cohort in sorted(rounds.values(), key=lambda rows: max(m.match_number for m in rows), reverse=True):
-            members = {m.loser_id for m in cohort if m.loser_id not in ranks}
-            if len(members) > 1 and rules['tie_policy'] != 'shared':
-                break
-            rank = len(ranks) + 1
-            ranks.update({member: rank for member in members})
-    if len(ranks) != len(teams):
-        return ranks, 'Record remaining final placements through the authorized event override.'
+        if len(teams) >= 4 and not bronze:
+            return ranks, 'Third-Place Playoff is missing or awaiting confirmation. An administrator can insert the missing playoff.'
+        if losses[final.winner_id] or any(losses[t.pk] != 1 for t in teams if t.pk != final.winner_id):
+            return ranks, 'Single Elimination bracket is incomplete or structurally inconsistent.'
+        if bronze:
+            third = max(bronze, key=lambda m: m.match_number)
+            semis = [m for m in championship if m.next_match_winner_id == final.pk]
+            if len(semis) != 2 or {m.loser_id for m in semis} != {third.team_a_id, third.team_b_id}:
+                return ranks, 'Third-Place Playoff participants must be the two confirmed semifinal losers.'
+            ranks.update({third.winner_id: 3, third.loser_id: 4})
+    elif event.tournament_type == 'double_elimination':
+        if losses[final.loser_id] < 2:
+            return ranks, 'Grand Final reset is required.'
+        if losses[final.winner_id] >= 2:
+            return ranks, 'Grand Final winner was already eliminated.'
+        alive = [t.name for t in teams if t.pk != final.winner_id and losses[t.pk] != 2]
+        if alive:
+            return ranks, 'Double Elimination bracket incomplete: missing elimination matches for ' + ', '.join(alive) + '.'
+        losers_final = [m for m in championship if 'losers final' in m.round_name.lower()]
+        if len(teams) > 2 and not losers_final:
+            return ranks, 'Losers Final is missing.'
+        if losers_final:
+            ranks[losers_final[-1].loser_id] = 3
+    # Validate authored progression instead of trusting the stored match count.
+    graph = {m.pk: m for m in event.bracket_matches.all()}
+    for match in graph.values():
+        if match.status not in TERMINAL:
+            continue
+        for participant, destination in ((match.winner_id, match.next_match_winner_id),
+                                         (match.loser_id, match.next_match_loser_id)):
+            if participant and destination:
+                target = graph.get(destination)
+                if not target or participant not in {target.team_a_id, target.team_b_id}:
+                    return ranks, f'Bracket progression is inconsistent after Game {match.match_number}.'
+    cohorts = defaultdict(set)
+    counts = Counter()
+    for match in sorted(championship, key=lambda m: m.match_number):
+        if match.loser_id:
+            counts[match.loser_id] += 1
+            if counts[match.loser_id] == (2 if event.tournament_type == 'double_elimination' else 1):
+                cohorts[match.round_name].add(match.loser_id)
+    position = max(ranks.values()) + 1
+    for members in reversed(list(cohorts.values())):
+        members -= set(ranks)
+        if members and (len(members) == 1 or rules['tie_policy'] == 'shared'):
+            ranks.update({member: position for member in members})
+        position += len(members)
+    if supplied:
+        override = {int(key): value for key, value in supplied.items()}
+        if any(override.get(key, ranks[key]) != ranks[key] for key in ranks if ranks[key] <= 4):
+            return ranks, 'Authorized placements contradict confirmed deciding matches.'
+        ranks.update(override)
+    required = set(rules.get('required_placements', []))
+    if required - set(ranks.values()):
+        return ranks, 'Required official placements are missing: ' + ', '.join(map(str, sorted(required - set(ranks.values()))))
     return ranks, ''
 
 
@@ -204,7 +275,9 @@ def _round_robin_placements(event, teams, matches, rules):
             if offset == 0 or key != previous:
                 rank = position + offset
             elif rules['tie_policy'] != 'shared':
-                return {}, 'Tournament ties require authorized final-placement resolution.'
+                return {}, ('Round Robin third-place tie is unresolved; authorized ranking resolution is required.'
+                            if rank <= 3 <= position + offset else
+                            'Round Robin placement tie is unresolved; apply the configured tiebreakers or an authorized ranking resolution.')
             ranks[member], previous = rank, key
         position += len(members)
     return ranks, ''
@@ -293,7 +366,7 @@ def reconcile_championship_points(event, *, force=False, publishing=False):
         if rules['method'] in {'placement', 'combined'}:
             if complete and (not rules['approval_required'] or cfg.get('approved')):
                 placements, pending = _match_placements(event, teams, confirmed, rules)
-                if len(placements) != len(teams):
+                if pending:
                     placements = {}
             else:
                 pending = 'Final placement awards await completed matches and authorized approval.'
@@ -381,6 +454,45 @@ def reopen_match_for_correction(event, match_id, user, reason):
     record_audit(user=user, action='Reopened Match for Correction', module='Championship',
                  event_name=event.name, description=reason,
                  metadata={'event_id': event.pk, 'match_id': match.pk, 'previous': old, 'updated': {'status': 'pending'}})
+
+
+@transaction.atomic
+def apply_global_rules_to_existing_events(rules, user):
+    """Synchronize classified events without changing their competition results."""
+    from .audit_service import record_audit
+    updated = 0
+    events = Event.objects.select_for_update().filter(
+        event_classification__in=['major', 'minor'], scoring_method__in=['match', 'criteria'],
+    ).order_by('pk')
+    for event in events:
+        cfg = dict(event.result_processing_config or {})
+        previous = deepcopy(cfg.get('championship_scoring') or {})
+        snapshot = deepcopy(previous)
+        snapshot.update(event_snapshot(event, rules))
+        schedule = placement_schedule(snapshot, event.event_classification)
+        if previous == snapshot and event.championship_points_config == schedule:
+            continue
+        cfg['championship_scoring'] = snapshot
+        cfg.pop('match_win_points', None)
+        event.result_processing_config = cfg
+        event.championship_points_config = schedule
+        if event.scoring_method == 'match':
+            event.apply_championship_points = False
+        event.save(update_fields=['result_processing_config', 'championship_points_config',
+                                 'apply_championship_points', 'updated_at'])
+        reason = 'Global championship settings changed; renewed approval and publication are required.'
+        invalidate_scoring_publication(event, user, reason)
+        reconcile_championship_points(event, force=True)
+        # A settings change does not alter the recorded final placements. The
+        # next authorized publication will verify them against the new rules.
+        if 'calculated_placements' in cfg:
+            event.result_processing_config['calculated_placements'] = deepcopy(cfg['calculated_placements'])
+            event.save(update_fields=['result_processing_config'])
+        record_audit(user=user, action='Updated Event From Global Championship Rules',
+                     module='Championship', event_name=event.name, description=reason,
+                     metadata={'event_id': event.pk, 'previous': previous, 'updated': snapshot})
+        updated += 1
+    return updated
 
 
 def official_department_awards(event_ids=None):

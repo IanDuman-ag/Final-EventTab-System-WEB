@@ -132,6 +132,10 @@ def serialize_event(event):
         'published_date': published_at,
         'summary': ('Published round results' if kind == 'criteria' and is_multiround(event)
                     else 'Official published results'),
+        'official_placements': ([{'name': team.name, 'rank': (event.result_processing_config or {}).get('calculated_placements', {}).get(str(team.pk))}
+                                 for team in event.bracket_teams.all()
+                                 if str(team.pk) in (event.result_processing_config or {}).get('calculated_placements', {})]
+                                if published and kind == 'match' else []),
     }
 
 

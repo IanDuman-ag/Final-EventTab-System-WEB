@@ -8,7 +8,6 @@ document.addEventListener('DOMContentLoaded', function () {
   var form = document.getElementById('team-form');
   var teamId = document.getElementById('team-id');
   var teamName = document.getElementById('team-name');
-  var teamCode = document.getElementById('team-code');
   var teamDepartment = document.getElementById('team-department');
   var teamImage = document.getElementById('team-image');
   var teamImagePreview = document.getElementById('team-image-preview');
@@ -118,7 +117,6 @@ document.addEventListener('DOMContentLoaded', function () {
     formModal.dataset.endpoint = createUrl;
     teamId.value = '';
     teamName.value = '';
-    teamCode.value = '';
     teamDepartment.value = '';
     if (teamImage) teamImage.value = '';
     setImagePreview('');
@@ -134,7 +132,6 @@ document.addEventListener('DOMContentLoaded', function () {
     formModal.dataset.endpoint = endpoint;
     teamId.value = row.dataset.teamId || '';
     teamName.value = row.dataset.name || '';
-    teamCode.value = row.dataset.code || '';
     teamDepartment.value = row.dataset.departmentId || '';
     if (teamImage) teamImage.value = '';
     setImagePreview(row.dataset.imageUrl || '');
@@ -154,7 +151,6 @@ document.addEventListener('DOMContentLoaded', function () {
       return;
     }
     document.getElementById('team-members-title').textContent = data.name || fallbackName || 'Team';
-    document.getElementById('team-members-subtitle').textContent = data.code ? ('Code: ' + data.code) : '';
     document.getElementById('view-team-department').textContent = data.department_name || '—';
 
     var viewImage = document.getElementById('view-team-image');
@@ -282,16 +278,14 @@ document.addEventListener('DOMContentLoaded', function () {
   form.addEventListener('submit', async function (e) {
     e.preventDefault();
     var name = teamName.value.trim();
-    var code = teamCode.value.trim();
     var departmentId = teamDepartment.value || '';
-    if (!name || !code || !departmentId) {
-      showToast('Team name, team code, and department are required.', 'warning');
+    if (!name || !departmentId) {
+      showToast('Team name and department are required.', 'warning');
       return;
     }
 
     var formData = new FormData();
     formData.append('name', name);
-    formData.append('code', code);
     formData.append('department_id', departmentId);
     formData.append('members', '');
     formData.append('coach', preservedCoach);

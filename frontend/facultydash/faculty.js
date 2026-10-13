@@ -37,8 +37,6 @@
     return {
       score_a: form.querySelector('[name="score_a"]').value,
       score_b: form.querySelector('[name="score_b"]').value,
-      winner_id: form.querySelector('[name="winner_id"]').value,
-      remarks: form.querySelector('[name="remarks"]').value,
     };
   }
 
@@ -61,24 +59,21 @@
       return 'Enter valid non-negative scores for both teams.';
     }
     if (confirming && scoreA === scoreB) return 'Tied scores cannot be confirmed. Review the scores.';
-    if (confirming && !data.winner_id) return 'Select and verify the winner before confirming.';
     return '';
   }
 
   function updateSuggestion(form) {
     var scoreAInput = form.querySelector('[name="score_a"]');
     var scoreBInput = form.querySelector('[name="score_b"]');
-    var winnerSelect = form.querySelector('[name="winner_id"]');
-    var suggestion = form.querySelector('[data-winner-suggestion]');
+    var suggestion = form.querySelector('[data-winner-display]');
     if (!suggestion) return;
     var scoreA = Number(scoreAInput.value);
     var scoreB = Number(scoreBInput.value);
-    if (scoreAInput.value === '' || scoreBInput.value === '' || scoreA === scoreB) {
-      suggestion.textContent = 'Verify the winner before confirmation.';
+    if (scoreAInput.value === '' || scoreBInput.value === '' || !Number.isFinite(scoreA) || !Number.isFinite(scoreB) || scoreA < 0 || scoreB < 0) {
+      suggestion.textContent = 'Enter valid scores for both teams.';
       return;
     }
-    var suggestedOption = scoreA > scoreB ? winnerSelect.options[1] : winnerSelect.options[2];
-    suggestion.textContent = 'Suggested winner: ' + suggestedOption.textContent + '. Select to verify.';
+    suggestion.textContent = scoreA === scoreB ? 'Tied scores — resolve the tie before confirmation.' : scoreA > scoreB ? form.dataset.teamA : form.dataset.teamB;
   }
 
   var menu = document.querySelector('.fac-menu-toggle');
@@ -113,6 +108,7 @@
   });
 
   document.querySelectorAll('[data-match-form]').forEach(function (form) {
+    if (form.dataset.confirmed !== 'true') updateSuggestion(form);
     ['score_a', 'score_b'].forEach(function (name) {
       var input = form.querySelector('[name="' + name + '"]');
       if (!input) return;
@@ -151,12 +147,11 @@
       showError(form, problem);
       if (problem) return;
       pendingConfirmation = { id: button.dataset.reviewResult, form: form };
-      var winnerSelect = form.querySelector('[name="winner_id"]');
-      var option = winnerSelect.options[winnerSelect.selectedIndex];
+      updateSuggestion(form);
       var score = document.createElement('strong');
       var winner = document.createElement('span');
       score.textContent = form.querySelector('[name="score_a"]').value + ' – ' + form.querySelector('[name="score_b"]').value;
-      winner.textContent = 'Winner: ' + option.textContent;
+      winner.textContent = 'Winner: ' + form.querySelector('[data-winner-display]').textContent;
       document.getElementById('result-confirm-summary').replaceChildren(score, winner);
       confirmDialog.showModal();
     });
@@ -190,4 +185,19 @@
     var directDialog = document.querySelector('[data-match-dialog="' + body.dataset.openMatchId + '"]');
     if (directDialog) directDialog.showModal();
   }
+  document.querySelectorAll('[data-open-publication]').forEach(function (button) {
+    button.addEventListener('click', function () {
+      var dialog = document.getElementById(button.dataset.openPublication);
+      if (dialog) dialog.showModal();
+    });
+  });
+  document.querySelectorAll('[data-close-publication]').forEach(function (button) {
+    button.addEventListener('click', function () { button.closest('dialog').close(); });
+  });
+  document.querySelectorAll('dialog form [name="return_to"]').forEach(function (input) {
+    input.form.addEventListener('submit', function () {
+      var button = input.form.querySelector('[type="submit"]');
+      if (button) { button.disabled = true; button.textContent = input.form.querySelector('[name="action"]').value === 'unpublish' ? 'Removing…' : 'Publishing…'; }
+    });
+  });
 })();

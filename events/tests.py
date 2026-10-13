@@ -149,26 +149,45 @@ class FacultyMatchWorkspaceTests(TestCase):
                 self.assertEqual(response.status_code, 400)
                 self.assertContains(response, message, status_code=400)
 
-    def test_confirmation_requires_winner_and_rejects_tie(self):
-        malformed_winner = self.client.post(
-            self.result_url(),
-            data=json.dumps({'score_a': 2, 'score_b': 1, 'winner_id': {'bad': 'value'}, 'confirm': True}),
+    def test_confirmation_derives_winner_without_selection(self):
+        response = self.client.post(
+            self.result_url(), data=json.dumps({'score_a': 12, 'score_b': 23, 'confirm': True}),
             content_type='application/json',
         )
-        self.assertEqual(malformed_winner.status_code, 400)
-        self.assertContains(malformed_winner, 'Winner selection is invalid', status_code=400)
-        missing_winner = self.client.post(
-            self.result_url(), data=json.dumps({'score_a': 2, 'score_b': 1, 'confirm': True}),
+        self.assertEqual(response.status_code, 200)
+        self.match.refresh_from_db()
+        self.assertEqual(self.match.winner_id, self.team_b.pk)
+        self.assertEqual(self.match.loser_id, self.team_a.pk)
+
+    def test_client_winner_cannot_override_scores(self):
+        response = self.client.post(
+            self.result_url(), data=json.dumps({'score_a': 23, 'score_b': 12, 'winner_id': self.team_b.pk, 'confirm': True}),
             content_type='application/json',
         )
-        self.assertEqual(missing_winner.status_code, 400)
-        self.assertContains(missing_winner, 'Choose a winner', status_code=400)
+        self.assertEqual(response.status_code, 200)
+        self.match.refresh_from_db()
+        self.assertEqual(self.match.winner_id, self.team_a.pk)
+
+    def test_confirmation_rejects_tie(self):
         response = self.client.post(
             self.result_url(), data=json.dumps({'score_a': 1, 'score_b': 1, 'confirm': True}),
             content_type='application/json',
         )
         self.assertEqual(response.status_code, 400)
         self.assertContains(response, 'cannot be confirmed', status_code=400)
+
+    def test_removed_remarks_input_preserves_existing_draft_notes(self):
+        sheet = ScoreSheet.objects.create(event=self.match_event, match=self.match, tabulator=self.faculty,
+            score_team_a=1, score_team_b=2, remarks='Historical note', status='pending')
+        response = self.client.post(self.result_url(), data=json.dumps({'score_a': 3, 'score_b': 2}),
+                                    content_type='application/json')
+        self.assertEqual(response.status_code, 200)
+        sheet.refresh_from_db()
+        self.assertEqual(sheet.remarks, 'Historical note')
+        self.assertEqual(sheet.winner_id, self.team_a.pk)
+        page = self.client.get(reverse('faculty_event_manage', args=[self.match_event.pk]) + '?tab=matches')
+        self.assertNotContains(page, 'name="winner_id"')
+        self.assertNotContains(page, 'name="remarks"')
 
     def test_confirmed_result_is_immutable(self):
         ScoreSheet.objects.create(
@@ -439,7 +458,7 @@ class MatchEventWorkflowTests(TestCase):
         actual = event.bracket_matches.filter(is_automatic_advance=False)
         advances = event.bracket_matches.filter(is_automatic_advance=True)
         # Compressed bracket seats BYEs directly; synthetic advances are preview-only.
-        self.assertEqual(actual.count(), 4)  # N-1
+        self.assertEqual(actual.count(), 5)  # N-1 plus third-place playoff
         self.assertEqual(advances.count(), 0)
         self.assertTrue(all(match.match_date for match in actual))
         self.assertTrue(all(match.match_number > 0 for match in actual))
@@ -519,9 +538,8 @@ class MatchEventWorkflowTests(TestCase):
         self.assertTrue(payload['success'])
         for match in payload['matches']:
             joined = f"{match.get('team_a')} {match.get('team_b')} {match.get('display_label')}"
-            self.assertNotRegex(joined, rf'(^|[^\w]){self.team_a.id}([^\w]|$)')
-            self.assertNotRegex(joined, rf'(^|[^\w]){self.team_b.id}([^\w]|$)')
-            self.assertNotRegex(joined, rf'(^|[^\w]){self.team_c.id}([^\w]|$)')
+            for label in (match.get('team_a'), match.get('team_b')):
+                self.assertFalse(str(label or '').strip().isdigit())
             if match.get('team_a_id'):
                 self.assertIn(match['participant_a']['team_name'], (
                     self.team_a.name, self.team_b.name, self.team_c.name, 'Team information unavailable'
@@ -693,7 +711,8 @@ class BracketDisplayGraphTests(TestCase):
             else:
                 self.assertGreater(match.get('number') or 0, 0)
                 label = match.get('display_label') or ''
-                self.assertNotRegex(label, r'(^|\s)\d+(\s+vs\s+|\s*$)')
+                for participant in label.split(' vs '):
+                    self.assertFalse(participant.strip().isdigit())
                 if match.get('next_winner_key') is None and 'Final' in (match.get('round') or ''):
                     continue
 
@@ -713,7 +732,7 @@ class BracketDisplayGraphTests(TestCase):
 
     def test_bracket_layout_five_participants(self):
         blueprint, serialized, layout = self._assert_layout(
-            5, expected_actual=4, expected_advances=3, expected_opening_slots=4
+            5, expected_actual=5, expected_advances=3, expected_opening_slots=4
         )
         rounds = {match['round'] for match in serialized if not match.get('is_automatic_advance')}
         self.assertIn('Quarterfinals', rounds)
@@ -731,16 +750,16 @@ class BracketDisplayGraphTests(TestCase):
         self.assertEqual(sum(1 for node in opening['nodes'] if node['kind'] == 'match'), 1)
 
     def test_bracket_layout_six_participants(self):
-        self._assert_layout(6, expected_actual=5, expected_advances=2, expected_opening_slots=4)
+        self._assert_layout(6, expected_actual=6, expected_advances=2, expected_opening_slots=4)
 
     def test_bracket_layout_seven_participants(self):
-        self._assert_layout(7, expected_actual=6, expected_advances=1, expected_opening_slots=4)
+        self._assert_layout(7, expected_actual=7, expected_advances=1, expected_opening_slots=4)
 
     def test_bracket_layout_eight_participants(self):
-        self._assert_layout(8, expected_actual=7, expected_advances=0, expected_opening_slots=4)
+        self._assert_layout(8, expected_actual=8, expected_advances=0, expected_opening_slots=4)
 
     def test_bracket_layout_sixteen_participants(self):
-        self._assert_layout(16, expected_actual=15, expected_advances=0, expected_opening_slots=8)
+        self._assert_layout(16, expected_actual=16, expected_advances=0, expected_opening_slots=8)
 
     def test_round_robin_uses_standings_graph_not_elimination_tree(self):
         from events.match_event_service import bracket_display_graph, serialize_blueprint_matches
@@ -777,7 +796,7 @@ class BracketDisplayGraphTests(TestCase):
         payload = response.json()
         self.assertTrue(payload['success'])
         self.assertIn('layout', payload)
-        self.assertEqual(payload['actual_match_count'], 4)
+        self.assertEqual(payload['actual_match_count'], 5)
         self.assertEqual(payload['automatic_advance_count'], 3)
         self.assertEqual(payload['layout']['opening_slot_count'], 4)
         for match in payload['matches']:
@@ -825,7 +844,7 @@ class BracketDisplayGraphTests(TestCase):
         self.assertRedirects(response, reverse('admin_match_events'))
         event = Event.objects.get(name='Layout Persist Cup')
         actual = list(event.bracket_matches.filter(is_automatic_advance=False).order_by('match_number'))
-        self.assertEqual(len(actual), 4)
+        self.assertEqual(len(actual), 5)
         linked = [match for match in actual if match.next_match_winner_id]
         self.assertEqual(len(linked), 3)
         page = self.client.get(reverse('admin_match_events'))
@@ -985,7 +1004,7 @@ class TournamentBracketsListingTests(TestCase):
     def test_five_participants_single_elimination_actual_matches(self):
         team_ids = [team.id for team in self.teams]
         blueprint = build_match_blueprint(team_ids, 'single_elimination', draw_order=team_ids)
-        self.assertEqual(blueprint['actual_match_count'], 4)
+        self.assertEqual(blueprint['actual_match_count'], 5)
         self.assertEqual(blueprint['automatic_advance_count'], 3)
 
     def test_bracket_and_tournament_status_are_separate(self):

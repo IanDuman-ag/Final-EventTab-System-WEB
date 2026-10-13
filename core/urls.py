@@ -97,6 +97,7 @@ from .faculty_views import (
     faculty_dashboard,
     faculty_my_events,
     faculty_event_manage,
+    faculty_publication_review,
     faculty_schedules,
     faculty_results_review,
     faculty_leaderboard,
@@ -152,6 +153,7 @@ urlpatterns = [
     path('faculty/dashboard/', faculty_dashboard, name='faculty_dashboard'),
     path('faculty/events/', faculty_my_events, name='faculty_my_events'),
     path('faculty/events/<int:event_id>/', faculty_event_manage, name='faculty_event_manage'),
+    path('faculty/events/<int:event_id>/official-results/', faculty_publication_review, name='faculty_publication_review'),
     path('faculty/events/<int:event_id>/schedule/export/', faculty_export_schedule, name='faculty_export_schedule'),
     path('faculty/events/<int:event_id>/matches/<int:match_id>/result/', faculty_match_result, name='faculty_match_result'),
     path('faculty/events/<int:event_id>/results/action/', faculty_results_action, name='faculty_results_action'),
@@ -159,11 +161,6 @@ urlpatterns = [
     path('faculty/schedules/', faculty_schedules, name='faculty_schedules'),
     path('faculty/results-review/', faculty_results_review, name='faculty_results_review'),
     path('faculty/leaderboard/', faculty_leaderboard, name='faculty_leaderboard'),
-    path(
-        'faculty/profile/',
-        RedirectView.as_view(pattern_name='faculty_dashboard', permanent=False),
-        name='faculty_profile',
-    ),
     # Tabulator portal: assigned events and result review.
     path('tabulator/dashboard/', tabulator_dashboard, name='tabulator_dashboard'),
     path('tabulator/my-events/', tabulator_my_events, name='tabulator_my_events'),

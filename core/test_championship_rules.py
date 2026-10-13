@@ -134,11 +134,13 @@ class ChampionshipRulesTests(TestCase):
 
     def test_global_save_snapshots_and_audits(self):
         event, _, _, _ = self.fixture('per_win')
-        before = deepcopy(event.result_processing_config)
         response = self.client.post(reverse('admin_settings'), self.payload('combined'))
         self.assertEqual(response.status_code, 302)
         self.assertEqual(scoring_rules()['method'], 'combined')
-        event.refresh_from_db(); self.assertEqual(event.result_processing_config, before)
+        event.refresh_from_db()
+        self.assertEqual(event.result_processing_config['championship_scoring']['method'], 'combined')
+        self.assertEqual(event.result_processing_config['championship_scoring']['classification'], 'major')
+        self.assertNotIn('approved', event.result_processing_config)
         self.assertTrue(AuditLog.objects.filter(action='Changed Championship Scoring Rules', metadata__updated__method='combined').exists())
 
     def test_staff_faculty_cannot_change_global_rules(self):
@@ -239,3 +241,81 @@ class ChampionshipRulesTests(TestCase):
         event.refresh_from_db()
         self.assertNotIn('approved', event.result_processing_config)
         with self.assertRaises(FacultyServiceError): publish_results(event, self.admin)
+
+
+    def test_global_save_updates_existing_major_minor_and_preserves_results(self):
+        major, a, b, major_match = self.fixture()
+        minor, _, _, minor_match = self.fixture(classification='minor')
+        before = list(BracketMatch.objects.values_list('pk', 'team_a_id', 'team_b_id', 'winner_id', 'loser_id', 'score_a', 'score_b', 'status'))
+        major.result_processing_config['championship_placements'] = {str(a.pk): 1, str(b.pk): 2}
+        major.save()
+        payload = self.payload()
+        payload['placements'] = json.dumps([{'rank': 1, 'major': 120, 'minor': 60}, {'rank': 2, 'major': 90, 'minor': 40}])
+        response = self.client.post(reverse('admin_settings'), payload, follow=True)
+        self.assertContains(response, 'Updated 2 existing Major and Minor events')
+        major.refresh_from_db(); minor.refresh_from_db()
+        self.assertEqual(major.championship_points_config[0]['points'], 120)
+        self.assertEqual(minor.championship_points_config[0]['points'], 60)
+        self.assertEqual(minor.result_processing_config['championship_scoring']['classification'], 'minor')
+        self.assertEqual(major.result_processing_config['championship_placements'], {str(a.pk): 1, str(b.pk): 2})
+        self.assertEqual(before, list(BracketMatch.objects.values_list('pk', 'team_a_id', 'team_b_id', 'winner_id', 'loser_id', 'score_a', 'score_b', 'status')))
+
+    def test_global_save_updates_legacy_and_preserves_criteria_calculation(self):
+        legacy, _, _, _ = self.fixture()
+        legacy.result_processing_config = {'legacy_championship_awarded': True}
+        legacy.save()
+        criteria = Event.objects.create(name='Existing Singing', event_date=date.today(),
+            scoring_method='criteria', event_classification='minor', apply_championship_points=True)
+        unclassified = Event.objects.create(name='Unclassified', event_date=date.today(), scoring_method='match')
+        response = self.client.post(reverse('admin_settings'), self.payload('combined'))
+        self.assertEqual(response.status_code, 302)
+        legacy.refresh_from_db(); criteria.refresh_from_db(); unclassified.refresh_from_db()
+        self.assertEqual(legacy.result_processing_config['championship_scoring']['method'], 'combined')
+        self.assertEqual(criteria.result_processing_config['championship_scoring']['method'], 'placement')
+        self.assertEqual(criteria.championship_points_config[0]['points'], 5)
+        self.assertTrue(criteria.apply_championship_points)
+        self.assertNotIn('championship_scoring', unclassified.result_processing_config or {})
+
+    def test_global_save_requires_republication_and_uses_new_awards_once(self):
+        from events.faculty_service import approve_results
+        event, a, b, _ = self.fixture()
+        publish_results(event, self.admin)
+        old_placements = deepcopy(event.result_processing_config['calculated_placements'])
+        payload = self.payload()
+        payload['placements'] = json.dumps([{'rank': 1, 'major': 100, 'minor': 50}, {'rank': 2, 'major': 70, 'minor': 30}])
+        self.assertEqual(self.client.post(reverse('admin_settings'), payload).status_code, 302)
+        event.refresh_from_db()
+        self.assertFalse(event.results_finalized)
+        self.assertNotIn('published_at', event.result_processing_config)
+        self.assertEqual(event.result_processing_config['calculated_placements'], old_placements)
+        self.assertEqual(leaderboard_rows(), [])
+        with self.assertRaises(FacultyServiceError):
+            publish_results(event, self.admin)
+        approve_results(event, self.admin)
+        publish_results(event, self.admin)
+        publish_results(event, self.admin)
+        a.refresh_from_db(); b.refresh_from_db()
+        self.assertEqual((a.points, b.points), (100, 70))
+        self.assertEqual(old_placements, event.result_processing_config['calculated_placements'])
+        self.assertEqual(sum(row['points'] for row in leaderboard_rows()), 170)
+        published = deepcopy(event.result_processing_config)
+        self.assertEqual(self.client.post(reverse('admin_settings'), payload).status_code, 302)
+        event.refresh_from_db()
+        self.assertEqual(event.result_processing_config, published)
+        self.assertTrue(event.results_finalized)
+
+    def test_global_propagation_failure_rolls_back_settings_and_all_events(self):
+        from unittest.mock import patch
+        from django.db import DatabaseError
+        one, _, _, _ = self.fixture()
+        two, _, _, _ = self.fixture(classification='minor')
+        settings = SystemSettings.load()
+        previous_settings = deepcopy(settings.championship_points_config)
+        before = [deepcopy(one.result_processing_config), deepcopy(two.result_processing_config)]
+        with patch('events.points_settings_service.reconcile_championship_points', side_effect=DatabaseError('unavailable')):
+            response = self.client.post(reverse('admin_settings'), self.payload('combined'))
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, 'No configuration changes were applied', status_code=400)
+        settings.refresh_from_db(); one.refresh_from_db(); two.refresh_from_db()
+        self.assertEqual(settings.championship_points_config, previous_settings)
+        self.assertEqual([one.result_processing_config, two.result_processing_config], before)

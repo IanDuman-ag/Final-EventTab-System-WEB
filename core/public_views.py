@@ -19,7 +19,7 @@ from events.faculty_service import leaderboard_rows
 from events.models import BracketMatch, Department, Event
 from events.public_service import (
     PUBLIC_TIMEZONE, TERMINAL_MATCH_STATUSES, criteria_condition, criteria_results,
-    event_kind, fixture_queryset, image_url,
+    event_kind, fixture_queryset, image_url, is_multiround,
     public_events, public_fixtures, public_participants, published_events,
     publication_datetime, result_is_published, result_rounds, serialize_event, standings_eligible,
 )
@@ -262,8 +262,14 @@ def results(request):
     page, context = paginate(request, apply_filters(
         published_events(), filters_for(request),
     ).order_by('-updated_at', '-pk'))
-    context.update(filter_options(), page_title='Official Results — EventTab',
-                   events=[serialize_event(event) for event in page])
+    cards = []
+    for event in page:
+        card = serialize_event(event)
+        if event_kind(event) == 'criteria' and not is_multiround(event) and len(result_rounds(event)) <= 1:
+            card['official_placements'], _ = criteria_results(event)
+        card['official_placements'].sort(key=lambda row: row['rank'] or 999999)
+        cards.append(card)
+    context.update(filter_options(), page_title='Official Results — EventTab', events=cards)
     return context
 
 
@@ -290,11 +296,13 @@ def result_detail(request, pk):
             notice = 'Updated match outcomes remain private until authorized republication.'
         # These are persisted championship points, not an invented placement rule.
         if standings_eligible(event):
-            rows = [{'rank': None, 'name': team.name,
+            placements = (event.result_processing_config or {}).get('calculated_placements', {})
+            rows = [{'rank': placements.get(str(team.pk)), 'name': team.name,
                      'department': team.department.name if team.department else '',
                      'points': team.points, 'score': '',
-                     'placement': 'Champion' if team.is_champion else ''}
+                     'placement': {1: 'Champion', 2: 'Runner-up', 3: 'Third place'}.get(placements.get(str(team.pk)), 'Champion' if team.is_champion else '')}
                     for team in event.bracket_teams.select_related('department').order_by('-points', 'seed', 'pk')]
+            rows.sort(key=lambda row: row['rank'] or 999999)
     page, pagination = paginate(request, fixtures if kind == 'match' else rows)
     return dict(pagination, page_title=f'Published results: {event.name} — EventTab',
                 event=serialize_event(event), result_kind=kind,

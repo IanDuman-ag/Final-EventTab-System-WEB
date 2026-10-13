@@ -13,6 +13,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db.models import Max, Q
+from django.db import transaction, DatabaseError
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -66,7 +67,7 @@ def _faculty_required(view):
     def wrapped(request, *args, **kwargs):
         if not request.user.is_staff and (
             request.user.groups.filter(name__iexact='Tabulator').exists()
-            or not request.user.groups.filter(name__iexact='Faculty').exists()
+            or not request.user.groups.filter(name__iregex=r'^(Faculty|Faculty In-Charge)$').exists()
         ):
             return HttpResponse('Faculty access required.', status=403)
         return view(request, *args, **kwargs)
@@ -83,18 +84,14 @@ def _get_event(request, event_id):
 @_faculty_required
 def faculty_dashboard(request):
     events = faculty_match_event_qs(request.user).order_by('-updated_at')
-    recent = [serialize_event_row(e) for e in events[:6]]
-    today = timezone.localdate()
-    today_matches = []
-    for event in events:
-        for row in schedule_rows(event):
-            if row.get('date') == today.isoformat():
-                today_matches.append({**row, 'event_id': event.id, 'event_name': event.name})
+    rows = [_publication_row(e, request.user) for e in events]
+    recent = rows[:6]
     return render(request, 'facultydash/dashboard.html', {
         'active': 'dashboard',
         'stats': dashboard_stats(request.user),
         'recent_events': recent,
-        'today_matches': today_matches,
+        'publication_queue': [row for row in rows if row['in_publication_queue']],
+        'publication_ready_count': sum(row['publication_ready'] for row in rows),
         'user_display': request.user.get_full_name() or request.user.username,
     })
 
@@ -117,10 +114,12 @@ def faculty_my_events(request):
     elif status == 'draft':
         qs = qs.filter(publication_status='draft', results_finalized=False)
     elif status == 'ready':
-        qs = qs.filter(result_processing_config__ready_for_publication=True)
+        from events.publication_service import match_publication_review
+        ready_ids = [event.pk for event in qs if match_publication_review(event)['can_publish']]
+        qs = qs.filter(pk__in=ready_ids)
     qs = qs.order_by(sort)
     page = Paginator(qs, 10).get_page(request.GET.get('page') or 1)
-    rows = [serialize_event_row(e) for e in page.object_list]
+    rows = [_publication_row(e, request.user) for e in page.object_list]
     return render(request, 'facultydash/my_events.html', {
         'active': 'my_events',
         'page_obj': page,
@@ -132,15 +131,111 @@ def faculty_my_events(request):
     })
 
 
+def _publication_row(event, user):
+    from events.publication_service import can_publish_event, match_publication_review
+    review = match_publication_review(event)
+    row = serialize_event_row(event)
+    row['tournament_format'] = (event.tournament_type or '').replace('_', ' ').title()
+    row.update(review_ready=review['review_ready'], publication_ready=review['can_publish'], last_match=review['last_match'], standings=review['standings'])
+    row['in_publication_queue'] = review['all_confirmed'] and not review['published']
+    row['status'] = ('Published' if review['published'] else 'Ready for Publication' if review['can_publish'] else 'Placements Incomplete' if review['errors'] and review['all_confirmed'] else 'Pending Approval' if review['all_confirmed'] else 'Pending Confirmation'
+                     if event.scoresheets.filter(status=ScoreSheet.STATUS_PENDING).exists() else 'In Progress')
+    row['status_key'] = ('published' if review['published'] else 'ready' if review['can_publish']
+                         else 'pending' if row['status'] in {'Pending Confirmation', 'Placements Incomplete', 'Pending Approval'} else 'progress')
+    row['show_publication_button'] = can_publish_event(user, event) and review['can_publish']
+    row['show_unpublish_button'] = can_publish_event(user, event) and review['published']
+    row['publication_errors'] = review['errors'] + review['approval_errors']
+    row['action'] = 'View Results' if review['published'] else 'Open Event'
+    row['action_url'] = reverse('public_result_detail', args=[event.pk]) if review['published'] else reverse(
+        'faculty_event_manage' if row['action'] == 'Open Event' else 'faculty_publication_review', args=[event.pk])
+    return row
+
+
+@_faculty_required
+def faculty_publication_review(request, event_id):
+    from events.publication_service import match_publication_review
+    from events.audit_service import record_audit
+    publisher = (request.user.is_staff and not request.user.groups.filter(
+        name__iregex=r'^(Faculty|Faculty In-Charge|Tabulator|Judge|Judges|Scorer|Viewers)$').exists())
+    event = get_object_or_404(Event, pk=event_id) if publisher else _get_event(request, event_id)
+    if event is None or event_type_label(event) != 'Match-Based':
+        return HttpResponse('Event access required.', status=403)
+    if request.method == 'POST':
+        try:
+            with transaction.atomic():
+                event = Event.objects.select_for_update().get(pk=event.pk)
+                review = match_publication_review(event)
+                action = request.POST.get('action')
+                if action == 'insert_playoff':
+                    from events.publication_service import insert_missing_third_place
+                    try:
+                        insert_missing_third_place(event, request.user)
+                    except ValueError as exc:
+                        raise FacultyServiceError(str(exc))
+                    messages.success(request, 'Third-Place Playoff added. Existing match results were preserved.')
+                elif action == 'approve':
+                    if not publisher:
+                        raise FacultyServiceError('Only an authorized administrator can approve final results.')
+                    if not review['review_ready']:
+                        raise FacultyServiceError(' '.join(review['errors']) or 'This event is already published.')
+                    approve_results(event, request.user)
+                    messages.success(request, 'Final results approved for publication.')
+                elif action == 'publish':
+                    if request.POST.get('confirm') != 'yes':
+                        raise FacultyServiceError('Explicit publication confirmation is required.')
+                    publish_results(event, request.user)
+                    messages.success(request, 'Official results published. Public results and championship standings are updated.')
+                elif action == 'unpublish':
+                    from events.faculty_service import unpublish_results
+                    if request.POST.get('confirm') != 'yes':
+                        raise FacultyServiceError('Explicit confirmation is required to remove publication.')
+                    unpublish_results(event, request.user)
+                    messages.success(request, 'Publication removed. Results are hidden from the public and their points no longer count in the leaderboard.')
+                elif action == 'submit':
+                    if not review['review_ready']:
+                        raise FacultyServiceError(' '.join(review['errors']) or 'This event is already published.')
+                    from events.publication_service import faculty_publication_workflow, can_publish_event
+                    if faculty_publication_workflow(event):
+                        if not can_publish_event(request.user, event):
+                            raise FacultyServiceError('Only the assigned faculty or an authorized administrator may publish these results.')
+                        messages.success(request, 'Results are ready for publication. Review the standings and confirm Publish Official Results.')
+                    else:
+                        if not review['submitted']:
+                            cfg = dict(event.result_processing_config or {})
+                            cfg.update(publication_submitted_at=timezone.now().isoformat(), publication_submitted_by=request.user.pk)
+                            event.result_processing_config = cfg
+                            event.save(update_fields=['result_processing_config', 'updated_at'])
+                            record_audit(user=request.user, action='Submitted Results for Publication',
+                                         description=f'Submitted final results for "{event.name}".', module='Results', event_name=event.name)
+                        messages.success(request, 'Results submitted for authorized review and publication.')
+                else:
+                    raise FacultyServiceError('Unknown publication action.')
+        except FacultyServiceError as exc:
+            messages.error(request, str(exc))
+        except DatabaseError:
+            messages.error(request, 'Results could not be saved. Please try again; no publication changes were committed.')
+        if request.POST.get('return_to') == 'admin_matches' and publisher:
+            return redirect('admin_match_events')
+        if request.POST.get('return_to') == 'dashboard':
+            return redirect('faculty_dashboard')
+        if request.POST.get('return_to') == 'my_events':
+            return redirect('faculty_my_events')
+        return redirect(reverse('faculty_event_manage', args=[event.pk]) + '?tab=results')
+    return redirect(reverse('faculty_event_manage', args=[event.pk]) + '?tab=results')
+
+
 @_faculty_required
 def faculty_event_manage(request, event_id):
-    event = _get_event(request, event_id)
+    from events.publication_service import match_publication_review
+    publisher = request.user.is_staff and not request.user.groups.filter(
+        name__iregex=r'^(Faculty|Faculty In-Charge|Tabulator|Judge|Judges|Scorer|Viewers)$').exists()
+    event = get_object_or_404(Event, pk=event_id) if publisher else _get_event(request, event_id)
     if event is None or event_type_label(event) != 'Match-Based':
         messages.error(request, 'You do not have access to this event.')
         return redirect('faculty_my_events')
     tab = (request.GET.get('tab') or 'overview').strip()
-    tab = {'schedule': 'matches', 'results': 'matches'}.get(tab, tab)
-    if tab not in {'overview', 'matches', 'participants'}:
+    tab = {'schedule': 'matches'}.get(tab, tab)
+    if tab not in {'overview', 'matches', 'participants', 'results'}:
         tab = 'overview'
     detail = serialize_event_detail(event)
     schedule = schedule_rows(event)
@@ -161,6 +256,9 @@ def faculty_event_manage(request, event_id):
         'tab': tab,
         'event': event,
         'detail': detail,
+        'publication_review': match_publication_review(event),
+        'publication_row': _publication_row(event, request.user),
+        'can_approve_role': publisher,
         'schedule': schedule,
         'match_schedule': filtered_matches,
         'match_filter': match_filter,
@@ -215,7 +313,7 @@ def faculty_match_result(request, event_id, match_id):
             score_a=score_a,
             score_b=score_b,
             winner_id=winner_id,
-            remarks=data.get('remarks', ''),
+            remarks=data.get('remarks'),
             confirm=confirm,
         )
     except FacultyServiceError as exc:
@@ -290,14 +388,19 @@ def faculty_results_action(request, event_id):
     if not hasattr(data, 'get'):
         return JsonResponse({'success': False, 'message': 'Request body must be a JSON object.'}, status=400)
     action = (data.get('action') or '').strip().lower()
+    from events.publication_service import can_publish_event, faculty_publication_workflow
+    direct_faculty_publish = (
+        action == 'publish' and faculty_publication_workflow(event)
+        and can_publish_event(request.user, event)
+    )
     is_faculty_only = (
-        request.user.groups.filter(name__iexact='Faculty').exists()
+        request.user.groups.filter(Q(name__iexact='Faculty') | Q(name__iexact='Faculty In-Charge')).exists()
         and not request.user.groups.filter(name__iexact='Tabulator').exists()
         and not request.user.is_staff
     )
-    if is_faculty_only:
+    if is_faculty_only and not direct_faculty_publish:
         return JsonResponse({'success': False, 'message': 'Faculty cannot manage criteria result approval.'}, status=403)
-    if not request.user.is_staff and action in {'approve', 'publish'}:
+    if not request.user.is_staff and action in {'approve', 'publish'} and not direct_faculty_publish:
         return JsonResponse({'success': False, 'message': 'Faculty cannot approve or publish official results.'}, status=403)
     is_tabulator = request.user.groups.filter(name__iexact='Tabulator').exists() and not request.user.is_staff
     if is_tabulator and action in {'approve', 'publish'}:
@@ -310,12 +413,16 @@ def faculty_results_action(request, event_id):
             approve_results(event, request.user)
             msg = 'Results approved.'
         elif action == 'publish':
+            if str(data.get('confirm') or '').lower() not in {'yes', 'true', '1'}:
+                raise FacultyServiceError('Explicit publication confirmation is required.')
             publish_results(event, request.user)
             msg = 'Results published.'
         else:
             return JsonResponse({'success': False, 'message': 'Unknown action.'}, status=400)
     except FacultyServiceError as exc:
         return JsonResponse({'success': False, 'message': str(exc)}, status=400)
+    except DatabaseError:
+        return JsonResponse({'success': False, 'message': 'Publication could not be saved; no publication changes were committed.'}, status=503)
     return JsonResponse({'success': True, 'message': msg})
 
 
