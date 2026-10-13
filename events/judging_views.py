@@ -2,6 +2,7 @@ import uuid
 from decimal import Decimal, InvalidOperation
 
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
@@ -42,7 +43,9 @@ class EventCategoryViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=True, methods=['get'])
     def events(self, request, pk=None):
         category = self.get_object()
-        events = category.events.all()
+        events = category.events.filter(
+            ~Q(portal_event__scoring_method='criteria') | Q(assigned_judges=request.user)
+        ).distinct()
         serializer = JudgingEventListSerializer(events, many=True)
         return Response(serializer.data)
 
@@ -58,7 +61,7 @@ class JudgingEventViewSet(viewsets.ReadOnlyModelViewSet):
         assigned = qs.filter(assigned_judges=self.request.user).distinct()
         if assigned.exists():
             return assigned
-        return qs
+        return qs.filter(portal_event__isnull=True)
 
     def get_serializer_class(self):
         if self.action == 'retrieve':
@@ -66,21 +69,46 @@ class JudgingEventViewSet(viewsets.ReadOnlyModelViewSet):
         return JudgingEventListSerializer
 
     @action(detail=True, methods=['post'])
+    @transaction.atomic
     def submit_scores(self, request, pk=None):
         event = self.get_object()
+        if not event.assigned_judges.filter(pk=request.user.pk).exists():
+            return Response({'detail': 'You are not assigned to judge this event.'}, status=403)
+        from .criteria_mobile_rounds import mobile_round_context
+        scoped = mobile_round_context(event)
+        portal = Event.objects.filter(judging_event=event, scoring_method='criteria').first()
+        if scoped is None and portal is not None and len(portal.rounds_config or []) > 1:
+            return Response({'detail': 'Round-specific scoring categories must be configured before multi-round mobile judging.'}, status=400)
+        if portal is not None and scoped is None:
+            from .criteria_faculty_service import round_is_scoreable
+            if not round_is_scoreable(portal, 0):
+                return Response({'detail': 'This round is locked or already completed.'}, status=400)
+        if portal is not None and portal.status in {Event.STATUS_COMPLETED, Event.STATUS_INACTIVE}:
+            return Response({'detail': 'This event is closed for judging.'}, status=400)
+        if scoped is not None and not scoped['event'].assigned_judges.filter(pk=request.user.pk, is_active=True).exists():
+            return Response({'detail': 'You are not assigned to judge this event.'}, status=403)
         serializer = SubmitScoresSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         candidate_id = serializer.validated_data['candidate_id']
         scores_data = serializer.validated_data['scores']
+        if scoped is not None:
+            requested_round = serializer.validated_data.get('round_id', serializer.validated_data.get('assigned_round_id'))
+            if scoped['round_id'] is None or (requested_round is not None and requested_round != scoped['round_id']):
+                return Response({'detail': 'This round is locked or already completed.'}, status=400)
+            if candidate_id not in scoped['candidate_entries']:
+                return Response({'detail': 'Candidate is not eligible for this round.'}, status=400)
 
         try:
             candidate = Candidate.objects.get(id=candidate_id, event=event)
         except Candidate.DoesNotExist:
             return Response({'detail': 'Candidate not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-        if JudgeScore.objects.filter(judge=request.user, candidate=candidate, is_locked=True).exists():
+        locked = JudgeScore.objects.filter(judge=request.user, candidate=candidate, is_locked=True)
+        if scoped is not None:
+            locked = locked.filter(criterion_id__in=scoped['normalized'])
+        if locked.exists():
             return Response(
                 {'detail': 'Scores already submitted and locked.'},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -99,6 +127,10 @@ class JudgingEventViewSet(viewsets.ReadOnlyModelViewSet):
             if criterion.id in seen_criteria:
                 return Response({'detail': 'Each criterion may be submitted once.'}, status=status.HTTP_400_BAD_REQUEST)
             seen_criteria.add(criterion.id)
+            if scoped is not None and criterion.id not in scoped['normalized']:
+                return Response({'detail': 'Criterion does not belong to the active round.'}, status=400)
+            if scoped is not None and scoped['normalized'][criterion.id].category.judge_mode != 'scoring':
+                return Response({'detail': 'Ranking mode is unavailable until its ranking rules and submission format are configured.'}, status=400)
             children = list(criterion.subcriteria.all())
             if children:
                 try:
@@ -118,8 +150,25 @@ class JudgingEventViewSet(viewsets.ReadOnlyModelViewSet):
                 if score_value.as_tuple().exponent < -2:
                     return Response({'detail': 'Criterion scores may have at most two decimal places.'},
                                     status=status.HTTP_400_BAD_REQUEST)
-                score_value = min(max(score_value, Decimal('0')), criterion.max_score)
+                minimum = scoped['normalized'][criterion.id].min_score if scoped is not None else Decimal('0')
+                if score_value < minimum or score_value > criterion.max_score:
+                    return Response({'detail': 'Score is outside the allowed range.'}, status=400)
             prepared.append((criterion, score_value, score_item.get('subcriteria') if children else None))
+            if scoped is not None:
+                definition = scoped['normalized'][criterion.id]
+                if score_value < definition.min_score or score_value > definition.max_score:
+                    return Response({'detail': 'Score is outside the allowed range.'}, status=400)
+
+        required = set(scoped['normalized']) if scoped is not None else set(event.criteria.values_list('id', flat=True))
+        if seen_criteria != required:
+            return Response({'detail': 'Submit every required criterion for this round.'}, status=400)
+        if scoped is not None:
+            from .models import CriteriaScoreSubmission
+            if CriteriaScoreSubmission.objects.filter(event=scoped['event'], assigned_round_id=scoped['round_id'],
+                    judge=request.user, participant_id=scoped['candidate_entries'][candidate.id],
+                    criterion_id__in=[definition.id for definition in scoped['normalized'].values()],
+                    is_active=True).exists():
+                return Response({'detail': 'This round already has a submitted scoresheet for this candidate.'}, status=400)
 
         with transaction.atomic():
             for criterion, score_value, children in prepared:
@@ -131,6 +180,28 @@ class JudgingEventViewSet(viewsets.ReadOnlyModelViewSet):
                 if children is not None:
                     save_judge_subscores(judge_score, children)
                 created_scores.append(judge_score)
+                if scoped is not None:
+                    from .models import CriteriaScoreSubmission, CriteriaSubcriterionScore
+                    definition = scoped['normalized'][criterion.id]
+                    normalized_submission = CriteriaScoreSubmission.objects.create(
+                        event=scoped['event'], assigned_round_id=scoped['round_id'],
+                        category=definition.category, criterion=definition, judge=request.user,
+                        participant_type='entry', participant_id=scoped['candidate_entries'][candidate.id],
+                        source=CriteriaScoreSubmission.SOURCE_MOBILE, status=CriteriaScoreSubmission.STATUS_SUBMITTED,
+                        raw_score=score_value, normalized_score=score_value / criterion.max_score * definition.weight_percent,
+                        submitted_at=submitted_at, submission_key=verification_id)
+                    if children is not None:
+                        normalized_children = {row.display_order: row for row in definition.subcriteria.all()}
+                        for child_score in judge_score.subcriterion_scores.select_related('subcriterion'):
+                            target_child = normalized_children.get(child_score.subcriterion.display_order)
+                            if target_child is None or child_score.score > target_child.max_score:
+                                transaction.set_rollback(True)
+                                return Response({'detail': 'Subcriterion definitions changed; reload the active round before scoring.'}, status=400)
+                            CriteriaSubcriterionScore.objects.create(
+                                submission=normalized_submission, subcriterion=target_child,
+                                raw_score=child_score.score,
+                            )
+
 
         total_score = 0
         breakdown = []
@@ -195,6 +266,10 @@ class JudgingEventViewSet(viewsets.ReadOnlyModelViewSet):
             candidate_id=candidate_id,
             candidate__event=event,
         )
+        from .criteria_mobile_rounds import mobile_round_context
+        scoped = mobile_round_context(event)
+        if scoped is not None:
+            scores = scores.filter(criterion_id__in=scoped['normalized'])
         serializer = JudgeScoreSerializer(scores, many=True)
 
         JudgeActivityLog.log(

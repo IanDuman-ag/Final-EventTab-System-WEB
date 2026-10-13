@@ -422,7 +422,7 @@ def export_schedule_csv(event):
 
 
 def dashboard_stats(user):
-    events = faculty_match_event_qs(user)
+    events = faculty_event_qs(user)
     today = timezone.localdate()
     actual_matches = BracketMatch.objects.filter(event__in=events, is_automatic_advance=False)
     todays = actual_matches.filter(match_date=today).count()
@@ -801,6 +801,34 @@ def return_for_correction(event, user, judge_ids=None):
     if not judging:
         raise FacultyServiceError('No judging event linked.')
     qs = JudgeScore.objects.filter(candidate__event=judging)
+    if event.scoring_categories.exists() and event.faculty_account_id and event.faculty_account.groups.filter(
+        Q(name__iexact='Faculty') | Q(name__iexact='Faculty In-Charge')
+    ).exists():
+        from .criteria_faculty_service import criteria_rounds, round_is_scoreable
+        from .models import CriteriaScoreSubmission
+        Event.objects.select_for_update().get(pk=event.pk)
+        event.refresh_from_db()
+        config = dict(event.result_processing_config or {})
+        index = int(config.get('active_stage_index') or 0)
+        if not round_is_scoreable(event, index):
+            raise FacultyServiceError('Approved or locked rounds cannot be returned for scoring.')
+        round_id = criteria_rounds(event)[index]['id']
+        sources = CriteriaScoreSubmission.objects.filter(event=event, assigned_round_id=round_id, is_active=True)
+        if judge_ids:
+            sources = sources.filter(judge_id__in=judge_ids)
+        sources.update(is_active=False, status=CriteriaScoreSubmission.STATUS_REOPENED,
+                       replacement_reason='Returned for authorized correction.', updated_at=timezone.now())
+        mapping = (config.get('mobile_round_mapping') or {}).get('criteria') or {}
+        criterion_ids = [value for key, value in mapping.items() if key.startswith(round_id + ':')]
+        qs = qs.filter(criterion_id__in=criterion_ids)
+        verified = dict(config.get('verified_stages') or {})
+        verified.pop(str(index), None)
+        config['verified_stages'] = verified
+        for key in ('tabulation_confirmed_at', 'tabulation_confirmed_by', 'tabulation_confirmed_round_id'):
+            config.pop(key, None)
+        config['tabulation_status'] = 'pending'
+        event.result_processing_config = config
+        event.save(update_fields=['result_processing_config', 'updated_at'])
     if judge_ids:
         qs = qs.filter(judge_id__in=judge_ids)
     qs.update(is_locked=False)
@@ -864,6 +892,11 @@ def approve_results(event, user):
 @transaction.atomic
 def confirm_tabulation(event, user):
     """Verify completeness and record approval without changing Judge scores."""
+    if event.scoring_categories.exists() and event.faculty_account_id and event.faculty_account.groups.filter(
+        Q(name__iexact='Faculty') | Q(name__iexact='Faculty In-Charge')
+    ).exists():
+        from .criteria_faculty_service import verify_criteria_round
+        return verify_criteria_round(event, user)
     cfg = dict(event.result_processing_config or {})
     mode = cfg.get('verification_mode') or 'admin_only'
     if mode == 'admin_only':

@@ -1,0 +1,11 @@
+<header class="official-report-header" tabindex="-1" data-branding-preview>
+  <div class="official-logo-slot"><img data-branding-left {% if branding.left_logo %}src="{{ branding.left_logo }}"{% endif %} alt="School logo" {% if not branding.left_logo %}hidden{% endif %}><div data-branding-extra-left class="official-extra-logos">{% for logo in branding.extra_left_logos %}<img src="{{ logo.url }}" alt="Additional left header logo">{% endfor %}</div></div>
+  <div class="official-report-copy">
+    <h1 data-branding-school>{{ branding.school_name|default:'EventTab' }}</h1>
+    <p data-branding-campus {% if not branding.campus_name %}hidden{% endif %}>{{ branding.campus_name }}</p>
+    <p class="official-product">EventTab</p>
+    <p data-branding-subtitle {% if not branding.report_subtitle %}hidden{% endif %}>{{ branding.report_subtitle }}</p>
+    <h2>{{ report_title|default:'Results Report' }}</h2>
+  </div>
+  <div class="official-logo-slot"><img data-branding-right {% if branding.right_logo %}src="{{ branding.right_logo }}"{% endif %} alt="Event logo" {% if not branding.right_logo %}hidden{% endif %}><div data-branding-extra-right class="official-extra-logos">{% for logo in branding.extra_right_logos %}<img src="{{ logo.url }}" alt="Additional right header logo">{% endfor %}</div></div>
+</header>

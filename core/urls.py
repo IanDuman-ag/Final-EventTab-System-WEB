@@ -14,6 +14,7 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
+from .report_header_views import report_header_settings
 from django.contrib import admin
 from django.urls import include, path
 from django.conf import settings
@@ -106,6 +107,7 @@ from .faculty_views import (
     faculty_results_action,
     faculty_stage_confirm,
     tabulator_dashboard,
+    tabulator_notifications,
     tabulator_my_events,
     tabulator_live_rankings,
     tabulator_results,
@@ -162,6 +164,7 @@ urlpatterns = [
     path('faculty/results-review/', faculty_results_review, name='faculty_results_review'),
     path('faculty/leaderboard/', faculty_leaderboard, name='faculty_leaderboard'),
     # Tabulator portal: assigned events and result review.
+    path('tabulator/notifications/', tabulator_notifications, name='tabulator_notifications'),
     path('tabulator/dashboard/', tabulator_dashboard, name='tabulator_dashboard'),
     path('tabulator/my-events/', tabulator_my_events, name='tabulator_my_events'),
     path('tabulator/live-rankings/', tabulator_live_rankings, name='tabulator_live_rankings'),
@@ -191,6 +194,7 @@ urlpatterns = [
     path('tabulator/result/<str:result_type>/<int:result_id>/approve/', tabulator_approve_result, name='tabulator_approve_result'),
     path('tabulator/result/<str:result_type>/<int:result_id>/reject/', tabulator_reject_result, name='tabulator_reject_result'),
     path('admin/dashboard/', admin_dashboard, name='admin_dashboard'),
+    path('admin/settings/report-header/', report_header_settings, name='admin_report_header'),
     path('admin/reports/', admin_generate_report, name='admin_generate_report'),
     path('admin/departments/', admin_departments, name='admin_departments'),
     path('admin/teams/', admin_teams, name='admin_teams'),

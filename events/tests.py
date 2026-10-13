@@ -45,10 +45,26 @@ class FacultyMatchWorkspaceTests(TestCase):
     def result_url(self):
         return reverse('faculty_match_result', args=[self.match_event.id, self.match.id])
 
-    def test_faculty_lists_only_assigned_match_events(self):
+    def test_faculty_lists_assigned_match_and_criteria_events(self):
         response = self.client.get(reverse('faculty_my_events'))
         self.assertContains(response, self.match_event.name)
-        self.assertNotContains(response, self.criteria_event.name)
+        self.assertContains(response, self.criteria_event.name)
+
+    def test_dashboard_includes_assigned_criteria_event(self):
+        response = self.client.get(reverse('faculty_dashboard'))
+        self.assertContains(response, self.criteria_event.name)
+        self.assertEqual(response.context['stats']['assigned_events'], 2)
+
+    def test_faculty_can_open_assigned_criteria_overview(self):
+        response = self.client.get(reverse('faculty_event_manage', args=[self.criteria_event.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.criteria_event.name)
+        self.assertTemplateUsed(response, 'facultydash/criteria_event.html')
+
+    def test_other_faculty_cannot_open_criteria_event(self):
+        self.client.force_login(self.other)
+        response = self.client.get(reverse('faculty_event_manage', args=[self.criteria_event.id]))
+        self.assertRedirects(response, reverse('faculty_my_events'))
 
     def test_other_faculty_cannot_open_event(self):
         self.client.force_login(self.other)
@@ -1289,6 +1305,91 @@ class CriteriaRoundAdvancementValidationTests(TestCase):
         payload.update(overrides)
         return payload
 
+    def test_faculty_and_tabulator_assignments_save_and_clear_independently(self):
+        from events.criteria_event_service import save_criteria_event, serialize_criteria_event
+
+        faculty = get_user_model().objects.create_user(username='criteria-faculty')
+        group, _ = Group.objects.get_or_create(name='Faculty')
+        faculty.groups.add(group)
+        payload = self._payload(4, qualifiers=3, faculty_in_charge_account=str(faculty.pk))
+        event = save_criteria_event(payload, self.admin)
+        event.refresh_from_db()
+        self.assertEqual(event.faculty_account, faculty)
+        self.assertEqual(event.faculty_in_charge, faculty.username)
+        self.assertEqual(list(event.assigned_tabulators.all()), [self.tabulator])
+        serialized = serialize_criteria_event(event)
+        self.assertEqual(serialized['faculty_in_charge_account_id'], faculty.pk)
+        self.assertEqual(serialized['faculty_account_id'], self.tabulator.pk)
+
+        payload['faculty_in_charge_account'] = ''
+        event = save_criteria_event(payload, self.admin, instance=event)
+        event.refresh_from_db()
+        self.assertIsNone(event.faculty_account)
+        self.assertEqual(event.faculty_in_charge, '')
+        self.assertEqual(list(event.assigned_tabulators.all()), [self.tabulator])
+
+    def test_faculty_assignment_options_are_separate_from_tabulators(self):
+        faculty = get_user_model().objects.create_user(username='faculty-option')
+        group, _ = Group.objects.get_or_create(name='Faculty')
+        faculty.groups.add(group)
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse('admin_criteria_events'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="judging-faculty-account"')
+        self.assertEqual(list(response.context['faculty_options']), [faculty])
+        self.assertEqual(list(response.context['tabulator_options']), [self.tabulator])
+
+    def test_faculty_assignment_rejects_tabulator_or_inactive_accounts(self):
+        from events.criteria_event_service import CriteriaEventValidationError, save_criteria_event
+
+        faculty = get_user_model().objects.create_user(username='inactive-faculty', is_active=False)
+        group, _ = Group.objects.get_or_create(name='Faculty')
+        faculty.groups.add(group)
+        for account_id in [self.tabulator.pk, faculty.pk, 'invalid']:
+            with self.subTest(account_id=account_id):
+                with self.assertRaises(CriteriaEventValidationError):
+                    save_criteria_event(self._payload(4, faculty_in_charge_account=str(account_id)), self.admin)
+
+    def test_faculty_without_tabulator_keeps_admin_verification(self):
+        from events.criteria_event_service import save_criteria_event
+
+        faculty = get_user_model().objects.create_user(username='faculty-only')
+        group, _ = Group.objects.get_or_create(name='Faculty')
+        faculty.groups.add(group)
+        event = save_criteria_event(self._payload(
+            4, faculty_account='', faculty_in_charge_account=str(faculty.pk),
+            result_processing_config=json.dumps({'verification_mode': 'tabulator_verification'}),
+        ), self.admin)
+        self.assertEqual(event.faculty_account, faculty)
+        self.assertFalse(event.assigned_tabulators.exists())
+        self.assertEqual(event.result_processing_config['verification_mode'], 'admin_only')
+
+    def test_assignment_emails_start_after_commit_without_blocking_save(self):
+        from unittest.mock import patch
+        from events.criteria_event_service import save_criteria_event
+
+        with patch('events.criteria_event_service.Thread') as thread, patch('events.criteria_event_service._notify_assignees') as notify:
+            with self.captureOnCommitCallbacks(execute=True):
+                event = save_criteria_event(self._payload(4), self.admin)
+                thread.assert_not_called()
+            thread.return_value.start.assert_called_once()
+            notify.assert_not_called()
+            thread.call_args.kwargs['target']()
+            self.assertEqual(notify.call_args.args[0], event)
+            self.assertIn(self.tabulator, notify.call_args.args[1])
+
+    def test_assignment_email_connection_has_a_timeout(self):
+        from unittest.mock import patch
+        from events.criteria_event_service import _notify_assignees
+        from events.models import Event
+
+        self.judge.email = 'judge@example.com'
+        event = Event(name='Timeout event', event_date=date.today(), category='Special Event')
+        with patch('events.criteria_event_service.get_connection') as connection, patch('events.criteria_event_service.send_mail') as send:
+            _notify_assignees(event, [self.judge])
+        self.assertGreater(connection.call_args.kwargs['timeout'], 0)
+        self.assertEqual(send.call_args.kwargs['connection'], connection.return_value)
+
     def test_four_candidates_top_ten_adjusts_to_top_four(self):
         from events.criteria_event_service import save_criteria_event
         event = save_criteria_event(self._payload(4, qualifiers=10), self.admin)
@@ -1391,7 +1492,10 @@ class CriteriaRoundAdvancementValidationTests(TestCase):
         event = save_criteria_event(self._payload(10, qualifiers=10), self.admin)
         updated = save_criteria_event(self._payload(4, qualifiers=10), self.admin, instance=event)
         self.assertEqual(updated.rounds_config[0]['qualifiers'], 4)
-        self.assertEqual(updated.participant_ids, [c.id for c in self.candidates[:4]])
+        entries = list(updated.criteria_entries.all())
+        self.assertEqual([entry.source_individual_id for entry in entries], [c.id for c in self.candidates[:4]])
+        self.assertEqual(updated.participant_ids, [entry.id for entry in entries])
+        self.assertEqual(updated.result_processing_config['qualified_participant_ids'], {'0': updated.participant_ids})
 
     def test_stage_confirmation_rejects_duplicate_qualifiers(self):
         from events.criteria_event_service import save_criteria_event

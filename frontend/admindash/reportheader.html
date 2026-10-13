@@ -1,0 +1,100 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Report Header Settings · EventTab</title>
+  {% include 'admindash/_bootstrap.html' %}
+  <link rel="stylesheet" href="{% static 'admindash/matchbasedevent.css' %}?v=20261009a">
+  <link rel="stylesheet" href="{% static 'admindash/bootstrap-admin.css' %}?v=20261013-extra1">
+  <link rel="stylesheet" href="{% static 'reports/header.css' %}?v=20261013-extra1">
+  <link rel="stylesheet" href="{% static 'admindash/reportheader.css' %}?v=20261013-extra1">
+</head>
+<body class="admin-dashboard-page admin-dashboard-v2 match-events-page report-header-page">
+  <div class="dashboard-shell d-flex flex-column flex-lg-row">
+    {% include 'admindash/_sidebar.html' with active='report_header' %}
+    <div class="content-area v2-content">
+      <header class="v2-topbar match-topbar"><div><span class="match-breadcrumb">Settings / <strong>Report Header</strong></span><h2 class="v2-welcome">Official report branding</h2></div></header>
+      <main class="container-fluid v2-main match-main branding-main">
+        {% for message in messages %}<div role="status" class="alert {% if message.tags == 'error' %}alert-danger{% else %}alert-success{% endif %}">{{ message }}</div>{% endfor %}
+        {% if form.errors %}<div class="alert alert-danger" role="alert"><strong>Changes could not be saved.</strong> Check the highlighted fields below. {{ form.non_field_errors }}</div>{% endif %}
+        <section class="match-page-head"><div><span class="match-kicker">REPORT IDENTITY</span><h1>Report Header Settings</h1><p>Set the official logos and information used across your printable reports.</p></div><span class="branding-admin-note">Admin managed</span></section>
+        <form method="post" enctype="multipart/form-data" id="branding-form">
+          {% csrf_token %}
+          {{ extra_formset.management_form }}
+          {% if extra_formset.errors or extra_formset.non_form_errors %}<div class="alert alert-danger" role="alert"><strong>Additional logos could not be saved.</strong> Check the logo fields below. {{ extra_formset.non_form_errors }}</div>{% endif %}
+          <div class="branding-editor">
+            <section class="branding-panel" aria-labelledby="logo-heading">
+              <header><span class="branding-step">01</span><div><h2 id="logo-heading">Header logos</h2><p>Place your school and event identities on either side.</p></div></header>
+              <div class="branding-logo-grid">
+                <div class="branding-logo-editor" data-logo-editor="left">
+                  <label class="form-label" for="id_school_logo">Left Header Logo</label>
+                  <div class="branding-logo-stage"><img data-logo-editor-image="left" {% if branding.left_logo %}src="{{ branding.left_logo }}"{% else %}hidden{% endif %} alt="Left header logo"><span data-logo-placeholder="left" {% if branding.left_logo %}hidden{% endif %}>No logo uploaded</span></div>
+                  <input class="form-control" type="file" id="id_school_logo" name="school_logo" accept="image/png,image/jpeg,image/webp" aria-describedby="logo-help left-errors">
+                  <div id="left-errors" class="branding-field-errors">{{ form.school_logo.errors }}</div>
+                  <div class="form-check mt-3"><input class="form-check-input" type="checkbox" name="remove_left_logo" id="id_remove_left_logo" {% if form.remove_left_logo.value %}checked{% endif %}><label class="form-check-label" for="id_remove_left_logo">Remove left logo</label></div>
+                  <div class="branding-extra-list" data-extra-list="left">
+                    {% for extra in extra_formset %}{% if extra.side.value == 'left' %}
+                    <div class="branding-extra-editor" data-extra-editor data-side="left" data-saved-url="{% if extra.instance.image %}{{ extra.instance.image.url }}{% endif %}">
+                      {{ extra.id }}{{ extra.side }}
+                      <div class="branding-extra-heading"><label for="{{ extra.image.id_for_label }}">Additional left logo</label><button class="btn btn-sm btn-outline-danger" type="button" data-remove-extra>Remove</button></div>
+                      <div class="branding-logo-stage"><img data-extra-image alt="Additional left logo" {% if extra.instance.image %}src="{{ extra.instance.image.url }}"{% else %}hidden{% endif %}><span data-extra-placeholder {% if extra.instance.image %}hidden{% endif %}>Choose a logo</span></div>
+                      {{ extra.image }}<div class="branding-field-errors">{{ extra.image.errors }}{{ extra.side.errors }}{{ extra.id.errors }}{{ extra.non_field_errors }}</div>
+                      <span hidden>{{ extra.DELETE }}</span>
+                    </div>
+                    {% endif %}{% endfor %}
+                  </div>
+                  <button class="btn btn-outline-primary branding-add-logo" type="button" data-add-logo="left">+ Add left logo</button>
+                </div>
+                <div class="branding-logo-editor" data-logo-editor="right">
+                  <label class="form-label" for="id_report_right_logo">Right Header Logo</label>
+                  <div class="branding-logo-stage"><img data-logo-editor-image="right" {% if branding.right_logo %}src="{{ branding.right_logo }}"{% else %}hidden{% endif %} alt="Right header logo"><span data-logo-placeholder="right" {% if branding.right_logo %}hidden{% endif %}>No logo uploaded</span></div>
+                  <input class="form-control" type="file" id="id_report_right_logo" name="report_right_logo" accept="image/png,image/jpeg,image/webp" aria-describedby="logo-help right-errors">
+                  <div id="right-errors" class="branding-field-errors">{{ form.report_right_logo.errors }}</div>
+                  <div class="form-check mt-3"><input class="form-check-input" type="checkbox" name="remove_right_logo" id="id_remove_right_logo" {% if form.remove_right_logo.value %}checked{% endif %}><label class="form-check-label" for="id_remove_right_logo">Remove right logo</label></div>
+                  <div class="branding-extra-list" data-extra-list="right">
+                    {% for extra in extra_formset %}{% if extra.side.value == 'right' %}
+                    <div class="branding-extra-editor" data-extra-editor data-side="right" data-saved-url="{% if extra.instance.image %}{{ extra.instance.image.url }}{% endif %}">
+                      {{ extra.id }}{{ extra.side }}
+                      <div class="branding-extra-heading"><label for="{{ extra.image.id_for_label }}">Additional right logo</label><button class="btn btn-sm btn-outline-danger" type="button" data-remove-extra>Remove</button></div>
+                      <div class="branding-logo-stage"><img data-extra-image alt="Additional right logo" {% if extra.instance.image %}src="{{ extra.instance.image.url }}"{% else %}hidden{% endif %}><span data-extra-placeholder {% if extra.instance.image %}hidden{% endif %}>Choose a logo</span></div>
+                      {{ extra.image }}<div class="branding-field-errors">{{ extra.image.errors }}{{ extra.side.errors }}{{ extra.id.errors }}{{ extra.non_field_errors }}</div>
+                      <span hidden>{{ extra.DELETE }}</span>
+                    </div>
+                    {% endif %}{% endfor %}
+                  </div>
+                  <button class="btn btn-outline-primary branding-add-logo" type="button" data-add-logo="right">+ Add right logo</button>
+                </div>
+              </div>
+              <p class="branding-help" id="logo-help">Up to six logos on each side. PNG, JPG, JPEG or WebP · Maximum 5 MB per image. Choose a new image to replace an existing logo.</p>
+            </section>
+            <section class="branding-panel" aria-labelledby="information-heading">
+              <header><span class="branding-step">02</span><div><h2 id="information-heading">Report information</h2><p>Use the official names that should appear on every report.</p></div></header>
+              <div class="branding-field"><label class="form-label" for="id_school_name">School / Organization Name</label><input class="form-control" id="id_school_name" name="school_name" value="{{ form.school_name.value|default_if_none:'' }}" maxlength="{{ form.school_name.field.max_length }}"><div class="branding-field-errors">{{ form.school_name.errors }}</div></div>
+              <div class="branding-field"><label class="form-label" for="id_campus_name">Department / Campus Name</label><input class="form-control" id="id_campus_name" name="campus_name" value="{{ form.campus_name.value|default_if_none:'' }}" maxlength="{{ form.campus_name.field.max_length }}"><div class="branding-field-errors">{{ form.campus_name.errors }}</div></div>
+              <div class="branding-field"><label class="form-label" for="id_report_subtitle">Report Subtitle</label><input class="form-control" id="id_report_subtitle" name="report_subtitle" value="{{ form.report_subtitle.value|default_if_none:'' }}" maxlength="{{ form.report_subtitle.field.max_length }}"><div class="branding-field-errors">{{ form.report_subtitle.errors }}</div></div>
+              <p class="branding-help">The report title updates automatically for each report, such as Detailed Score Breakdown or Final Results.</p>
+            </section>
+          </div>
+          <section class="branding-preview-panel" aria-labelledby="preview-heading" id="header-preview" tabindex="-1">
+            <header><div><span class="match-kicker">LIVE PREVIEW</span><h2 id="preview-heading">Your official report header</h2></div><span class="branding-preview-caption">Changes appear here before saving</span></header>
+            <div class="branding-paper">{% include 'reports/_header.html' with report_title='Detailed Score Breakdown' %}</div>
+          </section>
+          <div class="branding-actions"><span>Save to apply this header to generated reports.</span><div><button class="btn btn-outline-secondary" type="reset">Reset Unsaved Changes</button><button class="btn btn-outline-primary" type="button" id="preview-header-button">Preview Report Header</button><button class="btn btn-primary" type="submit" id="save-branding">Save Changes</button></div></div>
+        <template id="extra-logo-template">
+            <div class="branding-extra-editor" data-extra-editor data-side="" data-saved-url="">
+              {{ extra_formset.empty_form.id }}{{ extra_formset.empty_form.side }}
+              <div class="branding-extra-heading"><label for="{{ extra_formset.empty_form.image.id_for_label }}">Additional logo</label><button class="btn btn-sm btn-outline-danger" type="button" data-remove-extra>Remove</button></div>
+              <div class="branding-logo-stage"><img data-extra-image alt="Additional header logo" hidden><span data-extra-placeholder>Choose a logo</span></div>
+              {{ extra_formset.empty_form.image }}<span hidden>{{ extra_formset.empty_form.DELETE }}</span>
+            </div>
+          </template>
+        </form>
+      </main>
+    </div>
+  </div>
+  {{ branding|json_script:'saved-report-branding' }}
+  <script src="{% static 'admindash/reportheader.js' %}?v=20261013-extra1"></script>
+</body>
+</html>

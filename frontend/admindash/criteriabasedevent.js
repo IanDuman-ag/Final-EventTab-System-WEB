@@ -1517,7 +1517,7 @@
     });
     var judgeNames = $$('.judge-check:checked').map(function (box) { return box.dataset.name; });
     var chief = $('#chief-judge');
-    var faculty = form.faculty_account;
+    var faculty = $('#judging-faculty-account');
     var selectedTabulator = form.querySelector('[name="faculty_account"]:checked');
     var tabulatorLabel = selectedTabulator && selectedTabulator.value
       ? selectedTabulator.closest('label').querySelector('strong').textContent
@@ -1543,6 +1543,7 @@
       }).join(' · ') || '—'],
       ['Judging Segments & Criteria', categories],
       ['Tabulation Officer', tabulatorLabel],
+      ['Faculty In Charge', faculty.value ? faculty.options[faculty.selectedIndex].text : 'Not assigned'],
       ['Assigned Judges', judgeNames.join(', ') || '—'],
       ['Advanced Settings', ($('#advanced-carry-scores').checked ? 'Carry scores · ' : 'Do not carry scores · ') + ($('#advanced-special-awards').checked ? 'Special awards enabled · ' : 'Special awards disabled · ') + $('#advanced-tie-rule').options[$('#advanced-tie-rule').selectedIndex].text + ' · Default max ' + $('#advanced-default-max').value],
     ];
@@ -1785,6 +1786,7 @@
     deductions = event.deductions_config || [];
     renderDeductions();
     $('#chief-judge').value = event.chief_judge_id || '';
+    $('#judging-faculty-account').value = String(event.faculty_in_charge_account_id || '');
     $$('[name="faculty_account"]').forEach(function (input) {
       input.checked = String(input.value) === String(event.faculty_account_id || '');
     });
@@ -2047,6 +2049,7 @@
       ['Assigned Judges', (event.judge_names || []).join(', ') || '—'],
       ['Chief Judge', event.chief_judge_name],
       ['Tabulator in Charge', event.faculty_name],
+      ['Faculty In Charge', event.faculty_in_charge_name || 'Not assigned'],
       ['Championship Points', (event.points_config || []).map(function (row) {
         return row.label + ': ' + row.points;
       }).join(' · ') || '—'],
@@ -2349,6 +2352,11 @@
       return;
     }
     syncHiddenFields();
+    $('#publish-action').disabled = true;
+    $('#save-draft-action').disabled = true;
+    var submitButton = publishing ? $('#publish-action') : $('#save-draft-action');
+    submitButton.textContent = publishing ? 'Publishing...' : 'Saving...';
+    form.setAttribute('aria-busy', 'true');
   });
 
   $('#participation-type').addEventListener('change', function () {

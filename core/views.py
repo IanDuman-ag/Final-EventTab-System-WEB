@@ -3709,7 +3709,7 @@ def admin_criteria_events(request, event_id=None):
         ).select_related('department').order_by('number', 'name'),
         'judge_options': judge_options,
         'tabulator_options': tabulator_options,
-        'faculty_options': tabulator_options,
+        'faculty_options': User.objects.filter(is_active=True, is_staff=False, is_superuser=False, groups__name__iexact='Faculty').distinct().order_by('first_name', 'last_name', 'username'),
         'total_count': all_events.count(),
         'draft_count': all_events.filter(publication_status=Event.PUBLICATION_DRAFT).count(),
         'published_count': all_events.filter(publication_status=Event.PUBLICATION_PUBLISHED).count(),

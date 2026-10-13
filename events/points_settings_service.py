@@ -287,8 +287,25 @@ def criteria_placements(event, rules):
     from .public_service import is_multiround, result_rounds
     from .criteria_scoring import compute_official_criteria_rankings
     from .faculty_service import compute_criteria_rankings
+    from .criteria_faculty_service import approved_final_rankings
+    from .faculty_service import FacultyServiceError
+    try:
+        approved_final = approved_final_rankings(event)
+    except FacultyServiceError as exc:
+        return [], str(exc)
+    if approved_final is not None:
+        entries = {row.id: row for row in event.criteria_entries.all()}
+        if any(row['participant_id'] not in entries for row in approved_final):
+            return [], 'Approved final results need event-specific participant records.'
+        rows = [{'id': row['participant_id'], 'rank': row['rank'],
+                 'department_id': entries[row['participant_id']].department_id}
+                for row in approved_final]
+        if len({row['rank'] for row in rows}) != len(rows) and rules['tie_policy'] != 'shared':
+            return [], 'Tied criteria rankings require resolution under the official judging rules.'
+        return rows, ''
     if is_multiround(event) or len(result_rounds(event)) > 1:
         return [], 'Overall multiround aggregation is unavailable; round scores are not final championship results.'
+
     if event.scoring_categories.exists():
         if event.scoring_categories.filter(purpose='official', judge_mode='ranking').exists():
             return [], 'Ranking-mode championship aggregation requires an official final ranking calculator.'

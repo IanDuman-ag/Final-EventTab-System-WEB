@@ -66,6 +66,17 @@ class JudgingEventDetailSerializer(serializers.ModelSerializer):
     def get_candidate_count(self, obj):
         return obj.candidates.count()
 
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        from .criteria_mobile_rounds import mobile_round_context
+        scoped = mobile_round_context(instance)
+        if scoped is not None:
+            data.update(criteria=CriterionSerializer(scoped['criteria'], many=True).data,
+                        candidates=CandidateSerializer(scoped['candidates'], many=True).data,
+                        candidate_count=len(scoped['candidates']), rounds=scoped['rounds'],
+                        active_round=scoped['active_round'], round_id=scoped['round_id'])
+        return data
+
 
 class JudgeScoreSerializer(serializers.ModelSerializer):
     criterion_name = serializers.CharField(source='criterion.name', read_only=True)
@@ -89,6 +100,8 @@ class JudgeScoreSerializer(serializers.ModelSerializer):
 
 class SubmitScoresSerializer(serializers.Serializer):
     candidate_id = serializers.IntegerField()
+    round_id = serializers.CharField(required=False)
+    assigned_round_id = serializers.CharField(required=False)
     scores = serializers.ListField(child=serializers.DictField())
 
     def validate_scores(self, value):

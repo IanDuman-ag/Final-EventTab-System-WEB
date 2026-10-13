@@ -224,6 +224,26 @@ def criteria_results(event, round_id=None):
     """Return placements only; absent public score policy means totals stay private."""
     if not result_is_published(event):
         return [], 'Official results have not been published.'
+    from .criteria_faculty_service import approved_final_rankings, criteria_rounds
+    from .faculty_service import FacultyServiceError
+    try:
+        final_results = approved_final_rankings(event)
+    except FacultyServiceError:
+        return [], 'Approved final placements are unavailable.'
+    final_round_id = criteria_rounds(event)[-1]['id']
+    if final_results is not None and round_id is not None and str(round_id) != final_round_id:
+        return [], 'Only approved final placements have been published for this event.'
+    if final_results is not None and (round_id is None or str(round_id) == final_round_id):
+        if event.criteria_score_submissions.filter(is_active=True, updated_at__gt=publication_datetime(event)).exists():
+            return [], 'Updated competition results are awaiting authorized republication.'
+        participants = {row['id']: row for row in public_participants(event)}
+        if any(row['participant_id'] not in participants for row in final_results):
+            return [], 'Approved final participants are unavailable.'
+        rows = [{'rank': row['rank'], 'name': participants[row['participant_id']]['name'],
+                 'department': participants[row['participant_id']]['department'],
+                 'points': '', 'score': '', 'placement': placement(row['rank'])}
+                for row in final_results]
+        return rows, 'Official final placements. Individual judge scores remain private.'
     modern = event.scoring_categories.exists()
     multi = is_multiround(event) or (modern and len(result_rounds(event)) > 1)
     if modern:

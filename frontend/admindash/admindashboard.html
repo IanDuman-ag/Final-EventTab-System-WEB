@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Admin Dashboard - EventTab</title>
   {% include 'admindash/_bootstrap.html' %}
-  <link rel="stylesheet" href="{% static 'admindash/admindashboard.css' %}?v=20261009a">
+  <link rel="stylesheet" href="{% static 'admindash/admindashboard.css' %}?v=20261013b">
   <link rel="stylesheet" href="{% static 'admindash/bootstrap-admin.css' %}?v=1">
 </head>
 <body class="admin-dashboard-page admin-dashboard-home admin-dashboard-v2">
@@ -57,14 +57,7 @@
             <small class="v2-metric-foot v2-metric-foot--good">▲ 15% vs last month</small>
           </article>
 
-          <article class="v2-metric">
-            <div class="v2-metric-head">
-              <span class="v2-metric-icon v2-metric-icon--purple">👤</span>
-              <span class="v2-metric-label">TOTAL PARTICIPANTS</span>
-            </div>
-            <strong class="v2-metric-value">{{ total_participants|default:"0" }}</strong>
-            <small class="v2-metric-foot v2-metric-foot--good">▲ 24% vs last month</small>
-          </article>
+
 
           <article class="v2-metric">
             <div class="v2-metric-head">

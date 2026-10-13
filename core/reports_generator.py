@@ -747,7 +747,8 @@ def generate_pdf_report(event_name, department_filter="all", start_date=None, en
     story = []
     
     # Document Title and Banner
-    story.append(Paragraph("EVENT TABULATION OFFICIAL REPORT", title_style))
+    from events.report_header import pdf_report_header
+    story.append(pdf_report_header('Event Tabulation Official Report', doc.width))
     story.append(Paragraph(f"Exported metrics and academic standings for <b>{event_details['name']}</b>", subtitle_style))
     story.append(Spacer(1, 10))
 

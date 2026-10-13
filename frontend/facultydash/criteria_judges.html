@@ -1,0 +1,39 @@
+<article class="criteria-panel">
+<header>
+<h2>Judge Submission Status <small>({{ portal.selected_round.name|default:'No round' }})</small>
+</h2>{% if compact %}<a class="criteria-small-button" href="?tab=judges&amp;round={{ selected_round_index }}">View All Judges</a>{% endif %}</header>
+<div class="criteria-table-wrap" tabindex="0" role="region" aria-label="Judge submission status">
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Judge Name</th>
+<th>Status</th>
+<th>Progress</th>
+<th>Submitted At</th>
+</tr>
+</thead>
+<tbody>{% for judge in portal.judges %}<tr>
+<td>{{ forloop.counter }}</td>
+<td>
+<strong>{{ judge.name }}</strong>
+</td>
+<td>
+<span class="criteria-badge {% if judge.progress_percent == 100 %}status-submitted{% else %}status-pending{% endif %}">{{ judge.status }}</span>
+</td>
+<td>
+<div class="judge-progress">
+<progress value="{{ judge.progress_percent }}" max="100" aria-label="{{ judge.name }} scoring progress">
+</progress>
+<small>{{ judge.completed_scores }}/{{ judge.required_scores }}</small>
+</div>
+</td>
+<td>{% if judge.submitted_at %}<time datetime="{{ judge.submitted_at }}" data-local-time>{{ judge.submitted_at }}</time>{% else %}—{% endif %}</td>
+</tr>{% empty %}<tr>
+<td colspan="5" class="criteria-empty">No judges assigned to this round.</td>
+</tr>{% endfor %}</tbody>
+</table>
+</div>
+</article>
+
+

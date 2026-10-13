@@ -966,6 +966,9 @@ class SystemSettings(models.Model):
     """Singleton system-wide configuration for Superadmin."""
     school_name = models.CharField(max_length=200, blank=True, default='EventTab')
     school_logo = models.ImageField(upload_to='system/', null=True, blank=True)
+    report_right_logo = models.ImageField(upload_to='system/report_headers/', null=True, blank=True)
+    campus_name = models.CharField(max_length=200, blank=True, default='')
+    report_subtitle = models.CharField(max_length=200, blank=True, default='')
     academic_year = models.CharField(max_length=40, blank=True, default='')
     intramurals_name = models.CharField(max_length=200, blank=True, default='')
     password_min_length = models.PositiveSmallIntegerField(default=8)
@@ -1008,6 +1011,20 @@ class SystemSettings(models.Model):
 
     def __str__(self):
         return self.school_name or 'System Settings'
+
+
+class ReportHeaderLogo(models.Model):
+    """Additional ordered logos for the shared official report header."""
+    settings = models.ForeignKey(SystemSettings, on_delete=models.CASCADE, related_name='report_logos')
+    side = models.CharField(max_length=5, choices=[('left', 'Left'), ('right', 'Right')])
+    image = models.ImageField(upload_to='system/report_headers/')
+
+    class Meta:
+        ordering = ['pk']
+        constraints = [models.CheckConstraint(condition=models.Q(side__in=['left', 'right']), name='report_header_logo_valid_side')]
+
+    def __str__(self):
+        return f'{self.get_side_display()} report logo'
 
 
 class AuditLog(models.Model):

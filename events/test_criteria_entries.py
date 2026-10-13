@@ -61,3 +61,41 @@ class CriteriaEventEntryValidationTests(TestCase):
         self.assertEqual(saved_again[0].id, original_id)
         self.assertEqual(event.participant_ids, [original_id])
         self.assertEqual(event.result_processing_config['qualified_participant_ids'], {'0': [original_id], '1': [original_id]})
+
+    def test_reordering_same_participants_preserves_entry_ids_and_qualifications(self):
+        event = Event.objects.create(name='Solo', category='Special Event', event_date='2026-09-27', venue='Hall', scoring_method='criteria', participation_type='individual')
+        rows = _validated_event_entries('individual', {'participant_ids': json.dumps([p.id for p in self.people[:2]])}, strict=True)
+        saved, _ = _sync_event_entries(event, rows, {})
+        ids = {entry.source_individual_id: entry.id for entry in saved}
+        qualifications = {'0': [entry.id for entry in saved]}
+        event.result_processing_config = {'qualified_participant_ids': qualifications}
+        event.save(update_fields=['result_processing_config'])
+        reordered, replaced = _sync_event_entries(event, list(reversed(rows)), {})
+        event.refresh_from_db()
+        self.assertFalse(replaced)
+        self.assertEqual({entry.source_individual_id: entry.id for entry in reordered}, ids)
+        self.assertEqual(event.participant_ids, [entry.id for entry in reordered])
+        self.assertEqual(event.result_processing_config['qualified_participant_ids'], qualifications)
+
+    def test_changing_participants_saves_without_confirmation(self):
+        event = Event.objects.create(name='Solo', category='Special Event', event_date='2026-09-27', venue='Hall', scoring_method='criteria', participation_type='individual')
+        initial = _validated_event_entries('individual', {'participant_ids': json.dumps([self.people[0].id])}, strict=True)
+        _sync_event_entries(event, initial, {})
+        changed = _validated_event_entries('individual', {'participant_ids': json.dumps([self.people[1].id])}, strict=True)
+        saved, replaced = _sync_event_entries(event, changed, {})
+        event.refresh_from_db()
+        self.assertTrue(replaced)
+        self.assertEqual([entry.source_individual_id for entry in saved], [self.people[1].id])
+        self.assertEqual(event.participant_ids, [entry.id for entry in saved])
+
+    def test_recorded_scores_still_prevent_roster_replacement(self):
+        from unittest.mock import patch
+        event = Event.objects.create(name='Solo', category='Special Event', event_date='2026-09-27', venue='Hall', scoring_method='criteria', participation_type='individual')
+        initial = _validated_event_entries('individual', {'participant_ids': json.dumps([self.people[0].id])}, strict=True)
+        _sync_event_entries(event, initial, {})
+        changed = _validated_event_entries('individual', {'participant_ids': json.dumps([self.people[1].id])}, strict=True)
+        with patch('events.criteria_event_service.CriteriaScoreSubmission.objects.filter') as scores:
+            scores.return_value.exists.return_value = True
+            with self.assertRaisesMessage(CriteriaEventValidationError, 'scores have been recorded'):
+                _sync_event_entries(event, changed, {})
+        self.assertEqual(event.criteria_entries.get().source_individual_id, self.people[0].id)

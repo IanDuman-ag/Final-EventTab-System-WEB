@@ -26,7 +26,7 @@
       <div>
         <p class="fac-kicker">Faculty workspace</p>
         <h1>Welcome back, {{ user_display|default:"Faculty" }}! <span class="fac-wave" aria-hidden="true">&#128075;</span></h1>
-        <p class="fac-lead">Manage your assigned match-based events and official publication status.</p>
+        <p class="fac-lead">Manage your assigned events and official publication status.</p>
       </div>
       <div class="fac-dashboard-date"><span class="fac-date-icon"><svg><use href="#dash-calendar"/></svg></span>{% timezone 'Asia/Manila' %}<div><strong>{% now 'l, M d, Y' %}</strong><span>{% now 'g:i A' %}</span></div>{% endtimezone %}</div>
     </header>
@@ -53,23 +53,23 @@
       </section>
 
       <section class="fac-card fac-section fac-assigned-card" aria-labelledby="assigned-events-heading">
-        <header><div class="fac-section-heading"><span class="fac-heading-icon"><svg><use href="#dash-calendar"/></svg></span><div><h2 id="assigned-events-heading">My Assigned Events</h2><p>Overview of all match-based events assigned to you.</p></div></div><a class="fac-view-all" href="{% url 'faculty_my_events' %}"><svg><use href="#dash-list"/></svg>View All Events<svg><use href="#dash-arrow"/></svg></a></header>
+        <header><div class="fac-section-heading"><span class="fac-heading-icon"><svg><use href="#dash-calendar"/></svg></span><div><h2 id="assigned-events-heading">My Assigned Events</h2><p>Overview of all events assigned to you.</p></div></div><a class="fac-view-all" href="{% url 'faculty_my_events' %}"><svg><use href="#dash-list"/></svg>View All Events<svg><use href="#dash-arrow"/></svg></a></header>
         <p class="fac-table-scroll-hint" id="assigned-scroll-hint">Swipe to view progress, status, and actions &rarr;</p>
         <div class="fac-table-wrap" tabindex="0" role="region" aria-label="Assigned events table" aria-describedby="assigned-scroll-hint">
           <table class="fac-table fac-dashboard-table">
-            <thead><tr><th>Event</th><th>Schedule</th><th>Venue</th><th>Match progress</th><th>Status</th><th>Action</th></tr></thead>
+            <thead><tr><th>Event</th><th>Schedule</th><th>Venue</th><th>Progress</th><th>Status</th><th>Action</th></tr></thead>
             <tbody>
               {% for e in recent_events %}
               <tr>
                 <td><div class="fac-event-identity"><span class="fac-sport-tile" aria-hidden="true">{% with name=e.name|lower %}{% if 'table tennis' in name %}&#127955;{% elif 'basketball' in name %}&#127936;{% elif 'volleyball' in name %}&#127952;{% elif 'badminton' in name %}&#127992;{% else %}&#127942;{% endif %}{% endwith %}</span><div><strong>{{ e.name }}</strong><div class="fac-event-subtitle"><span>{{ e.event_type }}</span>{% if e.tournament_format %}<i aria-hidden="true">&middot;</i>{{ e.tournament_format }}{% endif %}</div></div></div></td>
                 <td><div class="fac-cell-meta"><svg><use href="#dash-calendar"/></svg><span>{{ e.schedule }}</span></div></td>
                 <td><div class="fac-cell-meta"><svg class="fac-icon-filled"><use href="#dash-pin"/></svg><span>{{ e.venue }}</span></div></td>
-                <td><div class="fac-dashboard-progress"><strong>{{ e.matches_completed }}/{{ e.matches_total }}</strong><div><span class="fac-progress-track"><i class="{% if e.progress_percent == 100 %}is-complete{% endif %}" style="width:{{ e.progress_percent }}%"></i></span><small>{{ e.progress_percent }}%</small></div></div></td>
+                <td>{% if e.event_type == 'Criteria-Based' %}<span>Judging event</span>{% else %}<div class="fac-dashboard-progress"><strong>{{ e.matches_completed }}/{{ e.matches_total }}</strong><div><span class="fac-progress-track"><i class="{% if e.progress_percent == 100 %}is-complete{% endif %}" style="width:{{ e.progress_percent }}%"></i></span><small>{{ e.progress_percent }}%</small></div></div>{% endif %}</td>
                 <td><span class="fac-pill fac-pill--{{ e.status_key }}">{{ e.status }}</span></td>
                 <td><div class="fac-event-actions"><a class="fac-btn fac-btn-sm" href="{{ e.action_url }}"><svg><use href="#dash-folder"/></svg>{{ e.action }}<svg class="fac-action-arrow"><use href="#dash-arrow"/></svg></a>{% if e.show_unpublish_button %}<button type="button" class="fac-btn fac-btn-sm fac-btn-danger" data-open-publication="remove-publication-{{ e.id }}">Remove Publish</button>{% endif %}</div></td>
               </tr>
               {% empty %}
-              <tr><td colspan="6"><div class="fac-empty"><strong>No assigned events</strong><span>Match-based events assigned by an administrator will appear here.</span></div></td></tr>
+              <tr><td colspan="6"><div class="fac-empty"><strong>No assigned events</strong><span>Events assigned by an administrator will appear here.</span></div></td></tr>
               {% endfor %}
             </tbody>
           </table>

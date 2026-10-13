@@ -307,8 +307,19 @@
                   {% endfor %}
                 </div>
               </section>
+              <section class="judging-card" id="judging-faculty-section">
+                <header class="judging-card-head"><div><h4><span>5</span> Faculty In Charge</h4><p>Assign the faculty member responsible for this event.</p></div></header>
+                <label class="field-block" for="judging-faculty-account">Faculty account</label>
+                <select class="form-select" id="judging-faculty-account" name="faculty_in_charge_account">
+                  <option value="">Not assigned</option>
+                  {% for user in faculty_options %}
+                  <option value="{{ user.id }}">{{ user.get_full_name|default:user.username }} ({{ user.username }})</option>
+                  {% endfor %}
+                </select>
+                {% if not faculty_options %}<p>No active faculty accounts available. Create one under Users first.</p>{% endif %}
+              </section>
               <details class="judging-card judging-advanced" id="judging-advanced">
-                <summary><strong><span>5</span> Advanced Options</strong><small>Additional settings for judging and tabulation.</small></summary>
+                <summary><strong><span>6</span> Advanced Options</strong><small>Additional settings for judging and tabulation.</small></summary>
                 <div class="judging-advanced-body">
                   <label>Result Verification<select class="form-select" id="advanced-result-verification"><option value="admin_only">Admin only</option><option value="tabulator_verification">Tabulation Officer verification</option><option value="tabulator_admin_approval">Tabulation Officer verification + Admin approval</option></select></label>
                   <label class="judging-check"><input class="form-check-input" type="checkbox" id="advanced-carry-scores"> Carry previous round scores to next round</label>
@@ -915,6 +926,6 @@
     <option value="Production Number"></option>
     <option value="Question and Answer"></option>
   </datalist>
-  <script src="{% static 'admindash/criteriabasedevent.js' %}?v=20261010b"></script>
+  <script src="{% static 'admindash/criteriabasedevent.js' %}?v=20261013c"></script>
 </body>
 </html>

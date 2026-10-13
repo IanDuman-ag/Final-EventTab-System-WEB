@@ -433,8 +433,9 @@ def export_report_pdf(preview: dict) -> bytes:
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=landscape(letter), leftMargin=24, rightMargin=24, topMargin=28, bottomMargin=24)
     styles = getSampleStyleSheet()
+    from .report_header import pdf_report_header
     story = [
-        Paragraph(f"EventTab — {preview.get('title', 'Report')}", styles['Title']),
+        pdf_report_header(preview.get('title', 'Report'), doc.width),
         Paragraph(f"Category: {preview.get('category', '')} · Generated {preview.get('generated_at', '')}", styles['Normal']),
         Spacer(1, 10),
     ]

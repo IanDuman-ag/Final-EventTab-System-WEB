@@ -194,3 +194,13 @@ class MobileJudgingEventSerializer(serializers.ModelSerializer):
         return MobileCandidateSerializer(
             candidates, many=True, context=self.context
         ).data
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        from .criteria_mobile_rounds import mobile_round_context
+        scoped = mobile_round_context(instance)
+        if scoped is not None:
+            data.update(criteria=MobileCriterionSerializer(scoped['criteria'], many=True).data,
+                        candidates=MobileCandidateSerializer(scoped['candidates'], many=True, context=self.context).data,
+                        rounds=scoped['rounds'], active_round=scoped['active_round'], round_id=scoped['round_id'])
+        return data

@@ -1,0 +1,11 @@
+{% load static %}<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Notifications &#183; EventTab</title>{% include 'tabulator/_bootstrap.html' %}<link rel="stylesheet" href="{% static 'tabulator/tabulator-shell.css' %}?v=5"><link rel="stylesheet" href="{% static 'tabulator/notifications.css' %}?v=1"></head>
+<body class="et-tab" data-page="notifications"><div class="et-shell">
+{% include 'tabulator/_sidebar.html' with active='notifications' %}
+<div class="et-main">{% include 'tabulator/_topbar.html' with topbar_title='Notifications' %}
+<main class="et-content"><div class="page-heading"><div><h1>Notifications</h1><p>Your assigned events, ready to monitor.</p></div></div>
+<section class="et-card notification-list" aria-labelledby="assignedEventsHeading"><header class="notification-list-heading"><h2 id="assignedEventsHeading">Assigned events</h2><span>{{ events|length }} assigned to you</span></header>
+{% for assigned in events %}<article class="notification-assignment"><span class="notification-event-icon" aria-hidden="true">&#9638;</span><div class="notification-assignment-copy"><h3>{{ assigned.name }}</h3><p><span>{{ assigned.event_type }}</span><span>{{ assigned.date }}</span><span>{{ assigned.venue }}</span></p></div><span class="notification-assignment-status">{{ assigned.status_label }}</span><a class="btn btn-primary et-btn et-btn-primary" href="{% url 'tabulator_dashboard' %}?event_id={{ assigned.id }}">Open event <span aria-hidden="true">&#8594;</span></a></article>
+{% empty %}<div class="notification-page-empty"><span class="notification-event-icon" aria-hidden="true">&#9638;</span><h3>No assigned events yet</h3><p>Your events will appear here when an administrator assigns you.</p><a class="btn btn-outline-primary et-btn et-btn-ghost" href="{% url 'tabulator_dashboard' %}">Back to dashboard</a></div>{% endfor %}
+</section></main></div></div><script src="{% static 'tabulator/tabulator.js' %}?v=4"></script><script src="{% static 'tabulator/notifications.js' %}?v=1"></script></body></html>

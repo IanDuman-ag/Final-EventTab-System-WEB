@@ -1,12 +1,15 @@
 """Transactional validation and persistence for criteria-based events."""
 import json
+import logging
+from collections import Counter, defaultdict, deque
+from threading import Thread
 from datetime import date
 
 from django.contrib.admin.models import ADDITION, CHANGE, LogEntry
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
-from django.core.mail import send_mail
-from django.db import transaction
+from django.core.mail import get_connection, send_mail
+from django.db import close_old_connections, transaction
 from django.db.models import Q
 from django.utils import timezone
 
@@ -14,6 +17,9 @@ from .models import (CriteriaEventEntry, CriteriaEventEntryMember, CriteriaScore
                      Event, RegistryCandidate, Team)
 from .mobile_sync import sync_event_to_mobile
 from .subcriteria import subcriteria_data, subcriteria_issue
+
+
+logger = logging.getLogger(__name__)
 
 
 class CriteriaEventValidationError(ValueError):
@@ -91,22 +97,26 @@ def _sync_event_entries(event, entries, data):
     def proposed_signature(row):
         if row['entry_type'] in {'individual', 'team'}: return (row['entry_type'], row['source'].id)
         return ('pair', tuple(sorted(member.id for member in row['members'])))
-    replacement = bool(existing) and [current_signature(row) for row in existing] != [proposed_signature(row) for row in entries]
-    if replacement and str(data.get('confirm_entry_replacement', '')).lower() not in {'1', 'true', 'yes', 'on'}:
-        raise CriteriaEventValidationError('Changing the participation type will remove the currently selected participants for this event. Continue?')
+    replacement = bool(existing) and Counter(current_signature(row) for row in existing) != Counter(proposed_signature(row) for row in entries)
     if replacement and CriteriaScoreSubmission.objects.filter(event=event).exists():
         raise CriteriaEventValidationError('Participants cannot be replaced after judging scores have been recorded.')
     if existing and not replacement:
         # An ordinary draft save must be idempotent. Entry IDs are referenced
         # by scores and round qualification maps, so update snapshots in place.
-        for entry, item in zip(existing, entries):
+        by_signature = defaultdict(deque)
+        for entry in existing:
+            by_signature[current_signature(entry)].append(entry)
+        ordered_entries = []
+        for item in entries:
+            entry = by_signature[proposed_signature(item)].popleft()
+            ordered_entries.append(entry)
             entry.display_name = item['display_name']
             entry.department = item['department']
             entry.display_order = item['order']
             entry.save(update_fields=['display_name', 'department', 'display_order', 'updated_at'])
-        event.participant_ids = [entry.id for entry in existing]
+        event.participant_ids = [entry.id for entry in ordered_entries]
         event.save(update_fields=['participant_ids'])
-        return existing, False
+        return ordered_entries, False
     if existing and CriteriaScoreSubmission.objects.filter(event=event).exists():
         return existing, False
     event.criteria_entries.all().delete()
@@ -1080,6 +1090,26 @@ def _validated_users(data, user_model):
     return chief, ordered_judges, faculty
 
 
+def _validated_faculty_in_charge(data, legacy_tabulator, instance=None):
+    """Keep older forms compatible while supporting an independent faculty owner."""
+    if 'faculty_in_charge_account' not in data:
+        if instance and instance.faculty_account and instance.faculty_account.groups.filter(name__iexact='Faculty').exists():
+            return instance.faculty_account
+        return legacy_tabulator
+    raw = (data.get('faculty_in_charge_account') or '').strip()
+    if not raw:
+        return None
+    if not raw.isdigit():
+        raise CriteriaEventValidationError('Select a valid Faculty In Charge account.')
+    faculty = get_user_model().objects.filter(
+        pk=int(raw), is_active=True, is_staff=False, is_superuser=False,
+        groups__name__iexact='Faculty',
+    ).distinct().first()
+    if faculty is None:
+        raise CriteriaEventValidationError('The selected Faculty In Charge is not authorized.')
+    return faculty
+
+
 def validate_saved_scoring_structure(event, strict=True):
     """Validate normalized Round -> Category -> Criterion records when present."""
     if not event or not getattr(event, 'pk', None):
@@ -1169,9 +1199,30 @@ def _notify_assignees(event, recipients):
             f'— EventTab Admin'
         )
         try:
-            send_mail(subject, body, from_email, [email], fail_silently=True)
+            connection = get_connection(timeout=getattr(settings, 'EMAIL_TIMEOUT', None) or 10)
+            send_mail(subject, body, from_email, [email], connection=connection, fail_silently=False)
         except Exception:
-            continue
+            logger.exception('Failed to send criteria assignment email for event %s to user %s', event.pk, user.pk)
+
+
+def _schedule_assignment_notifications(event, recipients):
+    """Start best-effort email delivery only after the event transaction commits."""
+    def deliver():
+        close_old_connections()
+        try:
+            _notify_assignees(event, recipients)
+        except Exception:
+            logger.exception('Failed to deliver assignment notifications for event %s', event.pk)
+        finally:
+            close_old_connections()
+
+    def start_delivery():
+        try:
+            Thread(target=deliver, name='criteria-assignment-email', daemon=True).start()
+        except Exception:
+            logger.exception('Failed to start assignment notifications for event %s', event.pk)
+
+    transaction.on_commit(start_delivery)
 
 
 def _save_event_image(event, files):
@@ -1306,6 +1357,7 @@ def _save_pageant_event(data, user, files=None, instance=None):
         **DEFAULT_RESULT_PROCESSING,
         **_json_dict(data.get('result_processing_config'), 'Result processing'),
     }
+    faculty_in_charge = _validated_faculty_in_charge(data, faculty, instance)
     _normalize_verification_mode(result_processing, faculty)
     result_processing['multi_stage'] = True
     result_processing['active_stage_index'] = 0
@@ -1373,11 +1425,8 @@ def _save_pageant_event(data, user, files=None, instance=None):
     event.rules_guidelines = pageant_config.get('rules') or (data.get('rules_guidelines') or '')
     event.mechanics = pageant_config.get('description') or ''
     event.chief_judge = chief
-    event.faculty_account = faculty
-    if faculty:
-        event.faculty_in_charge = faculty.get_full_name().strip() or faculty.username
-    elif not event.faculty_in_charge:
-        event.faculty_in_charge = ''
+    event.faculty_account = faculty_in_charge
+    event.faculty_in_charge = (faculty_in_charge.get_full_name().strip() or faculty_in_charge.username) if faculty_in_charge else ''
 
     raw_tpl = (data.get('scoresheet_template') or '').strip()
     if raw_tpl:
@@ -1426,10 +1475,12 @@ def _save_pageant_event(data, user, files=None, instance=None):
         recipients.append(chief)
     if faculty:
         recipients.append(faculty)
+    if faculty_in_charge and faculty_in_charge not in recipients:
+        recipients.append(faculty_in_charge)
     recipients.extend(judges or [])
     if recipients:
         uniq = list({u.id: u for u in recipients}.values())
-        transaction.on_commit(lambda: _notify_assignees(event, uniq))
+        _schedule_assignment_notifications(event, uniq)
     try:
         sync_event_to_mobile(event)
     except Exception:
@@ -1522,6 +1573,7 @@ def save_criteria_event(data, user, files=None, instance=None):
             raise
         chief, judges, faculty = None, [], None
     result_processing = {**DEFAULT_RESULT_PROCESSING, **_json_dict(data.get('result_processing_config'), 'Result processing')}
+    faculty_in_charge = _validated_faculty_in_charge(data, faculty, instance)
     _normalize_verification_mode(result_processing, faculty)
     stage_tiebreak = str(result_processing.get('stage_tiebreak_method') or 'highest_selected_criterion').strip()
     if stage_tiebreak not in TIE_BREAK_OPTIONS:
@@ -1575,8 +1627,8 @@ def save_criteria_event(data, user, files=None, instance=None):
     event.tie_break_rules = tie_breaks
     # Updated below after event-specific entries have been synchronized.
     event.chief_judge = chief
-    event.faculty_account = faculty
-    event.faculty_in_charge = (faculty.get_full_name().strip() or faculty.username) if faculty else ''
+    event.faculty_account = faculty_in_charge
+    event.faculty_in_charge = (faculty_in_charge.get_full_name().strip() or faculty_in_charge.username) if faculty_in_charge else ''
     raw_tpl = (data.get('scoresheet_template') or '').strip()
     if raw_tpl:
         from .models import ScoresheetTemplate
@@ -1603,7 +1655,7 @@ def save_criteria_event(data, user, files=None, instance=None):
     if event_format == 'multiple_stage':
         cfg = dict(event.result_processing_config or {})
         qualified = dict(cfg.get('qualified_participant_ids') or {})
-        # Entry IDs are event-specific. A confirmed roster replacement must
+        # Entry IDs are event-specific. A roster replacement must
         # never retain qualification IDs that belonged to the previous roster.
         if roster_replaced or '0' not in qualified:
             qualified = {'0': participant_ids}
@@ -1628,10 +1680,10 @@ def save_criteria_event(data, user, files=None, instance=None):
         ),
     )
 
-    recipients = [item for item in [chief, faculty, *judges] if item is not None]
+    recipients = [item for item in [chief, faculty, faculty_in_charge, *judges] if item is not None]
     recipients = list({item.id: item for item in recipients}.values())
     if recipients:
-        transaction.on_commit(lambda: _notify_assignees(event, recipients))
+        _schedule_assignment_notifications(event, recipients)
     try:
         sync_event_to_mobile(event)
     except Exception:
@@ -1654,7 +1706,10 @@ def serialize_criteria_event(event):
     judges = list(User.objects.filter(id__in=judge_ids))
     judge_map = {user.id: (user.get_full_name().strip() or user.username) for user in judges}
     assigned_tabulator = event.assigned_tabulators.order_by('id').first()
-    primary_tabulator = event.faculty_account or assigned_tabulator
+    primary_tabulator = assigned_tabulator
+    if not primary_tabulator and event.faculty_account and event.faculty_account.groups.filter(name__iexact='Tabulator').exists():
+        primary_tabulator = event.faculty_account
+    faculty_owner = event.faculty_account if event.faculty_account and event.faculty_account.groups.filter(name__iexact='Faculty').exists() else None
     entries = list(event.criteria_entries.select_related('department', 'source_individual', 'source_team').prefetch_related('member_links__individual'))
     participant_names = [entry.display_name for entry in entries]
     serialized_entries = [{
@@ -1768,10 +1823,12 @@ def serialize_criteria_event(event):
             event.chief_judge.get_full_name().strip() or event.chief_judge.username
             if event.chief_judge else '—'
         ),
+        'faculty_in_charge_account_id': faculty_owner.id if faculty_owner else None,
+        'faculty_in_charge_name': (faculty_owner.get_full_name().strip() or faculty_owner.username) if faculty_owner else 'Not assigned',
         'faculty_account_id': primary_tabulator.id if primary_tabulator else None,
         'faculty_name': (
             primary_tabulator.get_full_name().strip() or primary_tabulator.username
-            if primary_tabulator else event.faculty_in_charge or '—'
+            if primary_tabulator else 'Not assigned'
         ),
         'scoresheet_template_id': event.scoresheet_template_id,
         'judge_ids': judge_ids,

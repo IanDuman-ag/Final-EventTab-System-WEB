@@ -14,7 +14,7 @@ from django.utils import timezone
 from events.criteria_scoring import compute_official_criteria_rankings, normalized_criterion_score
 from events.models import (
     CriteriaEventEntry, CriteriaScoreSubmission, JudgeScore, RegistryCandidate,
-    SystemSettings, Team,
+    Team,
 )
 
 
@@ -188,10 +188,10 @@ def build_results_page(request, event, payload):
         'generated_at_iso': generated.isoformat(), 'school_name': 'EventTab', 'school_logo': '',
         'report_title': 'Results & Rankings',
     }
-    settings = SystemSettings.objects.filter(pk=1).first()
-    if settings:
-        page['school_name'] = settings.school_name or settings.intramurals_name or 'EventTab'
-        page['school_logo'] = settings.school_logo.url if settings.school_logo else ''
+    from events.report_header import report_branding
+    page['branding'] = report_branding()
+    page['school_name'] = page['branding']['school_name']
+    page['school_logo'] = page['branding']['left_logo']
     if not event:
         return page
     match = payload['event_kind'] == 'match'

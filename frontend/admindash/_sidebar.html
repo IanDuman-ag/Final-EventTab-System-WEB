@@ -108,10 +108,13 @@
       <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 4h16v16H4V4Zm2 2v12h12V6H6Zm2 2h8v2H8V8Zm0 4h5v2H8v-2Z"/></svg>
       <span>Generate Report</span>
     </a>
-    <a class="{% if active == 'settings' %}active{% endif %}" href="{% url 'admin_settings' %}" {% if active == 'settings' %}aria-current="page"{% endif %}>
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm9 4-2-1 .1-2-2-2-2 .1-1-2h-4l-1 2-2-.1-2 2 .1 2-2 1v4l2 1-.1 2 2 2 2-.1 1 2h4l1-2 2 .1 2-2-.1-2 2-1v-4Zm-9 6a6 6 0 1 1 0-12 6 6 0 0 1 0 12Z"/></svg>
-      <span>Settings</span>
-    </a>
+    <div class="v2-nav-group{% if active == 'settings' or active == 'report_header' %} is-open{% endif %}" id="settings-nav-group">
+      <button type="button" class="v2-nav-toggle{% if active == 'settings' or active == 'report_header' %} active{% endif %}" id="settings-nav-toggle" aria-expanded="{% if active == 'settings' or active == 'report_header' %}true{% else %}false{% endif %}" aria-controls="settings-nav-sub"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm9 4-2-1 .1-2-2-2-2 .1-1-2h-4l-1 2-2-.1-2 2 .1 2-2 1v4l2 1-.1 2 2 2 2-.1 1 2h4l1-2 2 .1 2-2-.1-2 2-1v-4Zm-9 6a6 6 0 1 1 0-12 6 6 0 0 1 0 12Z"/></svg><span class="v2-nav-toggle-label">Settings</span><svg class="v2-nav-chevron" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41Z"/></svg></button>
+      <div class="v2-nav-sub" id="settings-nav-sub">
+        <a class="v2-nav-sub-link{% if active == 'settings' %} active{% endif %}" href="{% url 'admin_settings' %}" {% if active == 'settings' %}aria-current="page"{% endif %}><span class="v2-nav-sub-dot" aria-hidden="true"></span><span>Scoring Rules</span></a>
+        <a class="v2-nav-sub-link{% if active == 'report_header' %} active{% endif %}" href="{% url 'admin_report_header' %}" {% if active == 'report_header' %}aria-current="page"{% endif %}><span class="v2-nav-sub-dot" aria-hidden="true"></span><span>Report Header</span></a>
+      </div>
+    </div>
   </nav>
 
   <div class="v2-user-card">
@@ -127,4 +130,4 @@
     <span>Logout</span>
   </a>
 </aside>
-<script src="{% static 'js/admin_sidebar.js' %}?v=20260725c"></script>
+<script src="{% static 'js/admin_sidebar.js' %}?v=20261013d"></script>

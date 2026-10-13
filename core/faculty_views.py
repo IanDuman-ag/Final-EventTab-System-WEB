@@ -7,6 +7,7 @@ import json
 from collections import defaultdict
 from datetime import datetime
 from types import SimpleNamespace
+from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
@@ -18,7 +19,7 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 from django.views.decorators.cache import never_cache
 
 from events.faculty_service import (
@@ -32,7 +33,6 @@ from events.faculty_service import (
     export_schedule_csv,
     faculty_can_access,
     faculty_event_qs,
-    faculty_match_event_qs,
     is_faculty_user,
     judge_monitoring,
     leaderboard_by_game,
@@ -83,7 +83,7 @@ def _get_event(request, event_id):
 
 @_faculty_required
 def faculty_dashboard(request):
-    events = faculty_match_event_qs(request.user).order_by('-updated_at')
+    events = faculty_event_qs(request.user).order_by('-updated_at')
     rows = [_publication_row(e, request.user) for e in events]
     recent = rows[:6]
     return render(request, 'facultydash/dashboard.html', {
@@ -98,7 +98,7 @@ def faculty_dashboard(request):
 
 @_faculty_required
 def faculty_my_events(request):
-    qs = faculty_match_event_qs(request.user)
+    qs = faculty_event_qs(request.user)
     q = (request.GET.get('q') or '').strip()
     status = (request.GET.get('status') or 'all').strip()
     sort = (request.GET.get('sort') or '-updated_at').strip()
@@ -115,7 +115,7 @@ def faculty_my_events(request):
         qs = qs.filter(publication_status='draft', results_finalized=False)
     elif status == 'ready':
         from events.publication_service import match_publication_review
-        ready_ids = [event.pk for event in qs if match_publication_review(event)['can_publish']]
+        ready_ids = [event.pk for event in qs if event_type_label(event) == 'Match-Based' and match_publication_review(event)['can_publish']]
         qs = qs.filter(pk__in=ready_ids)
     qs = qs.order_by(sort)
     page = Paginator(qs, 10).get_page(request.GET.get('page') or 1)
@@ -133,6 +133,16 @@ def faculty_my_events(request):
 
 def _publication_row(event, user):
     from events.publication_service import can_publish_event, match_publication_review
+    if event_type_label(event) != 'Match-Based':
+        row = serialize_event_row(event)
+        row.update(
+            tournament_format='', in_publication_queue=False, publication_ready=False,
+            show_publication_button=False, show_unpublish_button=False,
+            status='Published Results' if event.results_finalized else event.get_publication_status_display(),
+            status_key='published' if event.results_finalized or event.publication_status == 'published' else 'draft',
+            action='Open Event', action_url=reverse('faculty_event_manage', args=[event.pk]),
+        )
+        return row
     review = match_publication_review(event)
     row = serialize_event_row(event)
     row['tournament_format'] = (event.tournament_type or '').replace('_', ' ').title()
@@ -230,8 +240,65 @@ def faculty_event_manage(request, event_id):
     publisher = request.user.is_staff and not request.user.groups.filter(
         name__iregex=r'^(Faculty|Faculty In-Charge|Tabulator|Judge|Judges|Scorer|Viewers)$').exists()
     event = get_object_or_404(Event, pk=event_id) if publisher else _get_event(request, event_id)
-    if event is None or event_type_label(event) != 'Match-Based':
+    if event is None:
         messages.error(request, 'You do not have access to this event.')
+        return redirect('faculty_my_events')
+    if event.scoring_method == 'criteria':
+        from events.criteria_faculty_service import (
+            approve_criteria_round, criteria_faculty_portal, criteria_rounds,
+            submit_criteria_publication, unlock_criteria_round,
+        )
+        if request.method not in {'GET', 'HEAD', 'POST'}:
+            return HttpResponse('Method not allowed.', status=405)
+        selected_tab = request.POST.get('tab') if request.method == 'POST' else request.GET.get('tab')
+        selected_tab = selected_tab if selected_tab in {'overview', 'rounds', 'judges', 'participants', 'results'} else 'rounds'
+        current_index = (event.result_processing_config or {}).get('active_stage_index', 0)
+        raw_index = request.POST.get('selected_round_index', current_index) if request.method == 'POST' else request.GET.get('round', current_index)
+        try:
+            selected_index = int(raw_index)
+        except (TypeError, ValueError):
+            selected_index = 0
+        selected_index = max(0, min(selected_index, len(criteria_rounds(event)) - 1))
+        if request.method == 'POST':
+            if event.faculty_account_id != request.user.pk or not request.user.is_active:
+                return HttpResponse('Assigned Faculty-in-Charge access required.', status=403)
+            action = request.POST.get('action', '')
+            try:
+                if action in {'approve_round', 'unlock_round'}:
+                    try:
+                        round_index = int(request.POST.get('round_index', ''))
+                    except (TypeError, ValueError) as exc:
+                        raise FacultyServiceError('Select a valid round.') from exc
+                    if action == 'approve_round':
+                        approve_criteria_round(event, request.user, round_index, request.POST.getlist('qualifier_ids'))
+                        messages.success(request, 'Round results approved. Unlock the next round when you are ready.')
+                    else:
+                        unlock_criteria_round(event, request.user, round_index)
+                        selected_index = round_index
+                        messages.success(request, 'Round unlocked. Assigned judges can now score the qualified participants.')
+                elif action == 'submit_publication':
+                    submit_criteria_publication(event, request.user)
+                    messages.success(request, 'Final results submitted for authorized publication.')
+                else:
+                    raise FacultyServiceError('Unknown event action.')
+            except (FacultyServiceError, ValueError, TypeError) as exc:
+                messages.error(request, str(exc))
+            except DatabaseError:
+                messages.error(request, 'The action could not be saved. Please try again.')
+            return redirect(reverse('faculty_event_manage', args=[event.pk]) + '?' + urlencode({'tab': selected_tab, 'round': selected_index}))
+        portal = criteria_faculty_portal(event, request.user, selected_index)
+        if request.GET.get('format') == 'json':
+            response = JsonResponse({'portal': portal})
+            response['Cache-Control'] = 'no-store'
+            return response
+        return render(request, 'facultydash/criteria_event.html', {
+            'active': 'my_events', 'event': event,
+            'portal': portal,
+            'tab': selected_tab, 'selected_round_index': selected_index,
+            'user_display': request.user.get_full_name() or request.user.username,
+        })
+    if event_type_label(event) != 'Match-Based':
+        messages.error(request, 'This event type is unavailable.')
         return redirect('faculty_my_events')
     tab = (request.GET.get('tab') or 'overview').strip()
     tab = {'schedule': 'matches'}.get(tab, tab)
@@ -432,6 +499,10 @@ def faculty_stage_confirm(request, event_id):
     event = _get_event(request, event_id)
     if event is None:
         return JsonResponse({'success': False, 'message': 'Forbidden'}, status=403)
+    if event.scoring_method == 'criteria' and event.faculty_account_id and event.faculty_account.groups.filter(
+        Q(name__iexact='Faculty') | Q(name__iexact='Faculty In-Charge')
+    ).exists():
+        return JsonResponse({'success': False, 'message': 'Round approval and unlocking are managed by the assigned Faculty-in-Charge from Event Details.'}, status=403)
     if (
         request.user.groups.filter(name__iexact='Faculty').exists()
         and not request.user.groups.filter(name__iexact='Tabulator').exists()
@@ -1419,6 +1490,14 @@ def tabulator_dashboard(request):
             row['date'] = local_time.strftime('%b %d, %Y')
             row['time'] = local_time.strftime('%I:%M %p')
     return render(request, 'tabulator/tabulatordashboard.html', ctx)
+
+
+@_tabulator_portal_required
+@require_GET
+def tabulator_notifications(request):
+    events = _tabulator_portal_events(request.user)
+    ctx = _portal_context(request, 'notifications', {'events': events})
+    return render(request, 'tabulator/tabnotification.html', ctx)
 
 
 @_tabulator_portal_required

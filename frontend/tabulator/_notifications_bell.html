@@ -1,0 +1,11 @@
+<details class="et-notifications" data-assignment-notifications>
+  <summary class="et-notifications-trigger" aria-label="Assigned event notifications: {{ events|length }} assigned events">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a6 6 0 0 0-6 6v4l-2 3v2h16v-2l-2-3V9a6 6 0 0 0-6-6Zm0 2a4 4 0 0 1 4 4v4.6l1.6 2.4H6.4L8 13.6V9a4 4 0 0 1 4-4Zm-3 15h6a3 3 0 0 1-6 0Z"/></svg>
+    {% if events %}<span class="et-notifications-count" aria-hidden="true">{{ events|length }}</span>{% endif %}
+  </summary>
+  <section class="et-notifications-menu" aria-label="Assigned events">
+    <header><strong>Assigned events</strong><span>{{ events|length }} assigned to you</span></header>
+    <ul>{% for assigned in events|slice:':5' %}<li><a href="{% url 'tabulator_dashboard' %}?event_id={{ assigned.id }}"><span class="notification-event-icon" aria-hidden="true">&#9638;</span><span class="notification-event-copy"><strong>{{ assigned.name }}</strong><small>{{ assigned.event_type }} &#183; {{ assigned.date }}</small><small>{{ assigned.venue }}</small></span><span aria-hidden="true">&#8250;</span></a></li>{% empty %}<li class="notification-empty">No events have been assigned to you yet.</li>{% endfor %}</ul>
+    <a class="notification-view-all" href="{% url 'tabulator_notifications' %}">View all assigned events <span aria-hidden="true">&#8594;</span></a>
+  </section>
+</details>
