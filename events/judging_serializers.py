@@ -11,6 +11,10 @@ class EventCategorySerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'category_type', 'description', 'icon', 'color', 'event_count']
 
     def get_event_count(self, obj):
+        request = self.context.get('request')
+        if request is not None:
+            from .mobile_judge import assigned_events
+            return assigned_events(request.user).filter(category=obj).count()
         return obj.events.count()
 
 
@@ -68,17 +72,26 @@ class JudgingEventDetailSerializer(serializers.ModelSerializer):
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
-        from .criteria_mobile_rounds import mobile_round_context
-        scoped = mobile_round_context(instance)
-        if scoped is not None:
-            data.update(criteria=CriterionSerializer(scoped['criteria'], many=True).data,
-                        candidates=CandidateSerializer(scoped['candidates'], many=True).data,
-                        candidate_count=len(scoped['candidates']), rounds=scoped['rounds'],
-                        active_round=scoped['active_round'], round_id=scoped['round_id'])
+        request = self.context.get('request')
+        if request is not None:
+            from .mobile_judge import detail_payload
+            detail = detail_payload(request.user, instance, request.query_params.get('round_id'))
+            criterion_ids = [row['id'] for row in detail['criteria']]
+            candidate_ids = [row['id'] for row in detail['participants'] if row['is_qualified']]
+            data.update(criteria=CriterionSerializer(instance.criteria.filter(pk__in=criterion_ids), many=True).data,
+                        candidates=CandidateSerializer(instance.candidates.filter(pk__in=candidate_ids), many=True).data,
+                        candidate_count=len(candidate_ids), rounds=detail['stages'],
+                        active_round=detail['current_stage'], round_id=detail['selected_round_id'])
         return data
 
 
 class JudgeScoreSerializer(serializers.ModelSerializer):
+    is_locked = serializers.SerializerMethodField()
+
+    def get_is_locked(self, obj):
+        from .mobile_scoring_compatibility import legacy_score_is_submitted
+        return legacy_score_is_submitted(obj)
+
     criterion_name = serializers.CharField(source='criterion.name', read_only=True)
     criterion_max = serializers.DecimalField(
         source='criterion.max_score', max_digits=7, decimal_places=2, read_only=True,
@@ -98,14 +111,19 @@ class JudgeScoreSerializer(serializers.ModelSerializer):
         ]
 
 
+class SubmitScoreItemSerializer(serializers.Serializer):
+    criterion_id = serializers.IntegerField(min_value=1)
+    score = serializers.DecimalField(max_digits=7, decimal_places=2, required=False)
+    subcriteria = serializers.ListField(child=serializers.DictField(), required=False)
+
+    def validate(self, value):
+        if 'score' not in value and 'subcriteria' not in value:
+            raise serializers.ValidationError('A score or subcriteria scores are required.')
+        return value
+
+
 class SubmitScoresSerializer(serializers.Serializer):
-    candidate_id = serializers.IntegerField()
+    candidate_id = serializers.IntegerField(min_value=1)
     round_id = serializers.CharField(required=False)
     assigned_round_id = serializers.CharField(required=False)
-    scores = serializers.ListField(child=serializers.DictField())
-
-    def validate_scores(self, value):
-        for item in value:
-            if 'criterion_id' not in item or ('score' not in item and 'subcriteria' not in item):
-                raise serializers.ValidationError('Each score needs criterion_id and a score or subcriteria scores.')
-        return value
+    scores = SubmitScoreItemSerializer(many=True, allow_empty=False)

@@ -1,4 +1,4 @@
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Q
 from django.contrib.auth import get_user_model
 
@@ -935,15 +935,18 @@ class JudgeActivityLog(models.Model):
             contestant = ''
             if candidate is not None:
                 contestant = getattr(candidate, 'name', '') or str(candidate)
-            record_audit(
-                user=judge,
-                action=action_map.get(action, action),
-                description=details or action_map.get(action, action),
-                module='Criteria-Based Event' if action not in (cls.ACTION_LOGIN, cls.ACTION_LOGOUT) else 'Authentication',
-                event_name=event_name,
-                contestant=contestant,
-                ip_address=ip_address,
-            )
+            # Optional secondary audit failure must not poison the enclosing
+            # PostgreSQL score transaction. The primary activity row is required.
+            with transaction.atomic():
+                record_audit(
+                    user=judge,
+                    action=action_map.get(action, action),
+                    description=details or action_map.get(action, action),
+                    module='Criteria-Based Event' if action not in (cls.ACTION_LOGIN, cls.ACTION_LOGOUT) else 'Authentication',
+                    event_name=event_name,
+                    contestant=contestant,
+                    ip_address=ip_address,
+                )
         except Exception:
             pass
         return row

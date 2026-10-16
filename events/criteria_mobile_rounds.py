@@ -6,6 +6,51 @@ from django.db import transaction
 from .models import Candidate, Criterion, CriterionSubcriterion, Event, JudgeScore, CriteriaScoreSubmission
 
 
+def read_mobile_round_context(judging_event):
+    """Resolve provisioned IDs without synchronizing or backfilling any records."""
+    from .criteria_faculty_service import criteria_rounds, round_is_scoreable, round_participant_ids
+    from .mobile_scoring_compatibility import read_mobile_mapping, round_mapping_is_compatible
+    from .faculty_service import FacultyServiceError
+
+    event = Event.objects.filter(judging_event=judging_event, scoring_method='criteria').first()
+    if event is None or not event.scoring_categories.exists():
+        return None
+    rounds = criteria_rounds(event)
+    try:
+        active = next((i for i in range(len(rounds)) if round_is_scoreable(event, i)), None)
+    except (TypeError, ValueError):
+        active = None
+    rid = rounds[active]['id'] if active is not None else None
+    mapping = read_mobile_mapping(event, judging_event)
+    criteria_map, candidates_map = mapping.get('criteria') or {}, mapping.get('candidates') or {}
+    context = {'event': event, 'rounds': rounds, 'active_round': rounds[active] if active is not None else None,
+               'round_id': rid, 'criteria': [], 'normalized': {}, 'candidate_entries': {}, 'candidates': [],
+               'compatible': False}
+    if rid is None or not round_mapping_is_compatible(event, judging_event, rid):
+        return context
+    definitions = event.scoring_categories.filter(assigned_round_id=rid, purpose='official').prefetch_related('criteria')
+    mobile = {row.pk: row for row in judging_event.criteria.all()}
+    for category in definitions:
+        for definition in category.criteria.all():
+            mid = criteria_map[f'{rid}:{definition.pk}']
+            context['criteria'].append(mobile[mid])
+            context['normalized'][mid] = definition
+    try:
+        entries = round_participant_ids(event, active)
+    except FacultyServiceError:
+        return context
+    stored = {row.pk: row for row in judging_event.candidates.all()}
+    actual_entries = set(event.criteria_entries.filter(pk__in=entries).values_list('pk', flat=True))
+    ids = [candidates_map.get(str(entry)) for entry in entries]
+    if (actual_entries != set(entries) or len(set(ids)) != len(ids)
+            or any(mid not in stored or list(candidates_map.values()).count(mid) != 1 for mid in ids)):
+        return context
+    context['candidate_entries'] = {candidates_map[str(entry)]: entry for entry in entries}
+    context['candidates'] = [stored[mid] for mid in ids]
+    context['compatible'] = True
+    return context
+
+
 def _original_mobile_criterion(event, judging_event, definition, round_id):
     """Reuse an existing mobile ID only when the stored source identity is exact."""
     source = next((row for row in event.judging_criteria_config or []

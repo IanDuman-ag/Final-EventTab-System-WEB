@@ -1,8 +1,8 @@
 import uuid
 from decimal import Decimal, InvalidOperation
+from ipaddress import ip_address
 
 from django.db import transaction
-from django.db.models import Q
 from django.utils import timezone
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
@@ -19,11 +19,20 @@ from .judging_serializers import (
 )
 from .models import Candidate, Criterion, Event, EventCategory, JudgeActivityLog, JudgeScore, JudgingEvent
 from .subcriteria import save_judge_subscores, validated_child_scores
+from .mobile_submit_support import submit_errors, matching_receipt, receipt
 
 
 def _client_ip(request):
     xff = request.META.get('HTTP_X_FORWARDED_FOR')
-    return xff.split(',')[0].strip() if xff else request.META.get('REMOTE_ADDR')
+    for raw in (xff.split(',')[0].strip() if xff else None, request.META.get('REMOTE_ADDR')):
+        try:
+            parsed = ip_address(raw)
+            if getattr(parsed, 'scope_id', None) is not None:
+                continue  # PostgreSQL inet does not accept interface zone IDs.
+            return str(parsed)
+        except (ValueError, TypeError):
+            continue
+    return None
 
 
 class IsJudgeUser(permissions.BasePermission):
@@ -43,9 +52,8 @@ class EventCategoryViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=True, methods=['get'])
     def events(self, request, pk=None):
         category = self.get_object()
-        events = category.events.filter(
-            ~Q(portal_event__scoring_method='criteria') | Q(assigned_judges=request.user)
-        ).distinct()
+        from .mobile_judge import assigned_events
+        events = assigned_events(request.user).filter(category=category)
         serializer = JudgingEventListSerializer(events, many=True)
         return Response(serializer.data)
 
@@ -55,13 +63,12 @@ class JudgingEventViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsJudgeUser]
 
     def get_queryset(self):
-        qs = JudgingEvent.objects.exclude(
-            portal_event__status=Event.STATUS_INACTIVE,
-        ).prefetch_related('criteria__subcriteria', 'candidates')
-        assigned = qs.filter(assigned_judges=self.request.user).distinct()
-        if assigned.exists():
-            return assigned
-        return qs.filter(portal_event__isnull=True)
+        if self.action == 'submit_scores':
+            # Preserve the existing POST lookup and its explicit 403 checks.
+            qs = JudgingEvent.objects.exclude(portal_event__status=Event.STATUS_INACTIVE)
+            return qs
+        from .mobile_judge import assigned_events
+        return assigned_events(self.request.user).prefetch_related('criteria__subcriteria', 'candidates')
 
     def get_serializer_class(self):
         if self.action == 'retrieve':
@@ -69,14 +76,24 @@ class JudgingEventViewSet(viewsets.ReadOnlyModelViewSet):
         return JudgingEventListSerializer
 
     @action(detail=True, methods=['post'])
+    @submit_errors
     @transaction.atomic
     def submit_scores(self, request, pk=None):
+        request._score_stage = 'authorization'
         event = self.get_object()
-        if not event.assigned_judges.filter(pk=request.user.pk).exists():
+        from .criteria_mobile_rounds import read_mobile_round_context
+        from .mobile_scoring_compatibility import legacy_score_is_submitted
+        # Serialize submissions against Faculty transitions and other submissions.
+        JudgingEvent.objects.select_for_update().get(pk=event.pk)
+        portal = Event.objects.select_for_update().filter(judging_event=event, scoring_method='criteria').first()
+        if not request.user.is_active or (portal is None and not event.assigned_judges.filter(pk=request.user.pk).exists()):
             return Response({'detail': 'You are not assigned to judge this event.'}, status=403)
-        from .criteria_mobile_rounds import mobile_round_context
-        scoped = mobile_round_context(event)
-        portal = Event.objects.filter(judging_event=event, scoring_method='criteria').first()
+        if portal is not None and not portal.assigned_judges.filter(pk=request.user.pk, is_active=True).exists():
+            return Response({'detail': 'You are not assigned to judge this event.'}, status=403)
+        request._score_stage = 'round_configuration'
+        scoped = read_mobile_round_context(event)
+        if scoped is not None and not scoped['compatible']:
+            return Response({'detail': 'This round is locked or its mobile scoring configuration is incompatible.'}, status=400)
         if scoped is None and portal is not None and len(portal.rounds_config or []) > 1:
             return Response({'detail': 'Round-specific scoring categories must be configured before multi-round mobile judging.'}, status=400)
         if portal is not None and scoped is None:
@@ -87,6 +104,7 @@ class JudgingEventViewSet(viewsets.ReadOnlyModelViewSet):
             return Response({'detail': 'This event is closed for judging.'}, status=400)
         if scoped is not None and not scoped['event'].assigned_judges.filter(pk=request.user.pk, is_active=True).exists():
             return Response({'detail': 'You are not assigned to judge this event.'}, status=403)
+        request._score_stage = 'validation'
         serializer = SubmitScoresSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -105,14 +123,10 @@ class JudgingEventViewSet(viewsets.ReadOnlyModelViewSet):
         except Candidate.DoesNotExist:
             return Response({'detail': 'Candidate not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-        locked = JudgeScore.objects.filter(judge=request.user, candidate=candidate, is_locked=True)
+        locked = JudgeScore.objects.filter(judge=request.user, candidate=candidate).select_related('candidate__event')
         if scoped is not None:
             locked = locked.filter(criterion_id__in=scoped['normalized'])
-        if locked.exists():
-            return Response(
-                {'detail': 'Scores already submitted and locked.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        previous = list(locked)
 
         verification_id = str(uuid.uuid4())[:13].upper()
         submitted_at = timezone.now()
@@ -162,6 +176,12 @@ class JudgingEventViewSet(viewsets.ReadOnlyModelViewSet):
         required = set(scoped['normalized']) if scoped is not None else set(event.criteria.values_list('id', flat=True))
         if seen_criteria != required:
             return Response({'detail': 'Submit every required criterion for this round.'}, status=400)
+        if any(legacy_score_is_submitted(row) for row in previous):
+            request._score_stage = 'retry_receipt'
+            prior = matching_receipt(previous, prepared, scoped, request.user, candidate)
+            if prior is not None:
+                return Response(prior)
+            return Response({'detail': 'Scores already submitted and locked.'}, status=400)
         if scoped is not None:
             from .models import CriteriaScoreSubmission
             if CriteriaScoreSubmission.objects.filter(event=scoped['event'], assigned_round_id=scoped['round_id'],
@@ -172,6 +192,7 @@ class JudgingEventViewSet(viewsets.ReadOnlyModelViewSet):
 
         with transaction.atomic():
             for criterion, score_value, children in prepared:
+                request._score_stage = 'legacy_score_write'
                 judge_score, _ = JudgeScore.objects.update_or_create(
                     judge=request.user, candidate=candidate, criterion=criterion,
                     defaults={'score': score_value, 'is_locked': True,
@@ -181,6 +202,7 @@ class JudgingEventViewSet(viewsets.ReadOnlyModelViewSet):
                     save_judge_subscores(judge_score, children)
                 created_scores.append(judge_score)
                 if scoped is not None:
+                    request._score_stage = 'normalized_score_write'
                     from .models import CriteriaScoreSubmission, CriteriaSubcriterionScore
                     definition = scoped['normalized'][criterion.id]
                     normalized_submission = CriteriaScoreSubmission.objects.create(
@@ -203,30 +225,18 @@ class JudgingEventViewSet(viewsets.ReadOnlyModelViewSet):
                             )
 
 
-        total_score = 0
-        breakdown = []
-        for js in created_scores:
-            weighted = float(js.score) * float(js.criterion.weight_percent) / float(js.criterion.max_score)
-            total_score += weighted
-            breakdown.append({
-                'criterion': js.criterion.name,
-                'score': float(js.score),
-                'max_score': float(js.criterion.max_score),
-                'weight': float(js.criterion.weight_percent),
-                'weighted_score': round(weighted, 2),
-                'subcriteria': [{'id': row.subcriterion_id, 'name': row.subcriterion.name,
-                                 'score': float(row.score), 'max_score': float(row.subcriterion.max_score)}
-                                for row in js.subcriterion_scores.select_related('subcriterion').all()],
-            })
+        request._score_stage = 'receipt'
+        result = receipt(created_scores, scoped)
 
         from core.views import get_assignment_role
         role = get_assignment_role(request.user) or 'Judge'
+        request._score_stage = 'audit'
         JudgeActivityLog.log(
             judge=request.user,
             action=JudgeActivityLog.ACTION_SUBMIT_SCORE,
             details=(
                 f'{role} scored candidate #{candidate.number} {candidate.name} '
-                f'in "{event.title}" — total: {round(total_score, 1)} '
+                f'in "{event.title}" — total: {result["total_score"]} '
                 f'({len(created_scores)} criteria) [VID: {verification_id}]'
             ),
             event=event,
@@ -234,25 +244,8 @@ class JudgingEventViewSet(viewsets.ReadOnlyModelViewSet):
             ip_address=_client_ip(request),
         )
 
-        return Response({
-            'verification_id': verification_id,
-            'submitted_at': submitted_at.isoformat(),
-            'total_score': round(total_score, 1),
-            'breakdown': breakdown,
-            'is_locked': True,
-        })
-
-    def retrieve(self, request, *args, **kwargs):
-        response = super().retrieve(request, *args, **kwargs)
-        event = self.get_object()
-        JudgeActivityLog.log(
-            judge=request.user,
-            action=JudgeActivityLog.ACTION_VIEW_EVENT,
-            details=f'Viewed event "{event.title}"',
-            event=event,
-            ip_address=_client_ip(request),
-        )
-        return response
+        request._score_stage = 'commit'
+        return Response(result)
 
     @action(detail=True, methods=['get'])
     def my_scores(self, request, pk=None):
@@ -260,24 +253,45 @@ class JudgingEventViewSet(viewsets.ReadOnlyModelViewSet):
         candidate_id = request.query_params.get('candidate_id')
         if not candidate_id:
             return Response({'detail': 'candidate_id required.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            candidate_id = int(candidate_id)
+            if candidate_id <= 0:
+                raise ValueError
+        except (TypeError, ValueError):
+            return Response({'detail': 'candidate_id must be a positive integer.'}, status=400)
 
         scores = JudgeScore.objects.filter(
             judge=request.user,
             candidate_id=candidate_id,
             candidate__event=event,
         )
-        from .criteria_mobile_rounds import mobile_round_context
-        scoped = mobile_round_context(event)
-        if scoped is not None:
-            scores = scores.filter(criterion_id__in=scoped['normalized'])
+        from .mobile_judge import detail_payload
+        detail = detail_payload(request.user, event, request.query_params.get('round_id'))
+        scores = scores.filter(criterion_id__in=[row['id'] for row in detail['criteria']])
+        participant = next((row for row in detail['participants'] if row['id'] == candidate_id), None)
+        if participant and participant.get('entry_id') is not None:
+            from .models import CriteriaScoreSubmission
+            definitions = {row['normalized_criterion_id']: row['id'] for row in detail['criteria']
+                           if row.get('normalized_criterion_id') and row['id'] is not None}
+            children = {child['normalized_subcriterion_id']: child['id'] for criterion in detail['criteria']
+                        for child in criterion.get('subcriteria', [])
+                        if child.get('normalized_subcriterion_id') and child['id'] is not None}
+            normalized = CriteriaScoreSubmission.objects.filter(
+                event=event.portal_event, judge=request.user, participant_id=participant['entry_id'],
+                assigned_round_id=detail['selected_round_id'], is_active=True,
+                category__purpose='official', criterion_id__in=definitions,
+            ).exclude(status=CriteriaScoreSubmission.STATUS_SUPERSEDED).select_related('category', 'criterion').prefetch_related('subcriterion_scores')
+            normalized_rows = [{'criterion': definitions[row.criterion_id], 'score': str(row.raw_score),
+                'submitted_at': row.submitted_at.isoformat() if row.submitted_at else None,
+                'verification_id': row.submission_key,
+                'is_locked': row.status not in {'DRAFT', 'REOPENED', 'REJECTED'},
+                'is_draft': row.status == 'DRAFT',
+                'subcriterion_scores': [{'subcriterion_id': children[child.subcriterion_id], 'score': str(child.raw_score)}
+                    for child in row.subcriterion_scores.all() if child.subcriterion_id in children]} for row in normalized
+                if row.category.event_id == event.portal_event.pk
+                and row.criterion.category_id == row.category_id
+                and row.category.assigned_round_id == detail['selected_round_id']]
+            if normalized_rows:
+                return Response(normalized_rows)
         serializer = JudgeScoreSerializer(scores, many=True)
-
-        JudgeActivityLog.log(
-            judge=request.user,
-            action=JudgeActivityLog.ACTION_VIEW_SCORES,
-            details=f'Viewed their scores for candidate #{candidate_id} in "{event.title}"',
-            event=event,
-            ip_address=_client_ip(request),
-        )
-
         return Response(serializer.data)

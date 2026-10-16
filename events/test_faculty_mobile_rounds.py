@@ -47,7 +47,8 @@ class FacultyMobileRoundTests(TestCase):
         self.assertEqual(row.assigned_round_id, 'r1')
         self.assertEqual(row.status, 'SUBMITTED')
         self.assertEqual(row.participant_id, self.entry.id)
-        self.assertEqual(self.client.post(self.url, payload, content_type='application/json').status_code, 400)
+        self.assertEqual(self.client.post(self.url, payload, content_type='application/json').status_code, 200)
+        self.assertEqual(CriteriaScoreSubmission.objects.count(), 1)
 
     def test_locked_round_and_out_of_range_rejected(self):
         payload = self.payload()
