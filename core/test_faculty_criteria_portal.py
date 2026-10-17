@@ -114,6 +114,24 @@ class FacultyCriteriaPortalTests(TestCase):
         self.assertFalse(self.event.results_finalized)
         self.assertTrue(self.event.result_processing_config['ready_for_publication'])
 
+        dashboard = self.client.get(reverse('faculty_dashboard'))
+        self.assertEqual([row['id'] for row in dashboard.context['publication_queue']], [self.event.pk])
+        self.assertEqual(dashboard.context['publication_ready_count'], 1)
+        self.assertContains(dashboard, '1 Ready for Publication')
+        self.assertContains(dashboard, 'Final round approved')
+        self.assertNotContains(dashboard, '0/0 matches confirmed')
+        self.assertNotContains(dashboard, 'data-open-publication="publication-')
+        ready = self.client.get(reverse('faculty_my_events'), {'status': 'ready'})
+        self.assertEqual([row['id'] for row in ready.context['event_rows']], [self.event.pk])
+        self.assertEqual(ready.context['event_rows'][0]['status'], 'Ready for Publication')
+
+    def test_unsubmitted_criteria_is_pending_even_when_event_visibility_is_published(self):
+        self.event.publication_status = 'published'
+        self.event.save(update_fields=['publication_status'])
+        response = self.client.get(reverse('faculty_dashboard'))
+        self.assertEqual(response.context['publication_queue'], [])
+        self.assertEqual(response.context['recent_events'][0]['status'], 'Pending Review')
+
     def test_authorized_publication_reads_approved_final_snapshot(self):
         from events.points_settings_service import criteria_placements
         from events.public_service import criteria_results
@@ -130,6 +148,10 @@ class FacultyCriteriaPortalTests(TestCase):
         from events.faculty_service import publish_results
         admin = get_user_model().objects.create_user(username='portal-publisher', is_staff=True)
         publish_results(self.event, admin)
+        dashboard = self.client.get(reverse('faculty_dashboard'))
+        self.assertEqual(dashboard.context['publication_queue'], [])
+        self.assertEqual(dashboard.context['publication_ready_count'], 0)
+        self.assertEqual(dashboard.context['recent_events'][0]['status'], 'Published Results')
         results,_=criteria_results(self.event)
         self.assertEqual([row['name'] for row in results],[self.entries[0].display_name])
         self.assertEqual(results[0]['score'],'')

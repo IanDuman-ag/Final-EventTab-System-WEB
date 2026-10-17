@@ -114,8 +114,7 @@ def faculty_my_events(request):
     elif status == 'draft':
         qs = qs.filter(publication_status='draft', results_finalized=False)
     elif status == 'ready':
-        from events.publication_service import match_publication_review
-        ready_ids = [event.pk for event in qs if event_type_label(event) == 'Match-Based' and match_publication_review(event)['can_publish']]
+        ready_ids = [event.pk for event in qs if _publication_row(event, request.user)['publication_ready']]
         qs = qs.filter(pk__in=ready_ids)
     qs = qs.order_by(sort)
     page = Paginator(qs, 10).get_page(request.GET.get('page') or 1)
@@ -135,11 +134,12 @@ def _publication_row(event, user):
     from events.publication_service import can_publish_event, match_publication_review
     if event_type_label(event) != 'Match-Based':
         row = serialize_event_row(event)
+        ready = bool((event.result_processing_config or {}).get('ready_for_publication')) and not event.results_finalized
         row.update(
-            tournament_format='', in_publication_queue=False, publication_ready=False,
+            tournament_format='', in_publication_queue=ready, publication_ready=ready,
             show_publication_button=False, show_unpublish_button=False,
-            status='Published Results' if event.results_finalized else event.get_publication_status_display(),
-            status_key='published' if event.results_finalized or event.publication_status == 'published' else 'draft',
+            status='Published Results' if event.results_finalized else 'Ready for Publication' if ready else 'Pending Review',
+            status_key='published' if event.results_finalized else 'ready' if ready else 'pending',
             action='Open Event', action_url=reverse('faculty_event_manage', args=[event.pk]),
         )
         return row

@@ -6,10 +6,12 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.db import connection
 from django.test import TestCase
+from django.urls import resolve, reverse
 from django.utils import timezone
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
+from .judge_mobile_api import judge_dashboard
 from .models import (
     BracketMatch, BracketTeam, Candidate, CriteriaEventEntry, CriteriaScoreSubmission, Criterion, Department, Event,
     EventCategory, EventScoringCategory, EventScoringCriterion, JudgeScore, JudgingEvent,
@@ -52,6 +54,59 @@ class MobileApiTests(TestCase):
     def judge_paths(self):
         return ['dashboard/', 'assignments/', f'assignments/{self.event.pk}/',
                 f'portal-assignments/{self.portal.pk}/', 'score-history/', 'profile/']
+
+    def test_deployed_dashboard_contract_and_assignment_filter(self):
+        upcoming = JudgingEvent.objects.create(title='Upcoming', category=self.category,
+            date=date.today() + timedelta(days=1), time=time(11), venue='Hall', status='draft')
+        completed = JudgingEvent.objects.create(title='Completed', category=self.category,
+            date=date.today() - timedelta(days=1), time=time(11), venue='Hall', status='completed')
+        upcoming.assigned_judges.add(self.judge)
+        completed.assigned_judges.add(self.judge)
+        JudgingEvent.objects.create(title='Not assigned', category=self.category,
+            date=date.today(), time=time(11), venue='Hall', status='active')
+        with read_only_queries():
+            data = self.api.get('/api/events/judge/dashboard/').json()
+        self.assertEqual(set(data), {'greeting_name', 'assigned_events', 'todays_assignments',
+            'upcoming_events', 'stats', 'last_submission', 'notification_count'})
+        self.assertEqual({row['id'] for row in data['assigned_events']},
+                         {self.event.pk, upcoming.pk, completed.pk})
+        self.assertEqual([row['id'] for row in data['todays_assignments']], [self.event.pk])
+        self.assertEqual([row['id'] for row in data['upcoming_events']], [upcoming.pk])
+        self.assertEqual(data['stats'], {'total_events': 3, 'ongoing_events': 1, 'completed_events': 1})
+        row = next(row for row in data['assigned_events'] if row['id'] == self.event.pk)
+        self.assertEqual(row['status'], 'ongoing')
+        self.assertEqual(row['criteria_count'], 1)
+        self.assertEqual(row['candidate_count'], 1)
+        self.assertEqual(row['assignment_type'], 'CRITERIA BASED')
+
+    def test_notification_paths_share_contract_and_authorization(self):
+        paths = ['/api/events/judge/notifications/', '/api/events/judge-notifications/']
+        with read_only_queries():
+            self.assertEqual(self.api.get(paths[0]).json(), self.api.get(paths[1]).json())
+        for path in paths:
+            self.assertEqual(self.public.get(path).status_code, 401)
+            self.public.force_authenticate(self.faculty)
+            self.assertEqual(self.public.get(path).status_code, 403)
+            self.public.force_authenticate(None)
+
+    def test_deployed_and_local_url_names_are_preserved(self):
+        names = [('judge-mobile-dashboard', 'mobile_judge_dashboard', []),
+                 ('mobile-judge-assignments', 'mobile_judge_assignments', []),
+                 ('mobile-judge-assignment-detail', 'mobile_judge_assignment_detail', [self.event.pk]),
+                 ('mobile-judge-portal-assignment-detail', 'mobile_judge_portal_assignment_detail', [self.portal.pk]),
+                 ('mobile-judge-score-history', 'mobile_judge_score_history', []),
+                 ('mobile-judge-profile', 'mobile_judge_profile', [])]
+        for suffix in ['dashboard', 'events', 'rankings', 'live', 'bracket', 'profile',
+                       'announcements', 'notifications', 'about']:
+            names.append(('mobile-viewer-' + suffix, 'mobile_viewer_' + suffix, []))
+        names += [('mobile-viewer-criteria-detail', 'mobile_viewer_criteria_detail', [self.event.pk]),
+                  ('mobile-viewer-match-detail', 'mobile_viewer_match_detail', [1])]
+        for deployed, local, args in names:
+            with self.subTest(deployed=deployed):
+                self.assertEqual(reverse(deployed, args=args), reverse(local, args=args))
+        self.assertIs(resolve(reverse('judge-mobile-dashboard')).func, judge_dashboard)
+        self.assertEqual(reverse('mobile-judge-notifications'), '/api/events/judge/notifications/')
+        self.assertEqual(reverse('mobile_judge_notifications'), '/api/events/judge-notifications/')
 
     def test_authentication_and_role_enforced_for_every_judge_endpoint(self):
         for suffix in self.judge_paths():

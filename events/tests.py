@@ -95,7 +95,7 @@ class FacultyMatchWorkspaceTests(TestCase):
         self.assertEqual(self.match.status, BracketMatch.STATUS_PENDING)
         self.assertFalse((self.match_event.result_processing_config or {}).get('ready_for_publication', False))
 
-    def test_successful_confirmations_progress_authored_links_and_gate_readiness(self):
+    def test_confirmations_progress_links_but_missing_departments_block_publication(self):
         team_c = BracketTeam.objects.create(event=self.match_event, name='Green')
         team_d = BracketTeam.objects.create(event=self.match_event, name='Red')
         winner_target = BracketMatch.objects.create(
@@ -137,7 +137,11 @@ class FacultyMatchWorkspaceTests(TestCase):
         )
         self.assertEqual(second_response.status_code, 200)
         self.match_event.refresh_from_db()
-        self.assertTrue(self.match_event.result_processing_config['ready_for_publication'])
+        from .publication_service import match_publication_review
+        review = match_publication_review(self.match_event)
+        self.assertTrue(review['all_confirmed'])
+        self.assertTrue(any('department mapping' in error for error in review['errors']))
+        self.assertFalse(self.match_event.result_processing_config['ready_for_publication'])
 
     def test_other_owner_draft_is_not_overwritten(self):
         ScoreSheet.objects.create(
@@ -218,12 +222,15 @@ class FacultyMatchWorkspaceTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertContains(response, 'can no longer be changed', status_code=400)
 
-    def test_faculty_cannot_publish(self):
+    def test_assigned_faculty_cannot_publish_without_explicit_confirmation(self):
         response = self.client.post(
             reverse('faculty_results_action', args=[self.match_event.id]),
             data=json.dumps({'action': 'publish'}), content_type='application/json',
         )
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, 'Explicit publication confirmation is required', status_code=400)
+        self.match_event.refresh_from_db()
+        self.assertFalse(self.match_event.results_finalized)
 
 
 class MatchEventWorkflowTests(TestCase):
@@ -601,10 +608,15 @@ class MatchEventWorkflowTests(TestCase):
     def test_criteria_event_creation_is_reachable(self):
         response = self.client.post(reverse('admin_criteria_events'), {
             'event_name': 'Academic Quiz',
-            'category': 'Academic',
+            'category': 'Special Event',
+            'event_classification': 'minor',
+            'participation_type': 'individual',
             'division': 'Open',
             'venue': 'Library Hall',
-            'event_date': '2026-08-20',
+            'start_date': '2026-08-20',
+            'end_date': '2026-08-20',
+            'event_format': 'single_performance',
+            'criteria_score_method': 'weighted_percentage',
         })
         self.assertRedirects(response, reverse('admin_criteria_events'))
         event = Event.objects.get(name='Academic Quiz')
@@ -934,10 +946,13 @@ class TournamentBracketsListingTests(TestCase):
         self.assertEqual(response.status_code, 200)
         body = response.content.decode('utf-8')
         self.assertIn('Tournament Brackets', body)
-        self.assertNotIn('Create Bracket', body)
+        # The legacy regeneration dialog remains in the DOM but is not a
+        # listing action. Check the actual navigation/control, not hidden text.
+        self.assertNotIn('id="openCreateBracketBtn"', body)
         self.assertNotIn('Pop Solo', body)
         self.assertNotIn('Dance Sports', body)
-        self.assertIn('Go to Match-Based Events', body)
+        self.assertIn('Complete Event Setup', body)
+        self.assertIn(f'href="{listing["event_rows"][0]["edit_url"]}"', body)
 
     def test_summary_cards_exclude_criteria(self):
         self._create_match_event('Generated Later')
@@ -1095,15 +1110,15 @@ class PageantCriteriaEventTests(TestCase):
         self.admin = User.objects.create_user(
             username='pageant-admin', password='test-password', is_staff=True,
         )
-        self.faculty = User.objects.create_user(
-            username='pageant-faculty', password='test-password', is_staff=True,
+        self.tabulator = User.objects.create_user(
+            username='pageant-tabulator', password='test-password',
         )
         self.judge = User.objects.create_user(
             username='pageant-judge', password='test-password', is_staff=True,
         )
-        faculty_group, _ = Group.objects.get_or_create(name='Faculty')
+        tabulator_group, _ = Group.objects.get_or_create(name='Tabulator')
         judge_group, _ = Group.objects.get_or_create(name='Judge')
-        self.faculty.groups.add(faculty_group)
+        self.tabulator.groups.add(tabulator_group)
         self.judge.groups.add(judge_group)
         from .models import RegistryCandidate
         self.cand_a = RegistryCandidate.objects.create(number='1', name='Alex Rivera')
@@ -1131,7 +1146,7 @@ class PageantCriteriaEventTests(TestCase):
             'event_format': 'multiple_stage',
             'criteria_score_method': 'weighted_percentage',
             'publication_status': publication,
-            'faculty_account': str(self.faculty.id),
+            'faculty_account': str(self.tabulator.id),
             'chief_judge': str(self.judge.id),
             'judge_ids': json.dumps([self.judge.id]),
             'participant_ids': json.dumps([self.cand_a.id, self.cand_b.id]),
@@ -1374,7 +1389,11 @@ class CriteriaRoundAdvancementValidationTests(TestCase):
                 thread.assert_not_called()
             thread.return_value.start.assert_called_once()
             notify.assert_not_called()
-            thread.call_args.kwargs['target']()
+            # Production calls this in a separate thread. Running it inline
+            # must not close this TestCase's active transaction/connection.
+            with patch('events.criteria_event_service.close_old_connections') as close_connections:
+                thread.call_args.kwargs['target']()
+            self.assertEqual(close_connections.call_count, 2)
             self.assertEqual(notify.call_args.args[0], event)
             self.assertIn(self.tabulator, notify.call_args.args[1])
 
@@ -1412,7 +1431,9 @@ class CriteriaRoundAdvancementValidationTests(TestCase):
         self.assertTrue(response.json()['success'])
         event = Event.objects.get(pk=response.json()['event']['id'])
         self.assertEqual(event.publication_status, Event.PUBLICATION_DRAFT)
-        self.assertEqual(event.participant_ids, [candidate.id for candidate in self.candidates[:4]])
+        entries = list(event.criteria_entries.order_by('display_order'))
+        self.assertEqual([entry.source_individual_id for entry in entries], [candidate.id for candidate in self.candidates[:4]])
+        self.assertEqual(event.participant_ids, [entry.id for entry in entries])
         self.assertEqual(len(event.rounds_config), 2)
         self.assertEqual(list(event.assigned_judges.values_list('id', flat=True)), [self.judge.id])
 
@@ -1470,8 +1491,10 @@ class CriteriaRoundAdvancementValidationTests(TestCase):
 
     def test_zero_candidates_is_blocked(self):
         from events.criteria_event_service import CriteriaEventValidationError, save_criteria_event
-        with self.assertRaisesMessage(CriteriaEventValidationError, 'Select at least one candidate.'):
+        before = Event.objects.count()
+        with self.assertRaisesMessage(CriteriaEventValidationError, 'Add at least one valid event entry.'):
             save_criteria_event(self._payload(0, qualifiers=10, publication_status='published'), self.admin)
+        self.assertEqual(Event.objects.count(), before)
 
     def test_zero_candidates_can_be_saved_as_draft(self):
         from events.criteria_event_service import save_criteria_event
@@ -1501,20 +1524,20 @@ class CriteriaRoundAdvancementValidationTests(TestCase):
         from events.criteria_event_service import save_criteria_event
         from events.faculty_service import FacultyServiceError, confirm_stage_advancement
         event = save_criteria_event(self._payload(4, qualifiers=4), self.admin)
-        first_id = self.candidates[0].id
+        first_id = event.participant_ids[0]
         with self.assertRaisesMessage(FacultyServiceError, 'Duplicate qualifier selections are not allowed.'):
             confirm_stage_advancement(
                 event,
                 self.tabulator,
                 0,
-                [first_id, first_id, self.candidates[1].id, self.candidates[2].id],
+                [first_id, first_id, *event.participant_ids[1:3]],
             )
 
     def test_stage_confirmation_advances_adjusted_four_candidates(self):
         from events.criteria_event_service import save_criteria_event
         from events.faculty_service import confirm_stage_advancement
         event = save_criteria_event(self._payload(4, qualifiers=10), self.admin)
-        ids = [c.id for c in self.candidates[:4]]
+        ids = event.participant_ids
         result = confirm_stage_advancement(event, self.tabulator, 0, ids)
         event.refresh_from_db()
         self.assertEqual(result['qualifier_ids'], ids)
@@ -1643,8 +1666,9 @@ class TabulatorResultsPortalTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, 'tabulator/tabresults.html')
         self.assertEqual(response.context['payload']['selected_participant']['candidate_id'], self.cand_b.id)
-        for section in ('Live Rankings', 'Official Results', 'Detailed Score Breakdown', 'Result verification'):
+        for section in ('Live Rankings', 'Official Results', 'Detailed Score Breakdown'):
             self.assertContains(response, section)
+        self.assertContains(response, 'Results are awaiting verification and publication.')
         self.assertEqual(response.context['results_page']['default_tab'], 'breakdown')
         self.assertNotContains(response, 'Back to Results')
         self.assertNotContains(response, 'View Full Results')
