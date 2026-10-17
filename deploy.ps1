@@ -3,6 +3,7 @@ param(
     [Parameter(ParameterSetName = 'DryRun')][switch]$DryRun,
     [Parameter(ParameterSetName = 'Status')][switch]$Status,
     [Parameter(ParameterSetName = 'Rollback')][switch]$Rollback,
+    [Parameter(ParameterSetName = 'Deploy')][switch]$PrepareOnly,
     [Parameter(ParameterSetName = 'Deploy')]
     [Parameter(ParameterSetName = 'DryRun')]
     [string[]]$Tests = @('core', 'events', 'accounts')
@@ -28,7 +29,7 @@ try {
     $LogPath = Join-Path $LogDirectory ("windows-{0}.log" -f (Get-Date -Format 'yyyyMMddTHHmmssfff'))
     Start-Transcript -LiteralPath $LogPath | Out-Null
     $TranscriptStarted = $true
-    foreach ($Tool in @('git', 'ssh', 'scp')) {
+    foreach ($Tool in @('git')) {
         if (-not (Get-Command $Tool -ErrorAction SilentlyContinue)) { throw "Install $Tool and add it to PATH first." }
     }
     $Python = Join-Path $ProjectRoot 'venv\Scripts\python.exe'
@@ -37,6 +38,16 @@ try {
         if (-not (Test-Path -LiteralPath (Join-Path $ProjectRoot $File) -PathType Leaf)) { throw "Missing project file: $File" }
     }
     Invoke-Checked $Python @('--version')
+    $GatePath = Join-Path $ProjectRoot '.tmp\deploy\workflow-gate.json'
+    if ($DryRun -or $PrepareOnly) {
+        $Gate = [PSCustomObject]@{ ready = $false; reasons = @('Local preparation requested.') }
+    } else {
+        $GateArgs = @((Join-Path $ProjectRoot 'execution\deploy_workflow.py'), '--root', $ProjectRoot, '--output', $GatePath)
+        if ($Status -or $Rollback) { $GateArgs += '--recovery' }
+        Invoke-Checked $Python $GateArgs
+        $Gate = Get-Content -LiteralPath $GatePath -Raw | ConvertFrom-Json
+    }
+    if (($Status -or $Rollback) -and -not $Gate.ready) { throw ($Gate.reasons -join ' ') }
     if ($Status) {
         Invoke-Checked 'ssh' ($SshOptions + @($Target, "python3 $RemoteHelper status"))
         exit 0
@@ -71,16 +82,31 @@ try {
             Write-Host 'Dry run complete. No SSH connection, upload or server changes. Remote checks have not run.'
             exit 0
         }
+        if (-not $PrepareOnly -and -not $Gate.ready) {
+            Write-Host ($Gate.reasons -join ' ')
+            Write-Host 'Preparing locally only. No SSH, upload or production changes are permitted before activation.'
+        }
+        $PreparedCommit = & git rev-parse HEAD
+        if ($LASTEXITCODE -ne 0) { throw 'Cannot determine committed release.' }
         Invoke-Checked $Python $PackageArgs
         $Release = Get-Content -LiteralPath (Join-Path $OutputDirectory 'release.json') -Raw | ConvertFrom-Json
         if ($Release.release -notmatch '^\d{8}T\d{6}Z-[0-9a-f]{12}$' -or $Release.sha256 -notmatch '^[0-9a-f]{64}$') { throw 'Invalid release metadata.' }
         $ActualHash = (Get-FileHash -LiteralPath $Release.archive -Algorithm SHA256).Hash.ToLowerInvariant()
         if ($ActualHash -cne $Release.sha256) { throw 'Local archive SHA256 mismatch.' }
+        if ($PrepareOnly -or -not $Gate.ready) {
+            Write-Host "Preparation complete: $($Release.archive) | SHA256: $ActualHash"
+            Write-Host 'No SSH connection or production changes. First activation/exceptional changes require separate approval.'
+            exit 0
+        }
+        foreach ($Tool in @('ssh', 'scp')) {
+            if (-not (Get-Command $Tool -ErrorAction SilentlyContinue)) { throw "Install $Tool and add it to PATH first." }
+        }
+        Invoke-Checked $Python @((Join-Path $ProjectRoot 'execution\deploy_workflow.py'), '--root', $ProjectRoot, '--output', $GatePath)
+        $Gate = Get-Content -LiteralPath $GatePath -Raw | ConvertFrom-Json
+        if (-not $Gate.ready -or $Gate.commit -cne $PreparedCommit) { throw 'Activation or Git changed during preparation. Review and retry.' }
         Write-Host 'Verifying server'
         Invoke-Checked 'ssh' ($SshOptions + @($Target, "python3 $RemoteHelper status"))
         Write-Host "Release: $($Release.release) | SHA256: $ActualHash"
-        $Answer = Read-Host 'Review the summary above. Type DEPLOY to upload and deploy this committed release'
-        if ($Answer -cne 'DEPLOY') { throw 'Deployment cancelled.' }
         Write-Host 'Uploading release'
         Invoke-Checked 'scp' ($SshOptions + @($Release.archive, "${Target}:$RemoteInbox/$($Release.release).tar.gz"))
         Invoke-Checked 'ssh' ($SshOptions + @($Target, "python3 $RemoteHelper deploy $($Release.release) $ActualHash"))

@@ -5,6 +5,72 @@ This automation updates the existing Django installation at
 It does not provision Ubuntu, PostgreSQL, Nginx, a virtual environment, or Flutter.
 **No Kamatera connection or change was made while implementing it.**
 
+## Shortest path
+
+After one-time activation, commit an ordinary update and run `./deploy.ps1`.
+It runs native Windows safety/application tests against a disposable database,
+packages committed bytes, verifies the server, uploads and invokes the existing
+helper. No WSL session, manual SSH commands or repeated typed `DEPLOY` prompt.
+Tests and server safeguards remain mandatory; nothing automatically commits,
+installs packages or migrates production.
+
+Before activation, `./deploy.ps1` performs local preparation ONLY; no SSH is
+permitted. Use `./deploy.ps1 -PrepareOnly` to force local-only operation even
+after activation. Preparation still requires reviewed, committed, clean source.
+Use `./deploy.ps1 -DryRun` for uncommitted local inspection/checks.
+
+### One-time activation (not performed)
+
+1. Review/commit the workflow changes locally, then prepare its committed archive.
+   The existing approved candidate is `bc00155821ac7bcb265a279a7ddbedffb70e1011`;
+   these new workflow edits are NOT already covered by that commit.
+2. Close missing source-backup integrity/off-host proof. Review the outstanding
+   updated genuine-helper publication/recovery integration gap; unprivileged
+   filesystem tests are not a replacement. Do not reuse the vulnerable root
+   WSL orchestration path or assert it has been repaired.
+3. Separately authorize the production maintenance scopes already documented in
+   `FIRST_PRODUCTION_READINESS.md`: openpyxl/dependency and protected requirements
+   hash maintenance; exact 35-directory permission correction; additive migration
+   file-only installation (NO migrate); root-owned bounded publisher/allowlist/
+   config/service hook and known-good public baseline alignment. Verify each.
+4. Authorize the first live deployment and the ordinary code-only command scope.
+   Only after completed setup/evidence review, create the local activation receipt
+   below. Its baseline is the reviewed clean commit containing this workflow.
+
+Local receipt: `.tmp/deploy/activation.json` (ignored; never commit secrets):
+
+```json
+{
+  "format": 1,
+  "activated_commit": "<reviewed 40-character commit containing the workflow>",
+  "production_write_approval_reference": "<explicit operator authorization reference>",
+  "backup_verification_reference": "<verified source/database backup and off-host evidence>",
+  "publication_integration_reference": "<reviewed bounded publication and recovery evidence>"
+}
+```
+
+This is an operator-maintained local interlock, NOT cryptographic proof that
+maintenance happened and NOT a substitute for production authorization or the
+server's independent checks. No receipt is generated or activated automatically.
+Do not fill it with proposed/unverified work. It is deliberately absent today.
+
+### Ordinary versus exceptional
+
+- Ordinary: edits to existing Python views/services, templates, CSS/JS and the
+  existing design assets, with unchanged dependencies/schema/settings/tooling
+  and unchanged application archive membership. Mobile API edits still run the
+  full regression suite; classification is not proof of API compatibility.
+- Exceptional: requirements, models, migrations, settings, deployment tooling,
+  added/removed runtime paths or public allowlist changes. These stop before SSH
+  and require separate review/maintenance approval and renewed activation.
+- No new activation receipt is needed for each ordinary commit. Classification
+  compares against the activated baseline; unchanged file identities are retained.
+- Explicit rollback keeps both interactive confirmations. Recovery/status use
+  the existing remote checks and do not require clean local source, but still
+  require an activation receipt. No forced unsafe rollback is introduced.
+
+## Detailed safeguards
+
 Before the first deployment, follow [the first-deployment review and checklist](FIRST_DEPLOYMENT_REVIEW.md).
 The unmanaged baseline, migration-file approval and Linux rollback verification
 are release gates. A passing local dry run and server status are insufficient
@@ -18,8 +84,9 @@ The normal command, after the one-time setup and passing tests, is:
 .\deploy.ps1
 ```
 
-The script shows the branch, commit, release ID, allowed files and SHA256. You
-must type `DEPLOY` before upload. Only a clean, reviewed, committed working tree
+The script shows the branch, commit, release ID, allowed files and SHA256. After
+activation, invoking the normal command requests deployment without a second
+typed confirmation. Only a clean, reviewed, committed working tree
 can deploy. Untracked files also block deployment; `.tmp` is already Git-ignored.
 Do not commit secrets to make this check pass.
 
@@ -29,6 +96,7 @@ Run from `C:\Users\Admin\Desktop\eventtabs` in PowerShell 5.1 or later.
 
 ```powershell
 .\deploy.ps1 -DryRun
+.\deploy.ps1 -PrepareOnly
 .\deploy.ps1 -Status
 .\deploy.ps1
 .\deploy.ps1 -Rollback
