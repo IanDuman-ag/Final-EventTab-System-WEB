@@ -23,3 +23,4 @@ djangorestframework==3.16.1
 # Timezone support
 pytz==2024.1
 reportlab==5.0.1
+openpyxl==3.1.5
