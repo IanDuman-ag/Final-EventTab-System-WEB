@@ -9,6 +9,7 @@
 }
 html { min-width: 320px; }
 body.login-page { margin: 0; background: #fbfcff; color: var(--navy); font-family: var(--font-body); -webkit-font-smoothing: antialiased; }
+.public-home-link { position:absolute; top:22px; left:24px; z-index:10; color:#081a35; background:#fff; padding:9px 15px; border-radius:5px; font-size:13px; font-weight:600; text-decoration:none; box-shadow:0 2px 8px #081a3514; }
 button, input { font: inherit; }
 button { cursor: pointer; }
 .login-shell { position: relative; isolation: isolate; min-height: max(702px, 100svh); overflow: hidden; }
@@ -71,23 +72,29 @@ button:focus-visible, .login-remember input:focus-visible { outline: 3px solid #
   .login-brand-tagline { font-size: 15px; }
 }
 @media (max-width: 760px) {
-  .login-shell { min-height: 100svh; padding: 0 24px 36px; }
-  .login-campus { inset: auto 0 0; height: 250px; opacity: .25; }
-  .login-campus img { object-position: center; }
-  .login-white-panel { clip-path: none; background: linear-gradient(#fcfdff 65%, #fcfdfff2 75%, #fcfdff66); }
-  .login-white-panel::before { display: none; }
-  .login-content { position: relative; width: 100%; max-width: 440px; margin: 0 auto; padding: 65px 0 40px; }
-  .login-brand { margin-bottom: 32px; }
-  .login-brand-tagline { font-size: clamp(12px, 3.7vw, 17px); }
-  .login-brand-rule { margin-top: 20px; }
+  .public-home-link { top:12px; left:12px; padding:8px 12px; font-size:12px; }
+  .login-shell { display:flex; flex-direction:column; min-height:100svh; padding:0 0 28px; }
+  .login-campus { position:relative; inset:auto; z-index:0; width:100%; flex:none; }
+  .login-campus img { width:100%; height:auto; object-fit:contain; object-position:center; }
+  .login-diagonals { inset:0 0 auto; aspect-ratio:1885 / 834; z-index:1; }
+  .login-white-panel { display:none; }
+  .login-content { position:relative; width:calc(100% - 48px); max-width:440px; margin:0 auto; padding:28px 0 12px; }
+  .login-brand { margin-bottom:22px; }
+  .login-logo { width:100%; max-width:340px; }
+  .login-brand-tagline { font-size:clamp(13px, 3.7vw, 17px); white-space:normal; }
+  .login-brand-rule { margin-top:16px; }
   .login-brand-desc { font-size: 14px; }
-  .login-input-wrap input { font-size: 16px; }
+  .login-form { gap:14px; }
+  .login-input-wrap input { height:54px; font-size:16px; }
+  .login-options { flex-wrap:wrap; gap:12px; margin-top:4px; }
+  .login-button { height:54px; margin-top:12px; }
   .login-remember, .login-forgot { font-size: 13px; }
+  .login-remember, .login-forgot { min-height:44px; display:inline-flex; align-items:center; }
   .login-remember { gap: 9px; }
-  .diagonal-left-blue { clip-path: polygon(0 88%, 5% 88%, 18% 100%, 0 100%); }
-  .diagonal-left-gold { clip-path: polygon(4% 92%, 10% 92%, 23% 100%, 17% 100%); }
-  .diagonal-right-blue { clip-path: polygon(100% 83%, 100% 100%, 83% 100%); }
+  .diagonal-left-blue { clip-path:polygon(0 70%, 3% 70%, 12% 100%, 0 100%); }
+  .diagonal-left-gold { clip-path:polygon(2% 82%, 5% 82%, 10% 100%, 7% 100%); }
+  .diagonal-right-blue { clip-path:polygon(100% 65%, 100% 100%, 93% 100%); }
   .diagonal-right-gold::before { display: none; }
-  .diagonal-right-gold::after { clip-path: polygon(100% 84%, 100% 90%, 92% 100%, 86% 100%); }
+  .diagonal-right-gold::after { clip-path:polygon(100% 78%, 100% 86%, 97% 100%, 94% 100%); }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; } }

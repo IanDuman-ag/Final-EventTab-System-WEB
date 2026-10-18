@@ -8,13 +8,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{% static 'login.css' %}?v=20261001a">
+  <link rel="stylesheet" href="{% static 'login.css' %}?v=20261018responsive">
 </head>
 <body class="login-page">
-  <a class="public-home-link" href="{% url 'home' %}" style="position:absolute;top:22px;left:24px;z-index:10;color:#081a35;background:#fff;padding:9px 15px;border-radius:5px;font-size:13px;font-weight:600;text-decoration:none;box-shadow:0 2px 8px #081a3514">&#8592; Public website</a>
+  <a class="public-home-link" href="{% url 'home' %}">&#8592; Public website</a>
   <main class="login-shell">
     <div class="login-campus" aria-hidden="true">
-      <img src="{% static 'loginlogo/ustpentrance.png' %}" alt="">
+      <img src="{% static 'loginlogo/ustpentrance.png' %}" width="1885" height="834" alt="">
     </div>
     <div class="login-diagonals" aria-hidden="true">
       <span class="diagonal-left-blue"></span><span class="diagonal-left-gold"></span>
