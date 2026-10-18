@@ -20,7 +20,7 @@ from events.models import BracketMatch, Department, Event
 from events.public_service import (
     PUBLIC_TIMEZONE, TERMINAL_MATCH_STATUSES, criteria_condition, criteria_results,
     event_kind, fixture_queryset, image_url, is_multiround,
-    public_events, public_fixtures, public_participants, published_events,
+    public_events, public_fixtures, public_participants, public_result_bracket, published_events,
     publication_datetime, result_is_published, result_rounds, serialize_event, standings_eligible,
 )
 
@@ -283,6 +283,8 @@ def result_detail(request, pk):
     rows, rounds, selected = [], [], ''
     notice = 'Final scores from officially published matches.'
     fixtures = []
+    bracket_lanes = []
+    champion = None
     if kind == 'criteria':
         rounds = result_rounds(event)
         selected = request.GET.get('round_id', rounds[-1]['id'])
@@ -304,12 +306,18 @@ def result_detail(request, pk):
                      'placement': {1: 'Champion', 2: 'Runner-up', 3: 'Third place'}.get(placements.get(str(team.pk)), 'Champion' if team.is_champion else '')}
                     for team in event.bracket_teams.select_related('department').order_by('-points', 'seed', 'pk')]
             rows.sort(key=lambda row: row['rank'] or 999999)
+            champion = next((row for row in rows if row['placement'] == 'Champion'), None)
+        # The bracket must remain whole, including automatic-advance slots.
+        bracket_lanes = public_result_bracket(event, event.bracket_matches.filter(
+            status__in=TERMINAL_MATCH_STATUSES, updated_at__lte=publication_datetime(event),
+        ).select_related('team_a', 'team_b', 'winner').order_by('match_number', 'pk'))
     page, pagination = paginate(request, fixtures if kind == 'match' else rows)
     return dict(pagination, page_title=f'Published results: {event.name} — EventTab',
-                event=serialize_event(event), result_kind=kind,
+                event={**serialize_event(event), 'banner_key': featured_banner_key(event)}, result_kind=kind,
                 result_rows=rows if kind == 'match' else list(page),
                 fixtures=public_fixtures(event, page) if kind == 'match' else [], result_notice=notice,
-                result_rounds=rounds, selected_round=selected,
+                result_rounds=rounds, selected_round=selected, bracket_lanes=bracket_lanes,
+                bracket_champion=champion,
                 published_date=serialize_event(event)['published_date'])
 
 

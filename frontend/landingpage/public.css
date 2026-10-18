@@ -2300,3 +2300,131 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible {
   .result-medal { flex-basis:17px; height:17px; }
   .public-results .result-bottom { min-height:25px; padding-top:3px; padding-bottom:3px; }
 }
+
+/* Published event detail: final placements and the stored official bracket. */
+.result-detail-page { background:radial-gradient(ellipse at 50% 30%,#eef5fc 0,#f9fcff 65%); }
+.result-detail-page .official-result-hero { position:relative; overflow:hidden; background:#f4f8fc; border-bottom:1px solid #e3ecf5; }
+.official-result-hero::before { content:''; position:absolute; width:260px; height:260px; border:55px solid #ffcf1d16; border-radius:50%; left:-140px; bottom:-120px; }
+.result-detail-page .official-result-heading { position:relative; max-width:1024px; padding-top:19px; padding-bottom:15px; z-index:1; }
+.official-result-heading .breadcrumb-link { display:flex; align-items:center; gap:25px; color:#4f6b8c; font-size:10px; font-weight:650; margin:0 0 7px; width:fit-content; }
+.official-result-heading .breadcrumb-link::after { content:''; width:36px; height:2px; background:#ffcf20; }
+.official-result-heading h1 { max-width:70%; font-size:38px; line-height:1.12; letter-spacing:-1.5px; color:#071c39; margin:0 0 4px; }
+.official-result-heading>p { font-size:10px; color:#587394; margin:0 0 5px; }
+.official-published { display:inline-flex; align-items:center; gap:8px; background:#e9faf0; border:1px solid #b9e7ce; color:#14834c; border-radius:4px; padding:3px 11px; font-size:9px; font-weight:700; }
+.official-published>span { display:grid; place-items:center; width:13px; height:13px; color:white; background:#159350; border-radius:50%; font-size:9px; }
+.official-result-art { position:absolute; right:0; top:0; height:100%; width:45%; background:linear-gradient(145deg,#dbe9f3,#0b3158); }
+.official-result-art>img { width:100%; height:100%; object-fit:cover; object-position:center 48%; }
+.official-result-art::before { content:''; position:absolute; inset:0; background:linear-gradient(90deg,#f4f8fc 0%,#f4f8fc44 28%,transparent 55%); z-index:1; }
+.official-result-art::after { content:''; position:absolute; inset:0; background:linear-gradient(130deg,#fff2a8,#ffcf24); clip-path:polygon(0 0,11% 0,32% 100%,21% 100%); opacity:.85; z-index:2; }
+.official-result-hero::after { content:''; position:absolute; right:0; bottom:0; width:15%; height:40%; background:#ffcf16; clip-path:polygon(100% 0,100% 100%,0 100%); }
+.result-racket { position:absolute; width:100%; height:100%; object-fit:cover; }
+.result-detail-page .official-result-content { max-width:1080px; padding-top:0; padding-bottom:40px; }
+.official-placements-panel,.official-bracket-panel { background:#ffffffec; border:1px solid #e1eaf4; border-radius:9px; box-shadow:0 5px 25px #204c7b06; }
+.official-placements-panel { margin:0 40px 10px; padding:14px 17px 10px; }
+.official-panel-heading { display:flex; align-items:center; gap:13px; margin-bottom:12px; }
+.official-panel-heading h2 { margin:0; color:#111e4c; font-size:18px; line-height:1.2; letter-spacing:-.6px; }
+.official-panel-heading p { font-size:11px; color:#5a7190; line-height:1.4; margin:1px 0 0; }
+.official-heading-icon { flex:0 0 34px; color:#f4b900; }
+.official-heading-icon svg { display:block; width:34px; height:34px; stroke-width:1.8; }
+.chart-icon { color:#4489de; }
+.official-placements-table { border:1px solid #e8eef7; border-radius:5px; }
+.official-placements-table .table { min-width:600px; margin:0; color:#254366; font-size:10px; vertical-align:middle; line-height:1.4; }
+.official-placements-table .table th { background:#f3f6fb; color:#61799d; font-size:7px; letter-spacing:.8px; text-transform:uppercase; padding:9px 12px; border:0; white-space:nowrap; }
+.official-placements-table .table td { padding:5px 12px; background:transparent; border-color:#edf2f8; box-shadow:none; color:#476386; }
+.official-placements-table .table td:nth-child(2) { color:#102d53; }
+.official-placements-table .table td:first-child { width:80px; }
+.official-placements-table .table td:nth-child(3) { width:38%; font-size:9px; }
+.official-placements-table .table td:last-child { font-variant-numeric:tabular-nums; }
+.official-placements-table .table tbody tr:last-child td { border-bottom:0; }
+.placement-rank-1 { background:#fff9df; }.placement-rank-2 { background:#edf3fc; }.placement-rank-3 { background:#fff0e5; }
+.placement-medal { display:grid; place-items:center; width:22px; height:22px; font-weight:800; font-size:10px; color:#1e3d64; }
+.placement-rank-1 .placement-medal,.placement-rank-2 .placement-medal,.placement-rank-3 .placement-medal { border-radius:50%; color:#fff; box-shadow:inset 0 0 0 2px #ffffff36; }
+.placement-rank-1 .placement-medal { background:#d8a30b; }.placement-rank-2 .placement-medal { background:#9ca9bb; }.placement-rank-3 .placement-medal { background:#c77339; }
+.official-result-notice { margin:8px 0 0; font-size:10px; color:#607792; }
+.result-detail-page .round-filter { border:0; padding:0; margin:0 0 12px; }
+.result-detail-page .round-filter>label { font-size:10px; }
+.result-detail-page .round-picker { max-width:440px; }
+.result-detail-page .round-picker .btn { font-size:10px; padding:7px 13px; white-space:nowrap; }
+.official-bracket-panel { padding:14px 17px 16px; }
+.official-bracket-panel .official-panel-heading { margin-bottom:6px; }
+.official-bracket-scroll { overflow-x:auto; overscroll-behavior-x:contain; padding:0 5px 8px; scrollbar-width:thin; }
+.official-bracket { position:relative; width:max-content; min-width:100%; }
+.official-bracket-lane { display:flex; position:relative; gap:28px; padding:0 0 12px; align-items:stretch; }
+.official-bracket-column { width:202px; flex:0 0 202px; position:relative; z-index:1; }
+.official-bracket-column>h3 { margin:0; min-height:28px; display:flex; justify-content:center; align-items:center; color:#27558b; font-size:10px; font-weight:700; letter-spacing:0; }
+.official-bracket-track { min-height:calc(var(--bracket-slots,1) * 120px); height:calc(100% - 28px); display:flex; flex-direction:column; justify-content:space-around; gap:12px; }
+.official-match-card { position:relative; background:#fff; border:1px solid #d8e5f5; border-radius:6px; padding:0 12px 7px; box-shadow:0 2px 5px #1a497b08; }
+.official-match-top { margin:0 -12px 5px; padding:4px 10px; border-radius:5px 5px 0 0; background:#f0f7ff; display:flex; gap:4px; align-items:center; justify-content:space-between; color:#4c729e; font-size:8px; }
+.official-match-top>span { color:#15864b; background:#d9f9e6; padding:1px 4px; border-radius:3px; font-weight:600; white-space:nowrap; }
+.official-match-team { display:flex; align-items:baseline; justify-content:space-between; gap:8px; color:#6d819a; font-size:10px; line-height:1.4; }
+.official-match-team>span { overflow-wrap:anywhere; }
+.official-match-team strong { color:#193b68; font-variant-numeric:tabular-nums; }
+.official-match-team.is-winner { color:#14375e; font-weight:750; }
+.official-match-meta { margin:4px 0 0; font-size:8px; color:#6080a4; line-height:1.4; }
+.official-match-meta>span { display:flex; align-items:center; gap:4px; }
+.official-match-meta svg { flex:0 0 10px; width:10px; height:10px; }
+.official-match-missing { font-size:8px; color:#61738b; }
+.official-bracket-connectors { position:absolute; inset:0; width:100%; height:100%; overflow:visible; pointer-events:none; }
+.official-bracket-connectors path { fill:none; stroke:#92abc9; stroke-width:1.3; }
+.official-bracket-connectors .loser-connector { stroke:#a9bad1; stroke-dasharray:4 4; }
+.official-champion-card { border:1px solid #efbf26; background:#fffef8; border-radius:6px; padding:0 12px 10px; }
+.official-champion-card>div { display:flex; align-items:center; gap:8px; background:#fff6cf; margin:0 -12px 9px; padding:5px 9px; border-radius:5px 5px 0 0; color:#73520a; font-size:10px; }
+.official-champion-card svg { width:22px; height:22px; color:#e8ad00; }
+.official-champion-card h4 { color:#11365d; font-size:12px; font-weight:750; margin:0 0 3px; }
+.official-champion-card p { margin:0; color:#69809a; font-size:9px; }
+@media(max-width:800px) { .result-detail-page .official-result-heading { padding-top:22px; padding-bottom:20px; }.official-result-heading h1 { font-size:32px; }.official-placements-panel { margin-left:0; margin-right:0; }.official-bracket-column { width:190px; flex-basis:190px; }.official-bracket-lane { gap:24px; }.official-result-art { width:42%; opacity:.65; } }
+@media(max-width:480px) { .official-result-heading h1 { max-width:85%; font-size:30px; letter-spacing:-1px; }.official-result-art { width:38%; opacity:.3; }.official-placements-panel,.official-bracket-panel { padding:13px 11px; }.official-panel-heading { gap:9px; }.official-panel-heading h2 { font-size:17px; }.official-panel-heading p { font-size:10px; }.official-heading-icon,.official-heading-icon svg { width:29px; height:29px; flex-basis:29px; }.official-placements-table .table td { padding:6px 10px; }.official-bracket-scroll { padding-left:0; padding-right:0; }.result-detail-page .round-picker { flex-wrap:wrap; } }
+@media(min-width:801px) {
+  .result-detail-page .official-result-heading { width:72%; }
+  .result-detail-page .official-result-content { width:82%; }
+  .result-detail-page .site-header .container { max-width:1024px; width:72%; }
+  .result-detail-page .portal-nav { height:36px; gap:18px; }
+  .result-detail-page .brand { font-size:18px; }
+  .result-detail-page .brand-mark { width:27px; height:27px; margin-right:6px; }
+  .result-detail-page .nav-menu { gap:23px; }
+  .result-detail-page .site-header .nav-menu>a:not(.btn) { font-size:8px; padding:11px 0; }
+  .result-detail-page .nav-login { font-size:8px; padding:6px 13px; }
+  .official-result-heading h1 { font-size:clamp(28px,2.65vw,38px); }
+}
+@media(min-width:801px) and (max-width:1100px) {
+  .result-detail-page .official-result-heading { padding-top:13px; padding-bottom:11px; }
+  .official-result-heading .breadcrumb-link { font-size:8px; margin-bottom:5px; }
+  .official-result-heading h1 { margin-bottom:3px; }
+  .official-result-heading>p { font-size:8px; margin-bottom:3px; }
+  .official-published { font-size:7px; padding:2px 8px; gap:5px; }
+  .official-published>span { width:11px; height:11px; font-size:7px; }
+  .official-placements-panel { margin-left:30px; margin-right:30px; padding:11px 12px 8px; }
+  .official-panel-heading { margin-bottom:9px; gap:9px; }
+  .official-panel-heading h2 { font-size:14px; }
+  .official-panel-heading p { font-size:9px; }
+  .official-heading-icon,.official-heading-icon svg { width:27px; height:27px; flex-basis:27px; }
+  .official-placements-table .table { font-size:8px; }
+  .official-placements-table .table th { font-size:6px; padding:7px 9px; }
+  .official-placements-table .table td { padding:3px 9px; }
+  .official-placements-table .table td:nth-child(3) { font-size:7px; }
+  .official-placements-table .table td:first-child { width:60px; }
+  .placement-medal { width:18px; height:18px; font-size:8px; }
+  .official-bracket-panel { padding:11px 12px 13px; }
+  .official-bracket-column { width:150px; flex-basis:150px; }
+  .official-bracket-column>h3 { font-size:8px; min-height:24px; }
+  .official-bracket-lane { gap:22px; }
+  .official-bracket-track { min-height:calc(var(--bracket-slots,1) * 90px); height:calc(100% - 24px); gap:9px; }
+  .official-match-card { padding:0 9px 5px; }
+  .official-match-top { margin:0 -9px 4px; padding:3px 7px; font-size:6px; }
+  .official-match-team { font-size:8px; }
+  .official-match-meta { font-size:6px; margin-top:3px; }
+  .official-match-meta svg { width:8px; height:8px; flex-basis:8px; }
+  .official-champion-card h4 { font-size:10px; }
+  .official-champion-card p { font-size:7px; }
+}
+@media(min-width:801px) and (max-width:1100px) {
+  .result-detail-page .official-result-heading { padding-top:9px; padding-bottom:8px; }
+  .official-result-heading .breadcrumb-link { margin-bottom:4px; }
+  .official-published { line-height:1.3; }
+  .official-placements-panel { padding-top:9px; padding-bottom:7px; }
+  .official-panel-heading { margin-bottom:7px; }
+  .official-heading-icon,.official-heading-icon svg { width:24px; height:24px; flex-basis:24px; }
+  .official-placements-table .table th { padding-top:5px; padding-bottom:5px; }
+  .official-placements-table .table td { padding-top:1px; padding-bottom:1px; }
+  .placement-medal { width:16px; height:16px; }
+}

@@ -199,6 +199,29 @@ def public_fixtures(event, matches=None):
     return rows
 
 
+def public_result_bracket(event, matches):
+    """Read the published bracket's authored rounds and advancement links only."""
+    matches = list(matches)
+    published = [(match, fixture) for match, fixture in zip(matches, public_fixtures(event, matches))
+                 if fixture['is_official']]
+    visible_ids = {match.pk for match, _ in published}
+    lanes = {}
+    for match, fixture in published:
+        name = match.round_name or 'Matches'
+        lane = 'losers' if 'loser' in name.lower() else 'finals' if 'grand' in name.lower() else 'winners'
+        rounds = lanes.setdefault(lane, {})
+        column = rounds.setdefault(name, {'name': name, 'matches': []})
+        column['matches'].append({
+            **fixture, 'number': match.match_number,
+            'automatic_advance': match.is_automatic_advance,
+            'next_winner': match.next_match_winner_id if match.next_match_winner_id in visible_ids else '',
+            'next_loser': match.next_match_loser_id if match.next_match_loser_id in visible_ids else '',
+        })
+    return [{'key': key, 'rounds': list(lanes[key].values()),
+             'slots': max(len(column['matches']) for column in lanes[key].values())}
+            for key in ('winners', 'losers', 'finals') if key in lanes]
+
+
 def result_rounds(event):
     configured = [row for row in event.rounds_config or [] if isinstance(row, dict)]
     rounds = [{'id': str(row.get('id') or row.get('stage_number') or index + 1),

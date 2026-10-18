@@ -1,93 +1,87 @@
-{% extends "landingpage/base.html" %}{% block content %}{% if not data_error %}
-<section class="page-intro detail-intro">
-<div class="container">
-<a class="breadcrumb-link" href="{% url 'public_results' %}">&#8592; Official Results</a>
-<div class="detail-title">
-<div>
-<p class="eyebrow">
-{{ event.type_label }} &middot; {{ event.category }}
-</p>
-<h1>
-{{ event.name }}
-</h1>
-<p>
-{% if published_date %}Published {{ published_date|date:"F j, Y" }}{% else %}Official published competition outcomes{% endif %}
-</p>
-</div>
-<span class="status status-completed">Official / Published</span>
-</div>
-</div>
+﻿{% extends "landingpage/base.html" %}{% load static %}
+{% block body_class %}public-results result-detail-page{% endblock %}
+{% block content %}{% if not data_error %}
+<section class="official-result-hero">
+  <div class="official-result-art" aria-hidden="true">
+    {% if event.image_url %}<img src="{{ event.image_url }}" alt="">
+    {% elif event.banner_key %}<img src="{% static 'landingpage/assets/competitions/' %}{{ event.banner_key }}.webp" alt="">
+    {% else %}{% with name=event.name|lower %}{% if 'tennis' in name %}
+    <svg class="result-racket" viewBox="0 0 500 240" fill="none"><defs><linearGradient id="racket-rim"><stop stop-color="#ba8a37"/><stop offset=".5" stop-color="#e6c480"/><stop offset="1" stop-color="#6b4821"/></linearGradient><pattern id="racket-grip" width="5" height="5" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r=".7" fill="#67788b"/></pattern></defs><path d="M0 185H500M0 205H500M0 225H500M30 175V240M95 175V240M160 175V240M225 175V240M290 175V240M355 175V240M420 175V240" stroke="#9cb4ca" opacity=".3"/><g transform="rotate(23 280 120)"><path d="M300 95L463 91Q478 99 464 112L300 125Z" fill="url(#racket-rim)"/><ellipse cx="240" cy="105" rx="105" ry="72" fill="url(#racket-rim)"/><ellipse cx="236" cy="100" rx="102" ry="68" fill="#182c42"/><ellipse cx="236" cy="100" rx="100" ry="66" fill="url(#racket-grip)"/><path d="M341 98L461 98" stroke="#3c2516" stroke-width="3"/></g><circle cx="140" cy="180" r="25" fill="#e4ebf1"/><circle cx="134" cy="173" r="18" fill="#fbfdff"/></svg>
+    {% endif %}{% endwith %}{% endif %}
+  </div>
+  <div class="container official-result-heading">
+    <a class="breadcrumb-link" href="{% url 'public_results' %}">&#8592; Official Results</a>
+    <h1>{{ event.name }}</h1>
+    <p>{% if published_date %}Published {{ published_date|date:"F j, Y" }}{% else %}Official published competition outcomes{% endif %}</p>
+    <span class="official-published"><span aria-hidden="true">&#10004;</span> Official / Published</span>
+  </div>
 </section>
-<section class="container page-content">
-<div class="publication-note">
-<span aria-hidden="true">&#10003;</span>
-<div>
-<strong>Official competition outcomes</strong>
-<p>
-{{ result_notice|default:"These results have completed the authorized approval and publication workflow." }}
-</p>
-</div>
-</div>
-<div class="section-heading">
-<div>
-<p class="eyebrow">
-{% if result_rounds|length > 1 %}PUBLISHED ROUND RANKINGS{% else %}THE FINAL PLACEMENTS{% endif %}
-</p>
-<h2>
-{% if result_rounds|length > 1 %}Official outcomes, round by round.{% else %}Every achievement deserves its moment.{% endif %}
-</h2>
-</div>
-<a class="text-link" href="{{ event.detail_url }}">Competition details &#8599;</a>
-</div>
-{% if result_rounds %}
-<form class="filter-panel round-filter" method="get">
-<label for="result-round">Competition round</label>
-<div class="round-picker">
-<select class="form-select" id="result-round" name="round_id">
-{% for round in result_rounds %}
-<option value="{{ round.id }}" {% if selected_round == round.id %}selected{% endif %}>{{ round.name }}</option>
-{% endfor %}
-</select><button class="btn btn-navy" type="submit">View round</button>
-</div>
-</form>
-{% endif %}{% if result_rows %}
-<div class="table-responsive standings-table">
-<table class="table">
-<caption class="visually-hidden">
-{% if result_rounds|length > 1 %}Published round-specific competition placements{% else %}Published final competition placements{% endif %}
-</caption>
-<thead>
-<tr>
-<th scope="col">Rank</th><th scope="col">{% if result_kind == 'match' %}Team{% else %}Contestant / Group{% endif %}</th><th scope="col">Department</th><th scope="col">Placement</th>{% if result_kind == "match" %}<th scope="col">Championship Points</th>{% endif %}
-</tr>
-</thead>
-<tbody>
-{% for row in result_rows %}
-<tr class="rank-{{ row.rank|default_if_none:"Not available" }}">
-<td><span class="rank-number">{{ row.rank|default_if_none:"Not available" }}</span>
-</td><td><strong>{{ row.name }}</strong>
-</td><td>{{ row.department|default:"Not available" }}</td><td>{{ row.placement|default:"Not available" }}</td>{% if result_kind == "match" %}<td>{{ row.points|default_if_none:"Not available" }}</td>{% endif %}
-</tr>
-{% endfor %}
-</tbody>
-</table>
-</div>
-{% else %}
-<div class="empty-state compact">
-<h3>
-No public placements are available.
-</h3>
-<p>
-Only authorized, published competition placements are displayed.
-</p>
-</div>
-{% endif %}{% if result_kind == 'match' %}
-<section class="detail-section">
-<h2>
-Published match results
-</h2>
-{% include "landingpage/_fixtures.html" %}
-</section>
-{% endif %}{% include "landingpage/_pagination.html" %}
+<section class="container official-result-content">
+  <section class="official-placements-panel" aria-labelledby="placements-title">
+    <div class="official-panel-heading">
+      <span class="official-heading-icon">{% include "landingpage/_icon.html" with icon="trophy" %}</span>
+      <div><h2 id="placements-title">{% if result_rounds|length > 1 %}Published round rankings{% else %}Final Placements{% endif %}</h2><p>Every achievement deserves its moment.</p></div>
+    </div>
+    {% if result_rounds %}
+    <form class="round-filter" method="get">
+      <label for="result-round">Competition round</label>
+      <div class="round-picker"><select class="form-select" id="result-round" name="round_id">
+        {% for round in result_rounds %}<option value="{{ round.id }}" {% if selected_round == round.id %}selected{% endif %}>{{ round.name }}</option>{% endfor %}
+      </select><button class="btn btn-navy" type="submit">View round</button></div>
+    </form>
+    {% endif %}
+    {% if result_rows %}
+    <div class="table-responsive official-placements-table">
+      <table class="table">
+        <caption class="visually-hidden">{% if result_rounds|length > 1 %}Published round-specific competition placements{% else %}Published final competition placements{% endif %}</caption>
+        <thead><tr><th scope="col">Rank</th><th scope="col">{% if result_kind == 'match' %}Team{% else %}Contestant / Group{% endif %}</th><th scope="col">Department</th><th scope="col">Placement</th>{% if result_kind == 'match' %}<th scope="col">Championship Points</th>{% endif %}</tr></thead>
+        <tbody>{% for row in result_rows %}
+          <tr class="placement-rank-{{ row.rank|default_if_none:'unknown' }}"><td><span class="placement-medal">{{ row.rank|default_if_none:"—" }}</span></td><td><strong>{{ row.name }}</strong></td><td>{{ row.department|default:"Not available" }}</td><td>{{ row.placement|default:"Not available" }}</td>{% if result_kind == 'match' %}<td>{{ row.points|default_if_none:"Not available" }}</td>{% endif %}</tr>
+        {% endfor %}</tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state compact"><h3>No public placements are available.</h3><p>{{ result_notice }}</p></div>
+    {% endif %}
+    {% if result_kind != 'match' and result_rows %}<p class="official-result-notice">{{ result_notice }}</p>{% endif %}
+  </section>
+  {% if result_kind == 'match' %}
+  <section class="official-bracket-panel" aria-labelledby="published-matches-title">
+    <div class="official-panel-heading">
+      <span class="official-heading-icon chart-icon">{% include "landingpage/_icon.html" with icon="chart" %}</span>
+      <div><h2 id="published-matches-title">Published match results</h2><p>Complete results from all official matches.</p></div>
+    </div>
+    {% if bracket_lanes %}
+    <div class="official-bracket-scroll" role="region" aria-label="Official tournament bracket, scroll horizontally to view all rounds" tabindex="0">
+      <div class="official-bracket" data-official-bracket>
+        <svg class="official-bracket-connectors" aria-hidden="true"></svg>
+        {% for lane in bracket_lanes %}
+        <div class="official-bracket-lane" data-lane="{{ lane.key }}" style="--bracket-slots:{{ lane.slots }}">
+          {% for round in lane.rounds %}
+          <section class="official-bracket-column" aria-label="{{ round.name }}">
+            <h3>{{ round.name }}</h3>
+            <div class="official-bracket-track">
+              {% for match in round.matches %}
+              <article class="official-match-card" data-match-id="{{ match.id }}" data-next-winner="{{ match.next_winner }}" data-next-loser="{{ match.next_loser }}" aria-label="Match {{ match.number }}: {{ match.name_a }} versus {{ match.name_b }}">
+                <div class="official-match-top"><strong>{% if match.automatic_advance %}Automatic advance{% else %}Match {{ match.number }}{% endif %}</strong><span>&#10003; {{ match.status_label }}</span></div>
+                <div class="official-match-team {% if match.winner == match.name_a %}is-winner{% endif %}"><span>{{ match.name_a }}</span><strong>{% if not match.automatic_advance %}{{ match.score_a|default:"—" }}{% endif %}</strong></div>
+                {% if not match.automatic_advance %}<div class="official-match-team {% if match.winner == match.name_b %}is-winner{% endif %}"><span>{{ match.name_b }}</span><strong>{{ match.score_b|default:"—" }}</strong></div>{% endif %}
+                <p class="official-match-meta"><span>{% include "landingpage/_icon.html" with icon="calendar" %}{% if match.date %}{{ match.date|date:"M j, Y" }}{% else %}Date TBA{% endif %}{% if match.time %} &middot; {{ match.time|time:"g:i A" }}{% endif %}</span><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 1 1 14 0Z"/><circle cx="12" cy="10" r="2"/></svg>{{ match.venue|default:"Venue to be announced" }}</span></p>
+                {% if not match.winner %}<span class="official-match-missing">Winner not recorded.</span>{% endif %}
+              </article>
+              {% endfor %}
+            </div>
+          </section>
+          {% endfor %}
+          {% if forloop.last and bracket_champion %}
+          <section class="official-bracket-column champion-column" aria-label="Champion"><h3>Champion</h3><div class="official-bracket-track"><article class="official-champion-card"><div>{% include "landingpage/_icon.html" with icon="trophy" %}<strong>Champion</strong></div><h4>{{ bracket_champion.name }}</h4><p>{{ bracket_champion.department }}</p></article></div></section>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% else %}<div class="empty-state compact"><h3>No published matches are available.</h3><p>{{ result_notice }}</p></div>{% endif %}
+  </section>
+  {% else %}{% include "landingpage/_pagination.html" %}{% endif %}
 </section>
 {% endif %}{% endblock %}

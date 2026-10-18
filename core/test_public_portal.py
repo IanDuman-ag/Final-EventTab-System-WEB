@@ -221,6 +221,7 @@ class PublicPortalTests(TestCase):
         self.assertEqual((fixture['score_a'], fixture['score_b'], fixture['winner']), ('', '', ''))
         result = self.client.get(reverse('public_result_detail', args=[self.event.pk]))
         self.assertEqual(result.context['fixtures'], [])
+        self.assertEqual(result.context['bracket_lanes'], [])
         self.assertNotContains(result, 'Eagles')
         self.assertNotContains(result, '>99<')
         self.assertIn('republication', result.context['result_notice'])
@@ -231,6 +232,50 @@ class PublicPortalTests(TestCase):
         self.assertTrue(fixture['is_official'])
         self.assertEqual((fixture['score_a'], fixture['winner']), ('99', 'Eagles'))
         self.assertEqual(self.client.get(reverse('public_leaderboard')).context['standings'][0]['points'], 25)
+
+    def test_public_result_bracket_preserves_links_and_all_published_matches(self):
+        semifinal = BracketMatch.objects.create(
+            event=self.event, match_number=2, round_name='Winners Semifinals',
+            team_a=self.team_a, team_b=self.team_b, winner=self.team_a,
+            status='completed', score_a='21', score_b='12', next_match_winner=self.match,
+        )
+        losers = BracketMatch.objects.create(
+            event=self.event, match_number=3, round_name='Losers Final',
+            team_a=self.team_a, team_b=self.team_b, winner=self.team_b,
+            status='completed', score_a='10', score_b='21',
+        )
+        semifinal.next_match_loser = losers
+        semifinal.save()
+        for number in range(4, 17):
+            BracketMatch.objects.create(
+                event=self.event, match_number=number, round_name='Pool Play',
+                team_a=self.team_a, team_b=self.team_b, winner=self.team_a,
+                status='completed', score_a='21', score_b='8',
+            )
+        advance = BracketMatch.objects.create(
+            event=self.event, match_number=0, round_name='Winners Semifinals',
+            team_a=self.team_a, winner=self.team_a, is_automatic_advance=True,
+            status='completed', next_match_winner=semifinal,
+        )
+        self.publish()
+        response = self.client.get(reverse('public_result_detail', args=[self.event.pk]))
+        nodes = [match for lane in response.context['bracket_lanes']
+                 for column in lane['rounds'] for match in column['matches']]
+        self.assertEqual(len(nodes), 17)
+        self.assertTrue(next(match for match in nodes if match['id'] == advance.pk)['automatic_advance'])
+        node = next(match for match in nodes if match['id'] == semifinal.pk)
+        self.assertEqual(node['next_winner'], self.match.pk)
+        self.assertEqual(node['next_loser'], losers.pk)
+        self.assertContains(response, 'class="official-match-card"', count=17)
+        self.assertNotContains(response, 'PRIVATE STAFF NOTES')
+        self.assertNotContains(response, 'PRIVATE MEMBER INFORMATION')
+        self.match.save()
+        response = self.client.get(reverse('public_result_detail', args=[self.event.pk]))
+        nodes = [match for lane in response.context['bracket_lanes']
+                 for column in lane['rounds'] for match in column['matches']]
+        node = next(match for match in nodes if match['id'] == semifinal.pk)
+        self.assertEqual(node['next_winner'], '')
+        self.assertNotContains(response, f'data-match-id="{self.match.pk}"')
 
     def test_approval_and_tabulation_are_required_by_configured_workflow(self):
         cases = [

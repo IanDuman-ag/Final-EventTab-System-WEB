@@ -123,6 +123,38 @@ document.addEventListener('DOMContentLoaded', () => {
       submitStandings();
     });
   }
+  const officialBracket = document.querySelector('[data-official-bracket]');
+  if (officialBracket) {
+    const drawBracket = () => {
+      const svg = officialBracket.querySelector('.official-bracket-connectors');
+      const bounds = officialBracket.getBoundingClientRect();
+      const cards = new Map(Array.from(officialBracket.querySelectorAll('[data-match-id]'),
+        (card) => [card.dataset.matchId, card]));
+      svg.replaceChildren();
+      const connect = (source, target, loser = false) => {
+        const start = source.getBoundingClientRect();
+        const end = target.getBoundingClientRect();
+        const x1 = start.right - bounds.left;
+        const y1 = start.top + start.height / 2 - bounds.top;
+        const x2 = end.left - bounds.left;
+        const y2 = end.top + end.height / 2 - bounds.top;
+        const bend = x2 > x1 ? (x1 + x2) / 2 : x1 + 12;
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', `M ${x1} ${y1} H ${bend} V ${y2} H ${x2}`);
+        if (loser) path.classList.add('loser-connector');
+        svg.append(path);
+      };
+      cards.forEach((card) => {
+        const winnerTarget = cards.get(card.dataset.nextWinner);
+        const loserTarget = cards.get(card.dataset.nextLoser);
+        if (winnerTarget && winnerTarget !== card) connect(card, winnerTarget);
+        if (loserTarget && loserTarget !== card) connect(card, loserTarget, true);
+      });
+    };
+    new ResizeObserver(drawBracket).observe(officialBracket);
+    if (document.fonts) document.fonts.ready.then(drawBracket);
+    drawBracket();
+  }
   window.addEventListener('pageshow', () => {
     document.querySelectorAll('.filter-panel, .featured-controls').forEach((form) => {
       form.removeAttribute('aria-busy');
