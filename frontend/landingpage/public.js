@@ -93,18 +93,34 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   const standingsFilters = document.getElementById('standings-filters');
   if (standingsFilters) {
+    const search = document.getElementById('standings-search');
     const category = document.getElementById('standings-category');
     const event = document.getElementById('standings-event');
     const year = document.getElementById('standings-year');
+    let searchTimer;
+    const submitStandings = () => {
+      clearTimeout(searchTimer);
+      standingsFilters.requestSubmit();
+    };
+    standingsFilters.addEventListener('submit', () => clearTimeout(searchTimer));
+    search.addEventListener('input', (inputEvent) => {
+      clearTimeout(searchTimer);
+      if (!inputEvent.isComposing) searchTimer = setTimeout(submitStandings, 500);
+    });
+    search.addEventListener('compositionstart', () => clearTimeout(searchTimer));
+    search.addEventListener('compositionend', () => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(submitStandings, 500);
+    });
     category.addEventListener('change', () => {
       event.value = '';
-      standingsFilters.requestSubmit();
+      submitStandings();
     });
-    event.addEventListener('change', () => standingsFilters.requestSubmit());
+    event.addEventListener('change', submitStandings);
     year.addEventListener('change', () => {
       category.value = '';
       event.value = '';
-      standingsFilters.requestSubmit();
+      submitStandings();
     });
   }
   window.addEventListener('pageshow', () => {

@@ -21,7 +21,6 @@
     <label class="visually-hidden" for="standings-category">Competition category</label><select id="standings-category" name="category"><option value="">All categories</option>{% for category in categories %}<option value="{{ category }}" {% if filters.category == category %}selected{% endif %}>{{ category }}</option>{% endfor %}</select>
     <input type="hidden" name="type" value="{{ filters.type }}">
     <label class="visually-hidden" for="standings-event">Event</label><select id="standings-event" name="event_id"><option value="">All events</option>{% for event in event_options %}<option value="{{ event.id }}" {% if selected_event_id == event.id %}selected{% endif %}>{{ event.name }}</option>{% endfor %}</select>
-    <div class="standings-filter-actions"><button class="btn standings-apply" type="submit">Apply</button><a class="btn standings-reset" href="{% url 'public_leaderboard' %}">Reset</a></div>
   </form>
   {% if standings %}<div class="table-responsive standings-table" tabindex="0" role="region" aria-label="Official department standings">
     <table class="table"><caption class="visually-hidden">Official department championship rankings</caption><thead><tr><th scope="col">Rank</th><th scope="col">Department</th><th scope="col" class="points-cell">Total Points</th><th scope="col">Gold</th><th scope="col">Silver</th><th scope="col">Bronze</th><th scope="col">Events Joined</th><th scope="col">Actions</th></tr></thead><tbody>

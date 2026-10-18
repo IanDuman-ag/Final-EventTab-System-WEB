@@ -2159,18 +2159,13 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible {
 .public-standings .standings-tabs { gap:35px; margin:0; border:0; }
 .public-standings .standings-tabs button { font-size:12px; padding:15px 5px; border-bottom-width:2px; }
 .public-standings .standings-content { padding-top:16px; padding-bottom:32px; }
-.standings-filters { display:grid; grid-template-columns:minmax(220px,1.65fr) minmax(160px,1fr) minmax(160px,1fr) minmax(180px,1.35fr); gap:13px; border:1px solid #e4eaf1; padding:10px 12px; border-radius:6px; background:#fff; margin-bottom:12px; }
+.standings-filters { display:grid; grid-template-columns:minmax(220px,1.65fr) minmax(160px,1fr) minmax(160px,1fr); gap:13px; border:1px solid #e4eaf1; padding:10px 12px; border-radius:6px; background:#fff; margin-bottom:12px; }
 .standings-filters select,.standings-search { border:1px solid #d6e1ee; background:#fff; border-radius:5px; color:#253c5a; font-size:11px; min-width:0; height:37px; }
 .standings-filters select { padding:0 12px; }
 .standings-search { display:flex; align-items:center; gap:8px; padding:0 12px; }
 .standings-search svg { width:15px; height:15px; color:#8497b0; flex:none; }
 .standings-search input { width:100%; min-width:0; border:0; outline:none; font:inherit; color:inherit; }
 .standings-search:focus-within { outline:2px solid #175cd9; outline-offset:2px; }
-.standings-filter-actions { display:flex; justify-content:flex-end; gap:7px; }
-.standings-filter-actions .btn { min-height:37px; padding:7px 27px; font-size:11px; }
-.standings-apply { background:#0057ff; border:1px solid #0057ff; color:#fff; }
-.standings-apply:hover { background:#084fce; color:#fff; }
-.standings-reset { background:#fff; border:1px solid #b7cdeb; color:#3265a8; }
 .public-standings .standings-table { border-color:#dfe7f0; border-radius:6px; }
 .public-standings .standings-table .table { min-width:900px; font-size:11px; }
 .public-standings .standings-table th { padding:12px 13px; font-size:8px; letter-spacing:.8px; color:#7d8fa7; background:#f1f5f9; text-align:center; }
@@ -2197,13 +2192,13 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible {
 .public-standings .footer-bottom { padding-top:12px; padding-bottom:12px; font-size:10px!important; }
 .public-standings .partner-logos { margin-top:8px; gap:8px; }
 .public-standings .partner-logos img { width:21px; height:21px; }
-@media(max-width:900px) { .standings-podium { width:650px; }.standings-heading { max-width:380px; }.standings-heading h1 { font-size:34px; }.standings-year { width:150px; }.standings-filters { grid-template-columns:1fr 1fr; }.standings-search { grid-column:1/-1; }.standings-filter-actions { justify-content:stretch; }.standings-filter-actions>* { flex:1; padding-inline:12px!important; } }
+@media(max-width:900px) { .standings-podium { width:650px; }.standings-heading { max-width:380px; }.standings-heading h1 { font-size:34px; }.standings-year { width:150px; }.standings-filters { grid-template-columns:1fr 1fr; }.standings-search { grid-column:1/-1; }}
 @media(max-width:640px) {
  .public-standings .container { padding-inline:18px; }.public-standings .portal-nav { min-height:64px; }.public-standings .nav-menu { gap:0; }.public-standings .nav-menu>a:not(.btn) { padding:14px 0; font-size:13px; }
  .standings-hero-inner { height:480px; }.standings-heading { max-width:none; padding-top:23px; }.standings-heading h1 { font-size:34px; }.standings-heading>p:last-child { font-size:11px; }.standings-year { position:static; width:155px; margin-top:18px; }.standings-year select { font-size:12px; padding:7px 10px; }
  .standings-podium { width:calc(100% - 28px); gap:4px; }.podium-crest { width:62px; height:62px; }.place-1 .podium-crest { width:74px; height:74px; }.podium-crown { width:26px; height:22px; top:-24px; }.place-1 .podium-crown { width:32px; height:26px; top:-29px; }.podium-medallion { padding:7px; }.podium-laurel { width:117px; height:90px; }
  .podium-block { padding:15px 6px 10px; }.place-1 .podium-block { height:174px; }.place-2 .podium-block { height:150px; }.place-3 .podium-block { height:135px; }.podium-rank { font-size:26px; margin-bottom:9px; }.place-1 .podium-rank { font-size:32px; }.podium-block h2 { font-size:9px; line-height:1.35; margin-bottom:8px; overflow-wrap:anywhere; }.podium-points { padding:5px 10px; font-size:8px; }.podium-points strong { font-size:15px; }
- .public-standings .standings-tabs { gap:25px; }.public-standings .standings-tabs button { font-size:11px; padding:14px 0; }.standings-filters { gap:9px; padding:10px; }.standings-filters select { width:100%; font-size:10px; }.standings-filter-actions { grid-column:1/-1; }.public-standings .footer-top { gap:24px; }
+ .public-standings .standings-tabs { gap:25px; }.public-standings .standings-tabs button { font-size:11px; padding:14px 0; }.standings-filters { gap:9px; padding:10px; }.standings-filters select { width:100%; font-size:10px; }.public-standings .footer-top { gap:24px; }
 }
 .place-2 .podium-block,.place-3 .podium-block { padding:12px 12px 8px; }
 .place-2 .podium-rank,.place-3 .podium-rank { font-size:28px; margin-bottom:7px; }
