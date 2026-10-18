@@ -2210,3 +2210,93 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible {
 .standings-hero::after { background:#e8b818; clip-path:polygon(100%50%,100%80%,96%100%,93%100%); }
 @media(min-width:801px) { .public-standings .site-header .portal-nav { flex-wrap:nowrap; padding-top:0; }.public-standings .site-header .nav-menu { width:auto; }.public-standings .site-header .nav-menu>a:not(.btn) { padding-top:18px; padding-bottom:18px; } }
 @media(max-width:800px) { .public-standings .portal-nav { height:64px; }.public-standings .nav-menu { top:64px; } }
+
+/* Public results: compact championship directory matching the reference. */
+.public-results { background:#f1f6fa; }
+.public-results .container { max-width:1240px; }
+.public-results .site-header { position:relative; background:#092341; }
+.public-results .portal-nav { height:52px; gap:24px; }
+.public-results .brand { font-size:23px; }
+.public-results .brand-mark { width:36px; height:36px; margin-right:8px; }
+.public-results .nav-menu { gap:32px; }
+.public-results .nav-menu>a:not(.btn) { font-size:10px; padding:17px 0; }
+.public-results .nav-menu>a.active:after { bottom:0; height:2px; }
+.public-results .nav-login { font-size:10px; padding:7px 18px; }
+.results-hero { position:relative; overflow:hidden; background:linear-gradient(90deg,#031c38ed,#032448e8),url('assets/hero.webp') center 48%/cover; color:#fff; }
+.results-hero::before,.results-hero::after { content:''; position:absolute; top:-35%; height:180%; width:25px; background:#ffcb09; transform:skewX(-35deg); box-shadow:25px 0 #165183, -22px 0 #103b67; pointer-events:none; }
+.results-hero::before { left:1%; }
+.results-hero::after { right:26%; }
+.results-hero-inner { position:relative; min-height:160px; padding-top:17px; padding-bottom:42px; }
+.results-hero .eyebrow { font-size:9px; letter-spacing:2.5px; color:#e0e9f4; margin:0 0 3px; }
+.results-hero h1 { font-size:52px; line-height:1.12; letter-spacing:-1.4px; color:#fff; margin:0 0 1px; }
+.results-hero h1 span { color:#ffcd19; }
+.results-hero-inner>p:last-of-type { color:#e0e9f4; font-size:12px; margin:0; }
+.results-hero-inner>p:last-of-type::after { content:''; display:block; width:31px; height:3px; background:#ffce19; margin-top:10px; }
+.results-trophy { position:absolute; right:5px; top:5px; width:210px; display:flex; align-items:center; flex-direction:column; transform:rotate(-7deg); }
+.results-trophy svg { width:105px; height:100px; color:#ffce19; fill:#efb817; stroke-width:1; filter:drop-shadow(3px 5px 0 #845d13); }
+.results-trophy span { font-family:'Barlow Condensed',sans-serif; font-weight:800; font-style:italic; font-size:32px; letter-spacing:-1px; line-height:1; border-bottom:5px solid #ffcc16; }
+.public-results .results-content { position:relative; padding-top:0; margin-top:-31px; padding-bottom:35px; z-index:1; }
+.public-results .filter-panel { position:relative; border:1px solid #d7e5f4; border-radius:9px; padding:11px 24px 13px; margin-bottom:11px; background:#f9fbff; box-shadow:0 5px 18px #144d8110; }
+.public-results .filter-panel::before { content:''; position:absolute; left:0; top:20px; width:15px; height:36px; background:#ffcc16; clip-path:polygon(0 0,100% 40%,0 100%,0 66%,45% 40%,0 19%); }
+.public-results .filter-grid { display:grid; grid-template-columns:1.35fr 1fr 1.08fr auto; gap:20px; }
+.public-results .filter-grid>div { min-width:0; }
+.public-results .filter-grid label { font-size:9px; font-weight:700; color:#183452; margin-bottom:4px; }
+.public-results .form-control,.public-results .form-select { min-height:33px; font-size:10px; padding:7px 10px; border-color:#dce7f4; background-color:#f8fbff; }
+.public-results .reset-link { display:flex; align-items:center; justify-content:center; height:33px; min-width:125px; padding:0 12px; font-size:9px; border:1px solid #d4e1f0; border-radius:5px; text-decoration:none; color:#37557a; }
+.public-results .result-grid { gap:12px 16px; }
+.public-results .result-card { padding:0; border:1px solid #deebf6; border-radius:8px; overflow:hidden; background:#f9fcff; box-shadow:0 4px 14px #244d7510; }
+.result-banner { position:relative; isolation:isolate; overflow:hidden; display:flex; align-items:center; gap:11px; min-height:74px; padding:10px 17px; background:#042654; }
+.result-banner-art { position:absolute; z-index:-2; right:0; top:0; width:51%; height:100%; object-fit:cover; object-position:center; }
+.result-banner::before { content:''; position:absolute; z-index:-1; inset:0; background:linear-gradient(90deg,#042654 40%,#04265477 75%,#04265433); }
+.result-banner::after { content:''; position:absolute; z-index:-1; right:22%; top:-40%; width:15px; height:180%; background:#efc21a99; transform:skewX(-35deg); box-shadow:12px 0 #f9cf2333; }
+.result-sport-icon { flex:0 0 49px; width:49px; height:49px; border-radius:50%; background:#ffcf17; color:#063664; display:grid; place-items:center; }
+.result-sport-icon svg { width:36px; height:36px; }
+.result-heading { min-width:0; padding-right:42px; }
+.public-results .result-heading .mini-label { display:block; color:#d0def0; font-size:7px; letter-spacing:.5px; font-weight:700; text-transform:uppercase; }
+.public-results .result-heading h2 { color:#fff; font-size:18px; letter-spacing:-.4px; line-height:1.2; margin:2px 0; }
+.public-results .result-heading p { color:#e1eaf8; font-size:8px; margin:0; line-height:1.4; }
+.result-official { position:absolute; right:12px; top:9px; border:1px solid #95b5ff; border-radius:12px; background:#e4efff; color:#1759ff; padding:1px 8px; font-size:8px; font-weight:700; white-space:nowrap; }
+.result-placements { display:grid; grid-auto-flow:column; grid-template-rows:repeat(3,auto); grid-template-columns:1fr 1fr; gap:4px 20px; list-style:none; padding:10px 22px 8px; margin:0; min-height:80px; }
+.result-placement { display:flex; align-items:center; gap:10px; min-width:0; font-size:8px; line-height:1.3; }
+.result-placement:nth-child(n+4) { border-left:1px solid #e0e9f4; padding-left:22px; }
+.result-medal { flex:0 0 19px; height:19px; display:grid; place-items:center; background:#e6eef8; color:#385b84; border-radius:50%; font-weight:800; font-size:9px; }
+.rank-1 .result-medal,.rank-2 .result-medal,.rank-3 .result-medal { clip-path:polygon(50% 0,76% 9%,94% 30%,100% 60%,80% 86%,50% 100%,20% 86%,0 60%,6% 30%,24% 9%); color:white; }
+.rank-1 .result-medal { background:#e9b100; }
+.rank-2 .result-medal { background:#9daebf; }
+.rank-3 .result-medal { background:#b76a46; }
+.result-placement strong { flex:0 0 63px; color:#173655; font-size:8px; }
+.result-placement:nth-child(n+4) strong { display:none; }
+.result-team { color:#4d6d93; font-size:8px; overflow-wrap:anywhere; }
+.result-no-placements { grid-column:1/-1; color:#5a7493; font-size:11px; align-self:center; }
+.public-results .result-bottom { margin:0; padding:5px 18px; min-height:29px; border-top:1px solid #e0eaf5; gap:8px; }
+.public-results .result-bottom>span { display:flex; align-items:center; gap:5px; color:#57779d; font-size:7px; }
+.result-bottom svg { width:13px; height:13px; }
+.result-view { display:inline-flex; align-items:center; gap:9px; background:#062b51; color:#fff; border-radius:15px; padding:3px 12px; font-size:7px; font-weight:700; white-space:nowrap; }
+.result-view:hover { background:#174b7d; color:#fff; }
+.public-results .empty-state { grid-column:1/-1; }
+@media(min-width:801px) { .public-results .site-header .portal-nav { flex-wrap:nowrap; padding-top:0; }.public-results .site-header .nav-menu { width:auto; } }
+@media(max-width:1000px) { .public-results .nav-menu { gap:18px; }.public-results .filter-grid { gap:12px; }.result-placement { gap:6px; }.result-placement:nth-child(n+4) { padding-left:10px; }.result-placements { padding-left:14px; padding-right:14px; gap:4px 10px; }.result-placement strong { flex-basis:53px; } }
+@media(max-width:800px) { .public-results .result-grid { grid-template-columns:1fr; }.public-results .filter-grid { grid-template-columns:1fr 1fr; }.public-results .filter-grid .filter-search { grid-column:1/-1; }.results-hero h1 { font-size:42px; }.results-trophy { right:20px; width:150px; }.results-trophy span { font-size:25px; }.results-trophy svg { width:85px; height:85px; }.results-hero-inner>p:last-of-type { max-width:65%; }.public-results .filter-grid .filter-actions { width:100%; }.public-results .reset-link { width:100%; } }
+@media(max-width:480px) { .public-results .container { padding-left:16px; padding-right:16px; }.results-hero-inner { padding-top:24px; min-height:182px; }.results-hero .eyebrow { font-size:7px; letter-spacing:1.5px; }.results-hero h1 { font-size:36px; }.results-hero-inner>p:last-of-type { max-width:72%; font-size:10px; }.results-trophy { right:8px; top:43px; width:90px; }.results-trophy svg { width:65px; height:65px; }.results-trophy span { font-size:17px; }.results-hero::after { right:20%; opacity:.35; }.public-results .filter-panel { padding:12px 15px; }.public-results .filter-grid { gap:10px; }.public-results .filter-grid>div { width:auto; }.result-banner { padding-left:12px; }.public-results .result-heading h2 { font-size:16px; }.result-sport-icon { flex-basis:40px; width:40px; height:40px; }.result-sport-icon svg { width:30px; height:30px; }.result-placements { gap:5px 8px; }.result-placement { gap:5px; }.result-placement strong { flex-basis:47px; font-size:7px; }.result-team { font-size:7px; } }
+/* Preserve every placement when an event has more than six ranked entries. */
+.public-results .result-placements { display:block; columns:2; column-gap:20px; }
+.public-results .result-placement { break-inside:avoid; margin-bottom:4px; }
+.public-results .result-no-placements { column-span:all; }
+.public-results .nav-menu>a.active { color:#ffcf17; }
+@media(min-width:801px) {
+  .public-results .portal-nav { height:44px; }
+  .public-results .site-header .nav-menu>a:not(.btn) { padding:13px 0; }
+  .public-results .results-content,.results-hero-inner { max-width:1048px; }
+  .results-hero-inner { min-height:136px; padding-top:16px; padding-bottom:28px; }
+  .results-hero h1 { font-size:44px; line-height:1.08; }
+  .results-hero .eyebrow { font-size:8px; }
+  .results-hero-inner>p:last-of-type { font-size:11px; }
+  .results-trophy { right:-55px; }
+  .public-results .results-content { margin-top:-27px; }
+  .result-banner { min-height:62px; padding:8px 14px; }
+  .result-sport-icon { flex-basis:43px; width:43px; height:43px; }
+  .public-results .result-heading h2 { font-size:16px; }
+  .public-results .result-placements { min-height:69px; padding-top:8px; padding-bottom:5px; }
+  .result-medal { flex-basis:17px; height:17px; }
+  .public-results .result-bottom { min-height:25px; padding-top:3px; padding-bottom:3px; }
+}

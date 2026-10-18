@@ -27,7 +27,7 @@
 </div>
 {% endif %}
 <div class="filter-actions">
-<a class="reset-link" href="{{ request.path }}">Clear</a>
+<a class="reset-link" href="{{ request.path }}">{% if active == 'results' %}Clear Filters{% else %}Clear{% endif %}</a>
 </div>
 </div>
 {% if active == 'schedules' %}

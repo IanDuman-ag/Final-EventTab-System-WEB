@@ -268,6 +268,7 @@ def results(request):
         if event_kind(event) == 'criteria' and not is_multiround(event) and len(result_rounds(event)) <= 1:
             card['official_placements'], _ = criteria_results(event)
         card['official_placements'].sort(key=lambda row: row['rank'] or 999999)
+        card['banner_key'] = featured_banner_key(event)
         cards.append(card)
     context.update(filter_options(), page_title='Official Results — EventTab', events=cards)
     return context
