@@ -99,6 +99,20 @@ def faculty_dashboard(request):
 @_faculty_required
 def faculty_my_events(request):
     qs = faculty_event_qs(request.user)
+    assigned_events = list(qs)
+    assigned_rows = {event.pk: _publication_row(event, request.user) for event in assigned_events}
+    summary = {
+        'total': len(assigned_events),
+        'published': sum(event.results_finalized for event in assigned_events),
+        'ready': sum(row['publication_ready'] for row in assigned_rows.values()),
+        'criteria': sum(row['event_type'] == 'Criteria-Based' for row in assigned_rows.values()),
+        'match': sum(row['event_type'] == 'Match-Based' for row in assigned_rows.values()),
+    }
+    categories = sorted({event.category for event in assigned_events if event.category})
+    event_type = request.GET.get('type', 'all')
+    event_type = event_type if event_type in {'criteria', 'match'} else 'all'
+    category = request.GET.get('category', '')
+    category = category if category in categories else ''
     q = (request.GET.get('q') or '').strip()
     status = (request.GET.get('status') or 'all').strip()
     sort = (request.GET.get('sort') or '-updated_at').strip()
@@ -109,16 +123,23 @@ def faculty_my_events(request):
         qs = qs.filter(
             Q(name__icontains=q) | Q(category__icontains=q) | Q(venue__icontains=q) | Q(division__icontains=q)
         )
+    if event_type != 'all':
+        label = 'Criteria-Based' if event_type == 'criteria' else 'Match-Based'
+        qs = qs.filter(pk__in=[pk for pk, row in assigned_rows.items() if row['event_type'] == label])
+    if category:
+        qs = qs.filter(category=category)
     if status == 'published':
         qs = qs.filter(Q(publication_status='published') | Q(results_finalized=True))
     elif status == 'draft':
         qs = qs.filter(publication_status='draft', results_finalized=False)
     elif status == 'ready':
-        ready_ids = [event.pk for event in qs if _publication_row(event, request.user)['publication_ready']]
+        ready_ids = [pk for pk, row in assigned_rows.items() if row['publication_ready']]
         qs = qs.filter(pk__in=ready_ids)
     qs = qs.order_by(sort)
     page = Paginator(qs, 10).get_page(request.GET.get('page') or 1)
-    rows = [_publication_row(e, request.user) for e in page.object_list]
+    rows = [assigned_rows[e.pk] for e in page.object_list]
+    pagination_query = request.GET.copy()
+    pagination_query.pop('page', None)
     return render(request, 'facultydash/my_events.html', {
         'active': 'my_events',
         'page_obj': page,
@@ -126,6 +147,11 @@ def faculty_my_events(request):
         'search_query': q,
         'status_filter': status,
         'sort': sort,
+        'event_summary': summary,
+        'categories': categories,
+        'type_filter': event_type,
+        'category_filter': category,
+        'pagination_query': pagination_query.urlencode(),
         'user_display': request.user.get_full_name() or request.user.username,
     })
 
@@ -135,7 +161,8 @@ def _publication_row(event, user):
     if event_type_label(event) != 'Match-Based':
         row = serialize_event_row(event)
         from events.criteria_faculty_service import criteria_faculty_portal
-        publication = criteria_faculty_portal(event, user)['publication']
+        publication_portal = criteria_faculty_portal(event, user)
+        publication = publication_portal['publication']
         ready = publication['can_publish']
         queued = not event.results_finalized and (ready or bool(
             (event.result_processing_config or {}).get('ready_for_publication')))
@@ -147,6 +174,9 @@ def _publication_row(event, user):
             status='Published Results' if event.results_finalized else 'Ready for Publication' if ready else 'Pending Approval' if queued else 'Pending Review',
             status_key='published' if event.results_finalized else 'ready' if ready else 'pending',
             publication_errors=publication['publish_errors'],
+            judges_submitted=publication_portal['summary']['submitted_judges'],
+            judges_total=publication_portal['summary']['total_judges'],
+            judging_progress_percent=publication_portal['current_round']['progress_percent'],
             action='Open Event', action_url=reverse('faculty_event_manage', args=[event.pk]),
         )
         return row

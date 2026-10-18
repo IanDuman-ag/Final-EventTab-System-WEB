@@ -306,3 +306,35 @@ class FacultyCriteriaPortalTests(TestCase):
         self.assertEqual(response.status_code,403)
         self.event.refresh_from_db()
         self.assertEqual(self.event.rounds_config[1]['status'],'locked')
+
+    def test_my_events_summary_filters_and_scoped_list(self):
+        match = Event.objects.create(name='Basketball', category='Sports', venue='Court',
+            event_date=date.today(), scoring_method='match', faculty_account=self.faculty)
+        Event.objects.create(name='Other Faculty Event', category='Private', venue='Hall',
+            event_date=date.today(), scoring_method='criteria', faculty_account=self.other)
+        url = reverse('faculty_my_events')
+        response = self.client.get(url, {'type': 'criteria', 'category': 'Arts', 'q': 'Dance'})
+        self.assertEqual([row['id'] for row in response.context['event_rows']], [self.event.pk])
+        self.assertEqual(response.context['event_summary'], {'total': 2, 'published': 0, 'ready': 0, 'criteria': 1, 'match': 1})
+        self.assertEqual(response.context['categories'], ['Arts', 'Sports'])
+        self.assertContains(response, 'events-summary')
+        self.assertNotContains(response, 'Other Faculty Event')
+        response = self.client.get(url, {'type': 'match', 'category': 'Sports'})
+        self.assertEqual([row['id'] for row in response.context['event_rows']], [match.pk])
+        self.assertEqual(response.context['event_summary']['total'], 2)
+        self.assertEqual(self.client.get(url, {'type': 'criteria', 'category': 'Sports'}).context['event_rows'], [])
+
+    def test_my_events_pagination_keeps_active_filters(self):
+        for index in range(11):
+            Event.objects.create(name=f'Dance {index}', category='Arts', venue='Hall',
+                event_date=date.today(), scoring_method='criteria', faculty_account=self.faculty)
+        response = self.client.get(reverse('faculty_my_events'), {
+            'type': 'criteria', 'category': 'Arts', 'q': 'Dance', 'sort': 'name', 'status': 'all', 'page': 2})
+        self.assertEqual(response.context['page_obj'].number, 2)
+        self.assertEqual(len(response.context['event_rows']), 2)
+        query = response.context['pagination_query']
+        self.assertIn('type=criteria', query)
+        self.assertIn('category=Arts', query)
+        self.assertIn('q=Dance', query)
+        self.assertNotIn('page=', query)
+        self.assertContains(response, 'Previous page')
