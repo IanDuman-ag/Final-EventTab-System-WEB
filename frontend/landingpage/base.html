@@ -1,10 +1,10 @@
 {% load static %}<!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="The official EventTab intramural community portal. Explore competitions, schedules, team standings and published results."><title>{{ page_title|default:"EventTab" }}</title><link rel="stylesheet" href="{% static 'admindash/vendor/bootstrap-5.3.8.min.css' %}"><link rel="stylesheet" href="{% static 'landingpage/public.css' %}"><script defer src="{% static 'landingpage/public.js' %}?v=20261010a">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="The official EventTab intramural community portal. Explore competitions, schedules, team standings and published results."><title>{{ page_title|default:"EventTab" }}</title><link rel="stylesheet" href="{% static 'admindash/vendor/bootstrap-5.3.8.min.css' %}"><link rel="stylesheet" href="{% static 'landingpage/public.css' %}?v=20261018standings"><script defer src="{% static 'landingpage/public.js' %}?v=20261010a">
 </script>
 </head>
-<body>
+<body class="{% block body_class %}{% endblock %}">
 <a class="skip-link" href="#main">Skip to content</a>
 <header class="site-header">
 <nav class="container portal-nav" aria-label="Main navigation">

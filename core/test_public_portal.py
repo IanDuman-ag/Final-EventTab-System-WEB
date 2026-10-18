@@ -17,6 +17,34 @@ from events.public_service import PUBLIC_TIMEZONE, result_is_published
 
 
 class PublicPortalTests(TestCase):
+    def test_leaderboard_reference_layout_and_department_search(self):
+        self.publish(calculated_placements={str(self.team_a.pk): 1})
+        response = self.client.get(reverse('public_leaderboard'), {'q': 'engineer'})
+        self.assertEqual(response.context['standings'][0]['department'], 'Engineering')
+        self.assertEqual(response.context['standings'][0]['gold'], 1)
+        self.assertEqual(response.context['standings'][0]['events_joined'], 1)
+        self.assertContains(response, 'standings-podium')
+        self.assertContains(response, '>Match Based</button>')
+        self.assertNotContains(response, '>Sports</button>')
+        empty = self.client.get(reverse('public_leaderboard'), {'q': 'missing department'})
+        self.assertEqual(empty.context['standings'], [])
+        self.assertEqual(len(empty.context['podium']), 1)
+
+    def test_leaderboard_school_year_limits_published_points(self):
+        self.event.academic_year = '2026'
+        self.event.save()
+        self.publish()
+        older = self.create_event('Old event', academic_year='2025')
+        winner = BracketTeam.objects.create(event=older, name='Old Falcons', department=self.department, points=100)
+        opponent = BracketTeam.objects.create(event=older, name='Old Eagles')
+        BracketMatch.objects.create(event=older, match_number=1, round_name='Final',
+            team_a=winner, team_b=opponent, winner=winner, status='completed')
+        self.publish(older)
+        url = reverse('public_leaderboard')
+        self.assertEqual(self.client.get(url).context['standings'][0]['points'], 25)
+        self.assertEqual(self.client.get(url, {'year': '2025'}).context['standings'][0]['points'], 100)
+        self.assertEqual(self.client.get(url, {'year': ''}).context['standings'][0]['points'], 125)
+
     def setUp(self):
         self.today = timezone.localdate(timezone=PUBLIC_TIMEZONE)
         self.department = Department.objects.create(name='Engineering', code='ENG')

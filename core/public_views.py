@@ -315,15 +315,70 @@ def result_detail(request, pk):
 @public_page('leaderboard')
 def leaderboard(request):
     filters = filters_for(request)
-    candidates = apply_filters(published_events(), filters).select_related('judging_event')
-    eligible_ids = [event.pk for event in candidates if standings_eligible(event)]
+    published = published_events()
+    years = sorted({year or str(date.year) for year, date in published.values_list('academic_year', 'event_date') if year or date}, reverse=True)
+    selected_year = request.GET.get('year', years[0] if years else '')
+    selected_year = selected_year if selected_year in years else ''
+    event_filters = dict(filters, q='')
+    candidates = apply_filters(published, event_filters).select_related('judging_event').prefetch_related('bracket_teams', 'criteria_entries')
+    eligible = [event for event in candidates if standings_eligible(event) and (
+        not selected_year or (event.academic_year or (str(event.event_date.year) if event.event_date else '')) == selected_year)]
+    eligible_ids = [event.pk for event in eligible]
     rows = leaderboard_rows(event_ids=eligible_ids)
+    statistics = _standings_statistics(eligible)
     logos = {department.name: image_url(department.logo) for department in Department.objects.filter(
         name__in=[row['department'] for row in rows],
     )}
     result_params = {name: filters[name] for name in ('type', 'category') if filters[name] and filters[name] != 'all'}
     result_url = reverse('public_results') + ('?' + urlencode(result_params) if result_params else '')
     for row in rows:
-        row.update(logo_url=logos.get(row['department'], ''), result_url=result_url)
+        row.update(logo_url=logos.get(row['department'], ''), result_url=result_url,
+                   **statistics.get(row['department'], {}))
+    podium = rows[:3]
+    if filters['q']:
+        rows = [row for row in rows if filters['q'].casefold() in row['department'].casefold()]
     page, pagination = paginate(request, rows)
-    return dict(pagination, **filter_options(), page_title='Team Standings — EventTab', standings=list(page))
+    return dict(pagination, **filter_options(), page_title='Team Standings — EventTab', standings=list(page),
+                podium=podium, school_years=years, selected_year=selected_year)
+
+
+def _standings_statistics(events):
+    """Read medal counts from published placement snapshots, never infer them from points."""
+    from events.points_settings_service import official_department_awards
+    from events.criteria_faculty_service import approved_final_rankings
+    from events.faculty_service import FacultyServiceError
+    statistics = {}
+    departments = {department.pk: department.name for department in Department.objects.all()}
+    for event, department_id, _ in official_department_awards([event.pk for event in events]):
+        name = departments.get(department_id)
+        if name:
+            entry = statistics.setdefault(name, {'gold': 0, 'silver': 0, 'bronze': 0, 'event_ids': set(), 'medals_known': True})
+            entry['event_ids'].add(event.pk)
+    for event in events:
+        cfg = event.result_processing_config or {}
+        placements = []
+        if event_kind(event) == 'criteria':
+            try:
+                approved = approved_final_rankings(event) or []
+            except FacultyServiceError:
+                approved = []
+            entries = {entry.pk: entry.department_id for entry in event.criteria_entries.all()}
+            placements = [(entries.get(row['participant_id']), row['rank']) for row in approved]
+        else:
+            ranks = cfg.get('calculated_placements') or {}
+            placements = [(team.department_id, ranks.get(str(team.pk), 1 if team.is_champion else None))
+                          for team in event.bracket_teams.all()]
+        known = set()
+        for department_id, rank in placements:
+            name = departments.get(department_id)
+            if name not in statistics or not rank:
+                continue
+            known.add(name)
+            if rank in (1, 2, 3):
+                statistics[name][{1: 'gold', 2: 'silver', 3: 'bronze'}[rank]] += 1
+        for name, entry in statistics.items():
+            if event.pk in entry['event_ids'] and name not in known:
+                entry['medals_known'] = False
+    for entry in statistics.values():
+        entry['events_joined'] = len(entry.pop('event_ids'))
+    return statistics

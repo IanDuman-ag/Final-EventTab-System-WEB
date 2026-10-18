@@ -2102,3 +2102,116 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible {
 .featured-controls:has(.featured-loading:not([hidden])) {
   flex-wrap: wrap;
 }
+/* Public leaderboard: reference podium, compact controls and department standings. */
+.public-standings { background:#f4f7fa; }
+.public-standings .container { max-width:1264px; }
+.public-standings .site-header { position:relative; background:#041e3b; }
+.public-standings .portal-nav { min-height:58px; gap:24px; }
+.public-standings .brand { font-size:24px; letter-spacing:-.8px; }
+.public-standings .brand-mark { width:36px; height:36px; margin-right:8px; }
+.public-standings .nav-menu { gap:29px; }
+.public-standings .nav-menu>a:not(.btn) { font-size:11px; padding:18px 0; }
+.public-standings .nav-menu>a.active:after { bottom:10px; height:2px; }
+.public-standings .nav-login { padding:9px 20px; font-size:11px; gap:18px; }
+.standings-hero { position:relative; overflow:hidden; isolation:isolate; background:#04274b; color:#fff; }
+.standings-hero-photo { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:center 55%; opacity:.13; z-index:-2; }
+.standings-hero::before,.standings-hero::after { content:''; position:absolute; inset:0; pointer-events:none; z-index:-1; }
+.standings-hero::before { background:linear-gradient(140deg,#14669a77,#04508222 50%,#ffcf22); clip-path:polygon(0 6%,7%40%,12%100%,7%100%,0 68%); }
+.standings-hero::after { background:linear-gradient(120deg,#09558655 78%,#e3ae13 90%,#ffcf22); clip-path:polygon(100%18%,100%100%,94%100%); }
+.standings-hero-inner { height:350px; position:relative; }
+.standings-heading { padding-top:27px; max-width:470px; }
+.standings-eyebrow { color:#facc15; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:1px; display:flex; align-items:center; gap:9px; margin:0 0 8px; }
+.standings-eyebrow::before { content:''; width:31px; height:3px; background:#facc15; }
+.standings-heading h1 { font-size:40px; color:#fff; line-height:1.08; margin:0 0 9px; letter-spacing:-1.5px; }
+.standings-heading h1 span { color:#ffcd28; }
+.standings-heading>p:last-child { font-size:12px; color:#aebfd1; margin:0; }
+.standings-year { position:absolute; right:28px; top:25px; width:190px; }
+.standings-year label { display:flex; align-items:center; gap:7px; font-size:10px; color:#d6e1ed; margin-bottom:7px; }
+.standings-year svg { width:13px; height:13px; color:#facc15; }
+.standings-year select { width:100%; border:1px solid #6d819a; border-radius:4px; padding:9px 11px; font-size:13px; color:#fff; background:#ffffff12; }
+.standings-year option { color:#112a4c; background:#fff; }
+.standings-podium { position:absolute; bottom:0; left:50%; transform:translateX(-50%); width:720px; display:grid; grid-template-columns:1fr 1.05fr 1fr; align-items:end; gap:7px; }
+.podium-place { text-align:center; --podium-color:#bd8b69; min-width:0; }
+.podium-place.place-1 { grid-column:2; grid-row:1; --podium-color:#ffcf21; }
+.podium-place.place-2 { grid-column:1; grid-row:1; --podium-color:#c7d5e4; }
+.podium-place.place-3 { grid-column:3; grid-row:1; }
+.podium-crest { position:relative; width:88px; height:88px; margin:0 auto 5px; color:var(--podium-color); }
+.place-1 .podium-crest { width:98px; height:98px; margin-bottom:5px; }
+.podium-crown { width:36px; height:28px; position:absolute; top:-31px; left:50%; transform:translateX(-50%); fill:currentColor; }
+.place-1 .podium-crown { width:45px; height:35px; top:-39px; }
+.podium-medallion { border:4px double var(--podium-color); background:#fff; width:100%; height:100%; border-radius:50%; padding:10px; box-shadow:0 0 0 5px #ffffff30,0 8px 18px #0003; display:grid; place-items:center; color:#123864; font-weight:800; font-size:30px; }
+.podium-medallion img { width:100%; height:100%; object-fit:contain; min-height:0; }
+.podium-laurel { position:absolute; width:160px; height:112px; left:50%; bottom:-10px; transform:translateX(-50%); z-index:-1; fill:currentColor; }
+.podium-block { position:relative; height:184px; padding:20px 22px 12px; color:#fff; background:linear-gradient(#cba080,#875d43); box-shadow:inset 0 1px 0 #ffffff80,0 0 10px #0002; }
+.podium-block::before { content:''; position:absolute; bottom:100%; left:0; right:0; height:8px; background:#dcb496; clip-path:polygon(10% 0,90% 0,100% 100%,0 100%); }
+.place-1 .podium-block { height:190px; background:linear-gradient(#ffda43,#d19c06); color:#08233f; }
+.place-1 .podium-block::before { background:#ffdf65; }
+.place-2 .podium-block { height:144px; background:linear-gradient(#c4d5e3,#64798c); }
+.place-2 .podium-block::before { background:#d7e4ee; }
+.place-3 .podium-block { height:130px; }
+.podium-rank { display:block; font-size:32px; line-height:1; margin-bottom:10px; letter-spacing:-1px; }
+.place-1 .podium-rank { font-size:40px; }
+.podium-block h2 { color:inherit; font-size:12px; font-weight:600; line-height:1.35; letter-spacing:0; margin:0 auto 11px; max-width:190px; }
+.podium-points { display:inline-flex; align-items:baseline; gap:3px; padding:5px 24px; background:#0004; border-radius:4px; font-size:10px; line-height:1.1; }
+.podium-points strong { font-size:20px; }
+.place-1 .podium-points { background:#8f6b00; color:#ffe26c; }
+.public-standings .standings-tab-bar { border-bottom:1px solid #dce5ef; background:#f8fafc; }
+.public-standings .standings-tabs { gap:35px; margin:0; border:0; }
+.public-standings .standings-tabs button { font-size:12px; padding:15px 5px; border-bottom-width:2px; }
+.public-standings .standings-content { padding-top:16px; padding-bottom:32px; }
+.standings-filters { display:grid; grid-template-columns:minmax(220px,1.65fr) minmax(160px,1fr) minmax(160px,1fr) minmax(180px,1.35fr); gap:13px; border:1px solid #e4eaf1; padding:10px 12px; border-radius:6px; background:#fff; margin-bottom:12px; }
+.standings-filters select,.standings-search { border:1px solid #d6e1ee; background:#fff; border-radius:5px; color:#253c5a; font-size:11px; min-width:0; height:37px; }
+.standings-filters select { padding:0 12px; }
+.standings-search { display:flex; align-items:center; gap:8px; padding:0 12px; }
+.standings-search svg { width:15px; height:15px; color:#8497b0; flex:none; }
+.standings-search input { width:100%; min-width:0; border:0; outline:none; font:inherit; color:inherit; }
+.standings-search:focus-within { outline:2px solid #175cd9; outline-offset:2px; }
+.standings-filter-actions { display:flex; justify-content:flex-end; gap:7px; }
+.standings-filter-actions .btn { min-height:37px; padding:7px 27px; font-size:11px; }
+.standings-apply { background:#0057ff; border:1px solid #0057ff; color:#fff; }
+.standings-apply:hover { background:#084fce; color:#fff; }
+.standings-reset { background:#fff; border:1px solid #b7cdeb; color:#3265a8; }
+.public-standings .standings-table { border-color:#dfe7f0; border-radius:6px; }
+.public-standings .standings-table .table { min-width:900px; font-size:11px; }
+.public-standings .standings-table th { padding:12px 13px; font-size:8px; letter-spacing:.8px; color:#7d8fa7; background:#f1f5f9; text-align:center; }
+.public-standings .standings-table th:nth-child(2) { text-align:left; }
+.public-standings .standings-table td { padding:13px; text-align:center; color:#294567; }
+.public-standings .standings-table td:nth-child(2) { text-align:left; }
+.public-standings .standings-table .team-name { gap:13px; white-space:normal; min-width:340px; }
+.public-standings .standings-table .team-name>strong { font-size:11px; line-height:1.4; }
+.public-standings .standings-table .team-name img,.public-standings .standings-table .team-initial { width:38px; height:38px; flex:none; }
+.public-standings .standings-table .points-cell strong { font-size:16px; }
+.public-standings .rank-number { font-size:17px; font-weight:800; }
+.public-standings .rank-laurel { border-left:3px double #e8b626; border-right:3px double #e8b626; border-radius:50%; padding:1px 4px; color:#d0a520; }
+.public-standings .leader-tag { font-size:7px; padding:3px 5px; border-radius:3px; margin-left:0; white-space:nowrap; }
+.standings-result-link { display:inline-flex; align-items:center; justify-content:center; gap:6px; border:1px solid #9dbfff; border-radius:4px; padding:7px 16px; font-size:10px; font-weight:650; color:#0057ff; white-space:nowrap; }
+.standings-result-link:hover { background:#edf4ff; }
+.public-standings .site-footer { background:#041e3b; padding-top:22px; }
+.public-standings .footer-top { padding-bottom:18px; gap:50px; }
+.public-standings .site-footer .brand { font-size:22px; margin-bottom:6px; }
+.public-standings .site-footer .brand-mark { width:33px; height:33px; }
+.public-standings .site-footer p { font-size:10px; line-height:1.4; }
+.public-standings .footer-label { font-size:8px!important; margin-bottom:10px!important; }
+.public-standings .footer-links,.public-standings .staff-link { font-size:11px; }
+.public-standings .footer-small { font-size:10px!important; }
+.public-standings .footer-bottom { padding-top:12px; padding-bottom:12px; font-size:10px!important; }
+.public-standings .partner-logos { margin-top:8px; gap:8px; }
+.public-standings .partner-logos img { width:21px; height:21px; }
+@media(max-width:900px) { .standings-podium { width:650px; }.standings-heading { max-width:380px; }.standings-heading h1 { font-size:34px; }.standings-year { width:150px; }.standings-filters { grid-template-columns:1fr 1fr; }.standings-search { grid-column:1/-1; }.standings-filter-actions { justify-content:stretch; }.standings-filter-actions>* { flex:1; padding-inline:12px!important; } }
+@media(max-width:640px) {
+ .public-standings .container { padding-inline:18px; }.public-standings .portal-nav { min-height:64px; }.public-standings .nav-menu { gap:0; }.public-standings .nav-menu>a:not(.btn) { padding:14px 0; font-size:13px; }
+ .standings-hero-inner { height:480px; }.standings-heading { max-width:none; padding-top:23px; }.standings-heading h1 { font-size:34px; }.standings-heading>p:last-child { font-size:11px; }.standings-year { position:static; width:155px; margin-top:18px; }.standings-year select { font-size:12px; padding:7px 10px; }
+ .standings-podium { width:calc(100% - 28px); gap:4px; }.podium-crest { width:62px; height:62px; }.place-1 .podium-crest { width:74px; height:74px; }.podium-crown { width:26px; height:22px; top:-24px; }.place-1 .podium-crown { width:32px; height:26px; top:-29px; }.podium-medallion { padding:7px; }.podium-laurel { width:117px; height:90px; }
+ .podium-block { padding:15px 6px 10px; }.place-1 .podium-block { height:174px; }.place-2 .podium-block { height:150px; }.place-3 .podium-block { height:135px; }.podium-rank { font-size:26px; margin-bottom:9px; }.place-1 .podium-rank { font-size:32px; }.podium-block h2 { font-size:9px; line-height:1.35; margin-bottom:8px; overflow-wrap:anywhere; }.podium-points { padding:5px 10px; font-size:8px; }.podium-points strong { font-size:15px; }
+ .public-standings .standings-tabs { gap:25px; }.public-standings .standings-tabs button { font-size:11px; padding:14px 0; }.standings-filters { gap:9px; padding:10px; }.standings-filters select { width:100%; font-size:10px; }.standings-filter-actions { grid-column:1/-1; }.public-standings .footer-top { gap:24px; }
+}
+.place-2 .podium-block,.place-3 .podium-block { padding:12px 12px 8px; }
+.place-2 .podium-rank,.place-3 .podium-rank { font-size:28px; margin-bottom:7px; }
+.place-2 .podium-block h2,.place-3 .podium-block h2 { font-size:11px; line-height:1.25; margin-bottom:7px; }
+@media(max-width:640px) { .place-2 .podium-block h2,.place-3 .podium-block h2 { font-size:9px; }.place-2 .podium-rank,.place-3 .podium-rank { font-size:26px; } }
+/* Keep this page's header and podium framing aligned with the supplied reference. */
+.public-standings .portal-nav { height:58px; }
+.standings-hero::before { background:#f4c51e; clip-path:polygon(0 47%,11%100%,7%100%,0 73%); }
+.standings-hero::after { background:#e8b818; clip-path:polygon(100%50%,100%80%,96%100%,93%100%); }
+@media(min-width:801px) { .public-standings .site-header .portal-nav { flex-wrap:nowrap; padding-top:0; }.public-standings .site-header .nav-menu { width:auto; }.public-standings .site-header .nav-menu>a:not(.btn) { padding-top:18px; padding-bottom:18px; } }
+@media(max-width:800px) { .public-standings .portal-nav { height:64px; }.public-standings .nav-menu { top:64px; } }
