@@ -371,6 +371,8 @@ def criteria_faculty_portal(event, user, selected_round_index=0):
             'errors': publication_errors, 'publish_errors': publish_errors,
             'published': event.results_finalized,
             'can_publish': authorized and can_publish_event(user, event) and not publish_errors,
+            'can_unpublish': _can_mutate(event, user) and can_publish_event(user, event)
+            and event.results_finalized and bool(cfg.get('published_at')),
         },
         'errors': selected['blockers'],
     }

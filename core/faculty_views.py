@@ -141,7 +141,9 @@ def _publication_row(event, user):
             (event.result_processing_config or {}).get('ready_for_publication')))
         row.update(
             tournament_format='', in_publication_queue=queued, publication_ready=ready,
-            show_publication_button=False, show_unpublish_button=False,
+            show_publication_button=False,
+            show_unpublish_button=can_publish_event(user, event) and event.results_finalized and bool(
+                (event.result_processing_config or {}).get('published_at')),
             status='Published Results' if event.results_finalized else 'Ready for Publication' if ready else 'Pending Approval' if queued else 'Pending Review',
             status_key='published' if event.results_finalized else 'ready' if ready else 'pending',
             publication_errors=publication['publish_errors'],
@@ -173,13 +175,17 @@ def faculty_publication_review(request, event_id):
     publisher = (request.user.is_staff and not request.user.groups.filter(
         name__iregex=r'^(Faculty|Faculty In-Charge|Tabulator|Judge|Judges|Scorer|Viewers)$').exists())
     event = get_object_or_404(Event, pk=event_id) if publisher else _get_event(request, event_id)
-    if event is None or event_type_label(event) != 'Match-Based':
+    if event is None or event_type_label(event) not in {'Match-Based', 'Criteria-Based'}:
         return HttpResponse('Event access required.', status=403)
+    if event_type_label(event) == 'Criteria-Based' and (
+        request.method != 'POST' or request.POST.get('action') != 'unpublish'
+    ):
+        return HttpResponse('Use the criteria event results page to review and publish results.', status=403)
     if request.method == 'POST':
         try:
             with transaction.atomic():
                 event = Event.objects.select_for_update().get(pk=event.pk)
-                review = match_publication_review(event)
+                review = match_publication_review(event) if event_type_label(event) == 'Match-Based' else None
                 action = request.POST.get('action')
                 if action == 'insert_playoff':
                     from events.publication_service import insert_missing_third_place

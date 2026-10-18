@@ -46,6 +46,8 @@
 .criteria-button:hover{background:#164ec3;color:white}
 .criteria-button.secondary{background:#fff;border-color:#cfdded;color:#284a75}
 .criteria-button.secondary:hover{background:#edf4ff}
+.criteria-button.danger{background:#bd2c3f;border-color:#bd2c3f}
+.criteria-button.danger:hover{background:#a32133;border-color:#a32133}
 .criteria-button:disabled{background:#e2e9f1;color:#647893;border-color:#e2e9f1;cursor:not-allowed}
 .criteria-button:focus-visible,.criteria-tabs a:focus-visible,.criteria-small-button:focus-visible{outline:3px solid #7badff;outline-offset:3px}
 .round-body>.criteria-button{width:100%;margin-top:9px}

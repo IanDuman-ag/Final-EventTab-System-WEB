@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="{% static 'admindash/vendor/bootstrap-5.3.8.min.css' %}">
 <link rel="stylesheet" href="{% static 'facultydash/faculty.css' %}">
 <link rel="stylesheet" href="{% static 'facultydash/pages.css' %}">
-<link rel="stylesheet" href="{% static 'facultydash/criteria_event.css' %}?v=20261013-2">
+<link rel="stylesheet" href="{% static 'facultydash/criteria_event.css' %}?v=20261018withdraw">
 </head>
 <body class="fac-v2 tab-v2 criteria-page" data-revision="{{ portal.revision }}" data-round="{{ selected_round_index }}">
 <div class="tab-shell">{% include 'facultydash/_sidebar.html' with active='my_events' %}<div class="tab-main">
@@ -218,7 +218,7 @@
 <span class="criteria-badge">{{ portal.publication.status }}</span>
 </header>
 <div class="publication-body">
-<p>After final-round approval and required verification, review the rankings and confirm publication to make official results public.</p>{% if portal.publication.submitted_at %}<p class="round-note approved">Submitted by {{ portal.publication.submitted_by_name|default:portal.publication.submitted_by }} · <time datetime="{{ portal.publication.submitted_at }}" data-local-time>{{ portal.publication.submitted_at }}</time></p>{% endif %}{% for error in portal.publication.publish_errors %}<p class="publication-blocker">{{ error }}</p>{% endfor %}{% if portal.publication.can_publish %}<button class="criteria-button" type="button" data-open-dialog="publish-results">Review &amp; Publish</button>{% endif %}{% if not portal.publication.can_publish and not portal.publication.published and not portal.publication.submitted_at %}<button class="criteria-button" type="button" data-open-dialog="submit-publication" {% if not portal.publication.can_submit %}disabled title="{{ portal.publication.errors|join:' ' }}"{% endif %}>Approve &amp; Submit for Publication</button>{% endif %}</div>
+<p>After final-round approval and required verification, review the rankings and confirm publication to make official results public.</p>{% if portal.publication.submitted_at %}<p class="round-note approved">Submitted by {{ portal.publication.submitted_by_name|default:portal.publication.submitted_by }} · <time datetime="{{ portal.publication.submitted_at }}" data-local-time>{{ portal.publication.submitted_at }}</time></p>{% endif %}{% for error in portal.publication.publish_errors %}<p class="publication-blocker">{{ error }}</p>{% endfor %}{% if portal.publication.can_unpublish %}<button class="criteria-button danger" type="button" data-open-dialog="remove-publication">Remove Publish</button>{% endif %}{% if portal.publication.can_publish %}<button class="criteria-button" type="button" data-open-dialog="publish-results">Review &amp; Publish</button>{% endif %}{% if not portal.publication.can_publish and not portal.publication.published and not portal.publication.submitted_at %}<button class="criteria-button" type="button" data-open-dialog="submit-publication" {% if not portal.publication.can_submit %}disabled title="{{ portal.publication.errors|join:' ' }}"{% endif %}>Approve &amp; Submit for Publication</button>{% endif %}</div>
 </article>
 </section>
 </main>
@@ -276,6 +276,13 @@
 </footer>
 </form>
 </dialog>{% endif %}{% endfor %}
+{% if portal.publication.can_unpublish %}<dialog class="criteria-dialog modal-content" id="remove-publication" aria-labelledby="remove-title">
+<header class="modal-header"><h2 class="modal-title" id="remove-title">Remove Published Results?</h2><button type="button" data-close-dialog aria-label="Close">&times;</button></header>
+<form method="post" action="{% url 'faculty_publication_review' event.pk %}">{% csrf_token %}
+<div class="modal-body"><p>Remove the published results for <strong>{{ event.name }}</strong>? They will disappear from public Results and stop contributing points to the Leaderboard. Approved scores and rankings will be preserved so you can publish them again.</p></div>
+<input type="hidden" name="action" value="unpublish"><input type="hidden" name="confirm" value="yes">
+<footer class="modal-footer"><button type="button" class="criteria-button secondary" data-close-dialog>Cancel</button><button type="submit" class="criteria-button danger" data-loading-label="Removing...">Confirm Removal</button></footer>
+</form></dialog>{% endif %}
 {% if portal.publication.can_publish %}<dialog class="criteria-dialog modal-content" id="publish-results" aria-labelledby="publish-title">
 <header class="modal-header"><h2 class="modal-title" id="publish-title">Publish Official Results?</h2><button type="button" data-close-dialog aria-label="Close">&times;</button></header>
 <form method="post" action="{% url 'faculty_event_manage' event.pk %}">{% csrf_token %}

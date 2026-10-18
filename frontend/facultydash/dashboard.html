@@ -7,7 +7,7 @@
   <title>Faculty Dashboard · EventTab</title>
   <link href="{% static 'admindash/vendor/bootstrap-5.3.8.min.css' %}" rel="stylesheet">
   <link rel="stylesheet" href="{% static 'facultydash/faculty.css' %}?v=20261010">
-  <link rel="stylesheet" href="{% static 'facultydash/pages.css' %}?v=20261012dashboard">
+  <link rel="stylesheet" href="{% static 'facultydash/pages.css' %}?v=20261018publication-layout">
 </head>
 <body class="fac-v2 tab-v2 fac-dashboard">
 <svg class="fac-sr-only" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><defs>
@@ -79,7 +79,7 @@
     {% for e in recent_events %}{% if e.show_unpublish_button %}
     <dialog id="remove-publication-{{ e.id }}" class="fac-dialog" aria-labelledby="remove-publication-title-{{ e.id }}"><div class="fac-dialog-shell">
       <header><h2 id="remove-publication-title-{{ e.id }}">Remove Published Results?</h2><button type="button" data-close-publication aria-label="Close">&times;</button></header>
-      <div class="fac-dialog-body"><p>Remove the published results for <strong>{{ e.name }}</strong>? They will disappear from public Results and stop contributing points to the Leaderboard. Confirmed match records will be preserved.</p>
+      <div class="fac-dialog-body"><p>Remove the published results for <strong>{{ e.name }}</strong>? They will disappear from public Results and stop contributing points to the Leaderboard. Approved scores, rankings, and match records will be preserved.</p>
         <form method="post" action="{% url 'faculty_publication_review' e.id %}">{% csrf_token %}<input type="hidden" name="action" value="unpublish"><input type="hidden" name="confirm" value="yes"><input type="hidden" name="return_to" value="dashboard"><div class="d-flex justify-content-end gap-2 mt-3"><button type="button" class="fac-btn fac-btn-secondary" data-close-publication>Cancel</button><button type="submit" class="fac-btn fac-btn-danger">Confirm Removal</button></div></form>
       </div></div></dialog>
     {% endif %}{% endfor %}

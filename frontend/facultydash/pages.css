@@ -240,7 +240,8 @@
 /* Reference layout, scoped to the Faculty Dashboard only. */
 body.fac-dashboard { background:#eef6ff; }
 body.fac-dashboard .tab-main { background:radial-gradient(ellipse at 85% 0, #f8fcff 0, #eef6ff 58%, #f2f8ff 100%); }
-body.fac-dashboard .tab-topbar { padding:22px 28px 14px; border:0; background:transparent; align-items:flex-start; gap:20px; }
+body.fac-dashboard .tab-topbar { position:static; flex:0 0 auto; flex-wrap:wrap; padding:22px 28px 14px; border:0; background:transparent; align-items:flex-start; gap:20px; }
+body.fac-dashboard .tab-topbar>div:first-child { flex:1 1 320px; min-width:0; overflow-wrap:anywhere; }
 body.fac-dashboard .tab-topbar h1 { font-size:28px; font-weight:800; letter-spacing:-.7px; line-height:1.25; margin:0 0 6px; color:#0b1d3a; }
 body.fac-dashboard .fac-kicker { color:#0057ff; letter-spacing:.08em; }
 body.fac-dashboard .fac-lead { margin:0; color:#46668f; font-size:13px; max-width:none; }
@@ -338,6 +339,7 @@ body.fac-dashboard .fac-btn-danger { background:#bd2c3f; }
 }
 @media(max-width:640px) {
  body.fac-dashboard .tab-topbar { flex-direction:column; gap:10px; }
+ body.fac-dashboard .tab-topbar>div:first-child { flex-basis:auto; width:100%; }
  body.fac-dashboard .fac-dashboard-date { padding:0; }
  body.fac-dashboard .fac-content { padding:8px 12px 20px; }
  body.fac-dashboard .fac-stats { grid-template-columns:1fr; gap:9px; }

@@ -166,6 +166,60 @@ class FacultyCriteriaPortalTests(TestCase):
         self.event.refresh_from_db()
         self.assertTrue(self.event.results_finalized)
 
+    def test_criteria_removal_requires_confirmation_preserves_rankings_and_allows_republication(self):
+        from events.public_service import criteria_results
+        self.event.rounds_config = [self.event.rounds_config[0]]
+        self.event.save()
+        self.complete()
+        approve_criteria_round(self.event, self.faculty, 0)
+        self.client.post(self.url, {'action': 'publish', 'confirm': 'yes'})
+        self.event.refresh_from_db()
+        approved = self.event.result_processing_config['confirmed_stages']
+        scores = list(CriteriaScoreSubmission.objects.values_list('pk', 'raw_score', 'status'))
+        for url in [reverse('faculty_dashboard'), reverse('faculty_my_events'), self.url + '?tab=results']:
+            self.assertContains(self.client.get(url), 'Remove Publish')
+        removal = reverse('faculty_publication_review', args=[self.event.pk])
+        self.client.post(removal, {'action': 'unpublish'})
+        self.event.refresh_from_db()
+        self.assertTrue(self.event.results_finalized)
+        response = self.client.post(removal, {'action': 'unpublish', 'confirm': 'yes', 'return_to': 'dashboard'}, follow=True)
+        self.assertContains(response, 'Publication removed.')
+        self.assertNotContains(response, 'Remove Publish')
+        self.event.refresh_from_db()
+        self.assertFalse(self.event.results_finalized)
+        self.assertEqual(self.event.result_processing_config['confirmed_stages'], approved)
+        self.assertEqual(list(CriteriaScoreSubmission.objects.values_list('pk', 'raw_score', 'status')), scores)
+        self.assertEqual(criteria_results(self.event)[0], [])
+        self.assertEqual(self.client.get(reverse('public_result_detail', args=[self.event.pk])).status_code, 404)
+        self.assertEqual(response.context['publication_ready_count'], 1)
+        self.client.post(self.url, {'action': 'publish', 'confirm': 'yes'})
+        self.event.refresh_from_db()
+        self.assertTrue(self.event.results_finalized)
+        self.assertEqual(len(criteria_results(self.event)[0]), 2)
+        response = self.client.post(removal, {'action': 'unpublish', 'confirm': 'yes', 'return_to': 'my_events'}, follow=True)
+        self.assertEqual(response.redirect_chain[-1][0], reverse('faculty_my_events'))
+        self.assertContains(response, 'Ready for Publication')
+
+    def test_criteria_removal_rejects_other_faculty_and_missing_csrf(self):
+        from events.faculty_service import unpublish_results, FacultyServiceError
+        self.event.rounds_config = [self.event.rounds_config[0]]
+        self.event.save()
+        self.complete()
+        approve_criteria_round(self.event, self.faculty, 0)
+        self.client.post(self.url, {'action': 'publish', 'confirm': 'yes'})
+        removal = reverse('faculty_publication_review', args=[self.event.pk])
+        self.client.force_login(self.other)
+        self.client.post(removal, {'action': 'unpublish', 'confirm': 'yes'})
+        self.event.refresh_from_db()
+        self.assertTrue(self.event.results_finalized)
+        with self.assertRaises(FacultyServiceError):
+            unpublish_results(self.event, self.other)
+        csrf_client = Client(enforce_csrf_checks=True)
+        csrf_client.force_login(self.faculty)
+        self.assertEqual(csrf_client.post(removal, {'action': 'unpublish', 'confirm': 'yes'}).status_code, 403)
+        self.event.refresh_from_db()
+        self.assertTrue(self.event.results_finalized)
+
     def test_publish_rejects_unapproved_round_and_other_faculty(self):
         self.client.post(self.url, {'action': 'publish', 'confirm': 'yes'})
         self.event.refresh_from_db()
