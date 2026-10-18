@@ -91,6 +91,22 @@ document.addEventListener('DOMContentLoaded', () => {
       form.setAttribute('aria-busy', 'true');
     });
   });
+  const standingsFilters = document.getElementById('standings-filters');
+  if (standingsFilters) {
+    const category = document.getElementById('standings-category');
+    const event = document.getElementById('standings-event');
+    const year = document.getElementById('standings-year');
+    category.addEventListener('change', () => {
+      event.value = '';
+      standingsFilters.requestSubmit();
+    });
+    event.addEventListener('change', () => standingsFilters.requestSubmit());
+    year.addEventListener('change', () => {
+      category.value = '';
+      event.value = '';
+      standingsFilters.requestSubmit();
+    });
+  }
   window.addEventListener('pageshow', () => {
     document.querySelectorAll('.filter-panel, .featured-controls').forEach((form) => {
       form.removeAttribute('aria-busy');

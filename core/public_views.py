@@ -315,14 +315,28 @@ def result_detail(request, pk):
 @public_page('leaderboard')
 def leaderboard(request):
     filters = filters_for(request)
-    published = published_events()
-    years = sorted({year or str(date.year) for year, date in published.values_list('academic_year', 'event_date') if year or date}, reverse=True)
-    selected_year = request.GET.get('year', years[0] if years else '')
+    available = list(public_events().select_related('judging_event').prefetch_related('bracket_teams', 'criteria_entries'))
+    years = sorted({event.academic_year or str(event.event_date.year) for event in available
+                    if event.academic_year or event.event_date}, reverse=True)
+    published_years = sorted({year or str(date.year) for year, date in published_events().values_list('academic_year', 'event_date')
+                              if year or date}, reverse=True)
+    default_year = published_years[0] if published_years else (years[0] if years else '')
+    selected_year = request.GET.get('year', default_year)
     selected_year = selected_year if selected_year in years else ''
-    event_filters = dict(filters, q='')
-    candidates = apply_filters(published, event_filters).select_related('judging_event').prefetch_related('bracket_teams', 'criteria_entries')
-    eligible = [event for event in candidates if standings_eligible(event) and (
+    scoped = [event for event in available if (
+        filters['type'] == 'all' or event_kind(event) == filters['type']) and (
         not selected_year or (event.academic_year or (str(event.event_date.year) if event.event_date else '')) == selected_year)]
+    categories = sorted({event.category for event in scoped if event.category})
+    if filters['category'] not in categories:
+        filters['category'] = ''
+    candidates = [event for event in scoped if not filters['category'] or event.category == filters['category']]
+    event_options = [{'id': str(event.pk), 'name': event.name}
+                     for event in sorted(candidates, key=lambda event: (event.name.casefold(), event.pk))]
+    selected_event_id = request.GET.get('event_id', '')
+    if selected_event_id not in {option['id'] for option in event_options}:
+        selected_event_id = ''
+    eligible = [event for event in candidates if (not selected_event_id or str(event.pk) == selected_event_id)
+                and standings_eligible(event)]
     eligible_ids = [event.pk for event in eligible]
     rows = leaderboard_rows(event_ids=eligible_ids)
     statistics = _standings_statistics(eligible)
@@ -331,6 +345,8 @@ def leaderboard(request):
     )}
     result_params = {name: filters[name] for name in ('type', 'category') if filters[name] and filters[name] != 'all'}
     result_url = reverse('public_results') + ('?' + urlencode(result_params) if result_params else '')
+    if selected_event_id and eligible:
+        result_url = reverse('public_result_detail', args=[eligible[0].pk])
     for row in rows:
         row.update(logo_url=logos.get(row['department'], ''), result_url=result_url,
                    **statistics.get(row['department'], {}))
@@ -338,7 +354,8 @@ def leaderboard(request):
     if filters['q']:
         rows = [row for row in rows if filters['q'].casefold() in row['department'].casefold()]
     page, pagination = paginate(request, rows)
-    return dict(pagination, **filter_options(), page_title='Team Standings — EventTab', standings=list(page),
+    return dict(pagination, page_title='Team Standings — EventTab', standings=list(page), filters=filters,
+                categories=categories, event_options=event_options, selected_event_id=selected_event_id,
                 podium=podium, school_years=years, selected_year=selected_year)
 
 

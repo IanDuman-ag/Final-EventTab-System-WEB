@@ -17,6 +17,50 @@ from events.public_service import PUBLIC_TIMEZONE, result_is_published
 
 
 class PublicPortalTests(TestCase):
+    def test_leaderboard_tabs_scope_categories_and_actual_event_names(self):
+        singing = self.create_event('Singing', category='Arts', scoring_method='criteria')
+        badminton = self.create_event('Badminton', category='Indoor', scoring_method='match')
+        self.create_event('Private scoring event', category='Private', publication_status='draft')
+        url = reverse('public_leaderboard')
+        match = self.client.get(url, {'type': 'match'})
+        self.assertEqual(match.context['categories'], ['Indoor', 'Sports'])
+        self.assertEqual({option['id'] for option in match.context['event_options']}, {str(self.event.pk), str(badminton.pk)})
+        self.assertContains(match, 'id="standings-event"')
+        self.assertNotContains(match, 'All event types')
+        criteria = self.client.get(url, {'type': 'criteria', 'category': 'Sports', 'event_id': self.event.pk})
+        self.assertEqual(criteria.context['categories'], ['Arts'])
+        self.assertEqual(criteria.context['filters']['category'], '')
+        self.assertEqual(criteria.context['selected_event_id'], '')
+        self.assertEqual(criteria.context['event_options'], [{'id': str(singing.pk), 'name': 'Singing'}])
+        overall = self.client.get(url)
+        self.assertEqual(overall.context['categories'], ['Arts', 'Indoor', 'Sports'])
+        self.assertEqual(len(overall.context['event_options']), 3)
+        self.assertNotContains(overall, 'Private scoring event')
+
+    def test_leaderboard_category_and_event_filters_limit_official_points(self):
+        self.publish()
+        badminton = self.create_event('Badminton', category='Indoor')
+        winner = BracketTeam.objects.create(event=badminton, name='Shuttlers', department=self.department, points=75)
+        opponent = BracketTeam.objects.create(event=badminton, name='Opponents')
+        BracketMatch.objects.create(event=badminton, match_number=1, round_name='Final',
+            team_a=winner, team_b=opponent, winner=winner, status='completed')
+        self.publish(badminton)
+        pending = self.create_event('Awaiting confirmation', category='Sports')
+        BracketTeam.objects.create(event=pending, name='Pending', department=self.department, points=999)
+        url = reverse('public_leaderboard')
+        self.assertEqual(self.client.get(url).context['standings'][0]['points'], 100)
+        response = self.client.get(url, {'type': 'match', 'category': 'Indoor'})
+        self.assertEqual(response.context['event_options'], [{'id': str(badminton.pk), 'name': 'Badminton'}])
+        self.assertEqual(response.context['standings'][0]['points'], 75)
+        response = self.client.get(url, {'event_id': self.event.pk})
+        self.assertEqual(response.context['selected_event_id'], str(self.event.pk))
+        self.assertEqual(response.context['standings'][0]['points'], 25)
+        self.assertEqual(response.context['standings'][0]['result_url'], reverse('public_result_detail', args=[self.event.pk]))
+        response = self.client.get(url, {'event_id': pending.pk})
+        self.assertEqual(response.context['selected_event_id'], str(pending.pk))
+        self.assertEqual(response.context['standings'], [])
+        self.assertNotContains(response, '999')
+
     def test_leaderboard_reference_layout_and_department_search(self):
         self.publish(calculated_placements={str(self.team_a.pk): 1})
         response = self.client.get(reverse('public_leaderboard'), {'q': 'engineer'})
@@ -40,8 +84,10 @@ class PublicPortalTests(TestCase):
         BracketMatch.objects.create(event=older, match_number=1, round_name='Final',
             team_a=winner, team_b=opponent, winner=winner, status='completed')
         self.publish(older)
+        self.create_event('Future event', academic_year='2027')
         url = reverse('public_leaderboard')
         self.assertEqual(self.client.get(url).context['standings'][0]['points'], 25)
+        self.assertIn('2027', self.client.get(url).context['school_years'])
         self.assertEqual(self.client.get(url, {'year': '2025'}).context['standings'][0]['points'], 100)
         self.assertEqual(self.client.get(url, {'year': ''}).context['standings'][0]['points'], 125)
 
