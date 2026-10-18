@@ -354,7 +354,7 @@ def leaderboard(request):
     if filters['q']:
         rows = [row for row in rows if filters['q'].casefold() in row['department'].casefold()]
     page, pagination = paginate(request, rows)
-    return dict(pagination, page_title='Team Standings — EventTab', standings=list(page), filters=filters,
+    return dict(pagination, page_title='Leaderboards — EventTab', standings=list(page), filters=filters,
                 categories=categories, event_options=event_options, selected_event_id=selected_event_id,
                 podium=podium, school_years=years, selected_year=selected_year)
 

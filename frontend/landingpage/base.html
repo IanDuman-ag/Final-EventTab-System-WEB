@@ -16,7 +16,7 @@
 </span>
 </button>
 <div class="nav-menu" id="public-menu">
-<a {% if active == 'home' %}class="active" aria-current="page"{% endif %} href="{% url 'home' %}">Home</a><a {% if active == 'schedules' %}class="active" aria-current="page"{% endif %} href="{% url 'public_schedules' %}">Schedules</a><a {% if active == 'games' %}class="active" aria-current="page"{% endif %} href="{% url 'public_games' %}">Games</a><a {% if active == 'leaderboard' %}class="active" aria-current="page"{% endif %} href="{% url 'public_leaderboard' %}">Leaderboard</a><a {% if active == 'results' %}class="active" aria-current="page"{% endif %} href="{% url 'public_results' %}">Results</a><a class="btn btn-yellow nav-login" href="{% url 'login' %}">Login <span aria-hidden="true">&#8599;</span>
+<a {% if active == 'home' %}class="active" aria-current="page"{% endif %} href="{% url 'home' %}">Home</a><a {% if active == 'schedules' %}class="active" aria-current="page"{% endif %} href="{% url 'public_schedules' %}">Schedules</a><a {% if active == 'games' %}class="active" aria-current="page"{% endif %} href="{% url 'public_games' %}">Games</a><a {% if active == 'leaderboard' %}class="active" aria-current="page"{% endif %} href="{% url 'public_leaderboard' %}">Leaderboards</a><a {% if active == 'results' %}class="active" aria-current="page"{% endif %} href="{% url 'public_results' %}">Results</a><a class="btn btn-yellow nav-login" href="{% url 'login' %}">Login <span aria-hidden="true">&#8599;</span>
 </a>
 </div>
 </nav>
@@ -45,7 +45,7 @@ One event. One community.<br>Every achievement, together.
 EXPLORE THE COMPETITION
 </p>
 <div class="footer-links">
-<a href="{% url 'public_games' %}">Games &amp; Events</a><a href="{% url 'public_schedules' %}">Schedules</a><a href="{% url 'public_leaderboard' %}">Team Standings</a><a href="{% url 'public_results' %}">Official Results</a>
+<a href="{% url 'public_games' %}">Games &amp; Events</a><a href="{% url 'public_schedules' %}">Schedules</a><a href="{% url 'public_leaderboard' %}">Leaderboards</a><a href="{% url 'public_results' %}">Official Results</a>
 </div>
 </div>
 <div>

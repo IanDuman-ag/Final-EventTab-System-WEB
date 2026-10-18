@@ -4,7 +4,7 @@
 <section class="standings-hero" aria-labelledby="standings-title">
   <img class="standings-hero-photo" src="{% static 'loginlogo/ustpentrance.png' %}" alt="">
   <div class="container standings-hero-inner">
-    <div class="standings-heading"><p class="standings-eyebrow">Intramurals{% if selected_year %} {{ selected_year }}{% endif %}</p><h1 id="standings-title">Team <span>Standings</span></h1><p>Track official department rankings and championship points.</p></div>
+    <div class="standings-heading"><p class="standings-eyebrow">Intramurals{% if selected_year %} {{ selected_year }}{% endif %}</p><h1 id="standings-title"><span>Leaderboards</span></h1><p>Track official department rankings and championship points.</p></div>
     <div class="standings-year"><label for="standings-year">{% include "landingpage/_icon.html" with icon="calendar" %} School Year</label><select id="standings-year" name="year" form="standings-filters"><option value="">All school years</option>{% for year in school_years %}<option value="{{ year }}" {% if selected_year == year %}selected{% endif %}>{{ year }}</option>{% endfor %}</select></div>
     {% if podium %}<div class="standings-podium" aria-label="Top three departments">
       {% for team in podium %}<article class="podium-place place-{{ team.rank }}" aria-label="Rank {{ team.rank }}: {{ team.department }}">
