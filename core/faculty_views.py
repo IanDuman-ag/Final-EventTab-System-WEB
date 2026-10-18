@@ -134,12 +134,17 @@ def _publication_row(event, user):
     from events.publication_service import can_publish_event, match_publication_review
     if event_type_label(event) != 'Match-Based':
         row = serialize_event_row(event)
-        ready = bool((event.result_processing_config or {}).get('ready_for_publication')) and not event.results_finalized
+        from events.criteria_faculty_service import criteria_faculty_portal
+        publication = criteria_faculty_portal(event, user)['publication']
+        ready = publication['can_publish']
+        queued = not event.results_finalized and (ready or bool(
+            (event.result_processing_config or {}).get('ready_for_publication')))
         row.update(
-            tournament_format='', in_publication_queue=ready, publication_ready=ready,
+            tournament_format='', in_publication_queue=queued, publication_ready=ready,
             show_publication_button=False, show_unpublish_button=False,
-            status='Published Results' if event.results_finalized else 'Ready for Publication' if ready else 'Pending Review',
+            status='Published Results' if event.results_finalized else 'Ready for Publication' if ready else 'Pending Approval' if queued else 'Pending Review',
             status_key='published' if event.results_finalized else 'ready' if ready else 'pending',
+            publication_errors=publication['publish_errors'],
             action='Open Event', action_url=reverse('faculty_event_manage', args=[event.pk]),
         )
         return row
@@ -271,7 +276,7 @@ def faculty_event_manage(request, event_id):
                         raise FacultyServiceError('Select a valid round.') from exc
                     if action == 'approve_round':
                         approve_criteria_round(event, request.user, round_index, request.POST.getlist('qualifier_ids'))
-                        messages.success(request, 'Round results approved. Unlock the next round when you are ready.')
+                        messages.success(request, 'Final round approved. Review and publish the official results.' if round_index == len(criteria_rounds(event)) - 1 else 'Round results approved. Unlock the next round when you are ready.')
                     else:
                         unlock_criteria_round(event, request.user, round_index)
                         selected_index = round_index
@@ -279,6 +284,18 @@ def faculty_event_manage(request, event_id):
                 elif action == 'submit_publication':
                     submit_criteria_publication(event, request.user)
                     messages.success(request, 'Final results submitted for authorized publication.')
+                elif action == 'publish':
+                    if request.POST.get('confirm') != 'yes':
+                        raise FacultyServiceError('Explicit publication confirmation is required.')
+                    with transaction.atomic():
+                        event = Event.objects.select_for_update().get(pk=event.pk)
+                        publication = criteria_faculty_portal(event, request.user)['publication']
+                        if not publication['can_publish']:
+                            raise FacultyServiceError(' '.join(publication['publish_errors']) or 'Results are unavailable for publication.')
+                        if not publication['submitted_at']:
+                            submit_criteria_publication(event, request.user)
+                        publish_results(event, request.user)
+                    messages.success(request, 'Official results published. Public results and championship standings are updated.')
                 else:
                     raise FacultyServiceError('Unknown event action.')
             except (FacultyServiceError, ValueError, TypeError) as exc:

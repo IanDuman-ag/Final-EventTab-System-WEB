@@ -960,6 +960,15 @@ def publish_results(event, user):
         raise FacultyServiceError('You do not have permission to publish results for this event.')
     if current.results_finalized and (current.result_processing_config or {}).get('published_at'):
         return
+    if event.scoring_method == 'criteria' and (
+        (event.result_processing_config or {}).get('confirmed_stages') or event.faculty_account_id == user.pk
+    ):
+        from .criteria_faculty_service import criteria_faculty_portal, approved_final_rankings
+        publication = criteria_faculty_portal(event, user)['publication']
+        if publication['publish_errors']:
+            raise FacultyServiceError(' '.join(publication['publish_errors']))
+        if approved_final_rankings(event) is None:
+            raise FacultyServiceError('Submit the approved final rankings before publishing results.')
     if event_type_label(event) == 'Match-Based':
         from .publication_service import match_publication_review
         from .points_settings_service import match_championship_rules

@@ -336,6 +336,10 @@ def criteria_faculty_portal(event, user, selected_round_index=0):
         verified = cfg.get('verified_stages') or {}
         if not cfg.get('tabulation_confirmed_at') or (verified and str(len(rounds) - 1) not in verified):
             publication_errors.append('The Tabulation Officer must confirm final tabulation first.')
+    publish_errors = list(publication_errors)
+    if cfg.get('verification_mode') == 'tabulator_admin_approval' and not cfg.get('approved'):
+        publish_errors.append('Admin approval is required before publishing results.')
+    from .publication_service import can_publish_event
     tabulator = event.assigned_tabulators.first()
     event_status = event.get_status_display()
     publication_status = (
@@ -364,7 +368,9 @@ def criteria_faculty_portal(event, user, selected_round_index=0):
             'submitted_at': cfg.get('faculty_submitted_at'),
             'submitted_by': cfg.get('faculty_submitted_by'),
             'submitted_by_name': cfg.get('faculty_submitted_by_name'),
-            'errors': publication_errors, 'published': event.results_finalized, 'can_publish': False,
+            'errors': publication_errors, 'publish_errors': publish_errors,
+            'published': event.results_finalized,
+            'can_publish': authorized and can_publish_event(user, event) and not publish_errors,
         },
         'errors': selected['blockers'],
     }

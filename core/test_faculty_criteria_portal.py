@@ -132,6 +132,70 @@ class FacultyCriteriaPortalTests(TestCase):
         self.assertEqual(response.context['publication_queue'], [])
         self.assertEqual(response.context['recent_events'][0]['status'], 'Pending Review')
 
+    def test_single_round_requires_confirmation_then_publishes_and_leaves_queue(self):
+        from events.public_service import criteria_results
+        self.event.rounds_config = [self.event.rounds_config[0]]
+        self.event.save()
+        self.complete()
+        approve_criteria_round(self.event, self.faculty, 0)
+        self.assertContains(self.client.get(self.url + '?tab=results'), 'Confirm &amp; Publish')
+        dashboard = self.client.get(reverse('faculty_dashboard'))
+        self.assertEqual(dashboard.context['publication_ready_count'], 1)
+        self.assertContains(dashboard, 'Review &amp; Publish')
+        self.client.post(self.url, {'action': 'publish'})
+        self.event.refresh_from_db()
+        self.assertFalse(self.event.results_finalized)
+        self.assertNotIn('faculty_submitted_at', self.event.result_processing_config)
+        response = self.client.post(self.url, {'action': 'publish', 'confirm': 'yes', 'tab': 'results'}, follow=True)
+        self.assertContains(response, 'Official results published.')
+        self.event.refresh_from_db()
+        self.assertTrue(self.event.results_finalized)
+        self.assertEqual(self.event.result_processing_config['published_by'], self.faculty.pk)
+        self.assertEqual(len(criteria_results(self.event)[0]), 2)
+        self.assertEqual(self.client.get(reverse('faculty_dashboard')).context['publication_queue'], [])
+
+    def test_previously_submitted_multi_round_results_can_be_published(self):
+        self.complete()
+        approve_criteria_round(self.event, self.faculty, 0)
+        unlock_criteria_round(self.event, self.faculty, 1)
+        self.complete('final')
+        approve_criteria_round(self.event, self.faculty, 1)
+        submit_criteria_publication(self.event, self.faculty)
+        self.assertContains(self.client.get(self.url + '?tab=results'), 'Confirm &amp; Publish')
+        self.client.post(self.url, {'action': 'publish', 'confirm': 'yes'})
+        self.event.refresh_from_db()
+        self.assertTrue(self.event.results_finalized)
+
+    def test_publish_rejects_unapproved_round_and_other_faculty(self):
+        self.client.post(self.url, {'action': 'publish', 'confirm': 'yes'})
+        self.event.refresh_from_db()
+        self.assertFalse(self.event.results_finalized)
+        self.client.force_login(self.other)
+        self.client.post(self.url, {'action': 'publish', 'confirm': 'yes'})
+        self.event.refresh_from_db()
+        self.assertFalse(self.event.results_finalized)
+
+    def test_publish_service_preserves_tabulator_and_admin_requirements(self):
+        from events.faculty_service import publish_results, FacultyServiceError
+        self.event.rounds_config = [self.event.rounds_config[0]]
+        self.event.save()
+        self.complete()
+        approve_criteria_round(self.event, self.faculty, 0)
+        submit_criteria_publication(self.event, self.faculty)
+        self.event.result_processing_config.update(verification_mode='tabulator_admin_approval', approved=False)
+        self.event.save()
+        with self.assertRaises(FacultyServiceError):
+            publish_results(self.event, self.faculty)
+        self.event.result_processing_config['tabulation_confirmed_at'] = timezone.now().isoformat()
+        self.event.save()
+        with self.assertRaises(FacultyServiceError):
+            publish_results(self.event, self.faculty)
+        self.event.result_processing_config['approved'] = True
+        self.event.save()
+        publish_results(self.event, self.faculty)
+        self.event.refresh_from_db()
+        self.assertTrue(self.event.results_finalized)
+
     def test_authorized_publication_reads_approved_final_snapshot(self):
         from events.points_settings_service import criteria_placements
         from events.public_service import criteria_results

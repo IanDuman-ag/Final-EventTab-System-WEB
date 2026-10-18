@@ -218,7 +218,7 @@
 <span class="criteria-badge">{{ portal.publication.status }}</span>
 </header>
 <div class="publication-body">
-<p>Final results follow the existing tabulator review and publication authorization process. Round approval does not make results public.</p>{% if portal.publication.submitted_at %}<p class="round-note approved">Submitted by {{ portal.publication.submitted_by_name|default:portal.publication.submitted_by }} · <time datetime="{{ portal.publication.submitted_at }}" data-local-time>{{ portal.publication.submitted_at }}</time></p>{% endif %}{% for error in portal.publication.errors %}<p class="publication-blocker">{{ error }}</p>{% endfor %}{% if not portal.publication.published and not portal.publication.submitted_at %}<button class="criteria-button" type="button" data-open-dialog="submit-publication" {% if not portal.publication.can_submit %}disabled title="{{ portal.publication.errors|join:' ' }}"{% endif %}>Approve &amp; Submit for Publication</button>{% endif %}</div>
+<p>After final-round approval and required verification, review the rankings and confirm publication to make official results public.</p>{% if portal.publication.submitted_at %}<p class="round-note approved">Submitted by {{ portal.publication.submitted_by_name|default:portal.publication.submitted_by }} · <time datetime="{{ portal.publication.submitted_at }}" data-local-time>{{ portal.publication.submitted_at }}</time></p>{% endif %}{% for error in portal.publication.publish_errors %}<p class="publication-blocker">{{ error }}</p>{% endfor %}{% if portal.publication.can_publish %}<button class="criteria-button" type="button" data-open-dialog="publish-results">Review &amp; Publish</button>{% endif %}{% if not portal.publication.can_publish and not portal.publication.published and not portal.publication.submitted_at %}<button class="criteria-button" type="button" data-open-dialog="submit-publication" {% if not portal.publication.can_submit %}disabled title="{{ portal.publication.errors|join:' ' }}"{% endif %}>Approve &amp; Submit for Publication</button>{% endif %}</div>
 </article>
 </section>
 </main>
@@ -276,6 +276,14 @@
 </footer>
 </form>
 </dialog>{% endif %}{% endfor %}
+{% if portal.publication.can_publish %}<dialog class="criteria-dialog modal-content" id="publish-results" aria-labelledby="publish-title">
+<header class="modal-header"><h2 class="modal-title" id="publish-title">Publish Official Results?</h2><button type="button" data-close-dialog aria-label="Close">&times;</button></header>
+<form method="post" action="{% url 'faculty_event_manage' event.pk %}">{% csrf_token %}
+<div class="modal-body"><p>Confirm that you have reviewed the approved final rankings. Official results will become public and championship standings will be updated.</p>
+<ol>{% for round in portal.rounds %}{% if round.is_final %}{% for result in round.results %}<li>{{ result.name }} &middot; {{ result.final_score }}</li>{% endfor %}{% endif %}{% endfor %}</ol></div>
+<input type="hidden" name="action" value="publish"><input type="hidden" name="confirm" value="yes"><input type="hidden" name="tab" value="results"><input type="hidden" name="selected_round_index" value="{{ selected_round_index }}">
+<footer class="modal-footer"><button type="button" class="criteria-button secondary" data-close-dialog>Cancel</button><button type="submit" class="criteria-button" data-loading-label="Publishing...">Confirm &amp; Publish</button></footer>
+</form></dialog>{% endif %}
 {% if portal.publication.can_submit %}<dialog class="criteria-dialog modal-content" id="submit-publication" aria-labelledby="publication-title">
 <header class="modal-header">
 <h2 class="modal-title" id="publication-title">Submit Final Results for Publication?</h2>

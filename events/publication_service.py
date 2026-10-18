@@ -6,7 +6,7 @@ from .points_settings_service import _match_placements, match_championship_rules
 
 
 def can_publish_event(user, event):
-    """Administrators publish any event; faculty publish only their assigned sports events."""
+    """Administrators publish any event; faculty publish their assigned events."""
     if not user or not user.is_authenticated or not user.is_active:
         return False
     roles = {name.casefold() for name in user.groups.values_list('name', flat=True)}
@@ -16,7 +16,7 @@ def can_publish_event(user, event):
         return False
     from .faculty_service import event_type_label, faculty_can_access
     return bool(roles.intersection({'faculty', 'faculty in-charge'}) and
-                event_type_label(event) == 'Match-Based' and faculty_can_access(user, event) and
+                event_type_label(event) in {'Match-Based', 'Criteria-Based'} and faculty_can_access(user, event) and
                 event.faculty_account_id == user.pk)
 
 
