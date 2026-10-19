@@ -1,18 +1,22 @@
-<article class="event-card">
-{% if event.image_url %}<a href="{{ event.detail_url }}" class="event-art" aria-label="View {{ event.name }}"><img src="{{ event.image_url }}" alt="{{ event.name }}" loading="lazy" data-category="{{ event.category|default:event.type_label }}">
-</a>{% else %}<a href="{{ event.detail_url }}" class="event-art category-art {% if event.type == 'criteria' %}criteria-art{% endif %}" aria-label="View {{ event.name }}">{% include "landingpage/_category_icon.html" %}<span>{{ event.category|default:event.type_label }}</span>
-</a>{% endif %}
-<div class="event-body">
-<div class="event-meta">
-<span>{{ event.type_label }}</span><span class="status status-{{ event.status }}">{{ event.status_label }}</span>
-</div>
-<h3>
-<a href="{{ event.detail_url }}">{{ event.name }}</a>
-</h3>
-<p class="event-date">
-{% if event.date %}{{ event.date|date:"M j, Y" }}{% else %}Schedule to be announced{% endif %}{% if event.division %} <span>&middot; {{ event.division }}</span>{% endif %}
-</p>
-<a class="card-link" href="{{ event.detail_url }}">View Details <span aria-hidden="true">&#8599;</span>
+{% load static %}
+<article class="event-card game-card-{{ event.banner_key|default:'other' }}">
+<div class="game-card-banner">
+<a href="{{ event.detail_url }}" class="event-art {% if not event.image_url and not event.banner_key %}category-art{% endif %}" aria-label="View {{ event.name }}">
+{% if event.image_url %}<img src="{{ event.image_url }}" alt="" loading="lazy" {% if event.banner_key %}data-banner-fallback="{% static 'landingpage/assets/competitions/' %}{{ event.banner_key }}.webp"{% else %}data-category="{{ event.category|default:event.type_label }}"{% endif %}>
+{% elif event.banner_key %}<img src="{% static 'landingpage/assets/competitions/' %}{{ event.banner_key }}.webp" alt="" loading="lazy">
+{% else %}{% with name=event.name|lower %}{% if 'table tennis' in name or 'ping pong' in name %}
+<svg class="games-paddle-art" viewBox="0 0 600 210" fill="none" aria-hidden="true"><defs><linearGradient id="table-{{ event.id }}" x2="0" y2="1"><stop stop-color="#075c96"/><stop offset="1" stop-color="#137cb3"/></linearGradient><linearGradient id="paddle-{{ event.id }}" x2="0" y2="1"><stop stop-color="#ef504b"/><stop offset="1" stop-color="#a51c2b"/></linearGradient><pattern id="net-{{ event.id }}" width="15" height="12" patternUnits="userSpaceOnUse"><path d="M0 0H15V12" stroke="#d9e5ef" opacity=".5"/></pattern></defs><path fill="#072138" d="M0 0h600v210H0z"/><path fill="#28435c" d="M0 38h600v45H0z"/><path d="M0 80h600v130H0z" fill="url(#table-{{ event.id }})"/><path d="M0 120h600M290 80l-5 130" stroke="#a5d3ec" stroke-width="3"/><path d="M0 42h600v62H0z" fill="url(#net-{{ event.id }})"/><path d="M0 42h600" stroke="#ecf4f8" stroke-width="4"/><ellipse cx="400" cy="173" rx="116" ry="14" fill="#092642" opacity=".5"/><g transform="rotate(17 389 141)"><path d="m417 137 112-9 3 21-112 10" fill="#b3854d"/><path d="m434 141 89-7" stroke="#e1bf8f" stroke-width="3"/><ellipse cx="369" cy="137" rx="73" ry="40" fill="#d7b77e"/><ellipse cx="367" cy="132" rx="73" ry="40" fill="#17222d"/><ellipse cx="361" cy="127" rx="67" ry="35" fill="url(#paddle-{{ event.id }})"/><path d="M307 120c14-25 71-37 110-8" stroke="#ffaaa2" opacity=".4"/></g><circle cx="481" cy="169" r="13" fill="#f6fbff"/><circle cx="477" cy="165" r="8" fill="#fff"/></svg>
+{% else %}{% include "landingpage/_category_icon.html" %}{% endif %}{% endwith %}{% endif %}
 </a>
+<span class="game-type"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M5 2h7l3 3v13H5Z M12 2v4h3M8 9h4M8 12h4M8 15h3"/></svg>{{ event.type_label }}</span>
+<span class="status status-{{ event.status }}">{{ event.status_label }}</span>
+</div>
+<div class="event-body">
+<div class="game-title-row">
+<span class="game-category-symbol">{% include "landingpage/_category_icon.html" %}</span>
+<div><h3><a href="{{ event.detail_url }}">{{ event.name }}</a></h3>
+<p class="event-date">{% include "landingpage/_icon.html" with icon="calendar" %}<span>{% if event.date %}{{ event.date|date:"M j, Y" }}{% else %}Schedule to be announced{% endif %}{% if event.division %} &middot; {{ event.division }}{% endif %}</span></p></div>
+</div>
+<a class="card-link" href="{{ event.detail_url }}">View Details <span aria-hidden="true">&#8594;</span></a>
 </div>
 </article>

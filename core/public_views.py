@@ -231,7 +231,7 @@ def games(request):
         public_events(), filters_for(request),
     ).order_by('event_date', 'name', 'pk'))
     context.update(filter_options(), page_title='Games & Events — EventTab',
-                   events=[serialize_event(event) for event in page])
+                   events=[{**serialize_event(event), 'banner_key': featured_banner_key(event)} for event in page])
     return context
 
 

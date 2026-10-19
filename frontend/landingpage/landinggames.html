@@ -1,18 +1,25 @@
-{% extends "landingpage/base.html" %}{% block content %}
-<section class="page-intro">
-<div class="container">
+{% extends "landingpage/base.html" %}{% load static %}
+{% block body_class %}public-games{% endblock %}
+{% block content %}
+<section class="games-hero">
+<div class="games-hero-art" aria-hidden="true">
+<span class="games-hero-disc"></span>
+<img class="games-hero-athlete" src="{% static 'landingpage/assets/hero.webp' %}" alt="">
+<img class="games-hero-dancer" src="{% static 'landingpage/assets/competitions/dance.webp' %}" alt="">
+</div>
+<div class="container games-hero-heading">
 <p class="eyebrow">
 THE COURT. THE STAGE. YOUR COMMUNITY.
 </p>
 <h1>
-Games &amp; Events
+Games &amp; <span>Events</span>
 </h1>
 <p>
 Explore all intramural competitions.
 </p>
 </div>
 </section>
-<section class="container page-content">
+<section class="container page-content games-directory">
 {% include "landingpage/_filters.html" %}
 <div class="event-grid">
 {% for event in events %}{% include "landingpage/_event_card.html" %}{% empty %}
