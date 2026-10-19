@@ -360,6 +360,21 @@ class PublicPortalTests(TestCase):
         self.assertEqual(invalid.status_code, 200)
         self.assertEqual(invalid.context['featured_filters']['sort'], 'date')
 
+    def test_home_cultural_and_arts_tabs_use_public_event_categories(self):
+        cultural = self.create_event('Pageants', category='Cultural', scoring_method='criteria')
+        arts = self.create_event('Singing Showcase', category='Arts', scoring_method='criteria')
+        combined = self.create_event('Vocal Duet', category='Socio-Cultural & Literary Arts', scoring_method='criteria')
+        self.create_event('Private Cultural Event', category='Cultural', publication_status='draft')
+        self.create_event('Uncategorized Criteria', category='Special Event', scoring_method='criteria')
+        home = reverse('home')
+        cultural_response = self.client.get(home, {'featured_type': 'cultural'})
+        self.assertEqual({row['id'] for row in cultural_response.context['featured_events']}, {cultural.pk, combined.pk})
+        arts_response = self.client.get(home, {'featured_type': 'arts', 'featured_q': 'Singing', 'featured_sort': 'name'})
+        self.assertEqual([row['id'] for row in arts_response.context['featured_events']], [arts.pk])
+        self.assertIn('featured_type=arts', arts_response.context['featured_query_string'])
+        all_arts = self.client.get(home, {'featured_type': 'arts'})
+        self.assertEqual({row['id'] for row in all_arts.context['featured_events']}, {arts.pk, combined.pk})
+
     def test_schedule_union_uses_fixtures_without_duplicate_event_entries(self):
         singing = self.create_event('Singing', scoring_method='criteria', category='Special Event', venue='Hall')
         BracketMatch.objects.create(event=self.event, match_number=2, round_name='Bye',

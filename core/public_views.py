@@ -180,13 +180,17 @@ def home(request):
         'q': request.GET.get('featured_q', '').strip()[:200],
         'sort': request.GET.get('featured_sort', 'date'),
     }
-    if featured_filters['type'] not in {'match', 'criteria'}:
+    if featured_filters['type'] not in {'match', 'criteria', 'cultural', 'arts'}:
         featured_filters['type'] = 'all'
     if featured_filters['sort'] not in {'date', 'name'}:
         featured_filters['sort'] = 'date'
     competitions = public_events().exclude(status=Event.STATUS_COMPLETED)
-    if featured_filters['type'] != 'all':
+    if featured_filters['type'] in {'match', 'criteria'}:
         competitions = competitions.filter(public_kind=featured_filters['type'])
+    elif featured_filters['type'] == 'cultural':
+        competitions = competitions.filter(Q(category__icontains='cultur') | Q(category__icontains='literary'))
+    elif featured_filters['type'] == 'arts':
+        competitions = competitions.filter(Q(category__iexact='art') | Q(category__icontains='arts'))
     if featured_filters['q']:
         competitions = competitions.filter(
             Q(name__icontains=featured_filters['q']) | Q(category__icontains=featured_filters['q'])

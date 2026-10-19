@@ -2741,3 +2741,157 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible {
   .public-event-detail .detail-section { margin-top:12px; }
   .public-event-detail .participant { padding-top:5px; padding-bottom:5px; min-height:41px; }
 }
+/* Home: championship illustration and compact reference layout. */
+.public-home { background:#f5f9fd; }
+.public-home .container { max-width:1056px; }
+.public-home .portal-nav { height:48px; }
+.public-home .site-header { background:linear-gradient(100deg,#102d50,#041b38); }
+.public-home .site-header .brand { font-size:23px; letter-spacing:-.8px; }
+.public-home .site-header .brand-mark { width:32px; height:32px; margin-right:7px; padding:2px; }
+.public-home .nav-menu { gap:28px; }
+.public-home .nav-menu>a:not(.btn) { font-size:10px; padding:15px 0 14px; }
+.public-home .nav-menu>a.active::after { bottom:7px; height:2px; }
+.public-home .nav-login { font-size:10px; padding:7px 17px; min-height:0; border-radius:4px; }
+.public-home .hero { height:302px; background:#052344; }
+.public-home .home-championship-art { position:absolute; inset:0; width:100%; height:100%; }
+.public-home .hero-content { position:relative; padding-top:22px; padding-bottom:23px; }
+.public-home .hero .eyebrow { font-size:8px; letter-spacing:3px; gap:10px; margin:0 0 8px; }
+.public-home .hero h1 { font-size:43px; line-height:1.02; letter-spacing:-.5px; margin:0 0 9px; max-width:530px; }
+.public-home .hero h1 em { white-space:nowrap; }
+.public-home .hero-description { font-size:12px; line-height:1.5; letter-spacing:.2px; margin:0 0 14px; }
+.public-home .hero-actions { gap:11px; }
+.public-home .hero-actions .btn { padding:8px 16px; font-size:10px; min-height:0; border-radius:4px; }
+.public-home .hero-actions .btn span { margin-left:8px; }
+.public-home .quick-section { min-height:76px; background:white; position:relative; }
+.public-home .quick-section::before { content:''; position:absolute; left:50%; top:0; width:100vw; height:100%; transform:translateX(-50%); background:#fff; z-index:-1; }
+.public-home .quick-link { padding:15px 20px; border-bottom:0; position:relative; gap:12px; }
+.public-home .quick-link:first-child { padding-left:0; }
+.public-home .quick-link:not(:last-child)::after { content:''; position:absolute; right:0; top:22px; bottom:22px; width:1px; background:#dce5f0; }
+.public-home .quick-icon { display:grid; place-items:center; border-radius:50%; width:40px; height:40px; background:#edf4fc; }
+.public-home .quick-icon svg { width:23px; height:23px; }
+.public-home .quick-link h2 { font-size:11px; margin-bottom:2px; letter-spacing:-.1px; }
+.public-home .quick-link p { font-size:9px; line-height:1.4; max-width:150px; }
+.public-home .quick-link>span:last-child { display:none; }
+.public-home .featured-competitions { background:linear-gradient(120deg,#f7fbff,#f1f7fd); overflow:visible; isolation:isolate; }
+.public-home .featured-competitions::before { inset:auto auto -100px 0; width:160px; height:220px; background:#ffe391; transform:none; clip-path:polygon(0 60%,95% 0,100% 22%,0 100%); opacity:.55; }
+.public-home .featured-competitions::after { inset:auto 0 -110px auto; width:210px; height:300px; background:#d7e6f6; transform:none; clip-path:polygon(100% 0,100% 17%,0 86%,0 73%); opacity:.55; }
+.public-home .section-space { padding-top:20px; padding-bottom:16px; }
+.public-home .section-heading { margin-bottom:10px; align-items:center; }
+.public-home .section-heading h2 { font-size:25px; letter-spacing:-.9px; line-height:1.15; margin:0 0 3px; }
+.public-home .section-heading p:not(.eyebrow) { font-size:10px; margin:0; }
+.public-home .section-heading h2>span { color:#efb500; }
+.public-home .eyebrow { display:flex; align-items:center; gap:8px; font-size:7px; letter-spacing:1.7px; margin:0 0 4px; color:#5c7494; }
+.public-home .eyebrow::before { content:''; width:24px; height:2px; background:#ffd019; }
+.public-home .hero .eyebrow::before { display:none; }
+.public-home .featured-controls { margin:0 0 12px; min-height:29px; gap:14px; }
+.public-home .featured-tabs { background:transparent; border:0; padding:0; gap:8px; border-radius:0; }
+.public-home .featured-tabs button { border:0; background:#e5effb; color:#294e76; border-radius:5px; padding:6px 15px; font-size:9px; line-height:1.4; }
+.public-home .featured-tabs button svg { display:none; }
+.public-home .featured-tabs button.selected { background:#09284e; color:white; box-shadow:0 2px 4px #08294d22; }
+.public-home .featured-tools { gap:8px; }
+.public-home .featured-search input { width:208px; height:32px; font-size:10px; padding-left:30px; border-radius:4px; }
+.public-home .featured-search svg { width:13px; height:13px; left:10px; }
+.public-home .featured-tools .form-select { width:124px; height:32px; font-size:10px; padding:5px 25px 5px 10px; border-radius:4px; }
+.public-home .featured-apply { padding:5px 19px; min-height:32px; border:1px solid #d4e1ef; color:#12385f; background:#fff; font-size:10px; border-radius:4px; }
+.public-home .featured-grid { gap:16px; }
+.public-home .featured-card { border-radius:5px; border:1px solid #e0eaf5; box-shadow:0 5px 12px #16395c08; overflow:hidden; }
+.public-home .featured-banner { height:100px; border-radius:0; background:#06254b; }
+.public-home .featured-banner-shade { display:none; }
+.public-home .home-event-poster { display:block; position:absolute; inset:0; }
+.public-home .home-event-poster>svg { width:100%; height:100%; }
+.public-home .home-poster-title { position:absolute; top:50%; left:37%; right:12%; transform:translateY(-50%) rotate(-4deg); color:white; text-align:center; font-family:'Barlow Condensed',Impact,sans-serif; font-size:29px; font-weight:800; line-height:.95; letter-spacing:.5px; text-shadow:2px 2px #031730; }
+.public-home .home-poster-title small { display:block; font-size:16px; letter-spacing:1px; line-height:1.1; }
+.public-home .home-poster-pageant .home-poster-title { font-size:24px; left:28%; right:12%; top:58%; }
+.public-home .home-poster-pageant .home-poster-title small { font-size:19px; }
+.public-home .featured-card-body { padding:10px 13px 0; }
+.public-home .featured-meta { font-size:8px; letter-spacing:0; text-transform:none; line-height:1.2; margin-bottom:2px; gap:5px; }
+.public-home .home-card-category { background:#eaf2ff; border-radius:3px; color:#376fc1; padding:2px 7px; font-weight:600; font-size:8px; max-width:55%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.public-home .featured-card h3 { font-size:14px; line-height:1.25; margin:0 0 6px; letter-spacing:-.35px; }
+.public-home .featured-date,.public-home .featured-venue { font-size:9px; line-height:1.45; gap:7px; margin:0 0 3px; }
+.public-home .featured-date svg,.public-home .featured-venue svg { width:12px; height:12px; flex-shrink:0; }
+.public-home .featured-card-link { font-size:9px; padding:7px 0 8px; margin-top:7px; border-top:1px solid #e5edf6; }
+.public-home .upcoming-section { position:relative; overflow:hidden; background:#fbfdff; }
+.public-home .home-schedule-watermark { position:absolute; right:2%; bottom:-32px; width:190px; height:190px; color:#eaf0f7; pointer-events:none; }
+.public-home .upcoming-section .container { position:relative; z-index:1; }
+.public-home .upcoming-section .section-space { padding-top:17px; padding-bottom:17px; }
+.public-home .upcoming-section .section-heading h2 { font-size:23px; }
+.public-home .upcoming-section .text-link { font-size:10px; gap:8px; }
+.public-home .schedule-list .empty-state.compact { display:flex; justify-content:center; align-items:center; gap:15px; border:1px dashed #b6cbe6; background:#fff9; padding:15px 20px; min-height:66px; border-radius:0; text-align:left; }
+.public-home .schedule-list .empty-state.compact h3 { font-size:12px; margin:0 0 2px; letter-spacing:-.2px; }
+.public-home .schedule-list .empty-state.compact p { font-size:9px; margin:0; }
+.public-home .home-empty-calendar { color:#102f57; }
+.public-home .home-empty-calendar svg { width:29px; height:29px; }
+.public-home .timezone-note { font-size:8px; margin:6px 0 0; }
+@media(min-width:801px) and (max-width:1100px) {
+ .public-home .site-header .portal-nav { flex-wrap:nowrap; padding-top:0; gap:20px; height:48px; }
+ .public-home .site-header .nav-menu { width:auto; gap:19px; }
+ .public-home .site-header .nav-menu>a:not(.btn) { padding:15px 0 14px; }
+ .public-home .hero h1 { font-size:40px; }
+}
+@media(max-width:800px) {
+ .public-home .container { padding-left:22px; padding-right:22px; }
+ .public-home .portal-nav { height:66px; }
+ .public-home .site-header .brand { font-size:25px; }
+ .public-home .site-header .brand-mark { width:38px; height:38px; }
+ .public-home .nav-menu { gap:0; top:66px; }
+ .public-home .nav-menu>a:not(.btn) { padding:18px 0; font-size:14px; }
+ .public-home .nav-menu>a.active::after { bottom:10px; }
+ .public-home .nav-login { margin-top:16px; font-size:13px; padding:11px 20px; }
+ .public-home .hero { height:330px; }
+ .public-home .home-championship-art { width:145%; left:-29%; opacity:.65; }
+ .public-home .hero-content { padding-top:35px; }
+ .public-home .hero h1 { font-size:40px; max-width:500px; }
+ .public-home .hero-description { font-size:12px; max-width:70%; }
+ .public-home .hero-actions .btn { font-size:11px; padding:10px 15px; }
+ .public-home .quick-section { grid-template-columns:repeat(2,minmax(0,1fr)); padding-top:7px; padding-bottom:7px; }
+ .public-home .quick-link { padding:12px 8px; gap:10px; }
+ .public-home .quick-link:first-child { padding-left:8px; }
+ .public-home .quick-link:not(:last-child)::after { top:15px; bottom:15px; }
+ .public-home .quick-link:nth-child(even)::after { display:none; }
+ .public-home .quick-link h2 { font-size:11px; }
+ .public-home .featured-controls { align-items:stretch; flex-direction:column; gap:10px; }
+ .public-home .featured-tools { width:100%; display:flex; }
+ .public-home .featured-search { flex:1; min-width:0; }
+ .public-home .featured-search input { width:100%; }
+ .public-home .featured-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+ .public-home .featured-banner { height:115px; }
+ .public-home .section-heading h2 { font-size:23px; }
+}
+@media(max-width:520px) {
+ .public-home .container { padding-left:20px; padding-right:20px; }
+ .public-home .hero { height:355px; }
+ .public-home .home-championship-art { width:190%; left:-55%; opacity:.4; }
+ .public-home .hero::after { content:''; position:absolute; inset:0; background:linear-gradient(90deg,#05234555,#05234500); pointer-events:none; }
+ .public-home .hero-content { z-index:1; padding-top:38px; }
+ .public-home .hero h1 { font-size:clamp(29px,8.3vw,42px); line-height:1.03; margin-bottom:16px; }
+ .public-home .hero .eyebrow { font-size:7px; letter-spacing:2px; margin-bottom:13px; }
+ .public-home .hero-description { max-width:90%; font-size:12px; margin-bottom:20px; }
+ .public-home .quick-section { padding-left:12px; padding-right:12px; }
+ .public-home .quick-link { gap:8px; padding:13px 6px; }
+ .public-home .quick-icon { width:32px; height:32px; }
+ .public-home .quick-icon svg { width:20px; height:20px; }
+ .public-home .quick-link h2 { font-size:10px; }
+ .public-home .quick-link p { font-size:8px; }
+ .public-home .section-space { padding-top:23px; padding-bottom:20px; }
+ .public-home .section-heading h2 { font-size:22px; max-width:310px; }
+ .public-home .featured-tabs { width:auto; justify-content:flex-start; gap:8px; }
+ .public-home .featured-tabs button { flex:0; padding:6px 13px; }
+ .public-home .featured-tools { gap:5px; flex-wrap:wrap; }
+ .public-home .featured-search { flex-basis:50%; }
+ .public-home .featured-tools .form-select { width:105px; }
+ .public-home .featured-apply { padding:5px 10px; }
+ .public-home .featured-grid { grid-template-columns:1fr; gap:15px; }
+ .public-home .featured-banner { height:128px; }
+ .public-home .featured-card-body { padding:12px 15px 0; }
+ .public-home .featured-card h3 { font-size:17px; }
+ .public-home .featured-meta,.public-home .featured-date,.public-home .featured-venue { font-size:10px; }
+ .public-home .featured-card-link { font-size:11px; padding:10px 0; }
+ .public-home .upcoming-section .section-heading { align-items:flex-start; gap:10px; }
+ .public-home .upcoming-section .text-link { font-size:9px; white-space:nowrap; padding-top:17px; }
+ .public-home .upcoming-section .section-heading h2 { font-size:22px; }
+ .public-home .schedule-list .empty-state.compact { padding:18px 12px; gap:10px; }
+ .public-home .schedule-list .empty-state.compact h3 { font-size:11px; }
+ .public-home .home-poster-title { font-size:34px; }
+ .public-home .home-poster-title small { font-size:18px; }
+ .public-home .home-poster-pageant .home-poster-title { font-size:30px; }
+}

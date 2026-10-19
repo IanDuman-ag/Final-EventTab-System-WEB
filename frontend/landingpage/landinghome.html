@@ -1,26 +1,41 @@
-{% extends "landingpage/base.html" %}{% load static %}{% block content %}
+{% extends "landingpage/base.html" %}{% load static %}{% block body_class %}public-home{% endblock %}{% block content %}
 <section class="hero">
-<img class="hero-photo" src="{% get_media_prefix %}landingpagelogo/landingpage.jpg" alt="USTP campus building" fetchpriority="high">
-<div class="hero-shade">
-</div>
+<svg class="home-championship-art" viewBox="0 0 1440 310" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">
+<defs><linearGradient id="home-navy" x2="1" y2="1"><stop stop-color="#052043"/><stop offset="1" stop-color="#0d3970"/></linearGradient><linearGradient id="home-gold"><stop stop-color="#e69c00"/><stop offset=".38" stop-color="#ffdf3f"/><stop offset=".7" stop-color="#ffcb00"/><stop offset="1" stop-color="#e9a300"/></linearGradient><g id="home-leaf"><path d="M0 0Q-19-21-7-34Q6-18 0 0" fill="#ffcc14"/></g></defs>
+<path fill="url(#home-navy)" d="M0 0h1440v310H0z"/><g fill="#173e6b" opacity=".42"><path d="m0 0 280 310H135L0 165zm230 0 295 310H380L85 0zm340 0 180 190 160-190z"/><path d="m940 0 220 310h280V0z"/></g>
+<path fill="#fff" d="m1010-30 430 0v340H985L795 0l94 13 38 81 24-109 25 117z"/><g fill="#dceafa"><path d="m1052 203 190-218h-68zm0 0 388-131v-59zm0 0 388 60v-48zm0 0 215 107h95zm0 0-25-203h-31zm0 0-124 107h-77z"/></g><g fill="#ffcc0b"><path d="m1052 203 75-203h-23zm0 0 290-203h-31zm0 0 388-52v-23zm0 0 290 107h60zm0 0-147 107h-36zm0 0-122-203h-34z"/><path d="m0 43 110 125-38-13L0 61zm0 165 182 102H84zm655-143 35 18 7 30-30-16zm55 136 38-21-16 47z"/></g><path fill="#f0f6fc" d="m0 248 67 62H0z"/><path fill="#fff" d="m10 195 110 115h-21L0 211z"/>
+<!-- Campus architecture behind the trophy. -->
+<g fill="#123c6c"><path d="m854 183 69-36 105 34v111H854z"/><path d="m1190 153 181-66 69 23v200h-250z"/></g><g fill="#9abbdc"><path d="m864 186 47-24v13l-47 23zm0 31 47-24v13l-47 23zm0 31 47-24v13l-47 23zm65-76 90 29v12l-90-27zm0 29 90 29v12l-90-27zm0 29 90 29v12l-90-27z"/><path d="m1208 157 30-10v24l-30 10zm45-16 30-10v24l-30 10zm45-16 30-10v24l-30 10zm45-16 30-10v24l-30 10zm-135 88 30-10v24l-30 10zm45-16 30-10v24l-30 10zm45-16 30-10v24l-30 10zm45-16 30-10v24l-30 10z"/></g>
+<!-- Basketball player: extended arm, bent running legs, jersey and ball. -->
+<g fill="#06244a" stroke="#cfe6fa" stroke-width="1.4" stroke-linejoin="round">
+<path d="M795 76c-2-7-12-9-12-20-1-12 7-20 16-20 11-1 19 7 18 18-1 8-6 12-8 17l2 7 13 8c12-5 20-13 27-26l11-23 4-15c0-5 4-7 7-4l4 8c1 3-2 9-4 13l-10 25c-4 16-11 31-24 40l-10 12c-1 9-7 17-9 23 3 10 10 17 22 25l19 12c10 7 19 21 27 33l5 4 8 5c6 3 2 9-4 8l-16-2c-5-2-7-5-10-10l-23-24c-13-5-26-9-35-17-9 8-20 13-33 15l-16 4c-10 11-17 23-25 31l-4 10c-5 4-17 3-25 4-6 0-7-5-1-8l9-4 5-11c6-15 12-28 23-35 8-6 24-11 33-18l8-15c-10-7-15-16-16-28l-11-1c-10 5-18 13-25 17-7 5-12 4-12 0l7-7 16-18c6-6 20-8 33-9z"/>
+</g><path d="M792 88q11 3 20 0l4 28q-8 8-23 0z" fill="#12395f"/><path d="m795 92 2 17m5-17 2 17m-14 31 14 4m8 8 9-6" fill="none" stroke="#527c9f" stroke-width="1.3"/><circle cx="873" cy="20" r="16" fill="#05254c" stroke="#cfe5fb" stroke-width="1.5"/><path d="M857 20h32m-16-16v32m-12-27q24 10 24 22m-24 1q24-11 24-24" fill="none" stroke="#7596bd" stroke-width="1.3"/>
+<!-- Volleyball player reaching above the net. -->
+<g fill="#06244a" stroke="#e6f2fc" stroke-width="1.2" stroke-linejoin="round">
+<path d="M1240 79c-1-7-8-10-7-20 0-10 8-18 18-18 12-1 20 7 19 18 0 7-5 12-9 17v9l7 4 18-20c9-11 16-23 20-34l6-8c3-5 8-3 7 2l-4 12c-7 21-13 36-26 51l-14 18c5 10 9 19 8 30l12 21c8 12 16 23 28 34l16 23 12 10c6 6 3 11-3 9l-20-7c-4-2-4-6-5-10-10-13-19-19-30-26-13-8-21-17-28-27l-9-6c-7 12-17 22-29 30l-20 13-9 29-2 13c-2 7-7 10-17 12l-7 2c-6 1-10-3-4-7l8-8 7-28c2-17 7-27 19-35l21-18 9-16c-12-11-17-23-18-35l-17-11c-12-9-22-23-24-35l-2-14c0-6 4-9 7-4l5 11 4 17c7 9 18 15 30 18z"/>
+</g><path d="m1238 94 14 9 17-7 7 26-18 17-19-16z" fill="#11365c"/><path d="m1242 100 5 17m3-12 4 17m-10 29 12 7m18-10 8-4" stroke="#487398" stroke-width="1.2" fill="none"/><circle cx="1312" cy="15" r="17" fill="#ffcc18" stroke="#06244a" stroke-width="3"/><path d="m1298 8 20 5 7 13m-14-28-5 19-9 9m9-9 15-10" stroke="#092d55" stroke-width="3" fill="none"/>
+<!-- Trophy, cup handles, plinth and laurel. -->
+<g stroke="#e5a200" stroke-width="5" fill="none"><path d="M1012 121h-28q-3 48 48 54m89-54h28q3 48-48 54"/></g><path d="M1009 108q58-13 118 0l-12 59q-8 32-40 38v22h30v13h-79v-13h30v-22q-32-6-39-38z" fill="url(#home-gold)"/><path d="m1028 115 9 55q7 23 21 26l-6-80z" fill="#fff4a3"/><path d="m1108 114-9 57q-4 16-14 23l8-77z" fill="#e4a000"/><ellipse cx="1068" cy="110" rx="58" ry="8" fill="#ffe86b"/><path d="M1012 240h111l11 14H999z" fill="#082d59"/><path d="M1025 254h87v19h-87z" fill="#d7e7f7"/><path d="M1004 273h130v19h-130z" fill="#06254b"/>
+<g fill="none" stroke="#f4bf08" stroke-width="3"><path d="M1010 288q-63-28-49-91m168 91q63-28 49-91"/></g><g><use href="#home-leaf" transform="translate(966 232) rotate(-42) scale(.7)"/><use href="#home-leaf" transform="translate(974 251) rotate(-55) scale(.7)"/><use href="#home-leaf" transform="translate(988 269) rotate(-70) scale(.7)"/><use href="#home-leaf" transform="translate(1005 281) rotate(-86) scale(.7)"/><use href="#home-leaf" transform="translate(1173 232) rotate(42) scale(-.7 .7)"/><use href="#home-leaf" transform="translate(1165 251) rotate(55) scale(-.7 .7)"/><use href="#home-leaf" transform="translate(1151 269) rotate(70) scale(-.7 .7)"/><use href="#home-leaf" transform="translate(1134 281) rotate(86) scale(-.7 .7)"/></g>
+<!-- Stage singer, theatrical masks and chess knight. -->
+<g fill="#06254b" stroke="#d4e7f9" stroke-width="1.4"><path d="M737 245q-4-14 3-22l12-4 10 8-1 13-9 7 5 9 25 8 9 28h-65l-2-32-15-11 3-5 19 8z"/><path d="m757 254 19-17 9-1 4 5-24 25z"/><path d="m779 234 13-9 6 7-13 10z"/></g><path d="m795 233 8 75" stroke="#082d54" stroke-width="3"/><g fill="#ffcc19"><path d="m828 238 31 8-7 38q-10 21-25 0z"/><path d="m862 249 29-4 5 37q-8 23-25 7z"/></g><g fill="#082a52"><path d="m831 254 8 3-5 5zm14 4 8 1-5 5zm-12 15q8 10 15 1l-1 9-12-1zm33-12 8-4 4 5zm16-3 8-3 2 7zm-10 18q9-9 17-1l-1 5q-9-6-15 2z"/></g><path fill="#06254b" d="M1237 310v-11l10-8-2-14 14-13 3-21-12-2 1-12 17-14 21 9 11 17-15 5-6 29 12 16 8 8v11z"/><path d="m1264 223 5 8-9 5" fill="#fff"/>
+<g fill="#ffcd13"><path d="m1352 222 28 8v39l-28-7z"/><path d="m1406 218 9 3v69h-9z"/></g><path d="M1406 219v-16l20 4v16z" fill="#fff"/>
+</svg>
 <div class="container hero-content">
 <p class="eyebrow">
 <span>
-</span> THE OFFICIAL INTRAMURAL HUB
+</span> SCHOOL INTRAMURALS
 </p>
 <h1>
-ONE EVENT.<br>ONE COMMUNITY.<br><em>COUNTLESS<br class="mobile-break"> CHAMPIONS.</em>
+ONE EVENT.<br>ONE COMMUNITY.<br><em>COUNTLESS CHAMPIONS.</em>
 </h1>
 <p class="hero-description">
 Your official hub for intramural events,<br class="desktop-break"> schedules, live standings, and results.
 </p>
 <div class="hero-actions">
 <a class="btn btn-yellow" href="{% url 'public_games' %}">Explore Events <span aria-hidden="true">&#8599;</span>
-</a><a class="btn btn-hero-outline" href="{% url 'public_schedules' %}">View Schedules</a>
+</a><a class="btn btn-hero-outline" href="{% url 'public_schedules' %}">View Schedule</a>
 </div>
-</div>
-<div class="hero-caption">
-THE GAME BRINGS US TOGETHER.
 </div>
 </section>
 <section class="quick-section container" aria-label="Quick access">
@@ -70,17 +85,17 @@ Follow the race to the top.
   <div class="container section-space">
     <div class="section-heading">
       <div>
-        <p class="eyebrow">EXPLORE EVENTS</p>
+        <p class="eyebrow">FEATURED EVENTS</p>
         <h2 id="featured-title">Where community meets <span>competition.</span></h2>
-        <p>From the court to the stage, there's a place for everyone.</p>
+        <p>Discover intramurals events, schedules, and results.</p>
       </div>
-      <a class="text-link" href="{% url 'public_games' %}">All competitions <span aria-hidden="true">&#8594;</span></a>
     </div>
     <form class="featured-controls" method="get" action="{% url 'home' %}#featured-competitions" aria-label="Filter featured competitions">
       <div class="featured-tabs" aria-label="Competition type">
         <button type="submit" name="featured_type" value="all" class="{% if featured_filters.type == 'all' %}selected{% endif %}" aria-pressed="{% if featured_filters.type == 'all' %}true{% else %}false{% endif %}">All</button>
         <button type="submit" name="featured_type" value="match" class="{% if featured_filters.type == 'match' %}selected{% endif %}" aria-pressed="{% if featured_filters.type == 'match' %}true{% else %}false{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M4 12h16M12 4v16M7 6c7 4 7 8 0 12M17 6c-7 4-7 8 0 12"/></svg>Sports</button>
-        <button type="submit" name="featured_type" value="criteria" class="{% if featured_filters.type == 'criteria' %}selected{% endif %}" aria-pressed="{% if featured_filters.type == 'criteria' %}true{% else %}false{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m12 3 3 6 6 .8-4.4 4.3 1 6.2-5.6-3-5.6 3 1-6.2L3 9.8 9 9l3-6Z"/></svg>Criteria-Based</button>
+        <button type="submit" name="featured_type" value="cultural" class="{% if featured_filters.type == 'cultural' %}selected{% endif %}" aria-pressed="{% if featured_filters.type == 'cultural' %}true{% else %}false{% endif %}">Cultural</button>
+        <button type="submit" name="featured_type" value="arts" class="{% if featured_filters.type == 'arts' %}selected{% endif %}" aria-pressed="{% if featured_filters.type == 'arts' %}true{% else %}false{% endif %}">Arts</button>
       </div>
       <div class="featured-tools">
         <div class="featured-search">
@@ -119,32 +134,33 @@ Follow the race to the top.
   </div>
 </section>
 <section class="upcoming-section">
+<svg class="home-schedule-watermark" viewBox="0 0 160 160" aria-hidden="true" focusable="false"><g fill="none" stroke="currentColor" stroke-width="6"><path d="M48 20h64l-8 44q-3 25-24 29-21-4-24-29zM48 29H28q0 41 31 43m53-43h20q0 41-31 43M80 93v29m-24 8h48m-55 10h62"/><path d="M53 141Q7 112 18 65m89 76q46-29 35-76" stroke-width="3"/></g><g fill="currentColor"><path d="m25 99-18-6 11 19zm9 21-19-2 14 15zm101-21 18-6-11 19zm-9 21 19-2-14 15z"/></g></svg>
 <div class="container section-space">
 <div class="section-heading">
 <div>
 <p class="eyebrow">
-MARK YOUR CALENDAR
+NEXT UP: SCHEDULES
 </p>
 <h2>
 Coming up next.
 </h2>
 <p>
-Your next courtside moment starts here.
+Your real-time intramurals schedule is here.
 </p>
 </div>
-<a class="text-link" href="{% url 'public_schedules' %}">View All Schedules <span aria-hidden="true">&#8599;</span>
+<a class="text-link" href="{% url 'public_schedules' %}">View Full Schedule <span aria-hidden="true">&#8599;</span>
 </a>
 </div>
 <div class="schedule-list">
 {% for item in upcoming_schedules %}{% include "landingpage/_schedule_row.html" %}{% empty %}
-<div class="empty-state compact">
+<div class="empty-state compact"><span class="home-empty-calendar" aria-hidden="true">{% include "landingpage/_icon.html" with icon="calendar" %}</span><div>
 <h3>
 No upcoming schedules yet.
 </h3>
 <p>
-New event dates and venues will appear here when announced.
+New events will appear here once they are scheduled.
 </p>
-</div>
+</div></div>
 {% endfor %}
 </div>
 <p class="timezone-note">
