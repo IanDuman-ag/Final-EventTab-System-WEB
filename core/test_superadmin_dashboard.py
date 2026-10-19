@@ -6,13 +6,58 @@ from django.utils import timezone
 from urllib.parse import parse_qs, urlsplit
 from datetime import timedelta
 
-from events.models import AuditLog, Event
+from events.models import AdminReportHistory, AuditLog, Event
 from events.superadmin_service import dashboard_distributions
 
 
 class SuperadminDashboardTests(TestCase):
     def setUp(self):
         self.admin = get_user_model().objects.create_superuser('owner', 'owner@example.test', 'test-password')
+
+    def test_reports_preview_system_wide_exports_and_saved_download(self):
+        Event.objects.create(name='Report Test Event', event_date=timezone.localdate(), category='Sports', scoring_method='match')
+        self.client.force_login(self.admin)
+        generate = reverse('generate_superadmin_report')
+        payload = {'report_type': 'summary', 'format': 'pdf', 'action': 'preview'}
+        response = self.client.post(generate, payload)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['preview']['rows'][0][0], 'Report Test Event')
+        self.assertFalse(AdminReportHistory.objects.exists())
+        with_metrics = self.client.post(generate, {**payload, 'metrics': ['event_summary', 'publication_status']})
+        self.assertIn('Publication Status', with_metrics.json()['preview']['headers'])
+        self.assertIn('Event Venue', with_metrics.json()['preview']['headers'])
+        for fmt, prefix in [('pdf', b'%PDF'), ('excel', b'PK'), ('csv', b'Event Name')]:
+            response = self.client.post(generate, {'report_type': 'summary', 'format': fmt})
+            self.assertEqual(response.status_code, 200, response.content[:200])
+            self.assertTrue(response.content.startswith(prefix))
+        self.assertEqual(AdminReportHistory.objects.count(), 3)
+        report = AdminReportHistory.objects.first()
+        response = self.client.get(reverse('superadmin_reports'), {'download': report.pk})
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(b''.join(response.streaming_content).startswith(b'Event Name'))
+        page = self.client.get(reverse('superadmin_reports'))
+        self.assertEqual(page.context['reports_generated_count'], 3)
+        self.assertContains(page, 'Reports &amp; Analytics')
+        self.assertContains(page, '?download=')
+        export = self.client.get(reverse('superadmin_reports'), {'export': 'all'})
+        self.assertIn('Report,Created By,Created At,Format,Status', export.content.decode())
+
+    def test_reports_preserve_event_exports_and_validate_requests(self):
+        event = Event.objects.create(name='Basketball Report', event_date=timezone.localdate(), category='Sports', scoring_method='match')
+        self.client.force_login(self.admin)
+        url = reverse('generate_superadmin_report')
+        self.assertEqual(self.client.get(url).status_code, 405)
+        for payload in [{'report_type': 'invalid'}, {'format': 'invalid'}, {'event': 'Missing Event'},
+                        {'start_date': 'bad date'}, {'start_date': '2026-10-20', 'end_date': '2026-10-01'}]:
+            self.assertEqual(self.client.post(url, payload).status_code, 400)
+        for fmt, prefix in [('pdf', b'%PDF'), ('excel', b'PK')]:
+            response = self.client.post(url, {'event': event.name, 'report_type': 'summary', 'format': fmt,
+                                              'metrics': ['rankings', 'participants', 'scores']})
+            self.assertEqual(response.status_code, 200, response.content[:200])
+            self.assertTrue(response.content.startswith(prefix))
+        self.client.logout()
+        self.assertEqual(self.client.get(reverse('superadmin_reports')).status_code, 302)
+        self.assertEqual(self.client.post(url, {'action': 'preview'}).status_code, 302)
 
     def test_audit_quick_filters_insights_and_pagination_preserve_query(self):
         for number in range(12):
