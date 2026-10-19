@@ -521,6 +521,8 @@ def superadmin_activity_logs(request):
     selected_action = request.GET.get('action', 'all')
     date_from = request.GET.get('date_from', '')
     date_to = request.GET.get('date_to', '')
+    selected_result = request.GET.get('result', 'all')
+    insight_period = request.GET.get('insights', '7')
     export_format = (request.GET.get('export') or '').lower()
     detail_id = request.GET.get('detail', '')
 
@@ -541,6 +543,8 @@ def superadmin_activity_logs(request):
         date_from=date_from,
         date_to=date_to,
     )
+    if selected_result in ('success', 'failed'):
+        rows = [row for row in rows if row['status_key'] == selected_result]
 
     if export_format in ('csv', 'excel', 'xlsx', 'pdf'):
         record_audit(
@@ -570,12 +574,48 @@ def superadmin_activity_logs(request):
         return response
 
     opts = filter_options(rows if len(rows) < 1500 else None)
-    paginator = Paginator(rows, 25)
+    paginator = Paginator(rows, 8)
     page_obj = paginator.get_page(request.GET.get('page'))
     today = timezone.localdate()
     today_count = sum(1 for r in rows if timezone.localtime(r['created_at']).date() == today)
     failed_count = sum(1 for r in rows if r.get('status_key') == 'failed')
     latest = rows[0]['datetime_display'] if rows else 'N/A'
+
+    def change(current, previous):
+        if not previous:
+            return '—' if not current else 'New'
+        return f'{(current - previous) / previous:+.0%}'
+
+    dates = [(row, timezone.localtime(row['created_at']).date()) for row in rows]
+    yesterday = today - timedelta(days=1)
+    recent = sum(today - timedelta(days=6) <= date <= today for _, date in dates)
+    previous = sum(today - timedelta(days=13) <= date < today - timedelta(days=6) for _, date in dates)
+    yesterday_count = sum(date == yesterday for _, date in dates)
+    failed_today = sum(date == today and row['status_key'] == 'failed' for row, date in dates)
+    failed_yesterday = sum(date == yesterday and row['status_key'] == 'failed' for row, date in dates)
+    if insight_period not in ('7', '30', 'all'):
+        insight_period = '7'
+    insight_rows = [
+        row for row, date in dates
+        if insight_period == 'all' or today - timedelta(days=int(insight_period) - 1) <= date <= today
+    ]
+    insight_failed = sum(row['status_key'] == 'failed' for row in insight_rows)
+    insight_success = len(insight_rows) - insight_failed
+    modules = {}
+    for row in insight_rows:
+        modules[row['module']] = modules.get(row['module'], 0) + 1
+    top_modules = sorted(modules.items(), key=lambda item: (-item[1], item[0]))[:5]
+    params = request.GET.copy()
+    params.pop('page', None)
+    params.pop('export', None)
+    params.pop('detail', None)
+    quick_filters = []
+    for label, key, value in [('Success', 'result', 'success'), ('Failed', 'result', 'failed'),
+                               ('Login', 'action', 'Logged In'), ('Logout', 'action', 'Logged Out')]:
+        quick_params = params.copy()
+        active = quick_params.get(key) == value
+        quick_params[key] = 'all' if active else value
+        quick_filters.append({'label': label, 'key': label.lower(), 'active': active, 'query': quick_params.urlencode()})
 
     return render(request, 'superadmindash/activitylogs.html', {
         'active': 'audit_logs',
@@ -586,6 +626,23 @@ def superadmin_activity_logs(request):
         'today_count': today_count,
         'failed_count': failed_count,
         'latest_activity': latest,
+        'weekly_change': change(recent, previous),
+        'today_change': change(today_count, yesterday_count),
+        'failed_change': change(failed_today, failed_yesterday),
+        'selected_result': selected_result,
+        'insight_period': insight_period,
+        'insight_count': len(insight_rows),
+        'insight_success': insight_success,
+        'insight_failed': insight_failed,
+        'success_percent': round(100 * insight_success / len(insight_rows)) if insight_rows else 0,
+        'failed_percent': round(100 * insight_failed / len(insight_rows)) if insight_rows else 0,
+        'top_modules': [
+            {'name': name, 'count': count, 'percent': round(100 * count / top_modules[0][1])}
+            for name, count in top_modules
+        ],
+        'quick_filters': quick_filters,
+        'filter_query': params.urlencode(),
+        'insight_fields': [(key, value) for key, value in params.items() if key != 'insights'],
         'search_query': q,
         'selected_user': selected_user,
         'selected_role': selected_role,

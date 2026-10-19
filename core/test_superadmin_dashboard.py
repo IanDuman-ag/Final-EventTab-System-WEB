@@ -4,14 +4,63 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 from urllib.parse import parse_qs, urlsplit
+from datetime import timedelta
 
-from events.models import Event
+from events.models import AuditLog, Event
 from events.superadmin_service import dashboard_distributions
 
 
 class SuperadminDashboardTests(TestCase):
     def setUp(self):
         self.admin = get_user_model().objects.create_superuser('owner', 'owner@example.test', 'test-password')
+
+    def test_audit_quick_filters_insights_and_pagination_preserve_query(self):
+        for number in range(12):
+            AuditLog.objects.create(user=self.admin, user_name='owner', user_role='Super Admin',
+                                    module='Authentication', action='Logged In',
+                                    description='reference audit & review', status='failed' if number < 4 else 'success')
+        self.client.force_login(self.admin)
+        url = reverse('superadmin_activity_logs')
+        response = self.client.get(url, {'q': 'reference audit & review', 'page': 2})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['filtered_count'], 12)
+        self.assertEqual(len(response.context['rows']), 4)
+        self.assertEqual(response.context['insight_count'], 12)
+        self.assertEqual(response.context['insight_failed'], 4)
+        self.assertEqual(response.context['top_modules'][0]['count'], 12)
+        self.assertContains(response, 'Showing 9–12 of 12 entries')
+        for item in response.context['quick_filters']:
+            self.assertEqual(parse_qs(item['query'])['q'], ['reference audit & review'])
+            self.assertNotIn('page', parse_qs(item['query']))
+        response = self.client.get(url, {'q': 'reference audit & review', 'result': 'failed'})
+        self.assertEqual(response.context['filtered_count'], 4)
+        self.assertEqual(response.context['success_percent'], 0)
+        self.assertEqual(response.context['failed_percent'], 100)
+        self.assertContains(response, 'al-quick-failed is-active')
+        older = AuditLog.objects.create(action='Logged In', description='reference audit & review')
+        AuditLog.objects.filter(pk=older.pk).update(created_at=timezone.now() - timedelta(days=20))
+        recent = self.client.get(url, {'q': 'reference audit & review', 'insights': '7'})
+        all_time = self.client.get(url, {'q': 'reference audit & review', 'insights': 'all'})
+        self.assertEqual(recent.context['insight_count'], 12)
+        self.assertEqual(all_time.context['insight_count'], 13)
+        response = self.client.get(url, {'q': 'no matching audit rows', 'insights': 'invalid'})
+        self.assertEqual(response.context['insight_count'], 0)
+        self.assertEqual(response.context['success_percent'], 0)
+        self.assertContains(response, 'No audit logs match your filters.')
+
+    def test_audit_export_keeps_result_filter_and_read_only_protection(self):
+        AuditLog.objects.create(action='Logged In', description='reference export success', status='success')
+        AuditLog.objects.create(action='Logged In', description='reference export failure', status='failed')
+        url = reverse('superadmin_activity_logs')
+        self.assertEqual(self.client.get(url, {'export': 'excel'}).status_code, 302)
+        self.client.force_login(self.admin)
+        response = self.client.get(url, {'q': 'reference export', 'result': 'failed', 'export': 'csv'})
+        self.assertIn('reference export failure', response.content.decode())
+        self.assertNotIn('reference export success', response.content.decode())
+        response = self.client.get(url, {'q': 'reference export', 'result': 'failed', 'export': 'pdf'})
+        self.assertTrue(response.content.startswith(b'%PDF'))
+        response = self.client.get(url, {'q': 'reference export', 'result': 'failed', 'export': 'excel'})
+        self.assertTrue(response.content.startswith(b'PK'))
 
     def test_event_monitoring_filters_summary_progress_and_export(self):
         today = timezone.localdate()
