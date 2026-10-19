@@ -1,8 +1,38 @@
 from django.db import models, transaction
 from django.db.models import Q
 from django.contrib.auth import get_user_model
+import uuid
+
+from .ocr_storage import PrivateScoreSheetStorage
 
 User = get_user_model()
+
+
+class OCRScoreSheet(models.Model):
+    """Untrusted extraction drafts; official scores remain CriteriaScoreSubmission."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    event = models.ForeignKey('Event', on_delete=models.PROTECT, related_name='ocr_sheets')
+    judge = models.ForeignKey(User, on_delete=models.PROTECT, related_name='ocr_sheets')
+    uploaded_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name='uploaded_ocr_sheets')
+    round_id = models.CharField(max_length=80)
+    original = models.FileField(storage=PrivateScoreSheetStorage(), upload_to='%Y/%m/', blank=True)
+    content_type = models.CharField(max_length=40, blank=True)
+    page_count = models.PositiveSmallIntegerField(default=1)
+    snapshot = models.JSONField(default=dict)
+    extracted = models.JSONField(default=dict)
+    corrected = models.JSONField(default=dict)
+    corrections = models.JSONField(default=list)
+    ocr_status = models.CharField(max_length=12, default='pending', choices=[(v, v.title()) for v in ('pending', 'processing', 'completed', 'failed', 'manual')])
+    verification_status = models.CharField(max_length=12, default='pending', choices=[(v, v.title()) for v in ('pending', 'for_review', 'verified', 'confirmed')])
+    error = models.CharField(max_length=250, blank=True)
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    uploaded_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [models.Index(fields=['event', 'round_id', 'judge'], name='ocr_event_round_judge')]
 
 
 class Event(models.Model):

@@ -157,7 +157,8 @@ def _round_data(event, index, participants, judges, *, require_verification=True
             expected = len(eligible) * len(required)
             complete = expected > 0 and completed == expected
             timestamps = [row.submitted_at for row in sheet if row.submitted_at]
-            monitor.append({'id': judge.pk, 'name': _name(judge), 'status': 'Submitted' if complete else 'Pending', 'progress_percent': round(100 * completed / expected) if expected else 0, 'completed_scores': completed, 'required_scores': expected, 'submitted_at': max(timestamps).isoformat() if timestamps else None})
+            sources = sorted({row.source for row in sheet})
+            monitor.append({'id': judge.pk, 'name': _name(judge), 'status': 'Submitted' if complete else 'Pending', 'progress_percent': round(100 * completed / expected) if expected else 0, 'completed_scores': completed, 'required_scores': expected, 'submitted_at': max(timestamps).isoformat() if timestamps else None, 'submission_method': ' / '.join('OCR / Paper-Based' if source == 'OCR' else 'Mobile' if source == 'MOBILE' else 'Manual' for source in sources) or '—'})
         if len({row.judge_mode for row in categories}) > 1:
             errors.append('Mixed ordinal ranking and numerical scoring categories need an explicit conversion rule.')
         if event.criteria_score_method == 'ranking_based' and any(row.judge_mode != 'ranking' for row in categories):
@@ -204,7 +205,7 @@ def _round_data(event, index, participants, judges, *, require_verification=True
                 except ValueError as exc:
                     errors.append(str(exc))
             complete = bool(expected_keys) and keys == expected_keys
-            monitor.append({'id': judge.pk, 'name': _name(judge), 'status': 'Submitted' if complete else 'Pending', 'progress_percent': round(100 * len(keys & expected_keys) / len(expected_keys)) if expected_keys else 0, 'completed_scores': len(keys & expected_keys), 'required_scores': len(expected_keys), 'submitted_at': max(timestamps).isoformat() if timestamps else None})
+            monitor.append({'id': judge.pk, 'name': _name(judge), 'status': 'Submitted' if complete else 'Pending', 'progress_percent': round(100 * len(keys & expected_keys) / len(expected_keys)) if expected_keys else 0, 'completed_scores': len(keys & expected_keys), 'required_scores': len(expected_keys), 'submitted_at': max(timestamps).isoformat() if timestamps else None, 'submission_method': 'Mobile' if sheet else '?'})
         if verification and require_verification and not cfg.get('tabulation_confirmed_at'):
             errors.append('The Tabulation Officer must confirm the legacy tabulation first.')
         if event.criteria_score_method == 'ranking_based' or (event.judge_settings or {}).get('remove_high_low') or event.deductions_enabled:

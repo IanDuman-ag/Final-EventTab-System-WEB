@@ -22,6 +22,7 @@ from django.conf.urls.static import static
 from django.views.generic import RedirectView
 from .api_views import health_check, portal_notifications
 from . import public_views
+from . import ocr_views
 from .admin_settings_views import admin_settings
 from .views import (
     admin_brackets,
@@ -143,6 +144,10 @@ urlpatterns = [
     path('admin/settings/', admin_settings, name='admin_settings'),
     path('api/health/', health_check, name='health_check'),
     path('api/portal-notifications/', portal_notifications, name='portal_notifications'),
+    path('faculty/ocr/', ocr_views.ocr_page, name='faculty_ocr'),
+    path('faculty/ocr/api/', ocr_views.ocr_api, name='faculty_ocr_api'),
+    path('faculty/ocr/sheets/<uuid:sheet_id>/original/', ocr_views.original_sheet, name='faculty_ocr_original'),
+    path('faculty/ocr/sheets/<uuid:sheet_id>/print/', ocr_views.print_sheet, name='faculty_ocr_print'),
     path('api/auth/', include('accounts.urls')),
     path('api/events/', include('events.api_urls')),
     path('', public_views.home, name='home'),

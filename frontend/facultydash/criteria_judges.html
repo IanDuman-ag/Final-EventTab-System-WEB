@@ -11,6 +11,7 @@
 <th>Status</th>
 <th>Progress</th>
 <th>Submitted At</th>
+<th>Method</th>
 </tr>
 </thead>
 <tbody>{% for judge in portal.judges %}<tr>
@@ -29,8 +30,9 @@
 </div>
 </td>
 <td>{% if judge.submitted_at %}<time datetime="{{ judge.submitted_at }}" data-local-time>{{ judge.submitted_at }}</time>{% else %}—{% endif %}</td>
+<td>{{ judge.submission_method|default:'—' }}</td>
 </tr>{% empty %}<tr>
-<td colspan="5" class="criteria-empty">No judges assigned to this round.</td>
+<td colspan="6" class="criteria-empty">No judges assigned to this round.</td>
 </tr>{% endfor %}</tbody>
 </table>
 </div>

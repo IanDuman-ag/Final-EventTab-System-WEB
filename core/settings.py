@@ -166,6 +166,8 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 # Teams → assets/teams/  |  Candidates → assets/candidates/
 MEDIA_URL = '/assets/'
 MEDIA_ROOT = BASE_DIR / 'assets'
+OCR_PRIVATE_ROOT = Path(config('OCR_PRIVATE_ROOT', default=str(BASE_DIR / 'private_uploads' / 'score_sheets')))
+TESSERACT_CMD = config('TESSERACT_CMD', default='')
 
 # New image uploads can use Cloudinary; existing files and documents stay local.
 USE_CLOUDINARY = config_bool('USE_CLOUDINARY', default=False)

@@ -44,3 +44,6 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Private judge score sheets (never served as public media)
+private_uploads/
