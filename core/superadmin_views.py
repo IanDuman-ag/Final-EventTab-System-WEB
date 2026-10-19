@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import json
+import csv
+from datetime import timedelta
 
 from django.contrib import messages
 from django.contrib.auth import update_session_auth_hash
@@ -249,13 +251,43 @@ def superadmin_event_monitoring(request):
     q = (request.GET.get('q') or '').strip().lower()
     type_filter = (request.GET.get('type') or 'all').lower()
     status_filter = (request.GET.get('status') or 'all').lower()
+    classification = request.GET.get('classification', 'all')
+    period = request.GET.get('period', 'all')
+    today = timezone.localdate()
+    month_start = today.replace(day=1)
+    previous_start = (month_start - timedelta(days=1)).replace(day=1)
 
     events = (
         Event.objects.select_related('faculty_account')
         .prefetch_related('bracket_matches', 'assigned_judges')
         .order_by('-event_date', 'name')
     )
-    rows = [serialize_monitoring_row(ev) for ev in events]
+    rows = []
+    for event in events:
+        row = serialize_monitoring_row(event)
+        progress = event_progress(event)
+        judge_pct = round(100 * progress['judges_submitted'] / progress['judges_total']) if progress['judges_total'] else 0
+        row.update(date=event.event_date, classification_key=event.event_classification,
+                   progress=100 if row['status_key'] == 'completed' else min(100, max(0, progress['results_pct'], judge_pct)))
+        rows.append(row)
+    predicates = (
+        ('total', 'Total Events', 'calendar', lambda row: True),
+        ('ongoing', 'Ongoing Events', 'play', lambda row: row['status_key'] == 'ongoing'),
+        ('completed', 'Completed Events', 'check', lambda row: row['status_key'] == 'completed'),
+        ('criteria', 'Criteria-Based Events', 'list', lambda row: 'criteria' in row['event_type'].lower()),
+    )
+    summary = []
+    for key, label, icon, predicate in predicates:
+        current = sum(predicate(row) for row in rows if row['date'] and month_start <= row['date'] <= today)
+        previous = sum(predicate(row) for row in rows if row['date'] and previous_start <= row['date'] < month_start)
+        summary.append({'key': key, 'label': label, 'icon': icon,
+                        'count': sum(predicate(row) for row in rows), 'delta': current - previous})
+    if classification in dict(Event.CLASSIFICATION_CHOICES):
+        rows = [row for row in rows if row['classification_key'] == classification]
+    if period == 'month':
+        rows = [row for row in rows if row['date'] and row['date'].year == today.year and row['date'].month == today.month]
+    elif period == 'year':
+        rows = [row for row in rows if row['date'] and row['date'].year == today.year]
     if type_filter == 'match':
         rows = [r for r in rows if 'match' in r['event_type'].lower()]
     elif type_filter == 'criteria':
@@ -270,6 +302,20 @@ def superadmin_event_monitoring(request):
             or q in r['faculty'].lower()
             or q in r['admin'].lower()
         ]
+    if request.GET.get('export') == 'csv':
+        response = HttpResponse(content_type='text/csv; charset=utf-8')
+        response['Content-Disposition'] = 'attachment; filename="event-monitoring.csv"'
+        writer = csv.writer(response)
+        writer.writerow(['Event Name', 'Event Type', 'Category', 'Classification', 'Assigned Admin', 'Assigned Faculty', 'Status', 'Event Date', 'Progress (%)'])
+        for row in rows:
+            cells = [row[key] for key in ('name', 'event_type', 'category', 'classification', 'admin', 'faculty', 'status', 'event_date', 'progress')]
+            writer.writerow(["'" + value if isinstance(value, str) and value.lstrip().startswith(('=', '+', '-', '@', '\t', '\r', '\n')) else value for value in cells])
+        return response
+    params = request.GET.copy()
+    params.pop('page', None)
+    params.pop('export', None)
+    export_params = params.copy()
+    export_params['export'] = 'csv'
     paginator = Paginator(rows, 12)
     page_obj = paginator.get_page(request.GET.get('page'))
     return render(request, 'superadmindash/event_monitoring.html', {
@@ -280,6 +326,12 @@ def superadmin_event_monitoring(request):
         'search_query': request.GET.get('q', ''),
         'selected_type': type_filter,
         'selected_status': status_filter,
+        'selected_classification': classification,
+        'selected_period': period,
+        'classifications': Event.CLASSIFICATION_CHOICES,
+        'summary': summary,
+        'pagination_query': params.urlencode(),
+        'export_query': export_params.urlencode(),
         'total_count': len(rows),
     })
 

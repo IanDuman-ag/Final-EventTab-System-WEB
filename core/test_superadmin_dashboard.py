@@ -13,6 +13,33 @@ class SuperadminDashboardTests(TestCase):
     def setUp(self):
         self.admin = get_user_model().objects.create_superuser('owner', 'owner@example.test', 'test-password')
 
+    def test_event_monitoring_filters_summary_progress_and_export(self):
+        today = timezone.localdate()
+        Event.objects.create(name='=Unsafe spreadsheet title', event_date=today, scoring_method='match',
+                             status='completed', event_classification='major')
+        Event.objects.create(name='Vocal Duet', event_date=today, scoring_method='criteria',
+                             status='active', event_classification='minor')
+        self.client.force_login(self.admin)
+        url = reverse('superadmin_event_monitoring')
+        response = self.client.get(url, {'classification': 'major', 'period': 'month'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['total_count'], 1)
+        self.assertEqual(response.context['rows'][0]['progress'], 100)
+        cards = {card['key']: card for card in response.context['summary']}
+        self.assertEqual(cards['total']['count'], 2)
+        self.assertEqual(cards['criteria']['count'], 1)
+        self.assertContains(response, '<progress max="100" value="100"')
+        self.assertNotContains(response, 'Vocal Duet')
+        export = self.client.get(url, {'classification': 'major', 'period': 'month', 'export': 'csv'})
+        self.assertEqual(export.status_code, 200)
+        self.assertEqual(export['Content-Type'], 'text/csv; charset=utf-8')
+        self.assertIn("'=Unsafe spreadsheet title", export.content.decode())
+        self.assertNotIn('Vocal Duet', export.content.decode())
+
+    def test_event_monitoring_export_is_protected(self):
+        response = self.client.get(reverse('superadmin_event_monitoring'), {'export': 'csv'})
+        self.assertEqual(response.status_code, 302)
+
     def test_user_management_summary_stays_global_when_filtered(self):
         judge_group = Group.objects.create(name='Judge')
         for number in range(12):
