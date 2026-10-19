@@ -24,6 +24,7 @@ from events.superadmin_service import (
     chart_user_activity,
     create_portal_user,
     dashboard_cards,
+    dashboard_distributions,
     delete_portal_user,
     event_progress,
     export_leaderboard_csv,
@@ -63,6 +64,8 @@ def _display_name(user):
 @_superadmin_required
 def superadmin_dashboard(request):
     cards = dashboard_cards()
+    distributions = dashboard_distributions()
+    cards['published_results'] = next(row['value'] for row in distributions['publication'] if row['label'] == 'Published')
     activities = recent_activities(10)
     return render(request, 'superadmindash/dashboard.html', {
         'active': 'dashboard',
@@ -72,6 +75,9 @@ def superadmin_dashboard(request):
         'chart_month': chart_events_by_month(),
         'chart_points': chart_department_points(),
         'chart_activity': chart_user_activity(),
+        'chart_status': distributions['status'],
+        'chart_roles': distributions['roles'],
+        'chart_publication': distributions['publication'],
         'activities': activities,
         'notification_count': len(activities),
         # legacy keys for any leftover template refs

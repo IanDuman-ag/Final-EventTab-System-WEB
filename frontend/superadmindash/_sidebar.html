@@ -4,9 +4,9 @@
   active: dashboard, users, events, leaderboard, reports, audit_logs, settings, profile
   legacy aliases: admins -> users, activity_logs -> audit_logs
 {% endcomment %}
-<aside class="sidebar v2sa-sidebar" aria-label="Super admin navigation">
+<aside class="sidebar v2sa-sidebar" aria-label="Super admin navigation" {% if active == 'dashboard' %}id="sa-dashboard-navigation"{% endif %}>
   <div class="brand">
-    <h1>EventTab</h1>
+    {% if active == 'dashboard' %}<h1 class="sa-dashboard-brand"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M8 3h8v6c0 4-2 6-4 6S8 13 8 9V3ZM8 5H3v3c0 4 3 5 6 5m7-8h5v3c0 4-3 5-6 5m-3 2v5m-5 1h10"/></svg><span>Event<b>Tab</b></span></h1>{% else %}<h1>EventTab</h1>{% endif %}
     <span>SUPERADMIN PORTAL</span>
   </div>
 

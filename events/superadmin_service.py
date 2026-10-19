@@ -133,6 +133,38 @@ def chart_events_by_category():
     return [{'label': r['category'] or 'Other', 'value': r['count']} for r in rows]
 
 
+def dashboard_distributions():
+    """Partition dashboard records without treating event visibility as result publication."""
+    from .public_service import result_is_published
+
+    statuses = Counter()
+    publications = Counter()
+    for event in Event.objects.only('status', 'publication_status', 'results_finalized', 'result_processing_config'):
+        statuses[event.get_status_display()] += 1
+        config = event.result_processing_config or {}
+        state = 'Published' if result_is_published(event) else 'Approved' if config.get('approved') is True else 'Pending'
+        publications[state] += 1
+    roles = Counter()
+    for user in User.objects.prefetch_related('groups'):
+        groups = {group.name.lower() for group in user.groups.all()}
+        if user.is_superuser or user.is_staff:
+            role = 'Admins'
+        elif 'tabulator' in groups:
+            role = 'Tabulators'
+        elif 'faculty' in groups:
+            role = 'Faculty'
+        elif groups & {'judge', 'judges', 'scorer'}:
+            role = 'Judges'
+        else:
+            role = 'Other users'
+        roles[role] += 1
+    return {
+        'status': [{'label': label, 'value': statuses[label]} for label in ('Upcoming', 'Active', 'Completed', 'Deactivated')],
+        'roles': [{'label': label, 'value': roles[label]} for label in ('Admins', 'Judges', 'Faculty', 'Tabulators', 'Other users')],
+        'publication': [{'label': label, 'value': publications[label]} for label in ('Pending', 'Approved', 'Published')],
+    }
+
+
 def chart_events_by_month(months=12):
     start = timezone.now() - timedelta(days=30 * months)
     qs = (
