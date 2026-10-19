@@ -252,7 +252,8 @@ def event_detail(request, pk):
     else:
         rounds = [{'name': row['name'], 'status_label': ''} for row in result_rounds(event)]
     fixtures_page, pagination = paginate(request, fixture_queryset(event))
-    return dict(pagination, page_title=f'{event.name} — EventTab', event=serialize_event(event),
+    return dict(pagination, page_title=f'{event.name} — EventTab',
+                event={**serialize_event(event), 'banner_key': featured_banner_key(event)},
                 participants=public_participants(event), rounds=rounds,
                 fixtures=public_fixtures(event, fixtures_page))
 

@@ -1,130 +1,52 @@
-{% extends "landingpage/base.html" %}{% block content %}{% if not data_error %}
-<section class="page-intro detail-intro">
-<div class="container">
-<a class="breadcrumb-link" href="{% url 'public_games' %}">&#8592; Games &amp; Events</a>
-<div class="detail-title">
-<div>
-<p class="eyebrow">
-{{ event.type_label }} &middot; {{ event.category }}
-</p>
-<h1>
-{{ event.name }}
-</h1>
-</div>
-<span class="status status-{{ event.status }}">{{ event.status_label }}</span>
-</div>
-</div>
+{% extends "landingpage/base.html" %}{% load static %}
+{% block body_class %}public-games public-event-detail{% endblock %}
+{% block content %}{% if not data_error %}
+{% with name=event.name|lower %}
+<section class="event-detail-hero {% if 'pageant' in name %}pageant-detail-hero{% endif %}">
+  <div class="event-detail-hero-art" aria-hidden="true">
+    {% if 'pageant' in name %}
+    <svg class="pageant-portrait" viewBox="0 0 360 220" fill="none"><g fill="#f5d37e" opacity=".55"><ellipse cx="260" cy="140" rx="7" ry="18" transform="rotate(34 260 140)"/><ellipse cx="274" cy="112" rx="6" ry="16" transform="rotate(35 274 112)"/><ellipse cx="274" cy="80" rx="6" ry="15" transform="rotate(-20 274 80)"/><ellipse cx="250" cy="59" rx="6" ry="14" transform="rotate(-30 250 59)"/><ellipse cx="281" cy="150" rx="6" ry="18" transform="rotate(50 281 150)"/><ellipse cx="290" cy="126" rx="6" ry="16" transform="rotate(40 290 126)"/><path d="M249 197c29-38 34-83 13-133" stroke="#e6bd55" stroke-width="2"/></g><path d="M135 205c-5-22 4-54 23-67l24-15 2-22c-12 1-20-5-22-17l-9-5 7-12c-3-23 9-37 31-39 24-2 44 13 44 35 0 22-9 31 0 46 7 13 30 14 35 33 5 20-4 42-7 63Z" fill="#092541"/><path d="M189 34c28-1 42 17 39 38-3 19-11 31 1 46 8 10 24 11 27 27 3 14-2 36-5 48" stroke="#4c6b8b" stroke-width="2"/><path d="m163 133 11-8 68 70-14 11Z" fill="#ffd449"/><path d="m172 26-7-20 15 12 8-17 9 17 16-11-7 20Z" fill="#102e50"/><path d="M173 29h34" stroke="#436386" stroke-width="3"/><g fill="#ffcd3a"><path d="m126 55 4 13 13 4-13 4-4 13-4-13-13-4 13-4Z"/><path d="m144 104 3 8 8 3-8 3-3 8-3-8-8-3 8-3Z"/><path d="m278 36 3 9 9 3-9 3-3 9-3-9-9-3 9-3Z"/></g><circle cx="324" cy="37" r="10" fill="#fbefcf"/></svg>
+    <span class="hero-crown-watermark">{% include "landingpage/_category_icon.html" %}</span>
+    {% elif event.image_url %}<img src="{{ event.image_url }}" alt="">
+    {% elif event.banner_key %}<img src="{% static 'landingpage/assets/competitions/' %}{{ event.banner_key }}.webp" alt="">
+    {% else %}<span class="hero-event-symbol">{% include "landingpage/_category_icon.html" %}</span>{% endif %}
+  </div>
+  <div class="container event-detail-heading">
+    <nav class="event-breadcrumb" aria-label="Breadcrumb"><a href="{% url 'public_games' %}">Games &amp; Events</a><span aria-hidden="true">&#8250;</span><span>{{ event.type_label }} &middot; {{ event.category }}</span></nav>
+    <p class="event-detail-type">{{ event.type_label }} &middot; {{ event.category }}</p>
+    <h1>{{ event.name }}</h1>
+    <span class="status status-{{ event.status }}">{{ event.status_label }}</span>
+  </div>
 </section>
-<section class="container page-content">
-<div class="event-facts">
-<div>
-<span>Date</span><strong>{% if event.date %}{{ event.date|date:"F j, Y" }}{% else %}To be announced{% endif %}</strong>
-</div>
-<div>
-<span>Time &middot; {{ timezone_label }}</span><strong>{% if event.time %}{{ event.time|time:"g:i A" }}{% else %}To be announced{% endif %}</strong>
-</div>
-<div>
-<span>Venue</span><strong>{{ event.venue|default:"To be announced" }}</strong>
-</div>
-<div>
-<span>Format / Division</span><strong>{{ event.format_label|default:event.type_label }}{% if event.division %} &middot; {{ event.division }}{% endif %}</strong>
-</div>
-</div>
-<div class="detail-overview">
-<div>
-<p class="eyebrow">
-ABOUT THE COMPETITION
-</p>
-<h2>
-Made for the moment.
-</h2>
-<div class="event-description">
-{{ event.description|default:"Competition information will be available when announced."|linebreaks }}
-</div>
-</div>
-{% if event.has_results %}
-<aside class="published-callout">
-<span class="status status-completed">Published results</span>
-<h3>
-The results are in.
-</h3>
-<p>
-Explore this competition's official, approved outcomes.
-</p>
-<a class="btn btn-yellow" href="{{ event.result_url }}">View Official Results &#8599;</a>
-</aside>
-{% else %}
-<aside class="published-callout">
-<p class="eyebrow">
-OFFICIAL RESULTS
-</p>
-<h3>
-Follow the competition.
-</h3>
-<p>
-Final outcomes will appear after authorized approval and publication.
-</p>
-</aside>
-{% endif %}
-</div>
-<section class="detail-section">
-<div class="section-heading">
-<div>
-<p class="eyebrow">
-THE COMMUNITY IN COMPETITION
-</p>
-<h2>
-{% if event.type == 'match' %}Participating teams{% else %}Contestants &amp; groups{% endif %}
-</h2>
-</div>
-</div>
-<div class="participant-grid">
-{% for participant in participants %}
-<article class="participant">
-<span class="participant-symbol">{% if participant.logo_url %}<img src="{{ participant.logo_url }}" alt="" loading="lazy" data-fallback="{{ participant.name|slice:':1' }}">{% else %}{{ participant.name|slice:":1" }}{% endif %}</span>
-<div>
-<h3>
-{{ participant.name }}
-</h3>
-<p>
-{{ participant.department|default:"Department not listed" }}
-</p>
-</div>
-</article>
-{% empty %}
-<p class="inline-empty">
-Public participant information has not been announced.
-</p>
-{% endfor %}
-</div>
-</section>
-{% if rounds %}
-<section class="detail-section">
-<h2>
-Competition rounds
-</h2>
-<ol class="round-list">
-{% for round in rounds %}
-<li>
-<strong>{{ round.name }}</strong><span>{{ round.status_label }}</span>
-</li>
-{% endfor %}
-</ol>
-</section>
-{% endif %}{% if event.type == 'match' %}
-<section class="detail-section">
-<div class="section-heading">
-<div>
-<p class="eyebrow">
-THE ROAD TO THE FINAL
-</p>
-<h2>
-Matches &amp; fixtures
-</h2>
-</div>
-</div>
-{% include "landingpage/_fixtures.html" %}{% include "landingpage/_pagination.html" %}
-</section>
-{% endif %}
+{% endwith %}
+<section class="container page-content event-detail-content">
+  <div class="event-facts">
+    <div><span class="event-fact-icon calendar-fact">{% include "landingpage/_icon.html" with icon="calendar" %}</span><div><span>Date</span><strong>{% if event.date %}{{ event.date|date:"F j, Y" }}{% else %}To be announced{% endif %}</strong></div></div>
+    <div><span class="event-fact-icon time-fact"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg></span><div><span>Time &middot; {{ timezone_label }}</span><strong>{% if event.time %}{{ event.time|time:"g:i A" }}{% else %}To be announced{% endif %}</strong></div></div>
+    <div><span class="event-fact-icon venue-fact"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a8 8 0 0 0-8 8c0 6 8 12 8 12s8-6 8-12a8 8 0 0 0-8-8Zm0 11a3 3 0 1 1 0-6 3 3 0 0 1 0 6Z"/></svg></span><div><span>Venue</span><strong>{{ event.venue|default:"To be announced" }}</strong></div></div>
+    <div><span class="event-fact-icon format-fact"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="7" r="3"/><circle cx="5" cy="10" r="2"/><circle cx="19" cy="10" r="2"/><path d="M7 21v-5a5 5 0 0 1 10 0v5H7ZM1 20v-5a4 4 0 0 1 5-4v9H1ZM18 20v-9a4 4 0 0 1 5 4v5h-5Z"/></svg></span><div><span>Format / Division</span><strong>{{ event.format_label|default:event.type_label }}{% if event.division %} &middot; {{ event.division }}{% endif %}</strong></div></div>
+  </div>
+  <div class="detail-overview">
+    <section class="event-about-panel" aria-labelledby="event-about-title">
+      <p class="eyebrow">ABOUT THE COMPETITION</p><h2 id="event-about-title">Made for the moment.</h2>
+      <div class="event-description">{{ event.description|default:"Competition information will be available when announced."|linebreaks }}</div>
+      <span class="event-about-watermark" aria-hidden="true">{% include "landingpage/_category_icon.html" %}</span>
+    </section>
+    <aside class="published-callout">
+      <span class="callout-trophy" aria-hidden="true">{% include "landingpage/_icon.html" with icon="trophy" %}</span>
+      <div><p class="eyebrow">OFFICIAL RESULTS</p>
+      {% if event.has_results %}<h3>The results are in.</h3><p>Explore this competition's official, approved outcomes.</p><a class="event-results-link" href="{{ event.result_url }}">View Official Results <span aria-hidden="true">&#8594;</span></a>
+      {% else %}<h3>Follow the competition.</h3><p>Final outcomes will appear after authorized approval and publication.</p><span class="callout-chevron" aria-hidden="true">&#8250;</span>{% endif %}</div>
+    </aside>
+  </div>
+  <section class="detail-section event-participants">
+    <div class="event-detail-section-heading"><h2>{% if event.type == 'match' %}Participating teams{% else %}Contestants &amp; groups{% endif %}</h2><p>THE COMMUNITY IN COMPETITION</p></div>
+    <div class="participant-grid">
+      {% for participant in participants %}<article class="participant"><span class="participant-symbol">{% if participant.logo_url %}<img src="{{ participant.logo_url }}" alt="" loading="lazy" data-fallback="{{ participant.name|slice:':1' }}">{% else %}{{ participant.name|slice:":1" }}{% endif %}</span><div><h3>{{ participant.name }}</h3><p>{{ participant.department|default:"Department not listed" }}</p></div></article>
+      {% empty %}<p class="inline-empty">Public participant information has not been announced.</p>{% endfor %}
+    </div>
+  </section>
+  {% if rounds %}<section class="detail-section event-rounds"><div class="event-detail-section-heading"><h2>Competition rounds</h2><p>THE ROAD TO {% if event.type == 'match' %}THE FINAL{% else %}THE CROWN{% endif %}</p></div><ol class="round-list">{% for round in rounds %}<li><strong>{{ round.name }}</strong>{% if round.status_label %}<span>{{ round.status_label }}</span>{% endif %}<span class="round-watermark" aria-hidden="true">{% include "landingpage/_category_icon.html" %}</span></li>{% endfor %}</ol></section>{% endif %}
+  {% if event.type == 'match' %}<section class="detail-section event-fixtures"><div class="event-detail-section-heading"><h2>Matches &amp; fixtures</h2><p>THE ROAD TO THE FINAL</p></div>{% include "landingpage/_fixtures.html" %}{% include "landingpage/_pagination.html" %}</section>{% endif %}
 </section>
 {% endif %}{% endblock %}
