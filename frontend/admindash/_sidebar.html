@@ -7,7 +7,7 @@
     dashboard, events_match, events_criteria, accounts, accounts_tabulator, accounts_judge_scorer,
     departments, teams, candidates, brackets, scoresheets, reports, settings
 {% endcomment %}
-<aside class="sidebar v2-sidebar" aria-label="Admin navigation">
+<aside data-portal-mobile data-portal-logo="{% get_media_prefix %}landingpagelogo/logoeventtab%20(1).png" class="sidebar v2-sidebar" aria-label="Admin navigation">
   <div class="brand v2-brand">
     <h1>EventTab</h1>
     <span>ADMIN PORTAL</span>
@@ -130,4 +130,7 @@
     <span>Logout</span>
   </a>
 </aside>
-<script src="{% static 'js/admin_sidebar.js' %}?v=20261013d"></script>
+
+
+<link rel="stylesheet" href="{% static 'admindash/sidebar-scrollbar.css' %}?v=20261019mobilemenus">
+<script src="{% static 'js/admin_sidebar.js' %}?v=20261019mobilemenus"></script>

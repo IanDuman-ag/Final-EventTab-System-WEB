@@ -1,7 +1,7 @@
 {% load static %}
 <button class="fac-menu-toggle" type="button" aria-label="Open navigation" aria-controls="faculty-sidebar" aria-expanded="false"><span></span><span></span><span></span></button>
 <div class="fac-nav-scrim" data-nav-close></div>
-<aside class="tab-sidebar" id="faculty-sidebar" aria-label="Faculty navigation">
+<aside data-portal-mobile data-portal-logo="{% get_media_prefix %}landingpagelogo/logoeventtab%20(1).png" class="tab-sidebar" id="faculty-sidebar" aria-label="Faculty navigation">
   <div class="tab-brand"><h1>Event<span>Tab</span></h1><small>FACULTY PORTAL</small></div>
   <p class="fac-nav-label">Main</p>
   <nav class="tab-nav">
@@ -10,3 +10,6 @@
   </nav>
   <div class="fac-sidebar-bottom"><div class="tab-user-card"><span class="tab-user-avatar">{{ user_display|default:"FA"|slice:":2"|upper }}</span><span><strong>{{ user_display|default:"Faculty" }}</strong><small>Faculty In-Charge</small></span></div><a class="tab-logout" href="{% url 'logout' %}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17v-3H3v-4h7V7l5 5-5 5Zm2-14h8v18h-8v-2h6V5h-6V3Z"/></svg><span>Logout</span></a></div>
 </aside>
+
+<link rel="stylesheet" href="{% static 'admindash/sidebar-scrollbar.css' %}?v=20261019mobilemenus">
+<script src="{% static 'js/admin_sidebar.js' %}?v=20261019mobilemenus"></script>

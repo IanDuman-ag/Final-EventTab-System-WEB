@@ -4,7 +4,7 @@
   active: dashboard, users, events, leaderboard, reports, audit_logs, settings, profile
   legacy aliases: admins -> users, activity_logs -> audit_logs
 {% endcomment %}
-<aside class="sidebar v2sa-sidebar" aria-label="Super admin navigation" id="sa-dashboard-navigation">
+<aside data-portal-mobile data-portal-logo="{% get_media_prefix %}landingpagelogo/logoeventtab%20(1).png" class="sidebar v2sa-sidebar" aria-label="Super admin navigation" id="sa-dashboard-navigation">
   <div class="brand">
     <h1 class="sa-dashboard-brand"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M8 3h8v6c0 4-2 6-4 6S8 13 8 9V3ZM8 5H3v3c0 4 3 5 6 5m7-8h5v3c0 4-3 5-6 5m-3 2v5m-5 1h10"/></svg><span>Event<b>Tab</b></span></h1>
     <span>SUPERADMIN PORTAL</span>
@@ -64,25 +64,6 @@
   </a>
 </aside>
 
-{% if active != 'dashboard' %}
-<button class="sa-shared-menu-toggle" type="button" aria-controls="sa-dashboard-navigation" aria-expanded="false" aria-label="Open navigation"><span aria-hidden="true">☰</span></button>
-<script>
-(function () {
-  var toggle = document.querySelector('.sa-shared-menu-toggle');
-  var sidebar = document.getElementById('sa-dashboard-navigation');
-  function setOpen(open) {
-    document.body.classList.toggle('sa-navigation-open', open);
-    toggle.setAttribute('aria-expanded', String(open));
-    toggle.setAttribute('aria-label', open ? 'Close navigation' : 'Open navigation');
-    sidebar.inert = window.matchMedia('(max-width:760px)').matches && !open;
-  }
-  toggle.addEventListener('click', function () { setOpen(toggle.getAttribute('aria-expanded') !== 'true'); });
-  document.addEventListener('keydown', function (event) { if (event.key === 'Escape') setOpen(false); });
-  document.addEventListener('click', function (event) {
-    if (!sidebar.contains(event.target) && !toggle.contains(event.target)) setOpen(false);
-  });
-  window.matchMedia('(max-width:760px)').addEventListener('change', function () { setOpen(false); });
-  setOpen(false);
-})();
-</script>
-{% endif %}
+
+<link rel="stylesheet" href="{% static 'admindash/sidebar-scrollbar.css' %}?v=20261019mobilemenus">
+<script src="{% static 'js/admin_sidebar.js' %}?v=20261019mobilemenus"></script>
