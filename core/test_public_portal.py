@@ -74,6 +74,37 @@ class PublicPortalTests(TestCase):
         self.assertEqual(empty.context['standings'], [])
         self.assertEqual(len(empty.context['podium']), 1)
 
+    def test_leaderboard_progress_uses_unsearched_official_leader(self):
+        rows = [{'department': name, 'points': points, 'rank': rank}
+                for rank, (name, points) in enumerate([('Technology', 340), ('Information', 280), ('Food Processing', 220)], 1)]
+        with patch('core.public_views.leaderboard_rows', return_value=rows):
+            response = self.client.get(reverse('public_leaderboard'))
+        self.assertEqual(response.context['leader_points'], 340)
+        self.assertEqual(response.context['points_ticks'], [0, 85, 170, 255, 340])
+        self.assertEqual([row['progress_percent'] for row in response.context['standings']], [100, 82, 65])
+        self.assertEqual([row['points_gap'] for row in response.context['standings']], [0, 60, 120])
+        self.assertEqual(response.context['standings'][0]['lead_margin'], 60)
+        with patch('core.public_views.leaderboard_rows', return_value=rows):
+            searched = self.client.get(reverse('public_leaderboard'), {'q': 'Information'})
+        self.assertEqual(searched.context['leader_points'], 340)
+        self.assertEqual(searched.context['standings'][0]['progress_percent'], 82)
+        self.assertEqual(searched.context['standings'][0]['rank'], 2)
+
+    def test_leaderboard_progress_handles_zero_ties_and_single_department(self):
+        for values in ([0, 0], [100, 100], [100]):
+            rows = [{'department': f'Department {rank}', 'points': points, 'rank': rank}
+                    for rank, points in enumerate(values, 1)]
+            with self.subTest(values=values), patch('core.public_views.leaderboard_rows', return_value=rows):
+                response = self.client.get(reverse('public_leaderboard'))
+            standings = response.context['standings']
+            self.assertEqual(standings[0]['progress_percent'], 100 if values[0] else 0)
+            self.assertEqual(standings[0]['is_tied_leader'], len(values) > 1)
+            self.assertEqual(standings[0]['lead_margin'], 0 if len(values) > 1 else None)
+        with patch('core.public_views.leaderboard_rows', return_value=[]):
+            response = self.client.get(reverse('public_leaderboard'))
+        self.assertEqual(response.context['leader_points'], 0)
+        self.assertEqual(response.context['standings'], [])
+
     def test_leaderboard_school_year_limits_published_points(self):
         self.event.academic_year = '2026'
         self.event.save()

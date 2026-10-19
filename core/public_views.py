@@ -361,8 +361,14 @@ def leaderboard(request):
     result_url = reverse('public_results') + ('?' + urlencode(result_params) if result_params else '')
     if selected_event_id and eligible:
         result_url = reverse('public_result_detail', args=[eligible[0].pk])
+    leader_points = rows[0]['points'] if rows else 0
+    lead_margin = leader_points - rows[1]['points'] if len(rows) > 1 else None
+    tied_leaders = sum(row['points'] == leader_points for row in rows) > 1
     for row in rows:
         row.update(logo_url=logos.get(row['department'], ''), result_url=result_url,
+                   progress_percent=max(0, min(100, round(100 * row['points'] / leader_points))) if leader_points > 0 else 0,
+                   points_gap=leader_points - row['points'], lead_margin=lead_margin,
+                   is_tied_leader=tied_leaders and row['points'] == leader_points,
                    **statistics.get(row['department'], {}))
     podium = rows[:3]
     if filters['q']:
@@ -370,7 +376,8 @@ def leaderboard(request):
     page, pagination = paginate(request, rows)
     return dict(pagination, page_title='Leaderboards — EventTab', standings=list(page), filters=filters,
                 categories=categories, event_options=event_options, selected_event_id=selected_event_id,
-                podium=podium, school_years=years, selected_year=selected_year)
+                podium=podium, school_years=years, selected_year=selected_year,
+                leader_points=leader_points, points_ticks=[leader_points * step / 4 for step in range(5)])
 
 
 def _standings_statistics(events):
