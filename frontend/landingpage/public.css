@@ -2114,7 +2114,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible {
 .public-standings .nav-menu>a.active:after { bottom:10px; height:2px; }
 .public-standings .nav-login { padding:9px 20px; font-size:11px; gap:18px; }
 .standings-hero { position:relative; overflow:hidden; isolation:isolate; background:#04274b; color:#fff; }
-.standings-hero-photo { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:center 55%; opacity:.13; z-index:-2; }
+.standings-hero-photo { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:center 48%; opacity:.22; z-index:-2; }
 .standings-hero::before,.standings-hero::after { content:''; position:absolute; inset:0; pointer-events:none; z-index:-1; }
 .standings-hero::before { background:linear-gradient(140deg,#14669a77,#04508222 50%,#ffcf22); clip-path:polygon(0 6%,7%40%,12%100%,7%100%,0 68%); }
 .standings-hero::after { background:linear-gradient(120deg,#09558655 78%,#e3ae13 90%,#ffcf22); clip-path:polygon(100%18%,100%100%,94%100%); }
@@ -2167,7 +2167,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible {
 .standings-search input { width:100%; min-width:0; border:0; outline:none; font:inherit; color:inherit; }
 .standings-search:focus-within { outline:2px solid #175cd9; outline-offset:2px; }
 .public-standings .standings-table { border-color:#dfe7f0; border-radius:6px; }
-.public-standings .standings-table .table { min-width:900px; font-size:11px; }
+.public-standings .standings-table .table { min-width:780px; font-size:11px; }
 .public-standings .standings-table th { padding:12px 13px; font-size:8px; letter-spacing:.8px; color:#7d8fa7; background:#f1f5f9; text-align:center; }
 .public-standings .standings-table th:nth-child(2) { text-align:left; }
 .public-standings .standings-table td { padding:13px; text-align:center; color:#294567; }
@@ -2179,8 +2179,8 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible {
 .public-standings .rank-number { font-size:17px; font-weight:800; }
 .public-standings .rank-laurel { border-left:3px double #e8b626; border-right:3px double #e8b626; border-radius:50%; padding:1px 4px; color:#d0a520; }
 .public-standings .leader-tag { font-size:7px; padding:3px 5px; border-radius:3px; margin-left:0; white-space:nowrap; }
-.standings-result-link { display:inline-flex; align-items:center; justify-content:center; gap:6px; border:1px solid #9dbfff; border-radius:4px; padding:7px 16px; font-size:10px; font-weight:650; color:#0057ff; white-space:nowrap; }
-.standings-result-link:hover { background:#edf4ff; }
+
+
 .public-standings .site-footer { background:#041e3b; padding-top:22px; }
 .public-standings .footer-top { padding-bottom:18px; gap:50px; }
 .public-standings .site-footer .brand { font-size:22px; margin-bottom:6px; }
