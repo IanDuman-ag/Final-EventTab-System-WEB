@@ -105,6 +105,23 @@ def superadmin_users(request):
     paginator = Paginator(rows, 10)
     page_obj = paginator.get_page(request.GET.get('page'))
     departments = list(Department.objects.filter(status='active').order_by('name').values_list('name', flat=True))
+    all_rows = superadmin_user_rows()
+    summary = {
+        'total': len(all_rows),
+        'admins': sum(row['role'] in ('Admin', 'Super Admin') for row in all_rows),
+        'judges': sum(row['role'] == 'Judge' for row in all_rows),
+        'active': sum(row['is_active'] for row in all_rows),
+    }
+    params = request.GET.copy()
+    params.pop('page', None)
+    sort_headers = []
+    for key, label in (('name', 'Name'), ('email', 'Email'), ('role', 'Role'),
+                       ('department', 'Department'), ('status', 'Status'), ('last_login', 'Last Login')):
+        header_params = params.copy()
+        header_params['sort'] = key
+        header_params['dir'] = 'desc' if sort == key and direction == 'asc' else 'asc'
+        sort_headers.append({'label': label, 'key': key, 'url': '?' + header_params.urlencode(),
+                             'aria_sort': ('descending' if direction == 'desc' else 'ascending') if sort == key else 'none'})
     return render(request, 'superadmindash/users.html', {
         'active': 'users',
         'user_display': _display_name(request.user),
@@ -119,6 +136,10 @@ def superadmin_users(request):
         'search_query': q,
         'sort': sort,
         'direction': direction,
+        'summary': summary,
+        'sort_headers': sort_headers,
+        'pagination_query': params.urlencode(),
+        'page_numbers': paginator.get_elided_page_range(page_obj.number, on_each_side=1, on_ends=1),
     })
 
 

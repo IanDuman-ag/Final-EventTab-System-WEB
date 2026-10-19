@@ -3,6 +3,7 @@ from django.contrib.auth.models import Group
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
+from urllib.parse import parse_qs, urlsplit
 
 from events.models import Event
 from events.superadmin_service import dashboard_distributions
@@ -11,6 +12,37 @@ from events.superadmin_service import dashboard_distributions
 class SuperadminDashboardTests(TestCase):
     def setUp(self):
         self.admin = get_user_model().objects.create_superuser('owner', 'owner@example.test', 'test-password')
+
+    def test_user_management_summary_stays_global_when_filtered(self):
+        judge_group = Group.objects.create(name='Judge')
+        for number in range(12):
+            user = get_user_model().objects.create_user(f'judge{number}', is_active=number != 0)
+            user.groups.add(judge_group)
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse('superadmin_users'), {'role': 'judge', 'page': 2, 'sort': 'name', 'dir': 'asc'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['summary'], {'total': 13, 'admins': 1, 'judges': 12, 'active': 12})
+        self.assertEqual(response.context['total_count'], 12)
+        self.assertEqual(len(response.context['rows']), 2)
+        header = response.context['sort_headers'][0]
+        query = parse_qs(urlsplit(header['url']).query)
+        self.assertEqual(query['role'], ['judge'])
+        self.assertEqual(query['dir'], ['desc'])
+        self.assertNotIn('page', query)
+        self.assertEqual(header['aria_sort'], 'ascending')
+        self.assertContains(response, 'aria-current="page">2')
+        self.assertContains(response, 'id="sa-open-create"')
+        self.assertContains(response, 'sa-reset', count=None)
+
+    def test_user_management_search_and_sort_urls_escape_input(self):
+        self.client.force_login(self.admin)
+        query = '<script>A & B</script>'
+        response = self.client.get(reverse('superadmin_users'), {'q': query})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'No users found.')
+        self.assertNotContains(response, query)
+        for header in response.context['sort_headers']:
+            self.assertEqual(parse_qs(urlsplit(header['url']).query)['q'], [query])
 
     def test_distributions_count_each_user_once_and_require_official_publication(self):
         user = get_user_model().objects.create_user('multi-role')
