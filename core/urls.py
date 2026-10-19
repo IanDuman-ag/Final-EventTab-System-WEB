@@ -20,7 +20,7 @@ from django.urls import include, path
 from django.conf import settings
 from django.conf.urls.static import static
 from django.views.generic import RedirectView
-from .api_views import health_check
+from .api_views import health_check, portal_notifications
 from . import public_views
 from .admin_settings_views import admin_settings
 from .views import (
@@ -142,6 +142,7 @@ from .superadmin_views import (
 urlpatterns = [
     path('admin/settings/', admin_settings, name='admin_settings'),
     path('api/health/', health_check, name='health_check'),
+    path('api/portal-notifications/', portal_notifications, name='portal_notifications'),
     path('api/auth/', include('accounts.urls')),
     path('api/events/', include('events.api_urls')),
     path('', public_views.home, name='home'),

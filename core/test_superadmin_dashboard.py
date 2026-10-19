@@ -14,6 +14,49 @@ class SuperadminDashboardTests(TestCase):
     def setUp(self):
         self.admin = get_user_model().objects.create_superuser('owner', 'owner@example.test', 'test-password')
 
+    def test_notification_feed_is_authenticated_and_role_scoped(self):
+        url = reverse('portal_notifications')
+        self.assertEqual(self.client.get(url).status_code, 401)
+        faculty = get_user_model().objects.create_user('notification-faculty')
+        faculty.groups.add(Group.objects.create(name='Faculty'))
+        own = Event.objects.create(name='Assigned event', event_date=timezone.localdate(), faculty_account=faculty)
+        Event.objects.create(name='Private other event', event_date=timezone.localdate())
+        AuditLog.objects.create(action='Private system activity', description='Administrator details')
+        self.client.force_login(faculty)
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['count'], 1)
+        self.assertEqual(response.json()['notifications'][0]['url'], reverse('faculty_event_manage', args=[own.pk]))
+        self.assertNotContains(response, 'Private')
+        self.assertIn('no-store', response['Cache-Control'])
+        member = get_user_model().objects.create_user('no-portal-role')
+        self.client.force_login(member)
+        self.assertEqual(self.client.get(url).status_code, 403)
+
+    def test_admin_and_superadmin_notifications_link_to_authorized_pages(self):
+        event = Event.objects.create(name='Basketball update', event_date=timezone.localdate(), scoring_method='match')
+        staff = get_user_model().objects.create_user('notification-admin', is_staff=True)
+        self.client.force_login(staff)
+        note = self.client.get(reverse('portal_notifications')).json()['notifications'][0]
+        self.assertEqual(note['url'], reverse('admin_view_match_event', args=[event.pk]))
+        self.client.force_login(self.admin)
+        AuditLog.objects.create(action='Updated <event>', description='Real system change')
+        response = self.client.get(reverse('portal_notifications'))
+        notes = response.json()['notifications']
+        self.assertTrue(any(note['title'] == 'Updated <event>' for note in notes))
+        self.assertTrue(any(note['url'] == reverse('superadmin_event_detail', args=[event.pk]) for note in notes))
+
+    def test_notification_feed_empty_state_and_new_updates(self):
+        staff = get_user_model().objects.create_user('empty-admin', is_staff=True)
+        self.client.force_login(staff)
+        url = reverse('portal_notifications')
+        self.assertEqual(self.client.get(url).json(), {'notifications': [], 'count': 0})
+        event = Event.objects.create(name='New real event', event_date=timezone.localdate())
+        self.assertEqual(self.client.get(url).json()['notifications'][0]['title'], event.name)
+        for number in range(10):
+            Event.objects.create(name=f'Notification event {number}', event_date=timezone.localdate())
+        self.assertEqual(self.client.get(url).json()['count'], 8)
+
     def test_reports_preview_system_wide_exports_and_saved_download(self):
         Event.objects.create(name='Report Test Event', event_date=timezone.localdate(), category='Sports', scoring_method='match')
         self.client.force_login(self.admin)
