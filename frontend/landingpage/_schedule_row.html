@@ -2,6 +2,7 @@
 <div class="schedule-date">
 {% if item.date %}<strong>{{ item.date|date:"d" }}</strong><span>{{ item.date|date:"M" }}</span><small>{{ item.date|date:"Y" }}</small>{% else %}<strong>&mdash;</strong><span>TBA</span>{% endif %}
 </div>
+{% if active == 'schedules' %}<span class="schedule-category-symbol">{% include "landingpage/_category_icon.html" with event=item %}</span>{% endif %}
 <div class="schedule-title">
 <span class="mini-label">{{ item.type_label }}{% if item.round %} &middot; {{ item.round }}{% endif %}</span>
 <h3>
@@ -14,8 +15,8 @@
 {% endif %}
 </div>
 <div class="schedule-location">
-<strong>{% if item.time %}{{ item.time|time:"g:i A" }}{% else %}Time to be announced{% endif %}</strong><span>{{ item.venue|default:"Venue to be announced" }}</span>
+<strong>{% if active == 'schedules' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg>{% endif %}{% if item.time %}{{ item.time|time:"g:i A" }}{% else %}Time to be announced{% endif %}</strong><span>{% if active == 'schedules' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 1 1 14 0Z"/><circle cx="12" cy="10" r="2"/></svg>{% endif %}{{ item.venue|default:"Venue to be announced" }}</span>
 </div>
-<span class="status status-{{ item.status }}">{{ item.status_label }}</span><a class="schedule-detail" href="{{ item.detail_url }}">View Details <span aria-hidden="true">&#8599;</span>
+<span class="status status-{{ item.status }}">{{ item.status_label }}</span><a class="schedule-detail" href="{{ item.detail_url }}">View Details <span aria-hidden="true">{% if active == 'schedules' %}&#8594;{% else %}&#8599;{% endif %}</span>
 </a>
 </article>

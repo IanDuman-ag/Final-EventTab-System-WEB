@@ -1,21 +1,28 @@
-{% extends "landingpage/base.html" %}{% block content %}
-<section class="page-intro">
-<div class="container">
+{% extends "landingpage/base.html" %}{% load static %}
+{% block body_class %}public-schedules{% endblock %}
+{% block content %}
+<section class="schedules-hero">
+<div class="schedules-hero-art" aria-hidden="true">
+<img class="schedule-athlete" src="{% static 'landingpage/assets/hero.webp' %}" alt="">
+<img class="schedule-performer" src="{% static 'landingpage/assets/competitions/dance.webp' %}" alt="">
+<span>One<br>Campus<br>One Team</span>
+</div>
+<div class="container schedules-hero-heading">
 <p class="eyebrow">
 DON'T MISS YOUR MOMENT
 </p>
 <h1>
-Event Schedules
+Event <span>Schedules</span>
 </h1>
 <p>
 Stay updated with upcoming, ongoing, and completed competitions.
 </p>
 </div>
 </section>
-<section class="container page-content">
+<section class="container page-content schedules-directory">
 {% include "landingpage/_filters.html" %}
 <p class="timezone-note">
-Dates and times in {{ timezone_label }}. Unannounced schedules are marked accordingly.
+<span class="timezone-info" aria-hidden="true">i</span><span>Dates and times in <strong>{{ timezone_label }}</strong>. Unannounced schedules are marked accordingly.</span>
 </p>
 <div class="schedule-list">
 {% for item in schedules %}{% include "landingpage/_schedule_row.html" %}{% empty %}
