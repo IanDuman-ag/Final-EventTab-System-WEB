@@ -1231,13 +1231,14 @@ def _save_event_image(event, files):
     if image is None:
         return
     try:
-        validate_event_image(image)
+        image = validate_event_image(image)
     except MatchEventValidationError as exc:
         raise CriteriaEventValidationError(str(exc)) from exc
     try:
         event.image.save(image.name, image, save=False)
     except Exception as exc:
-        raise CriteriaEventValidationError('The event image could not be uploaded. Please try again.') from exc
+        logger.exception('Criteria event image storage failed')
+        raise CriteriaEventValidationError('Image storage is temporarily unavailable. Please try again shortly.') from exc
 
 
 def _save_pageant_event(data, user, files=None, instance=None):

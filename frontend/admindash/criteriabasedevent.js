@@ -21,8 +21,8 @@
     $('#event-image-error').textContent = '';
     previewEventImage(savedImageUrl);
     if (!file) return;
-    if (['image/jpeg', 'image/png', 'image/webp'].indexOf(file.type) === -1 || file.size > 5 * 1024 * 1024) {
-      $('#event-image-error').textContent = 'Choose a JPEG, PNG, or WebP image up to 5 MB.';
+    if (file.size > 5 * 1024 * 1024) {
+      $('#event-image-error').textContent = 'Choose an image up to 5 MB.';
       this.value = '';
       return;
     }

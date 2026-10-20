@@ -1,5 +1,6 @@
 """Transactional validation, bracket generation, and scheduling for match events."""
 import json
+import logging
 import random
 from datetime import date, datetime, timedelta
 
@@ -10,6 +11,9 @@ from django.db import transaction
 from django.utils import timezone
 
 from .models import BracketMatch, BracketTeam, Event, Team
+
+
+logger = logging.getLogger(__name__)
 
 
 class MatchEventValidationError(ValueError):
@@ -1404,19 +1408,43 @@ def _notify_faculty(event, actor, created):
 
 
 def validate_event_image(upload):
-    """Validate actual image content rather than trusting its filename or MIME type."""
-    from PIL import Image, UnidentifiedImageError
+    """Validate decoded content and normalize other raster formats for web display."""
+    from io import BytesIO
+    from uuid import uuid4
+
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    from PIL import Image, ImageOps, UnidentifiedImageError
+    from pillow_heif import register_heif_opener
+
+    register_heif_opener(thumbnails=False)
+
     if upload is None:
-        return
+        return None
     if upload.size > 5 * 1024 * 1024:
         raise MatchEventValidationError('Event image must be 5 MB or smaller.')
     try:
         with Image.open(upload) as image:
-            if image.format not in {'JPEG', 'PNG', 'WEBP'}:
-                raise MatchEventValidationError('Upload a JPEG, PNG, or WebP event image.')
             image.verify()
-    except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError) as exc:
-        raise MatchEventValidationError('Upload a valid JPEG, PNG, or WebP event image.') from exc
+        upload.seek(0)
+        with Image.open(upload) as image:
+            image.load()
+            extensions = {'JPEG': 'jpg', 'PNG': 'png', 'WEBP': 'webp', 'GIF': 'gif', 'AVIF': 'avif'}
+            if image.format in extensions:
+                upload.seek(0)
+                return SimpleUploadedFile(
+                    f'{uuid4().hex}.{extensions[image.format]}', upload.read(),
+                    content_type=Image.MIME[image.format],
+                )
+            # Browsers cannot reliably display formats such as TIFF and BMP.
+            output = BytesIO()
+            ImageOps.exif_transpose(image).convert('RGBA').save(output, format='PNG')
+            return SimpleUploadedFile(
+                f'{uuid4().hex}.png', output.getvalue(), content_type='image/png'
+            )
+    except (UnidentifiedImageError, OSError, ValueError, SyntaxError, Image.DecompressionBombError) as exc:
+        raise MatchEventValidationError(
+            'This image is damaged or its format is not supported. Try exporting it as PNG or JPEG.'
+        ) from exc
     finally:
         upload.seek(0)
 
@@ -1429,7 +1457,7 @@ def save_match_event(data, actor, instance=None, files=None):
     created = instance is None
     event = instance or Event(created_by=actor)
     image = files.get('event_image') if files else None
-    validate_event_image(image)
+    image = validate_event_image(image)
     if image is not None:
         event.image = image
     classification = _required(data, 'event_classification', 'Event Classification')
@@ -1642,7 +1670,8 @@ def save_match_event(data, actor, instance=None, files=None):
         try:
             event.image.save(image.name, image, save=False)
         except Exception as exc:
-            raise MatchEventValidationError('The event image could not be uploaded. Please try again.') from exc
+            logger.exception('Event image storage failed')
+            raise MatchEventValidationError('Image storage is temporarily unavailable. Please try again shortly.') from exc
     event.save()
     if faculty and event.faculty_account_id != faculty.id:
         Event.objects.filter(pk=event.pk).update(

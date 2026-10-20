@@ -24,8 +24,8 @@
     message.textContent = '';
     previewEventImage(savedImageUrl);
     if (!file) return;
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) {
-      message.textContent = 'Choose a JPEG, PNG, or WebP image up to 5 MB.';
+    if (file.size > 5 * 1024 * 1024) {
+      message.textContent = 'Choose an image up to 5 MB.';
       input.value = '';
       return;
     }

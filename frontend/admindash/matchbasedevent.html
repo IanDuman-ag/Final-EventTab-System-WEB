@@ -240,8 +240,8 @@
           <fieldset>
             <legend>Event Image</legend>
             <label class="btn btn-outline-secondary match-secondary" for="event-image">Upload Event Image</label>
-            <input class="form-control mt-2" type="file" id="event-image" name="event_image" accept="image/jpeg,image/png,image/webp" aria-describedby="event-image-help event-image-error">
-            <p id="event-image-help" class="points-editor-hint">JPEG, PNG, or WebP, up to 5 MB. Leave empty to keep the current image.</p>
+            <input class="form-control mt-2" type="file" id="event-image" name="event_image" accept="image/*,.heic,.heif,.hif,.tif,.tiff" aria-describedby="event-image-help event-image-error">
+            <p id="event-image-help" class="points-editor-hint">Images up to 5 MB. HEIC, HEIF, BMP, and TIFF are converted to PNG. Leave empty to keep the current image.</p>
             <p id="event-image-error" class="wizard-error" role="alert"></p>
             <img id="event-image-preview" alt="Event image preview" hidden style="max-width:100%;width:320px;max-height:200px;object-fit:contain;border-radius:8px">
           </fieldset>
