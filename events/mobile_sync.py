@@ -216,15 +216,9 @@ def _sync_candidates(judging_event, event, explicit_candidates=None):
 
 
 def _assign_judges(judging_event, event):
-    if map_judging_status(event) != 'active':
-        judging_event.assigned_judges.clear()
-        return
-    portal_assignees = list(event.assigned_judges.all())
-    if portal_assignees:
-        judging_event.assigned_judges.set(portal_assignees)
-        return
-    judges = get_active_judge_users()
-    judging_event.assigned_judges.set(judges)
+    # Assignment is independent of whether scoring has opened. Never grant
+    # every judge access when the admin has selected no assignees.
+    judging_event.assigned_judges.set(event.assigned_judges.all())
 
 
 @transaction.atomic
@@ -284,7 +278,7 @@ def delete_mobile_for_event(event):
 
 @transaction.atomic
 def sync_judge_to_mobile_events(user):
-    """Assign a judge to all active mobile events when account is created/activated."""
+    """Refresh only portal-authorized assignments when a judge is activated."""
     if not user.is_active:
         return
     from core.views import get_assignment_role
@@ -292,8 +286,13 @@ def sync_judge_to_mobile_events(user):
     if get_assignment_role(user) != 'Judge':
         return
 
-    active_events = JudgingEvent.objects.filter(status='active')
-    for judging_event in active_events:
+    # Account creation must not subscribe a judge to unrelated events.
+    # Include upcoming assignments so Home and Events agree before scoring opens.
+    assigned = JudgingEvent.objects.filter(
+        portal_event__assigned_judges=user,
+        portal_event__scoring_method='criteria',
+    ).exclude(portal_event__status=Event.STATUS_INACTIVE).distinct()
+    for judging_event in assigned:
         judging_event.assigned_judges.add(user)
 
 

@@ -1,13 +1,13 @@
 
-from datetime import date
+from zoneinfo import ZoneInfo
 
-from django.db.models import Q
+from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from core.views import get_assignment_role
-from .models import JudgingEvent
+from .mobile_judge import assigned_events, detail_payload
 
 
 @api_view(["GET"])
@@ -22,38 +22,21 @@ def judge_dashboard(request):
             status=403,
         )
 
-    # Only events assigned to this judge.
-    assigned = (
-        JudgingEvent.objects
-        .filter(assigned_judges=user)
-        .select_related("category")
-        .distinct()
-        .order_by("date", "time")
-    )
-
+    # Use the same authoritative portal assignments as the Events screen.
+    # Legacy mirror assignments may be missing for upcoming events or stale
+    # after an admin reassigns a judge.
     events = []
+    for event in assigned_events(user).order_by("date", "time"):
+        row = detail_payload(user, event)
+        if row["status"] not in ("ongoing", "completed", "upcoming"):
+            row["status"] = "upcoming"
+        row["candidate_count"] = row["participant_count"]
+        portal = getattr(event, "portal_event", None)
+        clock = portal.event_time if portal else event.time
+        row["time"] = clock.isoformat() if clock else None
+        events.append(row)
 
-    for event in assigned:
-        if event.status == "completed":
-            status_value = "completed"
-        elif event.status == "active":
-            status_value = "ongoing"
-        else:
-            status_value = "upcoming"
-
-        events.append({
-            "id": event.id,
-            "title": event.title,
-            "status": status_value,
-            "date": event.date.isoformat() if event.date else None,
-            "time": event.time.isoformat() if event.time else None,
-            "venue": event.venue,
-            "assignment_type": "CRITERIA BASED",
-            "criteria_count": event.criteria.count(),
-            "candidate_count": event.candidates.count(),
-        })
-
-    today = date.today()
+    today = timezone.localdate(timezone=ZoneInfo('Asia/Manila'))
 
     todays_assignments = [
         e for e in events if e["date"] == today.isoformat()
