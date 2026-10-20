@@ -1483,8 +1483,11 @@ def _save_pageant_event(data, user, files=None, instance=None):
         _schedule_assignment_notifications(event, uniq)
     try:
         sync_event_to_mobile(event)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.exception("Mobile judging sync failed for event %s", event.pk)
+        raise CriteriaEventValidationError(
+            "The event could not be synced to the judge app. Please try again or contact support."
+        ) from exc
     return event
 
 
@@ -1686,8 +1689,11 @@ def save_criteria_event(data, user, files=None, instance=None):
         _schedule_assignment_notifications(event, recipients)
     try:
         sync_event_to_mobile(event)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.exception("Mobile judging sync failed for event %s", event.pk)
+        raise CriteriaEventValidationError(
+            "The event could not be synced to the judge app. Please try again or contact support."
+        ) from exc
     return event
 
 

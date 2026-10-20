@@ -5,7 +5,7 @@ import re
 from datetime import time as dt_time
 
 from django.contrib.auth import get_user_model
-from django.db import models, transaction
+from django.db import connection, models, transaction
 
 from .models import (
     BracketTeam,
@@ -221,6 +221,29 @@ def _assign_judges(judging_event, event):
     judging_event.assigned_judges.set(event.assigned_judges.all())
 
 
+def _create_judging_event(**values):
+    """Support shared databases with the mobile-only required image_url column."""
+    table = JudgingEvent._meta.db_table
+    with connection.cursor() as cursor:
+        columns = {column.name for column in connection.introspection.get_table_description(cursor, table)}
+        if 'image_url' not in columns or any(field.column == 'image_url' for field in JudgingEvent._meta.local_fields):
+            return JudgingEvent.objects.create(**values)
+        # Some mobile installations added this NOT NULL column without a DB
+        # default. Supply its empty value explicitly; do not alter their schema.
+        instance = JudgingEvent(**values)
+        fields = [field for field in instance._meta.local_concrete_fields if not field.primary_key]
+        names = [field.column for field in fields] + ['image_url']
+        params = [field.get_db_prep_save(field.pre_save(instance, True), connection) for field in fields] + ['']
+        quote = connection.ops.quote_name
+        cursor.execute(
+            f"INSERT INTO {quote(table)} ({', '.join(quote(name) for name in names)}) "
+            f"VALUES ({', '.join(['%s'] * len(params))}) RETURNING {quote(instance._meta.pk.column)}",
+            params,
+        )
+        event_id = cursor.fetchone()[0]
+    return JudgingEvent.objects.get(pk=event_id)
+
+
 @transaction.atomic
 def sync_event_to_mobile(event, explicit_candidates=None):
     """Create or update the mobile JudgingEvent for a web Event."""
@@ -238,7 +261,7 @@ def sync_event_to_mobile(event, explicit_candidates=None):
 
     judging_event = getattr(event, 'judging_event', None)
     if judging_event is None:
-        judging_event = JudgingEvent.objects.create(
+        judging_event = _create_judging_event(
             title=event.name,
             category=category,
             date=event.event_date,

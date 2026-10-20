@@ -2,6 +2,7 @@ from datetime import date, time
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
+from django.db import connection
 from django.test import TestCase
 from rest_framework.test import APIClient
 
@@ -79,3 +80,18 @@ class JudgeAssignmentSyncTests(TestCase):
         self.portal.save(update_fields=['status'])
         mobile = sync_event_to_mobile(self.portal)
         self.assertFalse(mobile.assigned_judges.exists())
+
+    def test_sync_with_mobile_only_required_image_url_column(self):
+        # Reproduce the live shared DB drift omitted by clean migration tests.
+        with connection.cursor() as cursor:
+            cursor.execute("ALTER TABLE events_judgingevent ADD COLUMN image_url varchar(500) NOT NULL DEFAULT ''")
+            cursor.execute("ALTER TABLE events_judgingevent ALTER COLUMN image_url DROP DEFAULT")
+        mobile = sync_event_to_mobile(self.portal)
+        self.portal.refresh_from_db()
+        self.assertEqual(self.portal.judging_event_id, mobile.pk)
+        with connection.cursor() as cursor:
+            cursor.execute('SELECT image_url FROM events_judgingevent WHERE id = %s', [mobile.pk])
+            self.assertEqual(cursor.fetchone()[0], '')
+        response = self.api.get('/api/events/judge/dashboard/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['assigned_events'][0]['portal_event_id'], self.portal.pk)
