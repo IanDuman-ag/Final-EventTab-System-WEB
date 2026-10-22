@@ -37,6 +37,19 @@ def date_display(value):
     return value.strftime('%b %d, %Y') if value else ''
 
 
+def entry_photo_urls(entry, legacy_photo=''):
+    """Use explicit registry links; never guess a participant's photo by name."""
+    if entry.entry_type == 'individual' and entry.source_individual_id:
+        photos = [image_url(entry.source_individual.image)]
+    elif entry.entry_type == 'team' and entry.source_team_id:
+        photos = [image_url(entry.source_team.image)]
+    elif entry.entry_type == 'pair':
+        photos = [image_url(link.individual.image) for link in entry.member_links.all()]
+    else:
+        photos = []
+    return [url for url in photos if url] or ([legacy_photo] if legacy_photo else [])
+
+
 def round_projection(event):
     portal = portal_for(event)
     if portal is None:
@@ -171,7 +184,10 @@ def detail_payload(user, event, requested_round=None):
         ).exclude(status=CriteriaScoreSubmission.STATUS_SUPERSEDED):
             normalized_sheets[submission.participant_id].append(submission)
     participants = []
-    source = portal.criteria_entries.filter(pk__in=portal.participant_ids).select_related('department') if normalized else event.candidates.all()
+    legacy_photos = {row.pk: image_url(row.photo) for row in event.candidates.all()}
+    source = (portal.criteria_entries.filter(pk__in=portal.participant_ids)
+              .select_related('department', 'source_individual', 'source_team')
+              .prefetch_related('member_links__individual')) if normalized else event.candidates.all()
     for candidate in source:
         entry_id = candidate.pk if normalized else None
         mobile_id = candidates.get(str(entry_id)) if normalized else candidate.pk
@@ -182,11 +198,12 @@ def detail_payload(user, event, requested_round=None):
         if qualified and normalized_sheets[candidate.pk]:
             state = submission_state(normalized_sheets[candidate.pk], required)
             complete = state == 'submitted'
+        photos = entry_photo_urls(candidate, legacy_photos.get(mobile_id, '')) if normalized else ([image_url(candidate.photo)] if candidate.photo else [])
         participants.append({'id': mobile_id, 'entry_id': entry_id,
                              'number': candidate.display_order + 1 if normalized else candidate.number,
                              'name': candidate.display_name if normalized else candidate.name,
                              'department': (candidate.department.name if candidate.department else '') if normalized else candidate.department,
-                             'photo': '' if normalized else image_url(candidate.photo),
+                             'photo': photos[0] if photos else '', 'photos': photos,
                              'is_qualified': qualified, 'scoring_status': state,
                              'scoring_status_label': state.replace('_', ' ').title(), 'review_note': '',
                              'draft_step': 0, 'action_label': 'View Submission' if complete else 'Score'})
