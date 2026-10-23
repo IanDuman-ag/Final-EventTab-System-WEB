@@ -21,12 +21,14 @@ class PublicPortalTests(TestCase):
         self.event.name = 'Photo Contest'
         self.event.sport_type = ''
         self.event.special_event_type = ''
-        self.event.image = 'cloudinary/event_covers/photography_123'
-        self.event.save()
-        response = self.client.get(reverse('public_games'))
-        self.assertEqual(response.context['events'][0]['image_url'], '')
-        self.assertContains(response, 'data:image/svg+xml;base64,')
-        self.assertNotContains(response, 'photography_123')
+        for prefix in ('event_covers/', 'cloudinary/event_covers/', 'cloudinary/assets/event_covers/'):
+            with self.subTest(prefix=prefix):
+                self.event.image = prefix + 'photography_123'
+                self.event.save()
+                response = self.client.get(reverse('public_games'))
+                self.assertEqual(response.context['events'][0]['image_url'], '')
+                self.assertContains(response, 'data:image/svg+xml;base64,')
+                self.assertNotContains(response, 'photography_123')
 
     def test_games_category_filter_uses_major_and_minor_classification(self):
         self.event.event_classification = 'major'

@@ -15,7 +15,8 @@ logger = logging.getLogger(__name__)
 def event_saved(sender, instance, raw=False, using='default', **kwargs):
     if raw or not settings.EVENT_COVERS_ENABLED or using != 'default':
         return
-    if instance.image and not instance.image.name.startswith(('event_covers/', 'cloudinary/event_covers/')):
+    if instance.image and not instance.image.name.startswith((
+            'event_covers/', 'cloudinary/event_covers/', 'cloudinary/assets/event_covers/')):
         return
 
     def assign():
