@@ -163,7 +163,7 @@ class EventCoverTests(TestCase):
             for _ in range(2):
                 response = self.client.get(reverse('public_games'))
                 self.assertEqual(response.status_code, 200)
-                self.assertContains(response, 'data:image/webp;base64,')
+                self.assertContains(response, 'data:image/svg+xml;base64,')
         api.assert_not_called()
         self.assertEqual(EventCoverAsset.objects.count(), 0)
         event.refresh_from_db()

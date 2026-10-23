@@ -126,7 +126,9 @@ def serialize_event(event):
         'type': kind, 'type_label': 'Match-Based' if kind == 'match' else 'Criteria-Based',
         'status': status, 'status_label': status.title(),
         'date': event.event_date, 'time': event.event_time, 'venue': event.venue,
-        'division': event.division, 'image_url': image_url(event.image),
+        'division': event.division, 'image_url': (
+            '' if event.image and event.image.name.startswith(('event_covers/', 'cloudinary/event_covers/'))
+            else image_url(event.image)),
         'detail_url': reverse('public_event_detail', args=[event.pk]),
         'result_url': reverse('public_result_detail', args=[event.pk]) if published else '',
         'has_results': published, 'description': event.mechanics,

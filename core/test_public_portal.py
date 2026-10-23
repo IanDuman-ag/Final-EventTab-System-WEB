@@ -17,6 +17,17 @@ from events.public_service import PUBLIC_TIMEZONE, result_is_published
 
 
 class PublicPortalTests(TestCase):
+    def test_managed_photo_covers_do_not_override_restored_svg_artwork(self):
+        self.event.name = 'Photo Contest'
+        self.event.sport_type = ''
+        self.event.special_event_type = ''
+        self.event.image = 'cloudinary/event_covers/photography_123'
+        self.event.save()
+        response = self.client.get(reverse('public_games'))
+        self.assertEqual(response.context['events'][0]['image_url'], '')
+        self.assertContains(response, 'data:image/svg+xml;base64,')
+        self.assertNotContains(response, 'photography_123')
+
     def test_games_category_filter_uses_major_and_minor_classification(self):
         self.event.event_classification = 'major'
         self.event.save(update_fields=['event_classification'])
@@ -32,11 +43,11 @@ class PublicPortalTests(TestCase):
         from pathlib import Path
         from django.conf import settings
         from core.public_views import game_artwork_path
-        for name, asset in [('Spoken Poetry', 'intramurals-cover.webp'), ('Charcoal Painting', 'art-cover.webp'),
-                            ('Film on Stage', 'intramurals-cover.webp'), ('Photo Contest', 'photography-cover.webp'),
-                            ('Live Band Competition', 'intramurals-cover.webp'), ('Quiz Bee', 'quiz-cover.webp'),
-                            ('Radio Drama', 'intramurals-cover.webp'), ('Short & Sweet Play', 'intramurals-cover.webp'),
-                            ('Most Disciplined Unit', 'intramurals-cover.webp'), ('Amazing Race', 'intramurals-cover.webp'),
+        for name, asset in [('Spoken Poetry', 'speech.svg'), ('Charcoal Painting', 'art.svg'),
+                            ('Film on Stage', 'film.svg'), ('Photo Contest', 'photography.svg'),
+                            ('Live Band Competition', 'band.svg'), ('Quiz Bee', 'quiz.svg'),
+                            ('Radio Drama', 'radio.svg'), ('Short & Sweet Play', 'theater.svg'),
+                            ('Most Disciplined Unit', 'unit.svg'), ('Amazing Race', 'race.svg'),
                             ('Mr. & Ms. USTP Ambassador 2026', 'pageant.webp')]:
             with self.subTest(name=name):
                 self.event.name = name
@@ -50,7 +61,7 @@ class PublicPortalTests(TestCase):
         self.event.save()
         response = self.client.get(reverse('public_games'))
         self.assertContains(response, f'src="{self.event.image.url}"')
-        self.assertContains(response, 'data-banner-fallback="data:image/webp;base64,')
+        self.assertContains(response, 'data-banner-fallback="data:image/svg+xml;base64,')
 
     def test_classification_tags_use_saved_values_on_public_pages(self):
         for value, label in [('major', 'Major Event'), ('minor', 'Minor Event'), ('', '')]:

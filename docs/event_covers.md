@@ -1,5 +1,12 @@
 # Dynamic event covers
 
+Current public design: SVG-based covers have been restored. Managed files under
+`event_covers/` are ignored by public event serializers; custom uploads are still
+shown. `EVENT_COVERS_ENABLED` now defaults to false, so no automatic imports or
+generation are active unless explicitly enabled in the backend environment.
+Existing cover records/files and the additive tables are retained without deleting
+data or reversing the production migration. The implementation below is dormant.
+
 The existing `Event.image` field remains the public cover. An uploaded image always
 wins. The title, sport and special event type are matched before the category,
 using the curated catalog in `events/cover_catalog.py`.

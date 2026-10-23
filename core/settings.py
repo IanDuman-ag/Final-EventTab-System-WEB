@@ -170,7 +170,7 @@ OCR_PRIVATE_ROOT = Path(config('OCR_PRIVATE_ROOT', default=str(BASE_DIR / 'priva
 TESSERACT_CMD = config('TESSERACT_CMD', default='')
 
 # Covers are prepared on save; paid generation runs only in the bounded worker command.
-EVENT_COVERS_ENABLED = config_bool('EVENT_COVERS_ENABLED', default=True)
+EVENT_COVERS_ENABLED = config_bool('EVENT_COVERS_ENABLED', default=False)
 OPENAI_API_KEY = config('OPENAI_API_KEY', default='')
 EVENT_COVER_MODEL = config('EVENT_COVER_MODEL', default='gpt-image-2')
 EVENT_COVER_DAILY_LIMIT = config('EVENT_COVER_DAILY_LIMIT', default=5, cast=int)
