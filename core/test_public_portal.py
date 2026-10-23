@@ -17,6 +17,22 @@ from events.public_service import PUBLIC_TIMEZONE, result_is_published
 
 
 class PublicPortalTests(TestCase):
+    def test_home_classification_filter_combines_with_type_and_search(self):
+        major = self.create_event('Major Vocal Duet', scoring_method='criteria', event_classification='major')
+        self.create_event('Minor Vocal Duet', scoring_method='criteria', event_classification='minor')
+        response = self.client.get(reverse('home'), {
+            'featured_type': 'criteria', 'featured_q': 'Vocal',
+            'featured_classification': 'major', 'featured_sort': 'name',
+        })
+        self.assertEqual([row['id'] for row in response.context['featured_events']], [major.pk])
+        self.assertIn('featured_classification=major', response.context['featured_query_string'])
+        self.assertContains(response, 'home-leaderboard-title')
+        self.assertContains(response, 'home-schedule-layout')
+        self.assertContains(response, 'id="home-reference-styles"')
+        self.assertEqual(self.client.get(reverse('home'), {
+            'featured_classification': 'invalid',
+        }).context['featured_filters']['classification'], '')
+
     def test_managed_photo_covers_do_not_override_restored_svg_artwork(self):
         self.event.name = 'Photo Contest'
         self.event.sport_type = ''

@@ -1,0 +1,200 @@
+/* Home reference layout. Keep all overrides scoped to this page. */
+.home-reference { background:#f4f9fe; }
+.home-reference .container { max-width:1200px; padding-left:28px; padding-right:28px; }
+.home-reference .portal-nav { height:58px; }
+.home-reference .site-header { background:#061f3b; }
+.home-reference .site-header .brand { font-size:23px; }
+.home-reference .nav-menu>a:not(.btn) { font-size:11px; }
+.home-reference .nav-login { min-width:105px; padding:10px 19px; }
+.home-reference .hero { height:425px; min-height:0; overflow:hidden; isolation:isolate; background:#051f3a; }
+.home-reference .hero::before { display:none; }
+.home-reference .hero::after { content:''; position:absolute; inset:auto auto 0 0; width:125px; height:80px; background:#ffce16; clip-path:polygon(0 0,100% 100%,0 100%); z-index:2; }
+.home-reference .home-athlete-art { position:absolute; inset:0; overflow:hidden; z-index:0; }
+.home-reference .home-athlete-art::after { content:''; position:absolute; inset:0; background:linear-gradient(90deg,#041d38 10%,#041d38ed 32%,#041d3866 57%,#041d3810 100%); }
+.home-reference .home-arena-photo { position:absolute; width:79%; height:100%; right:0; top:0; object-fit:cover; object-position:65% 43%; filter:saturate(.35) contrast(1.13); }
+.home-reference .home-dancer-photo { position:absolute; right:0; bottom:-20px; width:38%; height:63%; object-fit:cover; object-position:center 30%; filter:saturate(.2) contrast(1.15); clip-path:polygon(45% 0,100% 0,100% 100%,0 100%); }
+.home-reference .home-hero-slash { position:absolute; z-index:2; width:23px; height:170%; right:17%; top:-30%; background:#ffcf16; transform:rotate(38deg); clip-path:polygon(0 0,100% 0,100% 42%,0 51%,0 64%,100% 55%,100% 100%,0 100%); }
+.home-reference .hero-content { position:relative; z-index:3; padding-top:57px; padding-bottom:52px; }
+.home-reference .hero .eyebrow { font-size:10px; letter-spacing:2.4px; color:#ffd231; margin:0 0 13px; }
+.home-reference .hero h1 { font-size:clamp(40px,4.2vw,65px); line-height:.96; letter-spacing:-.6px; max-width:690px; margin:0 0 16px; }
+.home-reference .hero h1 em { white-space:nowrap; color:#ffcf18; }
+.home-reference .hero-description { font-size:13px; line-height:1.55; max-width:390px; color:#c7d7e6; margin-bottom:22px; }
+.home-reference .hero-actions { gap:13px; }
+.home-reference .hero-actions .btn { min-height:39px; font-size:11px; padding:11px 20px; border-radius:3px; }
+.home-reference .quick-section { min-height:88px; gap:0; }
+.home-reference .quick-link { min-height:88px; padding:17px 20px; gap:12px; }
+.home-reference .quick-link h2 { font-size:12px; }
+.home-reference .quick-link p { font-size:10px; }
+.home-reference .quick-icon { background:transparent; width:35px; flex-shrink:0; }
+.home-reference .quick-icon svg { width:28px; height:28px; }
+.home-reference .featured-competitions { background:#f4f9fe; }
+.home-reference .featured-competitions::before,.home-reference .featured-competitions::after { display:none; }
+.home-reference .section-space { padding-top:36px; padding-bottom:35px; }
+.home-reference .section-heading { margin-bottom:16px; align-items:center; }
+.home-reference .eyebrow { font-size:9px; letter-spacing:2px; }
+.home-reference .section-heading h2 { font-size:34px; letter-spacing:-1.3px; }
+.home-reference .section-heading h2 span { color:#eeb100; }
+.home-reference .section-heading p:not(.eyebrow) { font-size:11px; color:#6b7f98; }
+.home-reference .text-link { font-size:11px; white-space:nowrap; }
+.home-reference .featured-controls { display:block; margin-bottom:18px; }
+.home-reference .featured-tools { display:grid; grid-template-columns:minmax(180px,2.2fr) minmax(120px,1.2fr) minmax(110px,1fr) 95px 80px; width:100%; gap:10px; }
+.home-reference .featured-search { width:100%; min-width:0; }
+.home-reference .featured-search input { width:100%; height:36px; background:white; border:1px solid #dbe5f0; font-size:11px; }
+.home-reference .featured-tools .form-select { width:100%; height:36px; min-width:0; border:1px solid #dbe5f0; font-size:10px; background-color:white; }
+.home-reference .featured-apply { min-height:36px; background:#ffcf18; border-color:#ffcf18; color:#082646; font-size:11px; font-weight:750; }
+.home-reference .featured-apply:hover { background:#f1bd00; border-color:#f1bd00; }
+.home-reference .featured-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:19px; }
+.home-reference .event-card { display:flex; flex-direction:column; min-width:0; border:1px solid #e0eaf5; border-radius:7px; overflow:hidden; background:white; box-shadow:0 4px 12px #193b5c06; }
+.home-reference .game-card-banner { position:relative; }
+.home-reference .event-art { display:block; height:128px; background:#082b4c; overflow:hidden; }
+.home-reference .event-art img { width:100%; height:100%; display:block; object-fit:cover; object-position:center; }
+.home-reference .event-art>svg { width:100%; height:100%; }
+.home-reference .game-type { position:absolute; left:9px; top:9px; display:inline-flex; align-items:center; gap:4px; border:1px solid #94a4b360; background:#061f3bca; padding:3px 6px; font-size:7px; color:#fff; border-radius:2px; }
+.home-reference .game-type svg { width:10px; height:10px; }
+.home-reference .game-card-banner>.status { position:absolute; right:8px; top:9px; padding:3px 7px; font-size:7px; border-radius:10px; }
+.home-reference .event-body { display:flex; flex:1; flex-direction:column; padding:0 13px; }
+.home-reference .game-title-row { display:flex; align-items:flex-start; gap:9px; padding:12px 0 9px; min-height:90px; }
+.home-reference .game-title-row>div { min-width:0; }
+.home-reference .game-category-symbol { flex-shrink:0; width:29px; height:29px; border-radius:50%; background:#fff5da; color:#d99b00; display:grid; place-items:center; margin-top:3px; }
+.home-reference .game-category-symbol svg { width:20px; height:20px; }
+.home-reference .event-body h3 { font-size:15px; line-height:1.25; font-weight:800; margin:0 0 4px; letter-spacing:-.4px; }
+.home-reference .classification-tag { font-size:8px; padding:3px 6px; }
+.home-reference .event-date { display:flex; align-items:center; gap:5px; font-size:9px; color:#70849c; line-height:1.5; margin:5px 0 0; }
+.home-reference .event-date svg { flex-shrink:0; width:11px; height:11px; }
+.home-reference .card-link { display:flex; justify-content:space-between; align-items:center; margin-top:auto; min-height:35px; border-top:1px solid #e7edf5; font-size:9px; font-weight:700; }
+.home-reference .card-link>span { width:23px; height:23px; display:grid; place-items:center; border-radius:50%; background:#ffcf19; font-size:15px; }
+.home-reference .pagination-bar { margin:22px 0 0; font-size:11px; }
+.home-reference .pagination-bar .btn { min-height:32px; font-size:10px; }
+.home-reference .upcoming-section { background:#e9f3fd; position:relative; }
+.home-reference .upcoming-section::before { content:''; position:absolute; inset:0; background:linear-gradient(130deg,transparent 67%,#d6e8f850 67% 72%,transparent 72%); pointer-events:none; }
+.home-reference .home-schedule-layout { display:grid; grid-template-columns:260px minmax(0,1fr); gap:42px; padding-top:36px; padding-bottom:30px; }
+.home-reference .home-schedule-intro { position:relative; padding-top:12px; }
+.home-reference .home-schedule-intro h2 { font-size:35px; line-height:1; font-weight:850; letter-spacing:-1.3px; margin:7px 0 12px; }
+.home-reference .home-schedule-intro h2 span { color:#e8ac00; }
+.home-reference .home-schedule-intro>p:not(.eyebrow) { color:#617b97; font-size:11px; line-height:1.6; max-width:235px; }
+.home-reference .home-schedule-intro .btn { font-size:10px; min-height:35px; padding:10px 14px; border-radius:3px; margin-top:5px; }
+.home-reference .home-calendar-watermark { position:absolute; width:110px; height:110px; right:0; bottom:-10px; color:#d8e8f7; transform:rotate(15deg); pointer-events:none; }
+.home-reference .home-calendar-watermark svg { width:100%; height:100%; }
+.home-reference .schedule-list { background:white; border:1px solid #d8e6f3; border-radius:5px; overflow:hidden; }
+.home-reference .schedule-row { min-height:61px; padding:9px 12px; display:grid; grid-template-columns:38px minmax(0,1fr) 140px auto 76px; gap:10px; border-bottom:1px solid #e2ebf5; box-shadow:none; border-radius:0; margin:0; }
+.home-reference .schedule-row:last-child { border-bottom:0; }
+.home-reference .schedule-date { width:auto; padding:0; background:transparent; border:0; }
+.home-reference .schedule-date strong { font-size:23px; line-height:1; }
+.home-reference .schedule-date span { font-size:8px; text-transform:uppercase; }
+.home-reference .schedule-date small { display:none; }
+.home-reference .schedule-title h3 { font-size:11px; line-height:1.3; margin:3px 0; }
+.home-reference .schedule-title .mini-label { font-size:7px; }
+.home-reference .schedule-title .classification-tag { font-size:7px; padding:2px 4px; }
+.home-reference .schedule-title p { font-size:8px; margin:1px 0; }
+.home-reference .schedule-location { font-size:8px; }
+.home-reference .schedule-location strong { font-size:9px; }
+.home-reference .schedule-location span { font-size:8px; }
+.home-reference .schedule-row>.status { font-size:7px; padding:3px 6px; white-space:nowrap; }
+.home-reference .schedule-detail { font-size:8px; white-space:nowrap; }
+.home-reference .timezone-note { font-size:8px; margin:6px 0 0; color:#788fa5; }
+.home-reference .schedule-list .empty-state { min-height:165px; border:0; margin:0; padding:25px; }
+.home-reference .home-leaderboard { position:relative; overflow:hidden; background:radial-gradient(ellipse at 75% 20%,#163f63,#06213e 65%); color:white; }
+.home-reference .home-leaderboard::after { content:''; position:absolute; width:400px; height:90px; bottom:-30px; right:6%; border-radius:50%; background:#224968; filter:blur(15px); }
+.home-reference .home-leaderboard-layout { position:relative; display:grid; grid-template-columns:1fr 1.3fr; align-items:center; min-height:275px; gap:40px; padding-top:35px; padding-bottom:30px; }
+.home-reference .home-leaderboard-copy { position:relative; z-index:2; max-width:340px; }
+.home-reference .home-leaderboard .eyebrow { color:#a4bdd4; }
+.home-reference .home-leaderboard h2 { color:#ffcd17; font-size:38px; font-weight:850; letter-spacing:-1.3px; margin:6px 0 9px; }
+.home-reference .home-leaderboard p:not(.eyebrow) { color:#bdcedf; font-size:12px; line-height:1.6; margin-bottom:18px; }
+.home-reference .home-leaderboard .btn { font-size:10px; min-height:35px; padding:10px 17px; border-radius:3px; }
+.home-reference .home-podium { display:flex; justify-content:center; align-items:flex-end; gap:12px; position:relative; height:220px; z-index:2; }
+.home-reference .podium-place { width:29%; max-width:146px; display:flex; flex-direction:column; align-items:center; position:relative; color:#c8d5df; }
+.home-reference .podium-medal { width:75px; height:75px; border:7px double currentColor; border-radius:50%; display:grid; place-items:center; font-size:44px; font-family:Georgia,serif; font-weight:800; box-shadow:0 4px 12px #0004,inset 0 0 12px #fff5; position:relative; margin-bottom:13px; background:linear-gradient(135deg,#eef5f7,#8c9ba7); text-shadow:1px 2px #fff5; }
+.home-reference .podium-medal::before,.home-reference .podium-medal::after { content:''; position:absolute; width:24px; height:40px; bottom:-8px; border:4px solid currentColor; border-top:0; border-bottom:0; }
+.home-reference .podium-medal::before { left:-21px; border-right:0; border-radius:0 0 0 40px; transform:rotate(-18deg); }
+.home-reference .podium-medal::after { right:-21px; border-left:0; border-radius:0 0 40px 0; transform:rotate(18deg); }
+.home-reference .podium-block { width:100%; height:65px; display:flex; flex-direction:column; justify-content:center; text-align:center; border:1px solid #b7d1de; border-top:7px solid #e2edf2; background:linear-gradient(90deg,#263f50,#7b93a0,#344e61); color:#f3f7fb; font-weight:800; font-size:15px; box-shadow:7px 8px #02142b55; }
+.home-reference .podium-block small { display:block; font-size:8px; font-weight:600; letter-spacing:2px; margin-top:2px; }
+.home-reference .podium-gold { color:#f7ce50; }
+.home-reference .podium-gold .podium-medal { width:89px; height:89px; background:linear-gradient(135deg,#fff1a9,#c48b10); }
+.home-reference .podium-gold .podium-block { height:96px; background:linear-gradient(90deg,#91701c,#d0aa44,#77540d); border-color:#c9a23d; border-top-color:#ffdd72; }
+.home-reference .podium-bronze { color:#db9b66; }
+.home-reference .podium-bronze .podium-medal { background:linear-gradient(135deg,#f2cfb1,#9c5a2d); }
+.home-reference .podium-bronze .podium-block { height:56px; background:linear-gradient(90deg,#63432e,#b3825b,#4b301d); border-color:#bb885c; border-top-color:#e6b78d; }
+.home-reference .podium-confetti { position:absolute; width:6px; height:13px; background:#f7c82f; top:12px; transform:rotate(28deg); }
+.home-reference .confetti-one { left:7%; }.home-reference .confetti-two { left:47%; top:0; transform:rotate(-18deg); }.home-reference .confetti-three { right:3%; top:55px; }
+.home-reference .site-footer { background:#051a31; padding-top:0; }
+.home-reference .footer-top { grid-template-columns:1.4fr 1fr 1fr; padding-top:31px; padding-bottom:25px; gap:45px; }
+.home-reference .site-footer .brand { font-size:23px; }
+.home-reference .site-footer .brand-mark { width:30px; height:30px; }
+.home-reference .site-footer p,.home-reference .footer-links a,.home-reference .staff-link { font-size:10px; line-height:1.8; }
+.home-reference .footer-label { letter-spacing:1.6px; font-size:8px !important; }
+.home-reference .partner-logos { margin-top:14px; }
+.home-reference .footer-bottom { padding-top:12px; padding-bottom:14px; font-size:9px; }
+@media(max-width:1000px) {
+  .home-reference .container { padding-left:22px; padding-right:22px; }
+  .home-reference .hero { height:390px; }
+  .home-reference .hero-content { padding-top:55px; }
+  .home-reference .hero h1 { font-size:49px; }
+  .home-reference .quick-link { padding:14px 12px; gap:7px; }
+  .home-reference .quick-link h2 { font-size:10px; }
+  .home-reference .quick-link p { font-size:8px; }
+  .home-reference .featured-tools { grid-template-columns:minmax(150px,1.7fr) 1fr 1fr 80px 65px; gap:6px; }
+  .home-reference .featured-grid { gap:12px; }
+  .home-reference .event-art { height:108px; }
+  .home-reference .event-body h3 { font-size:13px; }
+  .home-reference .home-schedule-layout { grid-template-columns:210px minmax(0,1fr); gap:22px; }
+  .home-reference .schedule-row { grid-template-columns:30px minmax(0,1fr) 90px auto; gap:7px; }
+  .home-reference .schedule-detail { grid-column:2/-1; justify-self:end; }
+  .home-reference .home-leaderboard-layout { gap:25px; }
+}
+@media(max-width:700px) {
+  .home-reference .container { padding-left:18px; padding-right:18px; }
+  .home-reference .portal-nav { height:62px; }
+  .home-reference .nav-menu { gap:0; }
+  .home-reference .nav-menu>a:not(.btn) { font-size:13px; padding:13px 0; }
+  .home-reference .hero { height:auto; min-height:410px; }
+  .home-reference .hero-content { padding-top:54px; padding-bottom:47px; }
+  .home-reference .hero h1 { font-size:clamp(36px,6.5vw,47px); max-width:100%; }
+  .home-reference .hero h1 em { white-space:normal; }
+  .home-reference .hero .eyebrow { font-size:8px; letter-spacing:1.7px; }
+  .home-reference .hero-description { font-size:12px; max-width:270px; }
+  .home-reference .home-arena-photo { width:100%; opacity:.65; object-position:70% center; }
+  .home-reference .home-athlete-art::after { background:linear-gradient(90deg,#041d38f5,#041d3866); }
+  .home-reference .home-dancer-photo { display:none; }
+  .home-reference .home-hero-slash { right:-18%; width:17px; opacity:.8; }
+  .home-reference .quick-section { display:grid; grid-template-columns:1fr 1fr; padding-top:7px; padding-bottom:7px; }
+  .home-reference .quick-link,.home-reference .quick-link:first-child { min-height:70px; padding:9px 7px; }
+  .home-reference .quick-link::after { display:none; }
+  .home-reference .quick-icon { width:27px; }.home-reference .quick-icon svg { width:23px; height:23px; }
+  .home-reference .quick-link h2 { font-size:11px; }.home-reference .quick-link p { font-size:9px; }
+  .home-reference .section-space { padding-top:26px; padding-bottom:26px; }
+  .home-reference .section-heading h2 { font-size:29px; }
+  .home-reference .section-heading .text-link { font-size:9px; }
+  .home-reference .section-heading p:not(.eyebrow) { font-size:10px; max-width:250px; }
+  .home-reference .featured-tools { grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; }
+  .home-reference .featured-search { grid-column:1/-1; }
+  .home-reference #featured-type,.home-reference #featured-classification { grid-column:span 2; }
+  .home-reference #featured-sort { grid-column:1/4; }
+  .home-reference .featured-apply { grid-column:4; }
+  .home-reference .featured-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:11px; }
+  .home-reference .event-art { height:85px; }
+  .home-reference .event-body { padding:0 8px; }
+  .home-reference .game-title-row { gap:6px; min-height:100px; padding-top:10px; }
+  .home-reference .game-category-symbol { width:23px; height:23px; }.home-reference .game-category-symbol svg { width:17px; height:17px; }
+  .home-reference .event-body h3 { font-size:12px; }
+  .home-reference .game-type { font-size:6px; left:5px; top:6px; padding:2px 4px; }
+  .home-reference .game-card-banner>.status { font-size:6px; right:5px; top:24px; padding:2px 5px; }
+  .home-reference .event-date { font-size:8px; align-items:flex-start; }
+  .home-reference .classification-tag { font-size:7px; }
+  .home-reference .card-link { font-size:8px; }
+  .home-reference .home-schedule-layout { grid-template-columns:1fr; gap:20px; }
+  .home-reference .home-schedule-intro { padding-top:0; }
+  .home-reference .home-schedule-intro h2 { font-size:31px; }
+  .home-reference .home-schedule-intro>p:not(.eyebrow) { max-width:320px; }
+  .home-reference .home-calendar-watermark { right:8%; top:10px; width:90px; height:90px; }
+  .home-reference .schedule-row { grid-template-columns:30px minmax(0,1fr) 90px; }
+  .home-reference .schedule-row>.status { grid-column:2; justify-self:start; }.home-reference .schedule-detail { grid-column:3; }
+  .home-reference .home-leaderboard-layout { grid-template-columns:1fr; gap:5px; padding-top:28px; padding-bottom:24px; }
+  .home-reference .home-leaderboard h2 { font-size:34px; }
+  .home-reference .home-podium { width:100%; max-width:470px; margin:auto; height:225px; }
+  .home-reference .footer-top { grid-template-columns:1fr 1fr; gap:22px; padding-top:28px; }
+  .home-reference .footer-top>div:first-child { grid-column:1/-1; }
+}
+@media(prefers-reduced-motion:reduce) {
+  .home-reference * { scroll-behavior:auto; }
+}

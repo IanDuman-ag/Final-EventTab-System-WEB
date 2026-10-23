@@ -190,12 +190,17 @@ def home(request):
         'type': request.GET.get('featured_type', 'all'),
         'q': request.GET.get('featured_q', '').strip()[:200],
         'sort': request.GET.get('featured_sort', 'date'),
+        'classification': request.GET.get('featured_classification', ''),
     }
     if featured_filters['type'] not in {'match', 'criteria', 'cultural', 'arts'}:
         featured_filters['type'] = 'all'
     if featured_filters['sort'] not in {'date', 'name'}:
         featured_filters['sort'] = 'date'
+    if featured_filters['classification'] not in {'major', 'minor'}:
+        featured_filters['classification'] = ''
     competitions = public_events().exclude(status=Event.STATUS_COMPLETED)
+    if featured_filters['classification']:
+        competitions = competitions.filter(event_classification=featured_filters['classification'])
     if featured_filters['type'] in {'match', 'criteria'}:
         competitions = competitions.filter(public_kind=featured_filters['type'])
     elif featured_filters['type'] == 'cultural':
@@ -213,10 +218,13 @@ def home(request):
     for event in featured_page:
         card = serialize_event(event)
         card['banner_key'] = featured_banner_key(event)
+        card['artwork_path'] = game_artwork_path(event)
+        card['artwork_url'] = game_artwork_url(card['artwork_path'])
         featured_events.append(card)
     featured_params = {
         'featured_type': featured_filters['type'], 'featured_q': featured_filters['q'],
         'featured_sort': featured_filters['sort'],
+        'featured_classification': featured_filters['classification'],
     }
     upcoming = dict(filters_for(request), status='upcoming')
     return {

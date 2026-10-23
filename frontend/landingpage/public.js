@@ -57,9 +57,9 @@ document.addEventListener('DOMContentLoaded', () => {
         featuredForm.requestSubmit(searchSubmitter);
       }
     });
-    featuredForm.querySelector('select').addEventListener('change', () => {
+    featuredForm.querySelectorAll('select').forEach(select => select.addEventListener('change', () => {
       featuredForm.requestSubmit(searchSubmitter);
-    });
+    }));
   }
   document.querySelectorAll('.filter-panel, .featured-controls').forEach((form) => {
     let searchTimer;
