@@ -15,6 +15,7 @@
 <div class="game-title-row">
 <span class="game-category-symbol">{% include "landingpage/_category_icon.html" %}</span>
 <div><h3><a href="{{ event.detail_url }}">{{ event.name }}</a></h3>
+{% if event.classification_label %}<span class="classification-tag classification-{{ event.classification }}" aria-label="Event classification">{{ event.classification_label }}</span>{% endif %}
 <p class="event-date">{% include "landingpage/_icon.html" with icon="calendar" %}<span>{% if event.date %}{{ event.date|date:"M j, Y" }}{% else %}Schedule to be announced{% endif %}{% if event.division %} &middot; {{ event.division }}{% endif %}</span></p></div>
 </div>
 <a class="card-link" href="{{ event.detail_url }}">View Details <span aria-hidden="true">&#8594;</span></a>

@@ -20,6 +20,7 @@
 <div class="result-heading">
 <span class="mini-label">{{ event.category }} &middot; {{ event.type_label }}</span>
 <h2>{{ event.name }}</h2>
+{% if event.classification_label %}<span class="classification-tag classification-{{ event.classification }}" aria-label="Event classification">{{ event.classification_label }}</span>{% endif %}
 <p>Official published results</p>
 </div>
 <span class="result-official"><span aria-hidden="true">&#10003;</span> Official</span>

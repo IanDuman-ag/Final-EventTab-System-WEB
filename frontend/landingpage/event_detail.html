@@ -15,6 +15,7 @@
     <nav class="event-breadcrumb" aria-label="Breadcrumb"><a href="{% url 'public_games' %}">Games &amp; Events</a><span aria-hidden="true">&#8250;</span><span>{{ event.type_label }} &middot; {{ event.category }}</span></nav>
     <p class="event-detail-type">{{ event.type_label }} &middot; {{ event.category }}</p>
     <h1>{{ event.name }}</h1>
+    {% if event.classification_label %}<span class="classification-tag classification-{{ event.classification }}" aria-label="Event classification">{{ event.classification_label }}</span>{% endif %}
     <span class="status status-{{ event.status }}">{{ event.status_label }}</span>
   </div>
 </section>

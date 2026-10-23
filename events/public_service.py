@@ -121,6 +121,8 @@ def serialize_event(event):
     published_at = publication_datetime(event)
     return {
         'id': event.pk, 'name': event.name, 'category': event.category,
+        'classification': event.event_classification,
+        'classification_label': dict(Event.CLASSIFICATION_CHOICES).get(event.event_classification, ''),
         'type': kind, 'type_label': 'Match-Based' if kind == 'match' else 'Criteria-Based',
         'status': status, 'status_label': status.title(),
         'date': event.event_date, 'time': event.event_time, 'venue': event.venue,

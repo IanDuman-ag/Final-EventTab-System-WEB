@@ -17,6 +17,35 @@ from events.public_service import PUBLIC_TIMEZONE, result_is_published
 
 
 class PublicPortalTests(TestCase):
+    def test_classification_tags_use_saved_values_on_public_pages(self):
+        for value, label in [('major', 'Major Event'), ('minor', 'Minor Event'), ('', '')]:
+            self.event.event_classification = value
+            self.event.save(update_fields=['event_classification'])
+            for route, args in [('home', []), ('public_games', []), ('public_schedules', []),
+                                ('public_event_detail', [self.event.pk])]:
+                with self.subTest(classification=value, route=route):
+                    response = self.client.get(reverse(route, args=args))
+                    marker = 'aria-label="Event classification"'
+                    if label:
+                        self.assertContains(response, marker + '>' + label + '</span>')
+                    else:
+                        self.assertNotContains(response, marker)
+        self.event.event_classification = 'major'
+        self.event.save(update_fields=['event_classification'])
+        self.publish()
+        for route, args in [('public_results', []), ('public_result_detail', [self.event.pk])]:
+            self.assertContains(self.client.get(reverse(route, args=args)),
+                                'aria-label="Event classification">Major Event</span>')
+
+    def test_schedule_union_preserves_event_and_match_classifications(self):
+        self.event.event_classification = 'major'
+        self.event.save(update_fields=['event_classification'])
+        self.create_event('Minor Singing', scoring_method='criteria', event_classification='minor')
+        response = self.client.get(reverse('public_schedules'))
+        classifications = {row['event_name']: row['classification_label'] for row in response.context['schedules']}
+        self.assertEqual(classifications['Basketball'], 'Major Event')
+        self.assertEqual(classifications['Minor Singing'], 'Minor Event')
+
     def test_leaderboard_tabs_scope_categories_and_actual_event_names(self):
         singing = self.create_event('Singing', category='Arts', scoring_method='criteria')
         badminton = self.create_event('Badminton', category='Indoor', scoring_method='match')

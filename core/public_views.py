@@ -120,6 +120,7 @@ def schedule_queryset(filters, future_only=False):
     today = timezone.localdate(timezone=PUBLIC_TIMEZONE)
     event_rows = events.annotate(has_fixtures=Exists(dated_matches)).filter(has_fixtures=False).annotate(
         public_event_id=F('pk'), event_name=F('name'), event_category=F('category'),
+        public_classification=F('event_classification'),
         event_kind=F('public_kind'), round=Value('', output_field=CharField()),
         date=F('event_date'), time=F('event_time'), public_venue=F('venue'),
         participants=Value('', output_field=CharField()),
@@ -133,6 +134,7 @@ def schedule_queryset(filters, future_only=False):
         event__in=events, is_automatic_advance=False, match_date__isnull=False,
     ).annotate(
         public_event_id=F('event_id'), event_name=F('event__name'), event_category=F('event__category'),
+        public_classification=F('event__event_classification'),
         event_kind=Case(When(criteria_condition('event__'), then=Value('criteria')),
                         default=Value('match'), output_field=CharField()),
         round=F('round_name'), date=F('match_date'), time=F('match_time'),
@@ -146,7 +148,7 @@ def schedule_queryset(filters, future_only=False):
         ),
     )
     fields = ('public_event_id', 'event_name', 'event_category', 'event_kind', 'round',
-              'date', 'time', 'public_venue', 'participants', 'public_status')
+              'date', 'time', 'public_venue', 'participants', 'public_status', 'public_classification')
     rows = []
     for qs in (event_rows, match_rows):
         if future_only:
@@ -164,6 +166,8 @@ def schedule_queryset(filters, future_only=False):
 def serialize_schedule(row):
     return {
         'event_id': row['public_event_id'], 'event_name': row['event_name'],
+        'classification': row['public_classification'],
+        'classification_label': dict(Event.CLASSIFICATION_CHOICES).get(row['public_classification'], ''),
         'detail_url': reverse('public_event_detail', args=[row['public_event_id']]),
         'type': row['event_kind'], 'type_label': 'Match-Based' if row['event_kind'] == 'match' else 'Criteria-Based',
         'category': row['event_category'], 'round': row['round'],

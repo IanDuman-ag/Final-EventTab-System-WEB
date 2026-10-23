@@ -12,6 +12,7 @@
   <div class="container official-result-heading">
     <a class="breadcrumb-link" href="{% url 'public_results' %}">&#8592; Official Results</a>
     <h1>{{ event.name }}</h1>
+    {% if event.classification_label %}<span class="classification-tag classification-{{ event.classification }}" aria-label="Event classification">{{ event.classification_label }}</span>{% endif %}
     <p>{% if published_date %}Published {{ published_date|date:"F j, Y" }}{% else %}Official published competition outcomes{% endif %}</p>
     <span class="official-published"><span aria-hidden="true">&#10004;</span> Official / Published</span>
   </div>

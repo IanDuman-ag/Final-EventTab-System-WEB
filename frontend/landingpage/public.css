@@ -482,6 +482,20 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible {
   letter-spacing:.5px;
   margin-bottom:13px
 }
+.classification-tag {
+  display: inline-block;
+  max-width: 100%;
+  margin: 4px 0;
+  padding: 3px 8px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.4;
+  vertical-align: middle;
+}
+.classification-major { background: #fff1c2; color: #765100; }
+.classification-minor { background: #e6efff; color: #214c87; }
+
 .status {
   display:inline-flex;
   align-items:center;

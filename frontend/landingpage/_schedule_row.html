@@ -8,6 +8,7 @@
 <h3>
 <a href="{{ item.detail_url }}">{{ item.event_name }}</a>
 </h3>
+{% if item.classification_label %}<span class="classification-tag classification-{{ item.classification }}" aria-label="Event classification">{{ item.classification_label }}</span>{% endif %}
 {% if item.participants %}
 <p>
 {{ item.participants }}
