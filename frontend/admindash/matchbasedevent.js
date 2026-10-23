@@ -1177,11 +1177,11 @@
     });
     wizard.classList.toggle('at-review', step === 5);
     $('#wizard-back').style.visibility = step === 1 ? 'hidden' : 'visible';
-    $('#publish-action').hidden = step !== 4;
+    $('#publish-action').hidden = step !== 5;
     error.textContent = '';
     if (step === 2) syncThirdPlaceVisibility();
     if (step === 3) syncPlayingAreas();
-    if (step === 4 || step === 5) buildReview();
+    if (step === 5) buildReview();
     $('.wizard-body').scrollTop = 0;
     saveBrowserDraft();
   }
@@ -1206,7 +1206,7 @@
   function saveBrowserDraft() {
     if (!wizard.open || restoringDraft || submitting) return draftWrites;
     syncHiddenFields();
-    if (step === 4) $('#publish-action').disabled = collectPublishGaps().length > 0;
+    if (step === 5) $('#publish-action').disabled = collectPublishGaps().length > 0;
     const fields = Array.from(form.elements).filter(field => field.name
       && !['csrfmiddlewaretoken', 'publication_status'].includes(field.name)
       && !['file', 'submit', 'button'].includes(field.type)).map(field => ({
@@ -1561,7 +1561,7 @@
     const publishing = $('#publication-status').value === 'published';
     syncHiddenFields();
     if (publishing) {
-      if (step !== 4) return;
+      if (step !== 5) return;
       const gaps = collectPublishGaps();
       if (gaps.length) {
         event.preventDefault();

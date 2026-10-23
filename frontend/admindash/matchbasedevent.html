@@ -265,7 +265,7 @@
         </section>
 
         <section class="wizard-panel" data-step="5">
-          <div class="wizard-section-title"><span>05</span><div><h3>Review event</h3><p>Confirm the operational plan. Return to Configuration (step 4) to publish.</p></div></div>
+          <div class="wizard-section-title"><span>05</span><div><h3>Review and publish</h3><p>Confirm the event setup below, then publish when all requirements are complete.</p></div></div>
           <div id="review-requirements" class="review-requirements" aria-live="polite"></div>
           <div id="review-summary" class="review-summary"></div>
         </section>
@@ -324,6 +324,6 @@
     window.MATCH_EVENT_ACADEMIC_YEAR = "{{ academic_year|escapejs }}";
     window.MATCH_EVENT_SEASON_NAMES = {{ season_event_names_json|safe }};
   </script>
-  <script src="{% static 'admindash/matchbasedevent.js' %}?v=20261023draft"></script>
+  <script src="{% static 'admindash/matchbasedevent.js' %}?v=20261023reviewpublish"></script>
 </body>
 </html>
