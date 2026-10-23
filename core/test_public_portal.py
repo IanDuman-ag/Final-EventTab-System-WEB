@@ -50,7 +50,7 @@ class PublicPortalTests(TestCase):
         self.event.save()
         response = self.client.get(reverse('public_games'))
         self.assertContains(response, f'src="{self.event.image.url}"')
-        self.assertContains(response, 'data-banner-fallback="/static/landingpage/assets/competitions/photography.svg"')
+        self.assertContains(response, 'data-banner-fallback="data:image/svg+xml;base64,')
 
     def test_classification_tags_use_saved_values_on_public_pages(self):
         for value, label in [('major', 'Major Event'), ('minor', 'Minor Event'), ('', '')]:

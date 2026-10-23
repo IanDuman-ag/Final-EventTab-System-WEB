@@ -1,14 +1,18 @@
 """Anonymous GET pages backed by the existing EventTab records and workflows."""
+import base64
 import logging
-from functools import wraps
+from functools import lru_cache, wraps
+from pathlib import Path
 from urllib.parse import urlencode
 
 from django.core.paginator import Paginator
+from django.conf import settings
 from django.db import DatabaseError
 from django.db.models import Case, CharField, Exists, F, OuterRef, Q, Value, When
 from django.db.models.functions import Coalesce, Concat
 from django.http import Http404
 from django.shortcuts import get_object_or_404, render
+from django.templatetags.static import static
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_date
@@ -264,6 +268,15 @@ def game_artwork_path(event):
     return 'landingpage/assets/competitions/competition.svg'
 
 
+@lru_cache(maxsize=32)
+def game_artwork_url(path):
+    """Embed trusted bundled illustrations; existing photos retain static URLs."""
+    if path.endswith('.svg'):
+        artwork = (Path(settings.BASE_DIR) / 'frontend' / path).read_bytes()
+        return 'data:image/svg+xml;base64,' + base64.b64encode(artwork).decode('ascii')
+    return static(path)
+
+
 @public_page('games')
 def games(request):
     page, context = paginate(request, apply_filters(
@@ -271,7 +284,8 @@ def games(request):
     ).order_by('event_date', 'name', 'pk'))
     context.update(filter_options(), page_title='Games & Events — EventTab',
                    events=[{**serialize_event(event), 'banner_key': featured_banner_key(event),
-                            'artwork_path': game_artwork_path(event)} for event in page])
+                            'artwork_path': game_artwork_path(event),
+                            'artwork_url': game_artwork_url(game_artwork_path(event))} for event in page])
     return context
 
 
