@@ -293,6 +293,9 @@
                       >{{ e.name }}</a
                     >
                     </h2>
+                    {% if e.classification == 'Major Event' or e.classification == 'Minor Event' %}
+                      <span class="fac-pill" aria-label="Event classification">{{ e.classification }}</span>
+                    {% endif %}
                     <span
                     class="events-type {% if e.event_type == 'Match-Based' %}is-match{% endif %}"
                     >{{ e.event_type }}</span

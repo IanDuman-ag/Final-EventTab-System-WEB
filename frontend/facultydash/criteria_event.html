@@ -24,6 +24,9 @@
             <div>
               <span class="criteria-type">Criteria-Based Event</span>
               <h1>{{ portal.header.name|default:event.name }}</h1>
+              {% if event.event_classification %}
+                <span class="criteria-badge" aria-label="Event classification">{{ event.get_event_classification_display }}</span>
+              {% endif %}
               <p>{{ portal.header.category }}</p>
             </div>
             <span class="criteria-badge status-{{ portal.header.status_key }}">{{ portal.header.status }}</span>

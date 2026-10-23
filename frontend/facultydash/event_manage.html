@@ -17,6 +17,9 @@
             <p class="fac-breadcrumb"><a href="{% url 'faculty_my_events' %}">My Events</a><span>/</span>{{ detail.name }}</p>
             <div class="fac-title-row">
               <h1>{{ detail.name }}</h1>
+              {% if event.event_classification %}
+                <span class="fac-pill" aria-label="Event classification">{{ event.get_event_classification_display }}</span>
+              {% endif %}
               <span class="fac-pill fac-pill--{{ publication_row.status_key }}">{{ publication_row.status }}</span>
             </div>
             <div class="fac-meta">
