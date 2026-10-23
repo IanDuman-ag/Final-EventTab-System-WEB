@@ -17,6 +17,41 @@ from events.public_service import PUBLIC_TIMEZONE, result_is_published
 
 
 class PublicPortalTests(TestCase):
+    def test_games_category_filter_uses_major_and_minor_classification(self):
+        self.event.event_classification = 'major'
+        self.event.save(update_fields=['event_classification'])
+        minor = self.create_event('Minor Quiz Bee', event_classification='minor')
+        for classification, expected in [('major', self.event.pk), ('minor', minor.pk)]:
+            response = self.client.get(reverse('public_games'), {'category': classification})
+            self.assertEqual([row['id'] for row in response.context['events']], [expected])
+            self.assertContains(response, f'value="{classification}" selected')
+        self.assertContains(response, '>Major</option>')
+        self.assertContains(response, '>Minor</option>')
+
+    def test_games_artwork_matches_event_and_preserves_uploaded_image(self):
+        from pathlib import Path
+        from django.conf import settings
+        from core.public_views import game_artwork_path
+        for name, asset in [('Spoken Poetry', 'speech.svg'), ('Charcoal Painting', 'art.svg'),
+                            ('Film on Stage', 'film.svg'), ('Photo Contest', 'photography.svg'),
+                            ('Live Band Competition', 'band.svg'), ('Quiz Bee', 'quiz.svg'),
+                            ('Radio Drama', 'radio.svg'), ('Short & Sweet Play', 'theater.svg'),
+                            ('Most Disciplined Unit', 'unit.svg'), ('Amazing Race', 'race.svg'),
+                            ('Mr. & Ms. USTP Ambassador 2026', 'pageant.webp')]:
+            with self.subTest(name=name):
+                self.event.name = name
+                self.event.sport_type = ''
+                self.event.special_event_type = ''
+                path = game_artwork_path(self.event)
+                self.assertTrue(path.endswith('/' + asset))
+                self.assertTrue((Path(settings.BASE_DIR) / 'frontend' / path).is_file())
+        self.event.name = 'Photo Contest'
+        self.event.image = 'events/uploaded-photo.jpg'
+        self.event.save()
+        response = self.client.get(reverse('public_games'))
+        self.assertContains(response, f'src="{self.event.image.url}"')
+        self.assertContains(response, 'data-banner-fallback="/static/landingpage/assets/competitions/photography.svg"')
+
     def test_classification_tags_use_saved_values_on_public_pages(self):
         for value, label in [('major', 'Major Event'), ('minor', 'Minor Event'), ('', '')]:
             self.event.event_classification = value

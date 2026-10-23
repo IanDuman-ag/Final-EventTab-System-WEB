@@ -80,7 +80,10 @@ def apply_filters(qs, filters, include_schedule=False):
     if filters['type'] != 'all':
         qs = qs.filter(public_kind=filters['type'])
     if filters['category']:
-        qs = qs.filter(category=filters['category'])
+        if filters['category'] in {'major', 'minor'}:
+            qs = qs.filter(event_classification=filters['category'])
+        else:
+            qs = qs.filter(category=filters['category'])
     if not include_schedule:
         if filters['date']:
             qs = qs.filter(event_date=parse_date(filters['date']))
@@ -233,13 +236,42 @@ def featured_banner_key(event):
     return ''
 
 
+def game_artwork_path(event):
+    """Use existing photos first, then artwork matching the competition."""
+    photo = featured_banner_key(event)
+    if photo:
+        return f'landingpage/assets/competitions/{photo}.webp'
+    name = ' '.join((event.name, event.sport_type, event.special_event_type)).lower()
+    for keywords, key in (
+        (('ambassador', 'mr.', 'ms.'), 'pageant'),
+        (('band', 'showchoir', 'yell'), 'band'),
+        (('poetry', 'speech', 'talumpati', 'debate'), 'speech'),
+        (('painting', 'charcoal', 'poster', 'banner', 'designing'), 'art'),
+        (('film',), 'film'),
+        (('photo',), 'photography'),
+        (('quiz',), 'quiz'),
+        (('radio',), 'radio'),
+        (('play', 'drama', 'theater', 'theatre'), 'theater'),
+        (('disciplined', 'character', 'unit'), 'unit'),
+        (('race', 'fiesta'), 'race'),
+        (('table tennis', 'ping pong', 'pickleball'), 'paddle'),
+        (('dart',), 'darts'),
+        (('chess',), 'chess'),
+    ):
+        if any(keyword in name for keyword in keywords):
+            extension = 'webp' if key == 'pageant' else 'svg'
+            return f'landingpage/assets/competitions/{key}.{extension}'
+    return 'landingpage/assets/competitions/competition.svg'
+
+
 @public_page('games')
 def games(request):
     page, context = paginate(request, apply_filters(
         public_events(), filters_for(request),
     ).order_by('event_date', 'name', 'pk'))
     context.update(filter_options(), page_title='Games & Events — EventTab',
-                   events=[{**serialize_event(event), 'banner_key': featured_banner_key(event)} for event in page])
+                   events=[{**serialize_event(event), 'banner_key': featured_banner_key(event),
+                            'artwork_path': game_artwork_path(event)} for event in page])
     return context
 
 

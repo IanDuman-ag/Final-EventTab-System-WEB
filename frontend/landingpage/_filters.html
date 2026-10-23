@@ -9,9 +9,14 @@
 </div>
 <div>
 <label for="category">{% if active == 'games' or active == 'schedules' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>{% endif %}Category</label><select class="form-select" id="category" name="category"><option value="">All categories</option>
+{% if active == 'games' %}
+<option value="major" {% if filters.category == 'major' %}selected{% endif %}>Major</option>
+<option value="minor" {% if filters.category == 'minor' %}selected{% endif %}>Minor</option>
+{% else %}
 {% for category in categories %}
 <option {% if filters.category == category %}selected{% endif %} value="{{ category }}">{{ category }}</option>
 {% endfor %}
+{% endif %}
 </select>
 </div>
 {% if active == 'schedules' %}
