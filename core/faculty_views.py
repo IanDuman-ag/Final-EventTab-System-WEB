@@ -670,7 +670,11 @@ def _judge_completion(event):
         requirements = set(event.scoring_categories.filter(purpose='official').values_list(
             'assigned_round_id', 'criteria__id'))
         requirements = {(rid, cid) for rid, cid in requirements if cid is not None}
-        expected_keys = {(rid, cid, pid) for rid, cid in requirements for pid in event.participant_ids}
+        from events.criteria_faculty_service import criteria_rounds
+        from events.participant_removal_service import active_participant_ids
+        round_indices = {row['id']: index for index, row in enumerate(criteria_rounds(event))}
+        expected_keys = {(rid, cid, pid) for rid, cid in requirements
+                         for pid in active_participant_ids(event, round_indices.get(rid))}
         submissions = event.criteria_score_submissions.filter(
             is_active=True, participant_id__in=event.participant_ids,
             status__in=['SUBMITTED', 'NEEDS_REVIEW', 'VERIFIED', 'APPROVED'],
@@ -685,13 +689,15 @@ def _judge_completion(event):
         } for judge in judges]
         return {'rows': rows, 'submitted': sum(row['complete'] for row in rows),
                 'total': len(judges), 'expected_per_judge': len(expected_keys)}
-    candidates = judging.candidates.count() if judging else 0
+    from events.participant_removal_service import active_mobile_candidate_ids
+    candidate_ids = active_mobile_candidate_ids(event) if judging else []
+    candidates = len(candidate_ids)
     criteria = judging.criteria.count() if judging else 0
     expected = candidates * criteria
     rows = []
     for judge in judges:
         locked = JudgeScore.objects.filter(
-            candidate__event=judging, judge=judge, is_locked=True,
+            candidate__event=judging, candidate_id__in=candidate_ids, judge=judge, is_locked=True,
         ).count() if judging else 0
         rows.append({
             'name': judge.get_full_name() or judge.username,
@@ -784,8 +790,9 @@ def _category_filter_options(event) -> list[str]:
     if names:
         return names
     if event.judging_event_id:
+        from events.participant_removal_service import active_mobile_candidate_ids
         depts = (
-            Candidate.objects.filter(event_id=event.judging_event_id)
+            Candidate.objects.filter(event_id=event.judging_event_id, pk__in=active_mobile_candidate_ids(event))
             .exclude(department='')
             .values_list('department', flat=True)
             .distinct()
@@ -797,8 +804,9 @@ def _category_filter_options(event) -> list[str]:
 def _enough_locked_scores(event) -> bool:
     if not event.judging_event_id:
         return False
+    from events.participant_removal_service import active_mobile_candidate_ids
     locked = JudgeScore.objects.filter(
-        candidate__event_id=event.judging_event_id, is_locked=True
+        candidate__event_id=event.judging_event_id, candidate_id__in=active_mobile_candidate_ids(event), is_locked=True
     ).exists()
     return locked
 
@@ -1355,7 +1363,8 @@ def _tabulator_results_payload(user, event_id=None, category='', tab='overall', 
         participant_count = event.bracket_teams.count()
         scored_count = len([r for r in match_standings if r.get('wins') or r.get('points')])
     elif event.judging_event_id:
-        participant_count = Candidate.objects.filter(event_id=event.judging_event_id).count()
+        from events.participant_removal_service import active_mobile_candidate_ids
+        participant_count = len(active_mobile_candidate_ids(event))
         scored_count = len([r for r in results if r.get('has_score')])
 
     monitoring = judge_monitoring(event) if mode == 'scoring' else {
@@ -1468,7 +1477,8 @@ def _tabulator_results_payload(user, event_id=None, category='', tab='overall', 
         payload.update(results=rows, participants=rows, winner=None,
                        status_message=page['scope_notice'] or page['status_message'],
                        criteria_round_name=page['round_name'], is_finalized=page['is_published'])
-        payload['stats'].update(participant_count=len(set(event.participant_ids)),
+        from events.participant_removal_service import active_participant_ids
+        payload['stats'].update(participant_count=len(set(active_participant_ids(event))),
                                 scored_count=sum(row['complete'] for row in rows))
     return payload
 
@@ -1511,11 +1521,13 @@ def tabulator_dashboard(request):
     if event and payload['event_kind'] == 'criteria':
         judging = event.judging_event
         if judging:
+            from events.participant_removal_service import active_mobile_candidate_ids
+            candidate_ids = active_mobile_candidate_ids(event)
             judge_ids = event.assigned_judges.values_list('pk', flat=True)
             criterion_ids = judging.criteria.values_list('pk', flat=True)
-            expected = judging.candidates.count() * judging.criteria.count() * event.assigned_judges.count()
+            expected = len(candidate_ids) * judging.criteria.count() * event.assigned_judges.count()
             submitted = JudgeScore.objects.filter(
-                candidate__event=judging, criterion_id__in=criterion_ids,
+                candidate__event=judging, candidate_id__in=candidate_ids, criterion_id__in=criterion_ids,
                 judge_id__in=judge_ids, is_locked=True,
             ).count()
             ctx['dashboard_stats'] = {

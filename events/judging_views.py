@@ -269,6 +269,10 @@ class JudgingEventViewSet(viewsets.ReadOnlyModelViewSet):
         detail = detail_payload(request.user, event, request.query_params.get('round_id'))
         scores = scores.filter(criterion_id__in=[row['id'] for row in detail['criteria']])
         participant = next((row for row in detail['participants'] if row['id'] == candidate_id), None)
+        from .mobile_judge import portal_for
+        portal = portal_for(event)
+        if participant is None and portal and (portal.result_processing_config or {}).get('participant_removals'):
+            return Response([])
         if participant and participant.get('entry_id') is not None:
             from .models import CriteriaScoreSubmission
             definitions = {row['normalized_criterion_id']: row['id'] for row in detail['criteria']

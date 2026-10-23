@@ -146,8 +146,10 @@ def public_participants(event):
             'department': team.department.name if team.department else '',
             'logo_url': image_url(team.source_team.image) if team.source_team else '',
         } for team in event.bracket_teams.select_related('department', 'source_team')]
+    from .participant_removal_service import active_participant_ids, active_mobile_candidate_ids
+    ids = active_participant_ids(event)
     entries = list(CriteriaEventEntry.objects.filter(
-        event=event, pk__in=event.participant_ids or [],
+        event=event, pk__in=ids,
     ).select_related('department', 'source_individual', 'source_team'))
     if entries:
         return [{
@@ -164,11 +166,11 @@ def public_participants(event):
             'department': person.department.name if person.department else '',
             'logo_url': image_url(person.image),
         } for person in model.objects.filter(
-            pk__in=event.participant_ids, status=model.STATUS_ACTIVE,
+            pk__in=ids, status=model.STATUS_ACTIVE,
         ).select_related('department')]
     if event.judging_event_id:
         return [{'id': person.pk, 'name': person.name, 'department': person.department,
-                 'logo_url': image_url(person.photo)} for person in event.judging_event.candidates.all()]
+                 'logo_url': image_url(person.photo)} for person in event.judging_event.candidates.filter(pk__in=active_mobile_candidate_ids(event))]
     return []
 
 
@@ -302,7 +304,8 @@ def criteria_results(event, round_id=None):
         candidate__event=event.judging_event, submitted_at__gt=publication_datetime(event),
     ).exists():
         return [], 'Updated competition results are awaiting authorized republication.'
-    candidate_ids = list(event.judging_event.candidates.values_list('pk', flat=True))
+    from .participant_removal_service import active_mobile_candidate_ids
+    candidate_ids = active_mobile_candidate_ids(event)
     criterion_ids = list(event.judging_event.criteria.values_list('pk', flat=True))
     judge_ids = list(event.assigned_judges.filter(is_active=True).values_list('pk', flat=True))
     locked = set(JudgeScore.objects.filter(

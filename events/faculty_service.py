@@ -216,6 +216,7 @@ def serialize_event_row(event):
 
 
 def serialize_event_detail(event):
+    from .participant_removal_service import active_participant_ids, active_mobile_candidate_ids
     row = serialize_event_row(event)
     judges = [
         (j.get_full_name() or j.username)
@@ -228,7 +229,7 @@ def serialize_event_detail(event):
     participants = []
     participant_rows = []
     if event.scoring_method == 'criteria' or event.participation_type == 'individual':
-        entries = list(event.criteria_entries.all()) if event.scoring_method == 'criteria' else []
+        entries = list(event.criteria_entries.filter(pk__in=active_participant_ids(event))) if event.scoring_method == 'criteria' else []
         participants.extend(entry.display_name for entry in entries)
         participant_rows.extend({
             'name': entry.display_name,
@@ -236,7 +237,7 @@ def serialize_event_detail(event):
             'seed': '—',
             'status': 'Assigned',
         } for entry in entries)
-        ids = event.participant_ids or []
+        ids = active_participant_ids(event)
         if not entries:
             for c in RegistryCandidate.objects.filter(id__in=ids):
                 participants.append(f'#{c.number} {c.name}')
@@ -246,8 +247,8 @@ def serialize_event_detail(event):
                     'seed': c.number or '—',
                     'status': 'Assigned',
                 })
-        if not participants and event.judging_event_id:
-            for c in event.judging_event.candidates.all()[:50]:
+        if not participants and not event.participant_ids and event.judging_event_id:
+            for c in event.judging_event.candidates.filter(pk__in=active_mobile_candidate_ids(event))[:50]:
                 participants.append(c.name)
                 participant_rows.append({
                     'name': c.name,
@@ -475,6 +476,8 @@ def recent_notifications(user, limit=8):
 
 
 def judge_monitoring(event):
+    from .participant_removal_service import active_mobile_candidate_ids
+    candidate_ids = active_mobile_candidate_ids(event)
     judges = list(event.assigned_judges.all())
     if event.chief_judge_id and event.chief_judge not in judges:
         judges.append(event.chief_judge)
@@ -485,7 +488,7 @@ def judge_monitoring(event):
         status = 'Pending'
         submitted_at = None
         if judging:
-            scores = JudgeScore.objects.filter(candidate__event=judging, judge=judge)
+            scores = JudgeScore.objects.filter(candidate__event=judging, candidate_id__in=candidate_ids, judge=judge)
             if scores.filter(is_locked=True).exists():
                 status = 'Submitted'
                 submitted += 1
@@ -517,7 +520,8 @@ def compute_criteria_rankings(event):
     criteria = list(judging.criteria.all())
     weight_by_id = {c.id: float(c.weight_percent or 0) or 1.0 for c in criteria}
     max_by_id = {c.id: float(c.max_score or 100) for c in criteria}
-    candidates = list(judging.candidates.all())
+    from .participant_removal_service import active_mobile_candidate_ids
+    candidates = list(judging.candidates.filter(pk__in=active_mobile_candidate_ids(event)))
     candidate_ids = [candidate.id for candidate in candidates]
     scores = JudgeScore.objects.filter(
         candidate_id__in=candidate_ids,

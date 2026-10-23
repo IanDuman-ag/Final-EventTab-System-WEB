@@ -206,6 +206,9 @@ class ParticipantRemovalTests(TestCase):
         record = self.remove()
         current = read_mobile_round_context(mobile)
         self.assertNotIn(removed_candidate, current['candidate_entries'])
+        from .mobile_judge import detail_payload
+        detail = detail_payload(self.judge, mobile)
+        self.assertNotIn(self.entries[0].pk, [row['entry_id'] for row in detail['participants']])
         self.client.force_login(self.judge)
         response = self.client.post(reverse('judgingevent-submit-scores', args=[mobile.pk]),
             {'candidate_id': removed_candidate,
@@ -215,3 +218,49 @@ class ParticipantRemovalTests(TestCase):
         self.assertFalse(CriteriaScoreSubmission.objects.exists())
         restore_criteria_participant(self.event, self.faculty, record['id'])
         self.assertIn(removed_candidate, read_mobile_round_context(mobile)['candidate_entries'])
+        self.assertIn(self.entries[0].pk, [row['entry_id'] for row in detail_payload(self.judge, mobile)['participants']])
+
+    def test_public_roster_faculty_details_and_report_counts_restore_together(self):
+        from .public_service import public_participants
+        from .faculty_service import serialize_event_detail
+        from .admin_report_service import build_report_preview, _count_participants
+        record = self.remove()
+        self.assertEqual([row['id'] for row in public_participants(self.event)], [self.entries[1].pk])
+        self.assertNotIn(self.entries[0].display_name, serialize_event_detail(self.event)['participants'])
+        report = build_report_preview('contestants')
+        self.assertNotIn(self.entries[0].display_name, [row[0] for row in report['rows']])
+        self.assertEqual(_count_participants([self.event]), 1)
+        restore_criteria_participant(self.event, self.faculty, record['id'])
+        self.assertEqual(len(public_participants(self.event)), 2)
+        self.assertIn(self.entries[0].display_name, serialize_event_detail(self.event)['participants'])
+        report = build_report_preview('contestants')
+        self.assertIn(self.entries[0].display_name, [row[0] for row in report['rows']])
+        self.assertEqual(_count_participants([self.event]), 2)
+
+    def test_removing_all_entries_does_not_resurrect_legacy_roster(self):
+        from .public_service import public_participants
+        from .faculty_service import serialize_event_detail
+        from .admin_report_service import build_report_preview, _count_participants
+        self.remove()
+        self.remove(self.entries[1])
+        self.assertEqual(public_participants(self.event), [])
+        self.assertEqual(serialize_event_detail(self.event)['participants'], [])
+        self.assertEqual(build_report_preview('contestants')['rows'], [])
+        self.assertEqual(_count_participants([self.event]), 0)
+
+    def test_tabulator_breakdown_and_completion_keep_only_historical_removed_scores(self):
+        from core.faculty_views import _judge_completion
+        from core.tabulator_result_page import build_results_page
+        from django.test import RequestFactory
+        self.second_round()
+        self.remove()
+        CriteriaScoreSubmission.objects.filter(event=self.event).update(status='APPROVED')
+        completion = _judge_completion(self.event)
+        self.assertEqual(completion['expected_per_judge'], 3)
+        self.assertEqual(completion['submitted'], 1)
+        factory = RequestFactory()
+        first = build_results_page(factory.get('/', {'round_id': 'first'}), self.event, {'event_kind': 'criteria'})
+        second = build_results_page(factory.get('/', {'round_id': 'second'}), self.event, {'event_kind': 'criteria'})
+        self.assertIn(self.entries[0].display_name, [row['name'] for row in first['breakdown_groups']])
+        self.assertNotIn(self.entries[0].display_name, [row['name'] for row in second['breakdown_groups']])
+        self.assertTrue(second['round_complete'])

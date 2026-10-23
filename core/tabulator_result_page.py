@@ -75,10 +75,14 @@ def _legacy_breakdown(event, rows, judges):
 
 def _modern_data(event, page, categories):
     round_id = page['selected_round']
-    participants = list(CriteriaEventEntry.objects.filter(event=event, id__in=event.participant_ids))
+    from events.criteria_faculty_service import criteria_rounds
+    from events.participant_removal_service import active_participant_ids
+    index = next((index for index, row in enumerate(criteria_rounds(event)) if row['id'] == round_id), None)
+    ids = active_participant_ids(event, index)
+    participants = list(CriteriaEventEntry.objects.filter(event=event, id__in=ids))
     if not participants:
         model = RegistryCandidate if event.participation_type == 'individual' else Team
-        participants = list(model.objects.filter(id__in=event.participant_ids, status=model.STATUS_ACTIVE))
+        participants = list(model.objects.filter(id__in=ids, status=model.STATUS_ACTIVE))
     participant_map = {row.pk: row for row in participants}
     ranked = []
     ranking_mode = any(category.judge_mode == 'ranking' for category in categories)
@@ -87,7 +91,7 @@ def _modern_data(event, page, categories):
         page['scope_notice'] = 'Ranking entries are shown for review. Calculated standings are not available for this scoring mode.'
     else:
         try:
-            ranked = compute_official_criteria_rankings(event, round_id=round_id)
+            ranked = compute_official_criteria_rankings(event, round_id=round_id, participant_ids=ids)
         except ValueError as exc:
             page['error'] = str(exc)
     page['scope_notice'] = page['scope_notice'] or 'Round standings use approved, complete judge sheets. Other submissions remain pending verification.'

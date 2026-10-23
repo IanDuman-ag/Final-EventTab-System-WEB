@@ -188,6 +188,11 @@ def detail_payload(user, event, requested_round=None):
     source = (portal.criteria_entries.filter(pk__in=portal.participant_ids)
               .select_related('department', 'source_individual', 'source_team')
               .prefetch_related('member_links__individual')) if normalized else event.candidates.all()
+    if portal:
+        from .participant_removal_service import excluded_participant_ids, active_mobile_candidate_ids
+        round_index = rounds.index(selected)
+        source = (source.exclude(pk__in=excluded_participant_ids(portal, round_index)) if normalized else
+                  source.filter(pk__in=active_mobile_candidate_ids(portal, round_index)))
     for candidate in source:
         entry_id = candidate.pk if normalized else None
         mobile_id = candidates.get(str(entry_id)) if normalized else candidate.pk

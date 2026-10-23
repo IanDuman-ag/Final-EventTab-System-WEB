@@ -27,6 +27,37 @@ def excluded_participant_ids(event, round_index=None):
     }
 
 
+def active_participant_ids(event, round_index=None):
+    """Event-wide roster by default; explicit rounds retain historical eligibility."""
+    excluded = excluded_participant_ids(event, round_index)
+    return [participant_id for participant_id in event.participant_ids or [] if participant_id not in excluded]
+
+
+def active_mobile_candidate_ids(event, round_index=None):
+    """Resolve event entry identities without deleting legacy candidates or scores."""
+    if not event.judging_event_id:
+        return []
+    candidates = list(event.judging_event.candidates.all())
+    if not excluded_participant_ids(event, round_index):
+        return [row.pk for row in candidates]
+    from .mobile_scoring_compatibility import read_mobile_mapping
+    mapping = read_mobile_mapping(event, event.judging_event)['candidates']
+    from .criteria_faculty_service import _participants
+    participants = _participants(event)
+    for participant in participants:
+        key = str(participant['id'])
+        if key in mapping:
+            continue
+        matches = [row for row in candidates if row.name == participant['name']]
+        peers = [row for row in participants if row['name'] == participant['name']]
+        if len(matches) == len(peers) == 1:
+            mapping[key] = matches[0].pk
+    # Never guess an ambiguous legacy identity or expose an unmapped removed entry.
+    eligible = set(active_participant_ids(event, round_index))
+    mobile_ids = {mapping[str(entry_id)] for entry_id in eligible if str(entry_id) in mapping}
+    return [row.pk for row in candidates if row.pk in mobile_ids]
+
+
 def participant_change_round(event):
     """Approved snapshots are immutable; changes begin at the next unapproved round."""
     from .criteria_faculty_service import criteria_rounds

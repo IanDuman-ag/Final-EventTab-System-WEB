@@ -314,13 +314,15 @@ def criteria_placements(event, rules):
         except ValueError as exc:
             return [], str(exc)
         entries = {row.id: row for row in event.criteria_entries.all()}
-        if not rankings or len(rankings) != len(event.participant_ids) or not all(row['complete'] for row in rankings):
+        from .participant_removal_service import active_participant_ids
+        if not rankings or len(rankings) != len(active_participant_ids(event)) or not all(row['complete'] for row in rankings):
             return [], 'Complete approved judge scores are required.'
         rows = [{'id': row['participant_id'], 'rank': row['rank'], 'department_id': entries[row['participant_id']].department_id}
                 for row in rankings if row['participant_id'] in entries]
     elif event.judging_event_id:
         from .models import JudgeScore
-        candidates = list(event.judging_event.candidates.all())
+        from .participant_removal_service import active_mobile_candidate_ids
+        candidates = list(event.judging_event.candidates.filter(pk__in=active_mobile_candidate_ids(event)))
         criteria = list(event.judging_event.criteria.values_list('id', flat=True))
         judges = list(event.assigned_judges.filter(is_active=True).values_list('id', flat=True))
         locked = set(JudgeScore.objects.filter(candidate__event=event.judging_event, is_locked=True).values_list('candidate_id', 'criterion_id', 'judge_id'))
