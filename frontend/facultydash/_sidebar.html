@@ -1,16 +1,55 @@
 {% load static %}
-<button class="fac-menu-toggle" type="button" aria-label="Open navigation" aria-controls="faculty-sidebar" aria-expanded="false"><span></span><span></span><span></span></button>
-<div class="fac-nav-scrim" data-nav-close></div>
+<button class="fac-menu-toggle" type="button" aria-label="Open navigation" aria-controls="faculty-sidebar" aria-expanded="false">
+  <span>
+  </span>
+  <span>
+  </span>
+  <span>
+  </span>
+</button>
+<div class="fac-nav-scrim" data-nav-close>
+</div>
 <aside data-portal-mobile data-portal-notifications="{% url 'portal_notifications' %}" data-portal-logo="{% get_media_prefix %}landingpagelogo/logoeventtab%20(1).png" class="tab-sidebar" id="faculty-sidebar" aria-label="Faculty navigation">
-  <div class="tab-brand"><h1>Event<span>Tab</span></h1><small>FACULTY PORTAL</small></div>
+  <div class="tab-brand">
+    <h1>Event<span>Tab</span></h1>
+    <small>FACULTY PORTAL</small>
+  </div>
   <p class="fac-nav-label">Main</p>
   <nav class="tab-nav">
-    <a class="tab-nav-link{% if active == 'dashboard' %} is-active{% endif %}" href="{% url 'faculty_dashboard' %}" {% if active == 'dashboard' %}aria-current="page"{% endif %}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm9 0h7v7h-7v-7Z"/></svg><span>Dashboard</span></a>
-    <a class="tab-nav-link{% if active == 'my_events' %} is-active{% endif %}" href="{% url 'faculty_my_events' %}" {% if active == 'my_events' %}aria-current="page"{% endif %}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14h16V6a2 2 0 0 0-2-2Zm0 14H5V9h14v9Z"/></svg><span>My Events</span></a>
-    <a class="tab-nav-link{% if active == 'ocr' %} is-active{% endif %}" href="{% url 'faculty_ocr' %}" {% if active == 'ocr' %}aria-current="page"{% endif %}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 2h10l5 5v15H5V2Zm9 2v5h4M8 12h8v2H8Zm0 4h8v2H8Z"/></svg><span>OCR Score Sheets</span></a>
+    <a class="tab-nav-link{% if active == 'dashboard' %} is-active{% endif %}" href="{% url 'faculty_dashboard' %}" {% if active == 'dashboard' %}aria-current="page"{% endif %}>
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm9 0h7v7h-7v-7Z"/>
+      </svg>
+      <span>Dashboard</span>
+    </a>
+    <a class="tab-nav-link{% if active == 'my_events' %} is-active{% endif %}" href="{% url 'faculty_my_events' %}" {% if active == 'my_events' %}aria-current="page"{% endif %}>
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14h16V6a2 2 0 0 0-2-2Zm0 14H5V9h14v9Z"/>
+      </svg>
+      <span>My Events</span>
+    </a>
+    <a class="tab-nav-link{% if active == 'ocr' %} is-active{% endif %}" href="{% url 'faculty_ocr' %}" {% if active == 'ocr' %}aria-current="page"{% endif %}>
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M5 2h10l5 5v15H5V2Zm9 2v5h4M8 12h8v2H8Zm0 4h8v2H8Z"/>
+      </svg>
+      <span>OCR Score Sheets</span>
+    </a>
   </nav>
-  <div class="fac-sidebar-bottom"><div class="tab-user-card"><span class="tab-user-avatar">{{ user_display|default:"FA"|slice:":2"|upper }}</span><span><strong>{{ user_display|default:"Faculty" }}</strong><small>Faculty In-Charge</small></span></div><a class="tab-logout" href="{% url 'logout' %}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17v-3H3v-4h7V7l5 5-5 5Zm2-14h8v18h-8v-2h6V5h-6V3Z"/></svg><span>Logout</span></a></div>
+  <div class="fac-sidebar-bottom">
+    <div class="tab-user-card">
+      <span class="tab-user-avatar">{{ user_display|default:"FA"|slice:":2"|upper }}</span>
+      <span>
+        <strong>{{ user_display|default:"Faculty" }}</strong>
+        <small>Faculty In-Charge</small>
+      </span>
+    </div>
+    <a class="tab-logout" href="{% url 'logout' %}">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M10 17v-3H3v-4h7V7l5 5-5 5Zm2-14h8v18h-8v-2h6V5h-6V3Z"/>
+      </svg>
+      <span>Logout</span>
+    </a>
+  </div>
 </aside>
-
 <link rel="stylesheet" href="{% static 'admindash/sidebar-scrollbar.css' %}?v=20261019notifications">
 <script src="{% static 'js/admin_sidebar.js' %}?v=20261019notifications"></script>

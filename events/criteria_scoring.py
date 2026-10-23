@@ -43,6 +43,12 @@ def compute_official_criteria_rankings(event, *, round_id, accepted_statuses=Non
         expected[category.id] = {row.id for row in criteria}
 
     roster = event.participant_ids if participant_ids is None else participant_ids
+    from .criteria_faculty_service import criteria_rounds
+    from .participant_removal_service import excluded_participant_ids
+    index = next((index for index, row in enumerate(criteria_rounds(event)) if row['id'] == round_id), None)
+    excluded = excluded_participant_ids(event, index) if index is not None else set()
+    if excluded:
+        roster = [participant_id for participant_id in roster if participant_id not in excluded]
     participants = {row.id: row for row in CriteriaEventEntry.objects.filter(event=event, id__in=roster)}
     if not participants:  # legacy fallback before migration
         registry = RegistryCandidate if event.participation_type == 'individual' else Team
@@ -58,7 +64,8 @@ def compute_official_criteria_rankings(event, *, round_id, accepted_statuses=Non
         if row.criterion.category_id != row.category_id:
             raise ValueError('Score criterion does not belong to the submission category.')
         ranking = configured and row.category.judge_mode == 'ranking'
-        if ranking and (row.raw_score != row.raw_score.to_integral_value() or not 1 <= row.raw_score <= len(participants)):
+        rank_limit = len(event.participant_ids) if excluded else len(participants)
+        if ranking and (row.raw_score != row.raw_score.to_integral_value() or not 1 <= row.raw_score <= rank_limit):
             raise ValueError('Ranking submissions must contain valid ordinal participant ranks.')
         if not ranking and row.raw_score < row.criterion.min_score:
             raise ValueError('Score is below the criterion minimum.')
@@ -129,7 +136,10 @@ def compute_official_criteria_rankings(event, *, round_id, accepted_statuses=Non
         for judge_id in judge_ids:
             for criterion_id in required:
                 ranks = [sheet[criterion_id].raw_score for (participant_id, sheet_judge), sheet in sheets.items() if sheet_judge == judge_id and criterion_id in sheet]
-                if len(ranks) == len(participants) and set(ranks) != {Decimal(value) for value in range(1, len(participants) + 1)}:
+                # Exclusions can leave gaps in previously submitted ordinal ranks.
+                # Keep the original scores and relative order; duplicates remain invalid.
+                if len(ranks) == len(participants) and (len(set(ranks)) != len(ranks) or
+                        (not excluded and set(ranks) != {Decimal(value) for value in range(1, len(participants) + 1)})):
                     raise ValueError('Each ranking criterion must assign each participant a distinct ordinal rank.')
     def ordering(row):
         keys = [row['final_score'] if ranking_mode else -row['final_score']]

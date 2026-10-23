@@ -1,63 +1,515 @@
 {% load static %}
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>My Events &middot; Faculty &middot; EventTab</title>
-  <link href="{% static 'admindash/vendor/bootstrap-5.3.8.min.css' %}" rel="stylesheet">
-  <link rel="stylesheet" href="{% static 'tabulator/vendor/bootstrap-icons.min.css' %}">
-  <link rel="stylesheet" href="{% static 'facultydash/faculty.css' %}?v=20261010">
-  <link rel="stylesheet" href="{% static 'facultydash/pages.css' %}?v=20261018myevents">
-</head>
-<body class="fac-v2 tab-v2 fac-my-events">
-<div class="tab-shell">
-  {% include 'facultydash/_sidebar.html' with active='my_events' %}
-  <div class="tab-main">
-    <header class="tab-topbar events-header">
-      <div><p class="fac-kicker">Assigned by Administrator</p><h1>My Events</h1><p class="fac-lead">View and manage your assigned events. Click an event to open its details.</p></div>
-      <div class="events-account"><a class="events-bell" href="{% url 'faculty_dashboard' %}#publication-queue-heading" aria-label="View publication queue"><i class="bi bi-bell" aria-hidden="true"></i>{% if event_summary.ready %}<span></span>{% endif %}</a><details class="events-menu"><summary>Faculty Portal <i class="bi bi-chevron-down" aria-hidden="true"></i></summary><div class="events-dropdown"><a href="{% url 'faculty_dashboard' %}">Dashboard</a><a href="{% url 'logout' %}">Logout</a></div></details></div>
-    </header>
-    <main class="tab-content fac-content events-content">
-      {% for message in messages %}<div class="alert {% if message.tags == 'error' %}alert-danger{% else %}alert-success{% endif %}" role="alert">{{ message }}</div>{% endfor %}
-      <form class="events-filters" method="get" aria-label="Filter assigned events">
-        <div class="events-search"><i class="bi bi-search" aria-hidden="true"></i><label class="fac-sr-only" for="event-search">Search events</label><input id="event-search" type="search" name="q" value="{{ search_query }}" placeholder="Search events..."></div>
-        <label class="fac-sr-only" for="event-type">Filter by event type</label><select id="event-type" name="type"><option value="all">All event types</option><option value="criteria" {% if type_filter == 'criteria' %}selected{% endif %}>Criteria-Based</option><option value="match" {% if type_filter == 'match' %}selected{% endif %}>Match-Based</option></select>
-        <label class="fac-sr-only" for="event-category">Filter by category</label><select id="event-category" name="category"><option value="">All categories</option>{% for category in categories %}<option value="{{ category }}" {% if category_filter == category %}selected{% endif %}>{{ category }}</option>{% endfor %}</select>
-        <label class="fac-sr-only" for="event-status">Filter by status</label><select id="event-status" name="status"><option value="all">All statuses</option><option value="published" {% if status_filter == 'published' %}selected{% endif %}>Published</option><option value="draft" {% if status_filter == 'draft' %}selected{% endif %}>Draft</option><option value="ready" {% if status_filter == 'ready' %}selected{% endif %}>Ready for Publication</option></select>
-        <label class="fac-sr-only" for="event-sort">Sort events</label><select id="event-sort" name="sort"><option value="-updated_at" {% if sort == '-updated_at' %}selected{% endif %}>Newest updated</option><option value="name" {% if sort == 'name' %}selected{% endif %}>Name A&ndash;Z</option><option value="-name" {% if sort == '-name' %}selected{% endif %}>Name Z&ndash;A</option><option value="event_date" {% if sort == 'event_date' %}selected{% endif %}>Date ascending</option><option value="-event_date" {% if sort == '-event_date' %}selected{% endif %}>Date descending</option></select>
-        <button class="fac-btn" type="submit">Apply</button>
-      </form>
-      <section class="events-summary" aria-label="Assigned event summary">
-        <article><span class="events-stat-icon tone-blue"><i class="bi bi-calendar-event-fill" aria-hidden="true"></i></span><div><strong>{{ event_summary.total }}</strong><span>Total Events</span></div></article>
-        <article><span class="events-stat-icon tone-green"><i class="bi bi-check-circle-fill" aria-hidden="true"></i></span><div><strong>{{ event_summary.published }}</strong><span>Published Events</span></div></article>
-        <article><span class="events-stat-icon tone-gold"><i class="bi bi-clock" aria-hidden="true"></i></span><div><strong>{{ event_summary.ready }}</strong><span>For Publication</span></div></article>
-        <article class="events-types"><span class="events-stat-icon tone-purple"><i class="bi bi-ui-radios" aria-hidden="true"></i></span><div><strong>{{ event_summary.criteria }}</strong><span>Criteria-Based</span></div><div><strong>{{ event_summary.match }}</strong><span>Match-Based</span></div></article>
-      </section>
-      <section class="events-list" aria-label="Assigned events">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>My Events &middot; Faculty &middot; EventTab</title>
+    <link
+      href="{% static 'admindash/vendor/bootstrap-5.3.8.min.css' %}"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="{% static 'tabulator/vendor/bootstrap-icons.min.css' %}"
+    />
+    <link
+      rel="stylesheet"
+      href="{% static 'facultydash/faculty.css' %}?v=20261010"
+    />
+    <link
+      rel="stylesheet"
+      href="{% static 'facultydash/pages.css' %}?v=20261018myevents"
+    />
+  </head>
+  <body class="fac-v2 tab-v2 fac-my-events">
+    <div class="tab-shell">
+      {% include 'facultydash/_sidebar.html' with active='my_events' %}
+      <div class="tab-main">
+        <header class="tab-topbar events-header">
+          <div>
+            <p class="fac-kicker">Assigned by Administrator</p>
+            <h1>My Events</h1>
+            <p class="fac-lead">
+              View and manage your assigned events. Click an event to open its
+              details.
+            </p>
+          </div>
+          <div class="events-account">
+            <a
+              class="events-bell"
+              href="{% url 'faculty_dashboard' %}#publication-queue-heading"
+              aria-label="View publication queue"
+              >
+              <i class="bi bi-bell" aria-hidden="true">
+              </i>
+              {% if event_summary.ready %}
+                <span>
+                </span>
+              {% endif %}
+            </a
+            >
+            <details class="events-menu">
+              <summary>
+                Faculty Portal
+                <i class="bi bi-chevron-down" aria-hidden="true"></i>
+              </summary>
+              <div class="events-dropdown">
+                <a href="{% url 'faculty_dashboard' %}">Dashboard</a
+                >
+                <a href="{% url 'logout' %}">Logout</a>
+              </div>
+            </details>
+          </div>
+        </header>
+        <main class="tab-content fac-content events-content">
+          {% for message in messages %}
+            <div
+            class="alert {% if message.tags == 'error' %}alert-danger{% else %}alert-success{% endif %}"
+            role="alert"
+          >
+            {{ message }}
+          </div>
+          {% endfor %}
+          <form
+            class="events-filters"
+            method="get"
+            aria-label="Filter assigned events"
+          >
+            <div class="events-search">
+              <i class="bi bi-search" aria-hidden="true">
+              </i
+              >
+              <label class="fac-sr-only" for="event-search"
+                >Search events</label
+              >
+              <input
+                id="event-search"
+                type="search"
+                name="q"
+                value="{{ search_query }}"
+                placeholder="Search events..."
+              />
+            </div>
+            <label class="fac-sr-only" for="event-type"
+              >Filter by event type</label
+            >
+            <select id="event-type" name="type">
+              <option value="all">All event types</option>
+              <option
+                value="criteria"
+                {% if type_filter == 'criteria' %}selected{% endif %}
+              >
+                Criteria-Based
+              </option>
+              <option
+                value="match"
+                {% if type_filter == 'match' %}selected{% endif %}
+              >
+                Match-Based
+              </option>
+            </select>
+            <label class="fac-sr-only" for="event-category"
+              >Filter by category</label
+            >
+            <select id="event-category" name="category">
+              <option value="">All categories</option>
+              {% for category in categories %}
+                <option
+                value="{{ category }}"
+                {% if category_filter == category %}selected{% endif %}
+              >
+                {{ category }}
+              </option>
+              {% endfor %}
+            </select>
+            <label class="fac-sr-only" for="event-status"
+              >Filter by status</label
+            >
+            <select id="event-status" name="status">
+              <option value="all">All statuses</option>
+              <option
+                value="published"
+                {% if status_filter == 'published' %}selected{% endif %}
+              >
+                Published
+              </option>
+              <option
+                value="draft"
+                {% if status_filter == 'draft' %}selected{% endif %}
+              >
+                Draft
+              </option>
+              <option
+                value="ready"
+                {% if status_filter == 'ready' %}selected{% endif %}
+              >
+                Ready for Publication
+              </option>
+            </select>
+            <label class="fac-sr-only" for="event-sort">Sort events</label
+            >
+            <select id="event-sort" name="sort">
+              <option
+                value="-updated_at"
+                {% if sort == '-updated_at' %}selected{% endif %}
+              >
+                Newest updated
+              </option>
+              <option value="name" {% if sort == 'name' %}selected{% endif %}>
+                Name A&ndash;Z
+              </option>
+              <option
+                value="-name"
+                {% if sort == '-name' %}selected{% endif %}
+              >
+                Name Z&ndash;A
+              </option>
+              <option
+                value="event_date"
+                {% if sort == 'event_date' %}selected{% endif %}
+              >
+                Date ascending
+              </option>
+              <option
+                value="-event_date"
+                {% if sort == '-event_date' %}selected{% endif %}
+              >
+                Date descending
+              </option>
+            </select>
+            <button class="fac-btn" type="submit">Apply</button>
+          </form>
+          <section class="events-summary" aria-label="Assigned event summary">
+            <article>
+              <span class="events-stat-icon tone-blue"
+                >
+                <i class="bi bi-calendar-event-fill" aria-hidden="true">
+                </i
+              >
+              </span>
+              <div>
+                <strong>{{ event_summary.total }}</strong
+                >
+                <span>Total Events</span>
+              </div>
+            </article>
+            <article>
+              <span class="events-stat-icon tone-green"
+                >
+                <i class="bi bi-check-circle-fill" aria-hidden="true">
+                </i
+              >
+              </span>
+              <div>
+                <strong>{{ event_summary.published }}</strong
+                >
+                <span>Published Events</span>
+              </div>
+            </article>
+            <article>
+              <span class="events-stat-icon tone-gold"
+                >
+                <i class="bi bi-clock" aria-hidden="true">
+                </i
+              >
+              </span>
+              <div>
+                <strong>{{ event_summary.ready }}</strong
+                >
+                <span>For Publication</span>
+              </div>
+            </article>
+            <article class="events-types">
+              <span class="events-stat-icon tone-purple"
+                >
+                <i class="bi bi-ui-radios" aria-hidden="true">
+                </i
+              >
+              </span>
+              <div>
+                <strong>{{ event_summary.criteria }}</strong
+                >
+                <span>Criteria-Based</span>
+              </div>
+              <div>
+                <strong>{{ event_summary.match }}</strong
+                >
+                <span>Match-Based</span>
+              </div>
+            </article>
+          </section>
+          <section class="events-list" aria-label="Assigned events">
+            {% for e in event_rows %}
+              <article
+              class="events-row"
+              aria-labelledby="event-title-{{ e.id }}"
+            >
+                <div class="events-identity">
+                  {% with name=e.name|lower %}
+                    <span
+                  class="events-event-icon {% if 'dance' in name %}tone-purple{% elif 'vocal' in name %}tone-pink{% elif 'tennis' in name %}tone-green{% elif 'pageant' in name %}tone-gold{% elif 'basketball' in name %}tone-orange{% else %}tone-blue{% endif %}"
+                  >
+                      {% if 'tennis' in name %}
+                        <svg
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                          <ellipse
+                      cx="14"
+                      cy="9"
+                      rx="6.5"
+                      ry="7.5"
+                      transform="rotate(40 14 9)"
+                    />
+                          <path d="m8.7 13 3 2.5-6.4 6.4-2.5-2.5z" />
+                          <circle cx="19.5" cy="19" r="2.4" />
+                        </svg
+                  >
+                      {% elif 'pageant' in name %}
+                        <svg
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                          <path
+                      d="m3 6 4 4 5-7 5 7 4-4-2 13H5L3 6Zm2 15h14v2H5z"
+                    />
+                        </svg
+                  >
+                      {% else %}
+                        <i
+                    class="bi {% if 'dance' in name %}bi-person-arms-up{% elif 'vocal' in name %}bi-mic-fill{% elif 'tennis' in name %}bi-record-circle-fill{% elif 'pageant' in name %}bi-trophy-fill{% elif 'basketball' in name %}bi-dribbble{% elif 'sing' in name %}bi-music-note-beamed{% else %}bi-calendar-event{% endif %}"
+                    aria-hidden="true"
+                  >
+                        </i
+                  >
+                      {% endif %}
+                    </span
+                >
+                  {% endwith %}
+                  <div>
+                    <h2 id="event-title-{{ e.id }}">
+                      <a href="{% url 'faculty_event_manage' e.id %}"
+                      >{{ e.name }}</a
+                    >
+                    </h2>
+                    <span
+                    class="events-type {% if e.event_type == 'Match-Based' %}is-match{% endif %}"
+                    >{{ e.event_type }}</span
+                  >
+                  </div>
+                </div>
+                <div class="events-category">{{ e.category }}</div>
+                <div class="events-schedule">
+                  <span
+                  ><i class="bi bi-calendar-event" aria-hidden="true"></i>{{
+                  e.schedule }}</span
+                >
+                  <span
+                  ><i class="bi bi-geo-alt-fill" aria-hidden="true"></i>{{
+                  e.venue }}</span
+                >
+                </div>
+                <div class="events-progress">
+                  {% if e.event_type == 'Criteria-Based' %}
+                    <span
+                  >Judging event</span
+                >
+                    <div>
+                      <span class="events-track"
+                    >
+                        <i
+                      style="width:{{ e.judging_progress_percent }}%"
+                    >
+                        </i>
+                      </span
+                  >
+                      <small title="Judges submitted / assigned"
+                    >{{ e.judges_submitted }}/{{ e.judges_total }}</small
+                  >
+                    </div>
+                  {% else %}
+                    <span
+                  >{% if e.matches_total and e.matches_completed == e.matches_total %}Matches completed{% else %}Match progress{% endif %}</span
+                >
+                    <div>
+                      <span class="events-track"
+                    >
+                        <i style="width:{{ e.progress_percent }}%">
+                        </i>
+                      </span
+                  >
+                      <small
+                    >{{ e.matches_completed }}/{{ e.matches_total }}</small
+                  >
+                    </div>
+                  {% endif %}
+                </div>
+                <div class="events-status">
+                  <span class="events-badge is-{{ e.status_key }}"
+                  >{% if e.status_key == 'published' %}<i
+                    class="bi bi-circle-fill"
+                    aria-hidden="true"
+                  ></i
+                  >Published{% elif e.status_key == 'ready' %}<i
+                    class="bi bi-clock"
+                    aria-hidden="true"
+                  ></i
+                  >Ready for Publication{% else %}{{ e.status }}{% endif %}</span
+                >
+                </div>
+                <div class="events-actions">
+                  <a
+                  class="fac-btn {% if e.action == 'View Results' %}events-results-button{% endif %}"
+                  href="{{ e.action_url }}"
+                  ><i
+                    class="bi {% if e.action == 'View Results' %}bi-bar-chart{% else %}bi-box-arrow-up-right{% endif %}"
+                    aria-hidden="true"
+                  ></i
+                  >{{ e.action }}</a
+                >
+                  {% if e.show_unpublish_button %}
+                    <button
+                  type="button"
+                  class="events-remove"
+                  data-open-publication="remove-publication-{{ e.id }}"
+                >
+                  <i class="bi bi-trash" aria-hidden="true"></i>Remove Publish</button
+                >
+                  {% endif %}
+                </div>
+                <details class="events-menu events-row-menu">
+                  <summary aria-label="More actions for {{ e.name }}">
+                    <i class="bi bi-three-dots-vertical" aria-hidden="true">
+                    </i>
+                  </summary>
+                  <div class="events-dropdown">
+                    <a href="{% url 'faculty_event_manage' e.id %}?tab=results"
+                    >Review results</a
+                  >
+                    <a href="{% url 'faculty_event_manage' e.id %}"
+                    >Event details</a
+                  >
+                  </div>
+                </details>
+              </article>
+            {% empty %}
+              <div class="events-empty">
+                <i class="bi bi-calendar-event" aria-hidden="true">
+                </i>
+                <h2>No assigned events found</h2>
+                <p>Try changing the search or status filter.</p>
+                <a href="{% url 'faculty_my_events' %}">Clear filters</a>
+              </div>
+            {% endfor %}
+          </section>
+          {% if page_obj %}
+            <footer class="events-pagination">
+              <span
+              >Showing {{ page_obj.start_index }}&ndash;{{ page_obj.end_index }}
+              of {{ page_obj.paginator.count }} events</span
+            >
+              <nav aria-label="Event pages">
+                {% if page_obj.has_previous %}
+                  <a
+                href="?{{ pagination_query }}&amp;page={{ page_obj.previous_page_number }}"
+                aria-label="Previous page"
+                >
+                    <i class="bi bi-chevron-left" aria-hidden="true">
+                    </i>
+                  </a
+              >
+                {% else %}
+                  <span class="is-disabled" aria-hidden="true"
+                >
+                    <i class="bi bi-chevron-left">
+                    </i>
+                  </span
+              >
+                {% endif %}
+                <span class="is-current" aria-current="page"
+                >{{ page_obj.number }}</span
+              >
+                {% if page_obj.has_next %}
+                  <a
+                href="?{{ pagination_query }}&amp;page={{ page_obj.next_page_number }}"
+                aria-label="Next page"
+                >
+                    <i class="bi bi-chevron-right" aria-hidden="true">
+                    </i>
+                  </a
+              >
+                {% else %}
+                  <span class="is-disabled" aria-hidden="true"
+                >
+                    <i class="bi bi-chevron-right">
+                    </i>
+                  </span
+              >
+                {% endif %}
+              </nav>
+            </footer>
+          {% endif %}
+        </main>
         {% for e in event_rows %}
-        <article class="events-row" aria-labelledby="event-title-{{ e.id }}">
-          <div class="events-identity">{% with name=e.name|lower %}<span class="events-event-icon {% if 'dance' in name %}tone-purple{% elif 'vocal' in name %}tone-pink{% elif 'tennis' in name %}tone-green{% elif 'pageant' in name %}tone-gold{% elif 'basketball' in name %}tone-orange{% else %}tone-blue{% endif %}">{% if 'tennis' in name %}<svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="14" cy="9" rx="6.5" ry="7.5" transform="rotate(40 14 9)"/><path d="m8.7 13 3 2.5-6.4 6.4-2.5-2.5z"/><circle cx="19.5" cy="19" r="2.4"/></svg>{% elif 'pageant' in name %}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 6 4 4 5-7 5 7 4-4-2 13H5L3 6Zm2 15h14v2H5z"/></svg>{% else %}<i class="bi {% if 'dance' in name %}bi-person-arms-up{% elif 'vocal' in name %}bi-mic-fill{% elif 'tennis' in name %}bi-record-circle-fill{% elif 'pageant' in name %}bi-trophy-fill{% elif 'basketball' in name %}bi-dribbble{% elif 'sing' in name %}bi-music-note-beamed{% else %}bi-calendar-event{% endif %}" aria-hidden="true"></i>{% endif %}</span>{% endwith %}<div><h2 id="event-title-{{ e.id }}"><a href="{% url 'faculty_event_manage' e.id %}">{{ e.name }}</a></h2><span class="events-type {% if e.event_type == 'Match-Based' %}is-match{% endif %}">{{ e.event_type }}</span></div></div>
-          <div class="events-category">{{ e.category }}</div>
-          <div class="events-schedule"><span><i class="bi bi-calendar-event" aria-hidden="true"></i>{{ e.schedule }}</span><span><i class="bi bi-geo-alt-fill" aria-hidden="true"></i>{{ e.venue }}</span></div>
-          <div class="events-progress">{% if e.event_type == 'Criteria-Based' %}<span>Judging event</span><div><span class="events-track"><i style="width:{{ e.judging_progress_percent }}%"></i></span><small title="Judges submitted / assigned">{{ e.judges_submitted }}/{{ e.judges_total }}</small></div>{% else %}<span>{% if e.matches_total and e.matches_completed == e.matches_total %}Matches completed{% else %}Match progress{% endif %}</span><div><span class="events-track"><i style="width:{{ e.progress_percent }}%"></i></span><small>{{ e.matches_completed }}/{{ e.matches_total }}</small></div>{% endif %}</div>
-          <div class="events-status"><span class="events-badge is-{{ e.status_key }}">{% if e.status_key == 'published' %}<i class="bi bi-circle-fill" aria-hidden="true"></i>Published{% elif e.status_key == 'ready' %}<i class="bi bi-clock" aria-hidden="true"></i>Ready for Publication{% else %}{{ e.status }}{% endif %}</span></div>
-          <div class="events-actions"><a class="fac-btn {% if e.action == 'View Results' %}events-results-button{% endif %}" href="{{ e.action_url }}"><i class="bi {% if e.action == 'View Results' %}bi-bar-chart{% else %}bi-box-arrow-up-right{% endif %}" aria-hidden="true"></i>{{ e.action }}</a>{% if e.show_unpublish_button %}<button type="button" class="events-remove" data-open-publication="remove-publication-{{ e.id }}"><i class="bi bi-trash" aria-hidden="true"></i>Remove Publish</button>{% endif %}</div>
-          <details class="events-menu events-row-menu"><summary aria-label="More actions for {{ e.name }}"><i class="bi bi-three-dots-vertical" aria-hidden="true"></i></summary><div class="events-dropdown"><a href="{% url 'faculty_event_manage' e.id %}?tab=results">Review results</a><a href="{% url 'faculty_event_manage' e.id %}">Event details</a></div></details>
-        </article>
-        {% empty %}<div class="events-empty"><i class="bi bi-calendar-event" aria-hidden="true"></i><h2>No assigned events found</h2><p>Try changing the search or status filter.</p><a href="{% url 'faculty_my_events' %}">Clear filters</a></div>{% endfor %}
-      </section>
-      {% if page_obj %}<footer class="events-pagination"><span>Showing {{ page_obj.start_index }}&ndash;{{ page_obj.end_index }} of {{ page_obj.paginator.count }} events</span><nav aria-label="Event pages">{% if page_obj.has_previous %}<a href="?{{ pagination_query }}&amp;page={{ page_obj.previous_page_number }}" aria-label="Previous page"><i class="bi bi-chevron-left" aria-hidden="true"></i></a>{% else %}<span class="is-disabled" aria-hidden="true"><i class="bi bi-chevron-left"></i></span>{% endif %}<span class="is-current" aria-current="page">{{ page_obj.number }}</span>{% if page_obj.has_next %}<a href="?{{ pagination_query }}&amp;page={{ page_obj.next_page_number }}" aria-label="Next page"><i class="bi bi-chevron-right" aria-hidden="true"></i></a>{% else %}<span class="is-disabled" aria-hidden="true"><i class="bi bi-chevron-right"></i></span>{% endif %}</nav></footer>{% endif %}
-    </main>
-    {% for e in event_rows %}{% if e.show_unpublish_button %}
-    <dialog id="remove-publication-{{ e.id }}" class="fac-dialog" aria-labelledby="remove-publication-title-{{ e.id }}"><div class="fac-dialog-shell">
-      <header><h2 id="remove-publication-title-{{ e.id }}">Remove Published Results?</h2><button type="button" data-close-publication aria-label="Close">&times;</button></header>
-      <div class="fac-dialog-body"><p>Remove the published results for <strong>{{ e.name }}</strong>? They will disappear from public Results and stop contributing points to the Leaderboard. Approved scores, rankings, and match records will be preserved.</p>
-        <form method="post" action="{% url 'faculty_publication_review' e.id %}">{% csrf_token %}<input type="hidden" name="action" value="unpublish"><input type="hidden" name="confirm" value="yes"><input type="hidden" name="return_to" value="my_events"><div class="d-flex justify-content-end gap-2 mt-3"><button type="button" class="fac-btn fac-btn-secondary" data-close-publication>Cancel</button><button type="submit" class="fac-btn fac-btn-danger">Confirm Removal</button></div></form>
-      </div></div></dialog>
-    {% endif %}{% endfor %}
-  </div>
-</div>
-<script src="{% static 'facultydash/faculty.js' %}?v=20261010withdraw"></script>
-</body>
+          {% if e.show_unpublish_button %}
+            <dialog
+          id="remove-publication-{{ e.id }}"
+          class="fac-dialog"
+          aria-labelledby="remove-publication-title-{{ e.id }}"
+        >
+              <div class="fac-dialog-shell">
+                <header>
+                  <h2 id="remove-publication-title-{{ e.id }}">
+                Remove Published Results?
+              </h2>
+                  <button type="button" data-close-publication aria-label="Close">
+                &times;
+              </button>
+                </header>
+                <div class="fac-dialog-body">
+                  <p>
+                Remove the published results for <strong>{{ e.name }}</strong>?
+                They will disappear from public Results and stop contributing
+                points to the Leaderboard. Approved scores, rankings, and match
+                records will be preserved.
+              </p>
+                  <form
+                method="post"
+                action="{% url 'faculty_publication_review' e.id %}"
+              >
+                    {% csrf_token %}
+                    <input
+                  type="hidden"
+                  name="action"
+                  value="unpublish"
+                />
+                    <input type="hidden" name="confirm" value="yes" />
+                    <input
+                  type="hidden"
+                  name="return_to"
+                  value="my_events"
+                />
+                    <div class="d-flex justify-content-end gap-2 mt-3">
+                      <button
+                    type="button"
+                    class="fac-btn fac-btn-secondary"
+                    data-close-publication
+                  >
+                    Cancel</button
+                  >
+                      <button type="submit" class="fac-btn fac-btn-danger">
+                    Confirm Removal
+                  </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </dialog>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+    <script src="{% static 'facultydash/faculty.js' %}?v=20261010withdraw"></script>
+  </body>
 </html>

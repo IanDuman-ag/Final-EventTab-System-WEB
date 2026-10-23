@@ -1,43 +1,71 @@
 <article class="criteria-panel">
-<header>
-<h2>{% if compact %}Qualified Participants{% else %}Round Results{% endif %} <small>({{ portal.selected_round.name|default:'No round' }})</small>
-</h2>{% if compact %}<a class="criteria-small-button" href="?tab=results&amp;round={{ selected_round_index }}">View Full Results</a>{% endif %}</header>
-<div class="criteria-table-wrap" tabindex="0" role="region" aria-label="Round rankings">
-<table>
-<thead>
-<tr>
-<th>Rank</th>
-<th>Participant / Team</th>
-<th>Total Score</th>
-<th>Status</th>{% if not compact %}<th>Breakdown</th>{% endif %}</tr>
-</thead>
-<tbody>{% for result in portal.results %}<tr>
-<td>
-<span class="criteria-rank rank-{{ result.rank }}">{{ result.rank }}</span>
-</td>
-<td>
-<strong>{{ result.name }}</strong>
-</td>
-<td>{{ result.final_score|floatformat:2 }}</td>
-<td>
-<span class="criteria-badge {% if result.qualified %}status-qualified{% elif result.qualification_status == 'Not Qualified' %}status-not-qualified{% else %}status-pending{% endif %}">{{ result.qualification_status }}</span>
-</td>{% if not compact %}<td>
-<details>
-<summary>Score details</summary>
-<div class="score-breakdown">
-<h3>Individual Judge Totals</h3>{% for score in result.judge_scores %}<p>
-<span>{{ score.name }}</span>
-<strong>{{ score.total|floatformat:2 }}</strong>
-</p>{% empty %}<p>No judge breakdown available.</p>{% endfor %}<h3>Criteria Breakdown</h3>{% for criterion in result.criteria_breakdown %}<p>
-<span>{{ criterion.name }}{% if criterion.weight != None %} ({{ criterion.weight }}%){% endif %}</span>
-<strong>{{ criterion.score|floatformat:2 }}{% if criterion.contribution != None %}<small class="criteria-contribution">Weighted: {{ criterion.contribution|floatformat:2 }}</small>{% endif %}</strong>
-</p>{% empty %}<p>No criteria breakdown available.</p>{% endfor %}</div>
-</details>
-</td>{% endif %}</tr>{% empty %}<tr>
-<td colspan="5" class="criteria-empty">Results will appear once all required judge submissions have been finalized and validated.</td>
-</tr>{% endfor %}</tbody>
-</table>
-</div>
+  <header>
+    <h2>{% if compact %}Qualified Participants{% else %}Round Results{% endif %} <small>({{ portal.selected_round.name|default:'No round' }})</small>
+</h2>
+    {% if compact %}
+      <a class="criteria-small-button" href="?tab=results&amp;round={{ selected_round_index }}">View Full Results</a>
+    {% endif %}
+  </header>
+  <div class="criteria-table-wrap" tabindex="0" role="region" aria-label="Round rankings">
+    <table>
+      <thead>
+        <tr>
+          <th>Rank</th>
+          <th>Participant / Team</th>
+          <th>Total Score</th>
+          <th>Status</th>
+          {% if not compact %}
+            <th>Breakdown</th>
+          {% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for result in portal.results %}
+          <tr>
+            <td>
+              <span class="criteria-rank rank-{{ result.rank }}">{{ result.rank }}</span>
+            </td>
+            <td>
+              <strong>{{ result.name }}</strong>
+            </td>
+            <td>{{ result.final_score|floatformat:2 }}</td>
+            <td>
+              <span class="criteria-badge {% if result.qualified %}status-qualified{% elif result.qualification_status == 'Not Qualified' %}status-not-qualified{% else %}status-pending{% endif %}">{{ result.qualification_status }}</span>
+            </td>
+            {% if not compact %}
+              <td>
+                <details>
+                  <summary>Score details</summary>
+                  <div class="score-breakdown">
+                    <h3>Individual Judge Totals</h3>
+                    {% for score in result.judge_scores %}
+                      <p>
+                        <span>{{ score.name }}</span>
+                        <strong>{{ score.total|floatformat:2 }}</strong>
+                      </p>
+                    {% empty %}
+                      <p>No judge breakdown available.</p>
+                    {% endfor %}
+                    <h3>Criteria Breakdown</h3>
+                    {% for criterion in result.criteria_breakdown %}
+                      <p>
+                        <span>{{ criterion.name }}{% if criterion.weight != None %} ({{ criterion.weight }}%){% endif %}</span>
+                        <strong>{{ criterion.score|floatformat:2 }}{% if criterion.contribution != None %}<small class="criteria-contribution">Weighted: {{ criterion.contribution|floatformat:2 }}</small>{% endif %}</strong>
+                      </p>
+                    {% empty %}
+                      <p>No criteria breakdown available.</p>
+                    {% endfor %}
+                  </div>
+                </details>
+              </td>
+            {% endif %}
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="5" class="criteria-empty">Results will appear once all required judge submissions have been finalized and validated.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </article>
-
-

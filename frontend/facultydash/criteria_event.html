@@ -1,321 +1,589 @@
 {% load static %}
 <!DOCTYPE html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{ event.name }} · Faculty · EventTab</title>
-<link rel="stylesheet" href="{% static 'admindash/vendor/bootstrap-5.3.8.min.css' %}">
-<link rel="stylesheet" href="{% static 'facultydash/faculty.css' %}">
-<link rel="stylesheet" href="{% static 'facultydash/pages.css' %}">
-<link rel="stylesheet" href="{% static 'facultydash/criteria_event.css' %}?v=20261018withdraw">
-</head>
-<body class="fac-v2 tab-v2 criteria-page" data-revision="{{ portal.revision }}" data-round="{{ selected_round_index }}">
-<div class="tab-shell">{% include 'facultydash/_sidebar.html' with active='my_events' %}<div class="tab-main">
-<header class="criteria-header">
-<nav aria-label="Breadcrumb">
-<a href="{% url 'faculty_my_events' %}">My Events</a>
-<span aria-hidden="true">›</span>
-<span>Event Details</span>
-</nav>
-<div class="criteria-title">
-<div>
-<span class="criteria-type">Criteria-Based Event</span>
-<h1>{{ portal.header.name|default:event.name }}</h1>
-<p>{{ portal.header.category }}</p>
-</div>
-<span class="criteria-badge status-{{ portal.header.status_key }}">{{ portal.header.status }}</span>
-</div>
-<div class="criteria-meta">
-<span>▣ {{ portal.header.schedule|default:'Not scheduled' }}</span>
-<span>⌖ {{ portal.header.venue|default:'No venue' }}</span>
-<span><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="7" r="3"/><path d="M3 20v-3a6 6 0 0 1 12 0v3H3Zm13-15a3 3 0 0 1 0 6m2 3a5 5 0 0 1 3 5"/></svg> {{ portal.header.participant_count }} Participants</span>
-<span><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="7" r="4"/><path d="M5 21v-3a7 7 0 0 1 14 0v3H5Z"/></svg> Faculty: {{ portal.header.faculty_name|default:'Unassigned' }}</span>
-<span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4H5v17h14V4h-3M9 3h6v4H9zM8 14l3 3 5-6"/></svg> Tabulation Officer: {{ portal.header.tabulator_name|default:'Unassigned' }}</span>
-</div>
-</header>
-<nav class="criteria-tabs nav nav-tabs" aria-label="Event sections">
-<a class="nav-link {% if tab == 'overview' %}active{% endif %}" href="?tab=overview&amp;round={{ selected_round_index }}" {% if tab == 'overview' %}aria-current="page"{% endif %}>Overview</a>
-<a class="nav-link {% if tab == 'rounds' %}active{% endif %}" href="?tab=rounds&amp;round={{ selected_round_index }}" {% if tab == 'rounds' %}aria-current="page"{% endif %}>Round Management</a>
-<a class="nav-link {% if tab == 'judges' %}active{% endif %}" href="?tab=judges&amp;round={{ selected_round_index }}" {% if tab == 'judges' %}aria-current="page"{% endif %}>Judges</a>
-<a class="nav-link {% if tab == 'participants' %}active{% endif %}" href="?tab=participants&amp;round={{ selected_round_index }}" {% if tab == 'participants' %}aria-current="page"{% endif %}>Participants</a>
-<a class="nav-link {% if tab == 'results' %}active{% endif %}" href="?tab=results&amp;round={{ selected_round_index }}" {% if tab == 'results' %}aria-current="page"{% endif %}>Results &amp; Publication</a>
-</nav>
-<main class="criteria-content">{% for message in messages %}<div class="alert {% if message.tags == 'error' %}alert-danger{% else %}alert-success{% endif %}" role="alert">{{ message }}</div>{% endfor %}{% if portal.selected_round.status_key == "ready" or portal.selected_round.status_key == "ready_for_review" or portal.selected_round.status_key == "completed" or portal.selected_round.status_key == "approved" %}{% for error in portal.errors %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endfor %}{% endif %}<p class="criteria-sync" id="criteria-sync" role="status" hidden>
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ event.name }} · Faculty · EventTab</title>
+    <link rel="stylesheet" href="{% static 'admindash/vendor/bootstrap-5.3.8.min.css' %}">
+    <link rel="stylesheet" href="{% static 'facultydash/faculty.css' %}">
+    <link rel="stylesheet" href="{% static 'facultydash/pages.css' %}">
+    <link rel="stylesheet" href="{% static 'facultydash/criteria_event.css' %}?v=20261018withdraw">
+  </head>
+  <body class="fac-v2 tab-v2 criteria-page" data-revision="{{ portal.revision }}" data-round="{{ selected_round_index }}">
+    <div class="tab-shell">
+      {% include 'facultydash/_sidebar.html' with active='my_events' %}
+      <div class="tab-main">
+        <header class="criteria-header">
+          <nav aria-label="Breadcrumb">
+            <a href="{% url 'faculty_my_events' %}">My Events</a>
+            <span aria-hidden="true">›</span>
+            <span>Event Details</span>
+          </nav>
+          <div class="criteria-title">
+            <div>
+              <span class="criteria-type">Criteria-Based Event</span>
+              <h1>{{ portal.header.name|default:event.name }}</h1>
+              <p>{{ portal.header.category }}</p>
+            </div>
+            <span class="criteria-badge status-{{ portal.header.status_key }}">{{ portal.header.status }}</span>
+          </div>
+          <div class="criteria-meta">
+            <span>▣ {{ portal.header.schedule|default:'Not scheduled' }}</span>
+            <span>⌖ {{ portal.header.venue|default:'No venue' }}</span>
+            <span><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="7" r="3"/><path d="M3 20v-3a6 6 0 0 1 12 0v3H3Zm13-15a3 3 0 0 1 0 6m2 3a5 5 0 0 1 3 5"/></svg> {{ portal.header.participant_count }} Participants</span>
+            <span><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="7" r="4"/><path d="M5 21v-3a7 7 0 0 1 14 0v3H5Z"/></svg> Faculty: {{ portal.header.faculty_name|default:'Unassigned' }}</span>
+            <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4H5v17h14V4h-3M9 3h6v4H9zM8 14l3 3 5-6"/></svg> Tabulation Officer: {{ portal.header.tabulator_name|default:'Unassigned' }}</span>
+          </div>
+        </header>
+        <nav class="criteria-tabs nav nav-tabs" aria-label="Event sections">
+          <a class="nav-link {% if tab == 'overview' %}active{% endif %}" href="?tab=overview&amp;round={{ selected_round_index }}" {% if tab == 'overview' %}aria-current="page"{% endif %}>Overview</a>
+          <a class="nav-link {% if tab == 'rounds' %}active{% endif %}" href="?tab=rounds&amp;round={{ selected_round_index }}" {% if tab == 'rounds' %}aria-current="page"{% endif %}>Round Management</a>
+          <a class="nav-link {% if tab == 'judges' %}active{% endif %}" href="?tab=judges&amp;round={{ selected_round_index }}" {% if tab == 'judges' %}aria-current="page"{% endif %}>Judges</a>
+          <a class="nav-link {% if tab == 'participants' %}active{% endif %}" href="?tab=participants&amp;round={{ selected_round_index }}" {% if tab == 'participants' %}aria-current="page"{% endif %}>Participants</a>
+          <a class="nav-link {% if tab == 'removal_history' %}active{% endif %}" href="?tab=removal_history&amp;round={{ selected_round_index }}" {% if tab == 'removal_history' %}aria-current="page"{% endif %}>Removal History</a>
+          <a class="nav-link {% if tab == 'results' %}active{% endif %}" href="?tab=results&amp;round={{ selected_round_index }}" {% if tab == 'results' %}aria-current="page"{% endif %}>Results &amp; Publication</a>
+        </nav>
+        <main class="criteria-content">
+          {% for message in messages %}
+            <div class="alert {% if message.tags == 'error' %}alert-danger{% else %}alert-success{% endif %}" role="alert">{{ message }}</div>
+          {% endfor %}
+          {% if portal.selected_round.status_key == "ready" or portal.selected_round.status_key == "ready_for_review" or portal.selected_round.status_key == "completed" or portal.selected_round.status_key == "approved" %}
+            {% for error in portal.errors %}
+              <div class="alert alert-danger" role="alert">{{ error }}</div>
+            {% endfor %}
+          {% endif %}
+          <p class="criteria-sync" id="criteria-sync" role="status" hidden>
+          </p>
+          <section {% if tab != 'overview' %}hidden{% endif %} aria-label="Overview">
+            <div class="criteria-summary">
+              <article>
+                <span>Participants</span>
+                <strong>{{ portal.summary.participant_count }}</strong>
+              </article>
+              <article>
+                <span>Assigned Judges</span>
+                <strong>{{ portal.summary.judge_count }}</strong>
+              </article>
+              <article>
+                <span>Configured Rounds</span>
+                <strong>{{ portal.summary.round_count }}</strong>
+              </article>
+              <article>
+                <span>Current Round</span>
+                <strong>{{ portal.summary.current_round_name|default:'Not active' }}</strong>
+              </article>
+              <article>
+                <span>Judge Submissions</span>
+                <strong>{{ portal.summary.submitted_judges }}/{{ portal.summary.total_judges }}</strong>
+              </article>
+              <article>
+                <span>Event Status</span>
+                <strong>{{ portal.summary.event_status }}</strong>
+              </article>
+            </div>
+            <div class="criteria-split">
+              <article class="criteria-panel">
+                <header>
+                  <h2>Event Information</h2>
+                </header>
+                <dl class="criteria-info">
+                  <div>
+                    <dt>Schedule</dt>
+                    <dd>{{ portal.header.schedule }}</dd>
+                  </div>
+                  <div>
+                    <dt>Venue</dt>
+                    <dd>{{ portal.header.venue|default:'Not set' }}</dd>
+                  </div>
+                  <div>
+                    <dt>Faculty In Charge</dt>
+                    <dd>{{ portal.header.faculty_name }}</dd>
+                  </div>
+                  <div>
+                    <dt>Tabulation Officer</dt>
+                    <dd>{{ portal.header.tabulator_name }}</dd>
+                  </div>
+                </dl>
+              </article>
+              <article class="criteria-panel">
+                <header>
+                  <h2>Current Round Summary</h2>
+                </header>
+                {% if portal.current_round %}
+                  <dl class="criteria-info">
+                    <div>
+                      <dt>Round</dt>
+                      <dd>{{ portal.current_round.name }}</dd>
+                    </div>
+                    <div>
+                      <dt>Status</dt>
+                      <dd>{{ portal.current_round.status }}</dd>
+                    </div>
+                    <div>
+                      <dt>Participants</dt>
+                      <dd>{{ portal.current_round.participant_count }}</dd>
+                    </div>
+                    <div>
+                      <dt>Judges Submitted</dt>
+                      <dd>{{ portal.current_round.submitted_judges }}/{{ portal.current_round.judge_count }}</dd>
+                    </div>
+                    <div>
+                      <dt>Score Calculation</dt>
+                      <dd>{{ portal.current_round.calculation_status }}</dd>
+                    </div>
+                  </dl>
+                {% else %}
+                  <p class="criteria-empty">No round is currently active.</p>
+                {% endif %}
+                <a class="criteria-button" href="?tab=rounds&amp;round={{ selected_round_index }}">View Round Management →</a>
+              </article>
+            </div>
+          </section>
+          <section class="criteria-round-management{% if portal.rounds|length == 1 %} criteria-single-round{% endif %}" {% if tab != 'rounds' %}hidden{% endif %} aria-label="Round Management">
+            <div class="criteria-section-heading">
+              <div>
+                <h2>Round Management</h2>
+                <p>Monitor judging progress, review results, and unlock the next round.</p>
+              </div>
+              <div class="criteria-current">
+                <small>Current Round</small>
+                <strong>{{ portal.summary.current_round_name|default:'No active round' }}</strong>
+              </div>
+            </div>
+            <div class="criteria-rounds">
+              {% for round in portal.rounds %}
+                <article class="criteria-round {% if round.index == selected_round_index %}is-selected{% endif %}">
+                  <header>
+                    <span class="round-number">{{ round.number }}</span>
+                    <h3>Round {{ round.number }} · {{ round.name }}</h3>
+                    <span class="criteria-badge status-{{ round.status_key }}">{{ round.status }}</span>
+                  </header>
+                  <div class="round-body">
+                    <dl>
+                      <div>
+                        <dt>Participants</dt>
+                        <dd>{% if round.status_key == "locked" and not round.participant_count %}Pending qualification{% else %}{{ round.participant_count }}{% endif %}</dd>
+                      </div>
+                      <div>
+                        <dt>Judges Submitted</dt>
+                        <dd>{{ round.submitted_judges }} / {{ round.judge_count }}</dd>
+                      </div>
+                    </dl>
+                    <div class="criteria-progress">
+                      <progress value="{{ round.progress_percent }}" max="100" aria-label="{{ round.name }} judge submission progress">
+                      </progress>
+                      <small>{{ round.progress_percent }}%</small>
+                    </div>
+                    <dl>
+                      <div>
+                        <dt>Score Calculation</dt>
+                        <dd>{{ round.calculation_status }}</dd>
+                      </div>
+                      <div>
+                        <dt>Qualified Participants</dt>
+                        <dd>{{ round.qualifier_count|default_if_none:'Pending' }}</dd>
+                      </div>
+                    </dl>
+                    <a class="criteria-button" href="?tab=results&amp;round={{ round.index }}">{% if round.is_final %}Review Final Results{% else %}View &amp; Review Round Results{% endif %}</a>
+                    {% if round.status_key == 'locked' %}
+                      <button class="criteria-button secondary" type="button" data-open-dialog="unlock-{{ round.index }}" {% if not round.can_unlock %}disabled title="{{ round.blockers|join:' ' }}"{% endif %}>Unlock Round {{ round.number }}</button>
+                    {% elif not round.approved_at %}
+                      <button class="criteria-button secondary" type="button" data-open-dialog="approve-{{ round.index }}" {% if not round.can_approve or round.qualification_rule == 'manual_selection' and round.index != selected_round_index %}disabled title="{{ round.blockers|join:' ' }}"{% endif %}>Approve Round Results</button>
+                    {% endif %}
+                    {% if round.approved_at %}
+                      <p class="round-note approved">✓ Verified by {{ round.approved_by_name|default:round.approved_by }}<small><time datetime="{{ round.approved_at }}" data-local-time>{{ round.approved_at }}</time></small>
 </p>
-<section {% if tab != 'overview' %}hidden{% endif %} aria-label="Overview">
-<div class="criteria-summary">
-<article>
-<span>Participants</span>
-<strong>{{ portal.summary.participant_count }}</strong>
-</article>
-<article>
-<span>Assigned Judges</span>
-<strong>{{ portal.summary.judge_count }}</strong>
-</article>
-<article>
-<span>Configured Rounds</span>
-<strong>{{ portal.summary.round_count }}</strong>
-</article>
-<article>
-<span>Current Round</span>
-<strong>{{ portal.summary.current_round_name|default:'Not active' }}</strong>
-</article>
-<article>
-<span>Judge Submissions</span>
-<strong>{{ portal.summary.submitted_judges }}/{{ portal.summary.total_judges }}</strong>
-</article>
-<article>
-<span>Event Status</span>
-<strong>{{ portal.summary.event_status }}</strong>
-</article>
-</div>
-<div class="criteria-split">
-<article class="criteria-panel">
-<header>
-<h2>Event Information</h2>
-</header>
-<dl class="criteria-info">
-<div>
-<dt>Schedule</dt>
-<dd>{{ portal.header.schedule }}</dd>
-</div>
-<div>
-<dt>Venue</dt>
-<dd>{{ portal.header.venue|default:'Not set' }}</dd>
-</div>
-<div>
-<dt>Faculty In Charge</dt>
-<dd>{{ portal.header.faculty_name }}</dd>
-</div>
-<div>
-<dt>Tabulation Officer</dt>
-<dd>{{ portal.header.tabulator_name }}</dd>
-</div>
-</dl>
-</article>
-<article class="criteria-panel">
-<header>
-<h2>Current Round Summary</h2>
-</header>{% if portal.current_round %}<dl class="criteria-info">
-<div>
-<dt>Round</dt>
-<dd>{{ portal.current_round.name }}</dd>
-</div>
-<div>
-<dt>Status</dt>
-<dd>{{ portal.current_round.status }}</dd>
-</div>
-<div>
-<dt>Participants</dt>
-<dd>{{ portal.current_round.participant_count }}</dd>
-</div>
-<div>
-<dt>Judges Submitted</dt>
-<dd>{{ portal.current_round.submitted_judges }}/{{ portal.current_round.judge_count }}</dd>
-</div>
-<div>
-<dt>Score Calculation</dt>
-<dd>{{ portal.current_round.calculation_status }}</dd>
-</div>
-</dl>{% else %}<p class="criteria-empty">No round is currently active.</p>{% endif %}<a class="criteria-button" href="?tab=rounds&amp;round={{ selected_round_index }}">View Round Management →</a>
-</article>
-</div>
-</section>
-<section class="criteria-round-management{% if portal.rounds|length == 1 %} criteria-single-round{% endif %}" {% if tab != 'rounds' %}hidden{% endif %} aria-label="Round Management">
-<div class="criteria-section-heading">
-<div>
-<h2>Round Management</h2>
-<p>Monitor judging progress, review results, and unlock the next round.</p>
-</div>
-<div class="criteria-current">
-<small>Current Round</small>
-<strong>{{ portal.summary.current_round_name|default:'No active round' }}</strong>
-</div>
-</div>
-<div class="criteria-rounds">{% for round in portal.rounds %}<article class="criteria-round {% if round.index == selected_round_index %}is-selected{% endif %}">
-<header>
-<span class="round-number">{{ round.number }}</span>
-<h3>Round {{ round.number }} · {{ round.name }}</h3>
-<span class="criteria-badge status-{{ round.status_key }}">{{ round.status }}</span>
-</header>
-<div class="round-body">
-<dl>
-<div>
-<dt>Participants</dt>
-<dd>{% if round.status_key == "locked" and not round.participant_count %}Pending qualification{% else %}{{ round.participant_count }}{% endif %}</dd>
-</div>
-<div>
-<dt>Judges Submitted</dt>
-<dd>{{ round.submitted_judges }} / {{ round.judge_count }}</dd>
-</div>
-</dl>
-<div class="criteria-progress">
-<progress value="{{ round.progress_percent }}" max="100" aria-label="{{ round.name }} judge submission progress">
-</progress>
-<small>{{ round.progress_percent }}%</small>
-</div>
-<dl>
-<div>
-<dt>Score Calculation</dt>
-<dd>{{ round.calculation_status }}</dd>
-</div>
-<div>
-<dt>Qualified Participants</dt>
-<dd>{{ round.qualifier_count|default_if_none:'Pending' }}</dd>
-</div>
-</dl>
-<a class="criteria-button" href="?tab=results&amp;round={{ round.index }}">{% if round.is_final %}Review Final Results{% else %}View &amp; Review Round Results{% endif %}</a>{% if round.status_key == 'locked' %}<button class="criteria-button secondary" type="button" data-open-dialog="unlock-{{ round.index }}" {% if not round.can_unlock %}disabled title="{{ round.blockers|join:' ' }}"{% endif %}>Unlock Round {{ round.number }}</button>{% elif not round.approved_at %}<button class="criteria-button secondary" type="button" data-open-dialog="approve-{{ round.index }}" {% if not round.can_approve or round.qualification_rule == 'manual_selection' and round.index != selected_round_index %}disabled title="{{ round.blockers|join:' ' }}"{% endif %}>Approve Round Results</button>{% endif %}{% if round.approved_at %}<p class="round-note approved">✓ Verified by {{ round.approved_by_name|default:round.approved_by }}<small><time datetime="{{ round.approved_at }}" data-local-time>{{ round.approved_at }}</time></small>
-</p>{% elif round.blockers %}<p class="round-note">{{ round.blockers.0 }}</p>{% endif %}<a class="round-monitor" href="?tab=rounds&amp;round={{ round.index }}">Monitor this round →</a>
-</div>
-</article>{% empty %}<p class="criteria-empty">No judging rounds have been configured.</p>{% endfor %}</div>
-<div class="criteria-split">{% include 'facultydash/criteria_judges.html' with compact=True %}{% include 'facultydash/criteria_results.html' with compact=True %}</div>
-</section>
-<section {% if tab != 'judges' %}hidden{% endif %} aria-label="Judge Monitoring">
-<div class="criteria-section-heading">
-<div>
-<h2>Judge Submission Monitoring</h2>
-<p>Finalized submissions for {{ portal.selected_round.name|default:'the selected round' }}. Faculty cannot edit judge scores.</p>
-</div>{% include 'facultydash/criteria_round_select.html' %}</div>{% include 'facultydash/criteria_judges.html' %}</section>
-<section {% if tab != 'participants' %}hidden{% endif %} aria-label="Participants">
-<article class="criteria-panel">
-<header>
-<h2>Assigned Participants <span class="criteria-count">{{ portal.participants|length }}</span>
+                    {% elif round.blockers %}
+                      <p class="round-note">{{ round.blockers.0 }}</p>
+                    {% endif %}
+                    <a class="round-monitor" href="?tab=rounds&amp;round={{ round.index }}">Monitor this round →</a>
+                  </div>
+                </article>
+              {% empty %}
+                <p class="criteria-empty">No judging rounds have been configured.</p>
+              {% endfor %}
+            </div>
+            <div class="criteria-split">
+              {% include 'facultydash/criteria_judges.html' with compact=True %}
+              {% include 'facultydash/criteria_results.html' with compact=True %}
+            </div>
+          </section>
+          <section {% if tab != 'judges' %}hidden{% endif %} aria-label="Judge Monitoring">
+            <div class="criteria-section-heading">
+              <div>
+                <h2>Judge Submission Monitoring</h2>
+                <p>Finalized submissions for {{ portal.selected_round.name|default:'the selected round' }}. Faculty cannot edit judge scores.</p>
+              </div>
+              {% include 'facultydash/criteria_round_select.html' %}
+            </div>
+            {% include 'facultydash/criteria_judges.html' %}
+          </section>
+          <section {% if tab != 'participants' %}hidden{% endif %} aria-label="Participants">
+            {% if not portal.can_manage_participants %}
+              <p class="round-note">Participant changes require the assigned Faculty-in-Charge and an unapproved round. Approved results remain read-only.</p>
+            {% endif %}
+            <article class="criteria-panel">
+              <header>
+                <h2>Assigned Participants <span class="criteria-count">{{ portal.participants|length }}</span>
 </h2>
-</header>
-<div class="criteria-table-wrap" tabindex="0" role="region" aria-label="Assigned participants">
-<table>
-<thead>
-<tr>
-<th>#</th>
-<th>Participant / Team</th>
-<th>Department</th>
-<th>Entry Type</th>
-</tr>
-</thead>
-<tbody>{% for participant in portal.participants %}<tr>
-<td>{{ forloop.counter }}</td>
-<td>
-<strong>{{ participant.name }}</strong>
-</td>
-<td>{{ participant.department|default:'—' }}</td>
-<td>{{ participant.entry_type }}</td>
-</tr>{% empty %}<tr>
-<td colspan="4" class="criteria-empty">No participants have been assigned.</td>
-</tr>{% endfor %}</tbody>
-</table>
-</div>
-</article>
-</section>
-<section {% if tab != 'results' %}hidden{% endif %} aria-label="Results and Publication">
-<div class="criteria-section-heading">
-<div>
-<h2>Results &amp; Publication</h2>
-<p>Review round rankings and detailed score breakdowns.</p>
-</div>{% include 'facultydash/criteria_round_select.html' %}</div>{% include 'facultydash/criteria_results.html' %}{% if portal.selected_round.can_approve %}<button class="criteria-button result-approve" type="button" data-open-dialog="approve-{{ portal.selected_round.index }}">Approve Round Results</button>{% endif %}<article class="criteria-panel criteria-publication">
-<header>
-<h2>Final Results Publication</h2>
-<span class="criteria-badge">{{ portal.publication.status }}</span>
-</header>
-<div class="publication-body">
-<p>After final-round approval and required verification, review the rankings and confirm publication to make official results public.</p>{% if portal.publication.submitted_at %}<p class="round-note approved">Submitted by {{ portal.publication.submitted_by_name|default:portal.publication.submitted_by }} · <time datetime="{{ portal.publication.submitted_at }}" data-local-time>{{ portal.publication.submitted_at }}</time></p>{% endif %}{% for error in portal.publication.publish_errors %}<p class="publication-blocker">{{ error }}</p>{% endfor %}{% if portal.publication.can_unpublish %}<button class="criteria-button danger" type="button" data-open-dialog="remove-publication">Remove Publish</button>{% endif %}{% if portal.publication.can_publish %}<button class="criteria-button" type="button" data-open-dialog="publish-results">Review &amp; Publish</button>{% endif %}{% if not portal.publication.can_publish and not portal.publication.published and not portal.publication.submitted_at %}<button class="criteria-button" type="button" data-open-dialog="submit-publication" {% if not portal.publication.can_submit %}disabled title="{{ portal.publication.errors|join:' ' }}"{% endif %}>Approve &amp; Submit for Publication</button>{% endif %}</div>
-</article>
-</section>
-</main>
-{% for round in portal.rounds %}{% if round.can_approve %}<dialog class="criteria-dialog modal-content" id="approve-{{ round.index }}" aria-labelledby="approve-title-{{ round.index }}">
-<header class="modal-header">
-<h2 class="modal-title" id="approve-title-{{ round.index }}">Approve Round Results?</h2>
-<button type="button" data-close-dialog aria-label="Close">×</button>
-</header>
-<form method="post" action="{% url 'faculty_event_manage' event.pk %}">{% csrf_token %}<div class="modal-body">
-<p>Are you sure you want to approve the results of <strong>{{ round.name }}</strong>? Once approved, the results will be finalized and the next round can be unlocked.</p>{% if round.qualification_rule == 'manual_selection' %}<fieldset>
-<legend>Select qualified participants</legend>{% for result in portal.results %}{% if round.index == selected_round_index %}<label class="qualification-choice">
-<input type="checkbox" name="qualifier_ids" value="{{ result.participant_id }}" {% if result.qualified %}checked{% endif %}> {{ result.name }}</label>{% endif %}{% endfor %}</fieldset>{% endif %}</div>
-<input type="hidden" name="action" value="approve_round">
-<input type="hidden" name="round_index" value="{{ round.index }}">
-<input type="hidden" name="tab" value="{{ tab }}">
-<input type="hidden" name="selected_round_index" value="{{ selected_round_index }}">
-<footer class="modal-footer">
-<button class="criteria-button secondary" type="button" data-close-dialog>Cancel</button>
-<button class="criteria-button" type="submit" data-loading-label="Approving…">Confirm Approval</button>
-</footer>
-</form>
-</dialog>{% endif %}{% if round.can_unlock %}<dialog class="criteria-dialog modal-content" id="unlock-{{ round.index }}" aria-labelledby="unlock-title-{{ round.index }}">
-<header class="modal-header">
-<h2 class="modal-title" id="unlock-title-{{ round.index }}">Unlock Round {{ round.number }} · {{ round.name }}?</h2>
-<button type="button" data-close-dialog aria-label="Close">×</button>
-</header>
-<form method="post" action="{% url 'faculty_event_manage' event.pk %}">{% csrf_token %}<div class="modal-body">
-<p>Unlocking this round will allow the assigned judges to begin scoring the qualified participants.</p>
-<dl class="criteria-info">
-<div>
-<dt>Previous Round</dt>
-<dd>{% for previous in portal.rounds %}{% if previous.number == round.index %}{{ previous.name }}{% endif %}{% endfor %}</dd>
-</div>
-<div>
-<dt>Next Round</dt>
-<dd>{{ round.name }}</dd>
-</div>
-<div>
-<dt>Qualified Participants</dt>
-<dd>{% if round.status_key == "locked" and not round.participant_count %}Pending qualification{% else %}{{ round.participant_count }}{% endif %}</dd>
-</div>
-<div>
-<dt>Assigned Judges</dt>
-<dd>{{ round.judge_count }}</dd>
-</div>
-</dl>
-</div>
-<input type="hidden" name="action" value="unlock_round">
-<input type="hidden" name="round_index" value="{{ round.index }}">
-<input type="hidden" name="tab" value="{{ tab }}">
-<input type="hidden" name="selected_round_index" value="{{ selected_round_index }}">
-<footer class="modal-footer">
-<button class="criteria-button secondary" type="button" data-close-dialog>Cancel</button>
-<button class="criteria-button" type="submit" data-loading-label="Unlocking…">Unlock Round</button>
-</footer>
-</form>
-</dialog>{% endif %}{% endfor %}
-{% if portal.publication.can_unpublish %}<dialog class="criteria-dialog modal-content" id="remove-publication" aria-labelledby="remove-title">
-<header class="modal-header"><h2 class="modal-title" id="remove-title">Remove Published Results?</h2><button type="button" data-close-dialog aria-label="Close">&times;</button></header>
-<form method="post" action="{% url 'faculty_publication_review' event.pk %}">{% csrf_token %}
-<div class="modal-body"><p>Remove the published results for <strong>{{ event.name }}</strong>? They will disappear from public Results and stop contributing points to the Leaderboard. Approved scores and rankings will be preserved so you can publish them again.</p></div>
-<input type="hidden" name="action" value="unpublish"><input type="hidden" name="confirm" value="yes">
-<footer class="modal-footer"><button type="button" class="criteria-button secondary" data-close-dialog>Cancel</button><button type="submit" class="criteria-button danger" data-loading-label="Removing...">Confirm Removal</button></footer>
-</form></dialog>{% endif %}
-{% if portal.publication.can_publish %}<dialog class="criteria-dialog modal-content" id="publish-results" aria-labelledby="publish-title">
-<header class="modal-header"><h2 class="modal-title" id="publish-title">Publish Official Results?</h2><button type="button" data-close-dialog aria-label="Close">&times;</button></header>
-<form method="post" action="{% url 'faculty_event_manage' event.pk %}">{% csrf_token %}
-<div class="modal-body"><p>Confirm that you have reviewed the approved final rankings. Official results will become public and championship standings will be updated.</p>
-<ol>{% for round in portal.rounds %}{% if round.is_final %}{% for result in round.results %}<li>{{ result.name }} &middot; {{ result.final_score }}</li>{% endfor %}{% endif %}{% endfor %}</ol></div>
-<input type="hidden" name="action" value="publish"><input type="hidden" name="confirm" value="yes"><input type="hidden" name="tab" value="results"><input type="hidden" name="selected_round_index" value="{{ selected_round_index }}">
-<footer class="modal-footer"><button type="button" class="criteria-button secondary" data-close-dialog>Cancel</button><button type="submit" class="criteria-button" data-loading-label="Publishing...">Confirm &amp; Publish</button></footer>
-</form></dialog>{% endif %}
-{% if portal.publication.can_submit %}<dialog class="criteria-dialog modal-content" id="submit-publication" aria-labelledby="publication-title">
-<header class="modal-header">
-<h2 class="modal-title" id="publication-title">Submit Final Results for Publication?</h2>
-<button type="button" data-close-dialog aria-label="Close">×</button>
-</header>
-<form method="post" action="{% url 'faculty_event_manage' event.pk %}">{% csrf_token %}<div class="modal-body">
-<p>Confirm that you have reviewed the final rankings. Results will be submitted to the existing publication authorization process.</p>
-</div>
-<input type="hidden" name="action" value="submit_publication">
-<input type="hidden" name="tab" value="results">
-<input type="hidden" name="selected_round_index" value="{{ selected_round_index }}">
-<footer class="modal-footer">
-<button type="button" class="criteria-button secondary" data-close-dialog>Cancel</button>
-<button type="submit" class="criteria-button" data-loading-label="Submitting…">Confirm Submission</button>
-</footer>
-</form>
-</dialog>{% endif %}
-</div>
-</div>
-<script src="{% static 'facultydash/faculty.js' %}">
+              </header>
+              <div class="criteria-table-wrap" tabindex="0" role="region" aria-label="Assigned participants">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Participant / Team</th>
+                      <th>Department</th>
+                      <th>Entry Type</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for participant in portal.participants %}
+                      <tr>
+                        <td>{{ forloop.counter }}</td>
+                        <td>
+                          <strong>{{ participant.name }}</strong>
+                        </td>
+                        <td>{{ participant.department|default:'—' }}</td>
+                        <td>{{ participant.entry_type }}</td>
+                        <td>
+                          {% if portal.can_manage_participants %}
+                            <button class="criteria-button danger" type="button" data-open-dialog="remove-participant-{{ participant.id }}">Remove</button>
+                          {% else %}
+                            <span>Unavailable</span>
+                          {% endif %}
+                        </td>
+                      </tr>
+                    {% empty %}
+                      <tr>
+                        <td colspan="5" class="criteria-empty">No participants have been assigned.</td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </article>
+          </section>
+          <section {% if tab != 'removal_history' %}hidden{% endif %} aria-label="Removal History">
+            <div class="criteria-section-heading">
+              <div>
+                <h2>Participant Removal History</h2>
+                <p>Review removal reasons and restore participants. Previous scoring records are retained.</p>
+              </div>
+            </div>
+            <article class="criteria-panel">
+              <header>
+                <h2>Removal Records <span class="criteria-count">{{ portal.removal_history|length }}</span></h2>
+              </header>
+              <div class="criteria-table-wrap" tabindex="0" role="region" aria-label="Participant removal history">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Participant / Team</th>
+                      <th>Reason</th>
+                      <th>Effective Round</th>
+                      <th>Removed</th>
+                      <th>Status</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for removal in portal.removal_history %}
+                      <tr>
+                        <td><strong>{{ removal.participant_name }}</strong></td>
+                        <td>
+                          {{ removal.reason_label }}
+                          {% if removal.explanation %}
+                            <p>{{ removal.explanation }}</p>
+                          {% endif %}
+                        </td>
+                        <td>{{ removal.round_name }}</td>
+                        <td>
+                          <time datetime="{{ removal.removed_at }}" data-local-time>{{ removal.removed_at }}</time>
+                          <p>{{ removal.removed_by_name }}</p>
+                        </td>
+                        <td>
+                          {% if removal.restored_at %}
+                            <strong>Restored</strong>
+                            <p><time datetime="{{ removal.restored_at }}" data-local-time>{{ removal.restored_at }}</time></p>
+                            <p>{{ removal.restored_by_name }}</p>
+                          {% else %}
+                            Removed
+                          {% endif %}
+                        </td>
+                        <td>
+                          {% if not removal.restored_at and portal.can_manage_participants %}
+                            <button class="criteria-button secondary" type="button" data-open-dialog="restore-participant-{{ removal.id }}">Restore</button>
+                          {% endif %}
+                        </td>
+                      </tr>
+                    {% empty %}
+                      <tr>
+                        <td colspan="6" class="criteria-empty">No participants have been removed.</td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </article>
+          </section>
+          <section {% if tab != 'results' %}hidden{% endif %} aria-label="Results and Publication">
+            <div class="criteria-section-heading">
+              <div>
+                <h2>Results &amp; Publication</h2>
+                <p>Review round rankings and detailed score breakdowns.</p>
+              </div>
+              {% include 'facultydash/criteria_round_select.html' %}
+            </div>
+            {% include 'facultydash/criteria_results.html' %}
+            {% if portal.selected_round.can_approve %}
+              <button class="criteria-button result-approve" type="button" data-open-dialog="approve-{{ portal.selected_round.index }}">Approve Round Results</button>
+            {% endif %}
+            <article class="criteria-panel criteria-publication">
+              <header>
+                <h2>Final Results Publication</h2>
+                <span class="criteria-badge">{{ portal.publication.status }}</span>
+              </header>
+              <div class="publication-body">
+                <p>After final-round approval and required verification, review the rankings and confirm publication to make official results public.</p>
+                {% if portal.publication.submitted_at %}
+                  <p class="round-note approved">Submitted by {{ portal.publication.submitted_by_name|default:portal.publication.submitted_by }} · <time datetime="{{ portal.publication.submitted_at }}" data-local-time>{{ portal.publication.submitted_at }}</time></p>
+                {% endif %}
+                {% for error in portal.publication.publish_errors %}
+                  <p class="publication-blocker">{{ error }}</p>
+                {% endfor %}
+                {% if portal.publication.can_unpublish %}
+                  <button class="criteria-button danger" type="button" data-open-dialog="remove-publication">Remove Publish</button>
+                {% endif %}
+                {% if portal.publication.can_publish %}
+                  <button class="criteria-button" type="button" data-open-dialog="publish-results">Review &amp; Publish</button>
+                {% endif %}
+                {% if not portal.publication.can_publish and not portal.publication.published and not portal.publication.submitted_at %}
+                  <button class="criteria-button" type="button" data-open-dialog="submit-publication" {% if not portal.publication.can_submit %}disabled title="{{ portal.publication.errors|join:' ' }}"{% endif %}>Approve &amp; Submit for Publication</button>
+                {% endif %}
+              </div>
+            </article>
+          </section>
+        </main>
+        {% if portal.can_manage_participants %}
+          {% for participant in portal.participants %}
+            <dialog class="criteria-dialog modal-content" id="remove-participant-{{ participant.id }}" aria-labelledby="remove-participant-title-{{ participant.id }}">
+              <header class="modal-header">
+                <h2 class="modal-title" id="remove-participant-title-{{ participant.id }}">Remove Participant?</h2>
+                <button type="button" data-close-dialog aria-label="Close">&times;</button>
+              </header>
+              <form method="post" action="{% url 'faculty_event_manage' event.pk %}">
+                {% csrf_token %}
+                <div class="modal-body">
+                  <p>Remove <strong>{{ participant.name }}</strong> from <strong>{{ portal.participant_change_round_name }}</strong> and succeeding rounds? Their previous scoring records will be retained, and they will be excluded from final rankings according to the event rules.</p>
+                  <div class="mb-3">
+                    <label class="form-label" for="removal-reason-{{ participant.id }}">Reason for removal *</label>
+                    <select class="form-select" id="removal-reason-{{ participant.id }}" name="reason" required>
+                      <option value="" selected disabled>Select a reason</option>
+                      <option value="disqualified">Disqualified</option>
+                      <option value="voluntary_withdrawal">Voluntary withdrawal</option>
+                      <option value="absent">Absent / No-show</option>
+                      <option value="ineligible">Eligibility requirements not met</option>
+                      <option value="other">Other reason</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="form-label" for="removal-explanation-{{ participant.id }}">Additional explanation (optional)</label>
+                    <textarea class="form-control" id="removal-explanation-{{ participant.id }}" name="explanation" rows="3" maxlength="2000"></textarea>
+                  </div>
+                </div>
+                <input type="hidden" name="action" value="remove_participant">
+                <input type="hidden" name="participant_id" value="{{ participant.id }}">
+                <input type="hidden" name="confirm" value="yes">
+                <input type="hidden" name="tab" value="participants">
+                <input type="hidden" name="selected_round_index" value="{{ selected_round_index }}">
+                <footer class="modal-footer">
+                  <button class="criteria-button secondary" type="button" data-close-dialog>Cancel</button>
+                  <button class="criteria-button danger" type="submit" data-loading-label="Removing...">Confirm Removal</button>
+                </footer>
+              </form>
+            </dialog>
+          {% endfor %}
+          {% for removal in portal.removal_history %}
+            {% if not removal.restored_at %}
+              <dialog class="criteria-dialog modal-content" id="restore-participant-{{ removal.id }}" aria-labelledby="restore-participant-title-{{ removal.id }}">
+                <header class="modal-header">
+                  <h2 class="modal-title" id="restore-participant-title-{{ removal.id }}">Restore Participant?</h2>
+                  <button type="button" data-close-dialog aria-label="Close">&times;</button>
+                </header>
+                <form method="post" action="{% url 'faculty_event_manage' event.pk %}">
+                  {% csrf_token %}
+                  <div class="modal-body">
+                    <p>Restore <strong>{{ removal.participant_name }}</strong> to the participant list from <strong>{{ portal.participant_change_round_name }}</strong>? Eligibility for each round follows the event rules. Their previous scoring records remain preserved.</p>
+                  </div>
+                  <input type="hidden" name="action" value="restore_participant">
+                  <input type="hidden" name="removal_id" value="{{ removal.id }}">
+                  <input type="hidden" name="confirm" value="yes">
+                  <input type="hidden" name="tab" value="removal_history">
+                  <input type="hidden" name="selected_round_index" value="{{ selected_round_index }}">
+                  <footer class="modal-footer">
+                    <button class="criteria-button secondary" type="button" data-close-dialog>Cancel</button>
+                    <button class="criteria-button" type="submit" data-loading-label="Restoring...">Confirm Restore</button>
+                  </footer>
+                </form>
+              </dialog>
+            {% endif %}
+          {% endfor %}
+        {% endif %}
+        {% for round in portal.rounds %}
+          {% if round.can_approve %}
+            <dialog class="criteria-dialog modal-content" id="approve-{{ round.index }}" aria-labelledby="approve-title-{{ round.index }}">
+              <header class="modal-header">
+                <h2 class="modal-title" id="approve-title-{{ round.index }}">Approve Round Results?</h2>
+                <button type="button" data-close-dialog aria-label="Close">×</button>
+              </header>
+              <form method="post" action="{% url 'faculty_event_manage' event.pk %}">
+                {% csrf_token %}
+                <div class="modal-body">
+                  <p>Are you sure you want to approve the results of <strong>{{ round.name }}</strong>? Once approved, the results will be finalized and the next round can be unlocked.</p>
+                  {% if round.qualification_rule == 'manual_selection' %}
+                    <fieldset>
+                      <legend>Select qualified participants</legend>
+                      {% for result in portal.results %}
+                        {% if round.index == selected_round_index %}
+                          <label class="qualification-choice">
+<input type="checkbox" name="qualifier_ids" value="{{ result.participant_id }}" {% if result.qualified %}checked{% endif %}> {{ result.name }}</label>
+                        {% endif %}
+                      {% endfor %}
+                    </fieldset>
+                  {% endif %}
+                </div>
+                <input type="hidden" name="action" value="approve_round">
+                <input type="hidden" name="round_index" value="{{ round.index }}">
+                <input type="hidden" name="tab" value="{{ tab }}">
+                <input type="hidden" name="selected_round_index" value="{{ selected_round_index }}">
+                <footer class="modal-footer">
+                  <button class="criteria-button secondary" type="button" data-close-dialog>Cancel</button>
+                  <button class="criteria-button" type="submit" data-loading-label="Approving…">Confirm Approval</button>
+                </footer>
+              </form>
+            </dialog>
+          {% endif %}
+          {% if round.can_unlock %}
+            <dialog class="criteria-dialog modal-content" id="unlock-{{ round.index }}" aria-labelledby="unlock-title-{{ round.index }}">
+              <header class="modal-header">
+                <h2 class="modal-title" id="unlock-title-{{ round.index }}">Unlock Round {{ round.number }} · {{ round.name }}?</h2>
+                <button type="button" data-close-dialog aria-label="Close">×</button>
+              </header>
+              <form method="post" action="{% url 'faculty_event_manage' event.pk %}">
+                {% csrf_token %}
+                <div class="modal-body">
+                  <p>Unlocking this round will allow the assigned judges to begin scoring the qualified participants.</p>
+                  <dl class="criteria-info">
+                    <div>
+                      <dt>Previous Round</dt>
+                      <dd>{% for previous in portal.rounds %}{% if previous.number == round.index %}{{ previous.name }}{% endif %}{% endfor %}</dd>
+                    </div>
+                    <div>
+                      <dt>Next Round</dt>
+                      <dd>{{ round.name }}</dd>
+                    </div>
+                    <div>
+                      <dt>Qualified Participants</dt>
+                      <dd>{% if round.status_key == "locked" and not round.participant_count %}Pending qualification{% else %}{{ round.participant_count }}{% endif %}</dd>
+                    </div>
+                    <div>
+                      <dt>Assigned Judges</dt>
+                      <dd>{{ round.judge_count }}</dd>
+                    </div>
+                  </dl>
+                </div>
+                <input type="hidden" name="action" value="unlock_round">
+                <input type="hidden" name="round_index" value="{{ round.index }}">
+                <input type="hidden" name="tab" value="{{ tab }}">
+                <input type="hidden" name="selected_round_index" value="{{ selected_round_index }}">
+                <footer class="modal-footer">
+                  <button class="criteria-button secondary" type="button" data-close-dialog>Cancel</button>
+                  <button class="criteria-button" type="submit" data-loading-label="Unlocking…">Unlock Round</button>
+                </footer>
+              </form>
+            </dialog>
+          {% endif %}
+        {% endfor %}
+        {% if portal.publication.can_unpublish %}
+          <dialog class="criteria-dialog modal-content" id="remove-publication" aria-labelledby="remove-title">
+            <header class="modal-header">
+              <h2 class="modal-title" id="remove-title">Remove Published Results?</h2>
+              <button type="button" data-close-dialog aria-label="Close">&times;</button>
+            </header>
+            <form method="post" action="{% url 'faculty_publication_review' event.pk %}">
+              {% csrf_token %}
+              <div class="modal-body">
+                <p>Remove the published results for <strong>{{ event.name }}</strong>? They will disappear from public Results and stop contributing points to the Leaderboard. Approved scores and rankings will be preserved so you can publish them again.</p>
+              </div>
+              <input type="hidden" name="action" value="unpublish">
+              <input type="hidden" name="confirm" value="yes">
+              <footer class="modal-footer">
+                <button type="button" class="criteria-button secondary" data-close-dialog>Cancel</button>
+                <button type="submit" class="criteria-button danger" data-loading-label="Removing...">Confirm Removal</button>
+              </footer>
+            </form>
+          </dialog>
+        {% endif %}
+        {% if portal.publication.can_publish %}
+          <dialog class="criteria-dialog modal-content" id="publish-results" aria-labelledby="publish-title">
+            <header class="modal-header">
+              <h2 class="modal-title" id="publish-title">Publish Official Results?</h2>
+              <button type="button" data-close-dialog aria-label="Close">&times;</button>
+            </header>
+            <form method="post" action="{% url 'faculty_event_manage' event.pk %}">
+              {% csrf_token %}
+              <div class="modal-body">
+                <p>Confirm that you have reviewed the approved final rankings. Official results will become public and championship standings will be updated.</p>
+                <ol>
+                  {% for round in portal.rounds %}
+                    {% if round.is_final %}
+                      {% for result in round.results %}
+                        <li>{{ result.name }} &middot; {{ result.final_score }}</li>
+                      {% endfor %}
+                    {% endif %}
+                  {% endfor %}
+                </ol>
+              </div>
+              <input type="hidden" name="action" value="publish">
+              <input type="hidden" name="confirm" value="yes">
+              <input type="hidden" name="tab" value="results">
+              <input type="hidden" name="selected_round_index" value="{{ selected_round_index }}">
+              <footer class="modal-footer">
+                <button type="button" class="criteria-button secondary" data-close-dialog>Cancel</button>
+                <button type="submit" class="criteria-button" data-loading-label="Publishing...">Confirm &amp; Publish</button>
+              </footer>
+            </form>
+          </dialog>
+        {% endif %}
+        {% if portal.publication.can_submit %}
+          <dialog class="criteria-dialog modal-content" id="submit-publication" aria-labelledby="publication-title">
+            <header class="modal-header">
+              <h2 class="modal-title" id="publication-title">Submit Final Results for Publication?</h2>
+              <button type="button" data-close-dialog aria-label="Close">×</button>
+            </header>
+            <form method="post" action="{% url 'faculty_event_manage' event.pk %}">
+              {% csrf_token %}
+              <div class="modal-body">
+                <p>Confirm that you have reviewed the final rankings. Results will be submitted to the existing publication authorization process.</p>
+              </div>
+              <input type="hidden" name="action" value="submit_publication">
+              <input type="hidden" name="tab" value="results">
+              <input type="hidden" name="selected_round_index" value="{{ selected_round_index }}">
+              <footer class="modal-footer">
+                <button type="button" class="criteria-button secondary" data-close-dialog>Cancel</button>
+                <button type="submit" class="criteria-button" data-loading-label="Submitting…">Confirm Submission</button>
+              </footer>
+            </form>
+          </dialog>
+        {% endif %}
+      </div>
+    </div>
+    <script src="{% static 'facultydash/faculty.js' %}">
 </script>
-<script src="{% static 'facultydash/criteria_event.js' %}?v=20261013" defer>
+    <script src="{% static 'facultydash/criteria_event.js' %}?v=20261013" defer>
 </script>
-</body>
+  </body>
 </html>
-
-
-

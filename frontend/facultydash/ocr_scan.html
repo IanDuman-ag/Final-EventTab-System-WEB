@@ -1,15 +1,411 @@
 {% load static tz %}
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>OCR Score Sheets · EventTab</title>
-<link rel="stylesheet" href="{% static 'admindash/vendor/bootstrap-5.3.8.min.css' %}"><link rel="stylesheet" href="{% static 'facultydash/faculty.css' %}"><link rel="stylesheet" href="{% static 'facultydash/pages.css' %}"><link rel="stylesheet" href="{% static 'facultydash/ocr_scan.css' %}"></head>
-<body class="fac-v2 tab-v2 ocr-page"><div class="tab-shell">{% include 'facultydash/_sidebar.html' with active='ocr' %}<div class="tab-main">
-<header class="tab-topbar"><div><p class="fac-kicker">Faculty workspace</p><h1>OCR Score Sheets</h1><p>Scan, review, and confirm paper-based judge score sheets.</p></div><div class="fac-dashboard-date ocr-date"><span aria-hidden="true">&#128197;</span>{% timezone "Asia/Manila" %}<div><strong>{% now "l, M d, Y" %}</strong><span>{% now "g:i A" %}</span></div>{% endtimezone %}</div></header>
-<main class="ocr-main" id="ocr-app" data-api="{% url 'faculty_ocr_api' %}">{% csrf_token %}
-<div class="ocr-summary"><article><span class="ocr-stat-icon">▤</span><div><span>Total Sheets</span><strong data-count="total">0</strong><small>Scanned score sheets uploaded</small></div></article><article><span class="ocr-stat-icon amber">◷</span><div><span>Pending OCR</span><strong data-count="pending">0</strong><small>Waiting for OCR extraction</small></div></article><article><span class="ocr-stat-icon">▤</span><div><span>For Verification</span><strong data-count="review">0</strong><small>OCR results awaiting review</small></div></article><article><span class="ocr-stat-icon green">✓</span><div><span>Confirmed</span><strong data-count="confirmed">0</strong><small>Verified and confirmed sheets</small></div></article></div>
-<ol class="ocr-workflow" aria-label="Score sheet workflow"><li data-step="1"><b>1</b><span><strong>Select Details</strong><small>Choose event, round, and judge</small></span></li><li data-step="2"><b>2</b><span><strong>Upload Sheet</strong><small>Scan or upload the judge score sheet</small></span></li><li data-step="3"><b>3</b><span><strong>OCR Extraction</strong><small>System extracts scores from the image</small></span></li><li data-step="4"><b>4</b><span><strong>Review &amp; Verify</strong><small>Check and edit extracted scores</small></span></li><li data-step="5"><b>5</b><span><strong>Confirm Submission</strong><small>Finalize and confirm the scores</small></span></li></ol>
-<p id="ocr-status" role="status" aria-live="polite"></p>
-<section class="ocr-card ocr-selection"><header><div><h2>▦ &nbsp; 1. Select Event, Round, and Judge</h2><p>Choose the event, round, and judge before uploading the score sheet.</p></div><span class="ocr-warning">Choose an active, unlocked round before scoring.</span></header><div class="ocr-selects"><label>Event <em>*</em><select id="ocr-event"><option value="">Select event</option></select></label><label>Round <em>*</em><select id="ocr-round" disabled><option value="">Select round</option></select></label><label>Judge <em>*</em><select id="ocr-judge" disabled><option value="">Select judge</option></select></label></div><div class="ocr-inline-actions"><button id="ocr-print" class="ocr-button secondary" disabled>Generate / Print Score Sheet</button><span id="ocr-sheet-id"></span></div></section>
-<div class="ocr-workspace"><section class="ocr-card"><header><div><h2>⇧ &nbsp; Upload Score Sheet</h2><p>Upload a scanned copy or photo of the judge’s score sheet.</p></div></header><label class="ocr-drop" id="ocr-drop"><input id="ocr-file" type="file" accept=".jpg,.jpeg,.png,.pdf" disabled><span>☁</span><strong>Drag and drop your file here</strong><small>or click to browse</small><small>JPG, PNG, PDF · Maximum 10 MB</small></label><div class="ocr-file-actions"><span id="ocr-filename">No file selected</span><button id="ocr-remove" type="button" hidden>Remove selected file</button></div><div class="ocr-preview" hidden><a id="ocr-zoom" target="_blank" rel="noopener"><img id="ocr-image" alt="Original judge score sheet"></a><div><button id="ocr-previous-page" aria-label="Previous original page" type="button">‹</button><span id="ocr-page-number"></span><button id="ocr-next-page" aria-label="Next original page" type="button">›</button><a id="ocr-original">View Original Sheet</a></div></div><div class="ocr-actions"><button class="ocr-button" id="ocr-start" disabled>⚙ &nbsp; Start OCR</button><button class="ocr-button secondary" id="ocr-manual" disabled>✎ &nbsp; Manual Entry</button></div><p class="ocr-help">Use the generated template for extraction. Handwriting may require manual correction. Click the original image to enlarge it.</p></section>
-<section class="ocr-card"><header><div><h2>▤ &nbsp; OCR Extracted Scores</h2><p>Review and edit extracted scores before verification.</p></div><span class="ocr-warning">Please verify every score before confirming.</span></header><div class="ocr-score-scroll"><table class="ocr-table" id="ocr-scores"><thead></thead><tbody><tr><td>Select an event, round, and judge.</td></tr></tbody></table></div><label class="ocr-attestation"><input id="ocr-compared" type="checkbox">I compared every score with the original paper sheet.</label><div class="ocr-actions"><button class="ocr-button secondary" id="ocr-save" disabled>Save Draft</button><button class="ocr-button" id="ocr-verify" disabled>Verify Scores</button><button class="ocr-button" id="ocr-confirm" disabled>Confirm Submission</button></div></section></div>
-<section class="ocr-card ocr-records"><header><div><h2>▤ &nbsp; Scanned Score Sheet Records</h2><p>List of uploaded scanned sheets and their OCR status.</p></div><button class="ocr-button secondary" id="ocr-filters-toggle" aria-expanded="false">Filter</button><label class="ocr-search"><span class="visually-hidden">Search records</span><input id="ocr-search" type="search" placeholder="Search event, judge, or round..."></label></header><div class="ocr-filters" hidden><label>Event<select id="filter-event"><option value="">All events</option></select></label><label>Round<select id="filter-round"><option value="">All rounds</option></select></label><label>Judge<select id="filter-judge"><option value="">All judges</option></select></label><label>OCR status<select id="filter-ocr"><option value="">All statuses</option><option>pending</option><option>processing</option><option>completed</option><option>failed</option><option value="manual">Manual entry</option></select></label><label>Verification<select id="filter-verification"><option value="">All statuses</option><option>pending</option><option>for_review</option><option>verified</option><option>confirmed</option></select></label><button class="ocr-button secondary" id="ocr-filter-apply">Apply</button></div><div class="ocr-score-scroll"><table class="ocr-table"><thead><tr><th>#</th><th>Judge</th><th>Event</th><th>Round</th><th>Uploaded At</th><th>OCR Status</th><th>Verification</th><th>Method</th><th>Actions</th></tr></thead><tbody id="ocr-records-body"></tbody></table></div><nav class="ocr-pagination"><button id="records-previous">Previous</button><span id="records-page"></span><button id="records-next">Next</button></nav></section>
-</main></div></div><dialog id="ocr-confirm-dialog"><h2>Confirm Judge Submission</h2><dl id="ocr-confirm-details"></dl><p>These scores will become a locked judge submission. Round approval and publication remain separate actions.</p><div class="ocr-actions"><button id="ocr-cancel-confirm" class="ocr-button secondary">Cancel</button><button id="ocr-submit-confirm" class="ocr-button">Confirm Submission</button></div></dialog><script src="{% static 'facultydash/ocr_scan.js' %}"></script></body></html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>OCR Score Sheets · EventTab</title>
+    <link
+      rel="stylesheet"
+      href="{% static 'admindash/vendor/bootstrap-5.3.8.min.css' %}"
+    />
+    <link rel="stylesheet" href="{% static 'facultydash/faculty.css' %}" />
+    <link rel="stylesheet" href="{% static 'facultydash/pages.css' %}" />
+    <link rel="stylesheet" href="{% static 'facultydash/ocr_scan.css' %}" />
+  </head>
+  <body class="fac-v2 tab-v2 ocr-page">
+    <div class="tab-shell">
+      {% include 'facultydash/_sidebar.html' with active='ocr' %}
+      <div class="tab-main">
+        <header class="tab-topbar">
+          <div>
+            <p class="fac-kicker">Faculty workspace</p>
+            <h1>OCR Score Sheets</h1>
+            <p>Scan, review, and confirm paper-based judge score sheets.</p>
+          </div>
+          <div class="fac-dashboard-date ocr-date">
+            <span aria-hidden="true">&#128197;</span>
+            {% timezone "Asia/Manila" %}
+              <div>
+                <strong>
+                  {% now "l, M d, Y" %}
+                </strong
+              >
+                <span>
+                  {% now "g:i A" %}
+                </span>
+              </div>
+            {% endtimezone %}
+          </div>
+        </header>
+        <main
+          class="ocr-main"
+          id="ocr-app"
+          data-api="{% url 'faculty_ocr_api' %}"
+        >
+          {% csrf_token %}
+          <div class="ocr-summary">
+            <article>
+              <span class="ocr-stat-icon">▤</span>
+              <div>
+                <span>Total Sheets</span>
+                <strong data-count="total">0</strong
+                >
+                <small>Scanned score sheets uploaded</small>
+              </div>
+            </article>
+            <article>
+              <span class="ocr-stat-icon amber">◷</span>
+              <div>
+                <span>Pending OCR</span>
+                <strong data-count="pending">0</strong
+                >
+                <small>Waiting for OCR extraction</small>
+              </div>
+            </article>
+            <article>
+              <span class="ocr-stat-icon">▤</span>
+              <div>
+                <span>For Verification</span
+                >
+                <strong data-count="review">0</strong
+                >
+                <small>OCR results awaiting review</small>
+              </div>
+            </article>
+            <article>
+              <span class="ocr-stat-icon green">✓</span>
+              <div>
+                <span>Confirmed</span>
+                <strong data-count="confirmed">0</strong
+                >
+                <small>Verified and confirmed sheets</small>
+              </div>
+            </article>
+          </div>
+          <ol class="ocr-workflow" aria-label="Score sheet workflow">
+            <li data-step="1">
+              <b>1</b
+              >
+              <span
+                >
+                <strong>Select Details</strong
+                >
+                <small>Choose event, round, and judge</small>
+              </span
+              >
+            </li>
+            <li data-step="2">
+              <b>2</b
+              >
+              <span
+                >
+                <strong>Upload Sheet</strong
+                >
+                <small>Scan or upload the judge score sheet</small>
+              </span
+              >
+            </li>
+            <li data-step="3">
+              <b>3</b
+              >
+              <span
+                >
+                <strong>OCR Extraction</strong
+                >
+                <small>System extracts scores from the image</small>
+              </span
+              >
+            </li>
+            <li data-step="4">
+              <b>4</b
+              >
+              <span
+                >
+                <strong>Review &amp; Verify</strong
+                >
+                <small>Check and edit extracted scores</small>
+              </span
+              >
+            </li>
+            <li data-step="5">
+              <b>5</b
+              >
+              <span
+                >
+                <strong>Confirm Submission</strong
+                >
+                <small>Finalize and confirm the scores</small>
+              </span
+              >
+            </li>
+          </ol>
+          <p id="ocr-status" role="status" aria-live="polite">
+          </p>
+          <section class="ocr-card ocr-selection">
+            <header>
+              <div>
+                <h2>▦ &nbsp; 1. Select Event, Round, and Judge</h2>
+                <p>
+                  Choose the event, round, and judge before uploading the score
+                  sheet.
+                </p>
+              </div>
+              <span class="ocr-warning"
+                >Choose an active, unlocked round before scoring.</span
+              >
+            </header>
+            <div class="ocr-selects">
+              <label
+                >Event <em>*</em
+                ><select id="ocr-event">
+                  <option value="">Select event</option>
+                </select></label
+              >
+              <label
+                >Round <em>*</em
+                ><select id="ocr-round" disabled>
+                  <option value="">Select round</option>
+                </select></label
+              >
+              <label
+                >Judge <em>*</em
+                ><select id="ocr-judge" disabled>
+                  <option value="">Select judge</option>
+                </select></label
+              >
+            </div>
+            <div class="ocr-inline-actions">
+              <button id="ocr-print" class="ocr-button secondary" disabled>
+                Generate / Print Score Sheet</button
+              >
+              <span id="ocr-sheet-id">
+              </span>
+            </div>
+          </section>
+          <div class="ocr-workspace">
+            <section class="ocr-card">
+              <header>
+                <div>
+                  <h2>⇧ &nbsp; Upload Score Sheet</h2>
+                  <p>
+                    Upload a scanned copy or photo of the judge’s score sheet.
+                  </p>
+                </div>
+              </header>
+              <label class="ocr-drop" id="ocr-drop"
+                >
+                <input
+                  id="ocr-file"
+                  type="file"
+                  accept=".jpg,.jpeg,.png,.pdf"
+                  disabled
+                />
+                <span>☁</span>
+                <strong>Drag and drop your file here</strong
+                >
+                <small>or click to browse</small
+                >
+                <small>JPG, PNG, PDF · Maximum 10 MB</small>
+              </label
+              >
+              <div class="ocr-file-actions">
+                <span id="ocr-filename">No file selected</span
+                >
+                <button id="ocr-remove" type="button" hidden>
+                  Remove selected file
+                </button>
+              </div>
+              <div class="ocr-preview" hidden>
+                <a id="ocr-zoom" target="_blank" rel="noopener"
+                  >
+                  <img id="ocr-image" alt="Original judge score sheet"
+                />
+                </a>
+                <div>
+                  <button
+                    id="ocr-previous-page"
+                    aria-label="Previous original page"
+                    type="button"
+                  >
+                    ‹</button
+                  >
+                  <span id="ocr-page-number">
+                  </span
+                  >
+                  <button
+                    id="ocr-next-page"
+                    aria-label="Next original page"
+                    type="button"
+                  >
+                    ›</button
+                  >
+                  <a id="ocr-original">View Original Sheet</a>
+                </div>
+              </div>
+              <div class="ocr-actions">
+                <button class="ocr-button" id="ocr-start" disabled>
+                  ⚙ &nbsp; Start OCR</button
+                >
+                <button class="ocr-button secondary" id="ocr-manual" disabled>
+                  ✎ &nbsp; Manual Entry
+                </button>
+              </div>
+              <p class="ocr-help">
+                Use the generated template for extraction. Handwriting may
+                require manual correction. Click the original image to enlarge
+                it.
+              </p>
+            </section>
+            <section class="ocr-card">
+              <header>
+                <div>
+                  <h2>▤ &nbsp; OCR Extracted Scores</h2>
+                  <p>Review and edit extracted scores before verification.</p>
+                </div>
+                <span class="ocr-warning"
+                  >Please verify every score before confirming.</span
+                >
+              </header>
+              <div class="ocr-score-scroll">
+                <table class="ocr-table" id="ocr-scores">
+                  <thead>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>Select an event, round, and judge.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <label class="ocr-attestation"
+                ><input id="ocr-compared" type="checkbox" />I compared every
+                score with the original paper sheet.</label
+              >
+              <div class="ocr-actions">
+                <button class="ocr-button secondary" id="ocr-save" disabled>
+                  Save Draft</button
+                >
+                <button class="ocr-button" id="ocr-verify" disabled>
+                  Verify Scores</button
+                >
+                <button class="ocr-button" id="ocr-confirm" disabled>
+                  Confirm Submission
+                </button>
+              </div>
+            </section>
+          </div>
+          <section class="ocr-card ocr-records">
+            <header>
+              <div>
+                <h2>▤ &nbsp; Scanned Score Sheet Records</h2>
+                <p>List of uploaded scanned sheets and their OCR status.</p>
+              </div>
+              <button
+                class="ocr-button secondary"
+                id="ocr-filters-toggle"
+                aria-expanded="false"
+              >
+                Filter</button
+              >
+              <label class="ocr-search"
+                >
+                <span class="visually-hidden">Search records</span
+                >
+                <input
+                  id="ocr-search"
+                  type="search"
+                  placeholder="Search event, judge, or round..."
+              />
+              </label>
+            </header>
+            <div class="ocr-filters" hidden>
+              <label
+                >Event<select id="filter-event">
+                  <option value="">All events</option>
+                </select></label
+              >
+              <label
+                >Round<select id="filter-round">
+                  <option value="">All rounds</option>
+                </select></label
+              >
+              <label
+                >Judge<select id="filter-judge">
+                  <option value="">All judges</option>
+                </select></label
+              >
+              <label
+                >OCR status<select id="filter-ocr">
+                  <option value="">All statuses</option>
+                  <option>pending</option>
+                  <option>processing</option>
+                  <option>completed</option>
+                  <option>failed</option>
+                  <option value="manual">Manual entry</option>
+                </select></label
+              >
+              <label
+                >Verification<select id="filter-verification">
+                  <option value="">All statuses</option>
+                  <option>pending</option>
+                  <option>for_review</option>
+                  <option>verified</option>
+                  <option>confirmed</option>
+                </select></label
+              >
+              <button class="ocr-button secondary" id="ocr-filter-apply">
+                Apply
+              </button>
+            </div>
+            <div class="ocr-score-scroll">
+              <table class="ocr-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Judge</th>
+                    <th>Event</th>
+                    <th>Round</th>
+                    <th>Uploaded At</th>
+                    <th>OCR Status</th>
+                    <th>Verification</th>
+                    <th>Method</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="ocr-records-body">
+                </tbody>
+              </table>
+            </div>
+            <nav class="ocr-pagination">
+              <button id="records-previous">Previous</button
+              >
+              <span id="records-page">
+              </span
+              >
+              <button id="records-next">Next</button>
+            </nav>
+          </section>
+        </main>
+      </div>
+    </div>
+    <dialog id="ocr-confirm-dialog">
+      <h2>Confirm Judge Submission</h2>
+      <dl id="ocr-confirm-details">
+      </dl>
+      <p>
+        These scores will become a locked judge submission. Round approval and
+        publication remain separate actions.
+      </p>
+      <div class="ocr-actions">
+        <button id="ocr-cancel-confirm" class="ocr-button secondary">
+          Cancel</button
+        >
+        <button id="ocr-submit-confirm" class="ocr-button">
+          Confirm Submission
+        </button>
+      </div>
+    </dialog>
+    <script src="{% static 'facultydash/ocr_scan.js' %}"></script>
+  </body>
+</html>

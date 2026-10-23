@@ -1,196 +1,415 @@
 {% load static %}
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{ detail.name }} · EventTab</title>
-  <link rel="stylesheet" href="{% static 'facultydash/faculty.css' %}?v=20260929b">
-  <link rel="stylesheet" href="{% static 'facultydash/pages.css' %}?v=20261010confirm">
-</head>
-<body class="fac-v2 tab-v2" data-event-id="{{ event.id }}" data-csrf="{{ csrf_token }}" data-open-match-id="{{ open_match_id }}">
-<div class="tab-shell">
-  {% include 'facultydash/_sidebar.html' with active='my_events' %}
-  <div class="tab-main">
-    <header class="tab-topbar fac-event-header">
-      <div>
-        <p class="fac-breadcrumb"><a href="{% url 'faculty_my_events' %}">My Events</a><span>/</span>{{ detail.name }}</p>
-        <div class="fac-title-row"><h1>{{ detail.name }}</h1><span class="fac-pill fac-pill--{{ publication_row.status_key }}">{{ publication_row.status }}</span></div>
-        <div class="fac-meta">
-          <span><b>Schedule</b>{{ detail.schedule }}</span>
-          <span><b>Venue</b>{{ detail.venue }}</span>
-          <span><b>Matches</b>{{ match_count }}</span>
-          <span><b>Teams</b>{{ detail.participants|length }}</span>
-        </div>
-      </div>
-    </header>
-
-    <main class="tab-content fac-content">
-      {% for message in messages %}<div class="fac-waiting-banner" role="alert">{{ message }}</div>{% endfor %}
-      <nav class="fac-tabs" aria-label="Event workspace">
-        <a href="?tab=overview" class="{% if tab == 'overview' %}is-active{% endif %}">Overview</a>
-        <a href="?tab=matches" class="{% if tab == 'matches' %}is-active{% endif %}">Matches</a>
-        <a href="?tab=results" class="{% if tab == 'results' %}is-active{% endif %}">Results</a>
-        <a href="?tab=participants" class="{% if tab == 'participants' %}is-active{% endif %}">Participants</a>
-      </nav>
-
-      <section class="fac-card" id="final-placements">
-        <header><h2>Final Placements</h2></header>
-        {% for error in publication_review.errors %}<div class="fac-waiting-banner">{{ error }}</div>{% endfor %}
-        {% if can_approve_role and publication_review.can_insert_playoff %}
-        <form method="post" action="{% url 'faculty_publication_review' event.id %}">{% csrf_token %}<button class="fac-btn fac-btn-sm" name="action" value="insert_playoff">Insert Missing Third-Place Playoff</button></form>
-        {% endif %}
-        <div class="fac-table-wrap"><table class="fac-table"><thead><tr><th>Placement</th><th>Team</th><th>Source</th><th>Championship Points</th><th>Verification</th></tr></thead><tbody>
-        {% for row in publication_review.standings %}<tr><td>{{ row.placement }}</td><td>{{ row.name }}</td><td>{{ row.source }}</td><td>{{ row.points }}</td><td>{% if publication_review.review_ready or publication_review.published %}Verified{% else %}Awaiting validation{% endif %}</td></tr>{% endfor %}
-        </tbody></table></div>
-      </section>
-
-      {% if tab == 'results' %}
-      <section class="fac-card"><header><div><h2>Official Results</h2><p>{% if publication_review.published %}Published results are read-only. Corrections require explicit authorization and an audit record.{% else %}Review the final placements above and confirm official publication.{% endif %}</p></div></header>
-        <div class="fac-toolbar">
-          {% if publication_row.show_publication_button %}<button class="fac-btn fac-btn-yellow" type="button" data-open-publication="event-publication">Publish Official Results</button>{% endif %}
-          {% if publication_review.published %}<a class="fac-btn" href="{% url 'public_result_detail' event.id %}">View Public Results</a>{% endif %}
-        </div>
-        {% for error in publication_review.approval_errors %}<div class="fac-waiting-banner">{{ error }}</div>{% endfor %}
-      </section>
-      {% endif %}
-
-      {% if tab == 'overview' %}
-      <section class="fac-card">
-        <header><div><h2>Event & assignment information</h2><p>Read-only details provided by the administrator.</p></div></header>
-        <div class="fac-readonly">
-          <div><span>Event Name</span><strong>{{ detail.name }}</strong></div>
-          <div><span>Category</span><strong>{{ detail.category }}</strong></div>
-          <div><span>Classification</span><strong>{{ detail.classification }}</strong></div>
-          <div><span>Division</span><strong>{{ detail.division }}</strong></div>
-          <div><span>Venue</span><strong>{{ detail.venue }}</strong></div>
-          <div><span>Schedule</span><strong>{{ detail.schedule }}</strong></div>
-          <div><span>Event Type</span><strong>{{ detail.event_type }}</strong></div>
-          <div><span>Competition Structure</span><strong>{{ detail.structure }}</strong></div>
-          <div><span>Result Format</span><strong>{{ detail.result_entry_format }}</strong></div>
-          <div><span>Faculty In-Charge</span><strong>{{ detail.faculty_name }}</strong></div>
-          <div><span>Teams</span><strong>{{ detail.participants|length }}</strong></div>
-        </div>
-      </section>
-      {% endif %}
-
-      {% if tab == 'matches' %}
-      {% if not publication_review.published %}
-      <div class="fac-toolbar">
-        {% if can_approve_role and publication_review.review_ready and publication_review.approval_errors %}<form method="post" action="{% url 'faculty_publication_review' event.id %}">{% csrf_token %}<button class="fac-btn fac-btn-sm" name="action" value="approve">Approve Final Results</button></form>
-        {% elif publication_review.review_ready and not publication_review.submitted and not publication_review.can_publish %}<form method="post" action="{% url 'faculty_publication_review' event.id %}">{% csrf_token %}<button class="fac-btn fac-btn-sm" name="action" value="submit">Submit for Publication</button></form>{% endif %}
-        {% if publication_row.show_publication_button %}<button class="fac-btn fac-btn-sm fac-btn-yellow" type="button" data-open-publication="event-publication">Publish Official Results</button>{% endif %}
-      </div>
-      {% endif %}
-      <section class="fac-match-summary">
-        <div><span>Match progress</span><strong>{{ confirmed_count }} of {{ match_count }} confirmed</strong></div>
-        <div class="fac-progress-bar"><i style="width:{{ progress_percent }}%"></i></div>
-      </section>
-      {% if match_count and confirmed_count == match_count %}
-      <div class="fac-waiting-banner" role="status"><strong>All match results confirmed</strong><span>{% if publication_review.published %}Official results are published and read-only.{% elif publication_review.can_publish %}Review the Results tab and confirm official publication.{% else %}Resolve the publication requirements shown above.{% endif %}</span></div>
-      {% endif %}
-      <nav class="fac-status-filters" aria-label="Match status filters">
-        <a class="{% if match_filter == 'all' %}is-active{% endif %}" href="?tab=matches&amp;status=all">All</a>
-        <a class="{% if match_filter == 'pending' %}is-active{% endif %}" href="?tab=matches&amp;status=pending">Pending</a>
-        <a class="{% if match_filter == 'draft' %}is-active{% endif %}" href="?tab=matches&amp;status=draft">Draft</a>
-        <a class="{% if match_filter == 'confirmed' %}is-active{% endif %}" href="?tab=matches&amp;status=confirmed">Confirmed</a>
-      </nav>
-      <section class="fac-card">
-        <div class="fac-table-wrap">
-          <table class="fac-table fac-match-table">
-            <thead><tr><th>Game / Stage</th><th>Matchup</th><th>Schedule</th><th>Venue</th><th>Status</th><th>Action</th></tr></thead>
-            <tbody>
-              {% for row in match_schedule %}
-              <tr id="match-{{ row.id }}">
-                <td><strong>{{ row.game }}</strong><small>{{ row.stage }}</small></td>
-                <td>{{ row.matchup }}</td>
-                <td>{{ row.date|default:"—" }}<small>{{ row.time|default:"—" }}</small></td>
-                <td>{{ row.venue }}</td>
-                <td><span class="fac-pill fac-pill--{{ row.result_status_key }}">{{ row.result_status }}</span></td>
-                <td>
-                  {% if row.team_a_id and row.team_b_id %}
-                  <button type="button" class="fac-btn fac-btn-sm{% if row.is_confirmed %} fac-btn-secondary{% endif %}" data-open-match="{{ row.id }}">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ detail.name }} · EventTab</title>
+    <link rel="stylesheet" href="{% static 'facultydash/faculty.css' %}?v=20260929b">
+    <link rel="stylesheet" href="{% static 'facultydash/pages.css' %}?v=20261010confirm">
+  </head>
+  <body class="fac-v2 tab-v2" data-event-id="{{ event.id }}" data-csrf="{{ csrf_token }}" data-open-match-id="{{ open_match_id }}">
+    <div class="tab-shell">
+      {% include 'facultydash/_sidebar.html' with active='my_events' %}
+      <div class="tab-main">
+        <header class="tab-topbar fac-event-header">
+          <div>
+            <p class="fac-breadcrumb"><a href="{% url 'faculty_my_events' %}">My Events</a><span>/</span>{{ detail.name }}</p>
+            <div class="fac-title-row">
+              <h1>{{ detail.name }}</h1>
+              <span class="fac-pill fac-pill--{{ publication_row.status_key }}">{{ publication_row.status }}</span>
+            </div>
+            <div class="fac-meta">
+              <span><b>Schedule</b>{{ detail.schedule }}</span>
+              <span><b>Venue</b>{{ detail.venue }}</span>
+              <span><b>Matches</b>{{ match_count }}</span>
+              <span><b>Teams</b>{{ detail.participants|length }}</span>
+            </div>
+          </div>
+        </header>
+        <main class="tab-content fac-content">
+          {% for message in messages %}
+            <div class="fac-waiting-banner" role="alert">{{ message }}</div>
+          {% endfor %}
+          <nav class="fac-tabs" aria-label="Event workspace">
+            <a href="?tab=overview" class="{% if tab == 'overview' %}is-active{% endif %}">Overview</a>
+            <a href="?tab=matches" class="{% if tab == 'matches' %}is-active{% endif %}">Matches</a>
+            <a href="?tab=results" class="{% if tab == 'results' %}is-active{% endif %}">Results</a>
+            <a href="?tab=participants" class="{% if tab == 'participants' %}is-active{% endif %}">Participants</a>
+          </nav>
+          <section class="fac-card" id="final-placements">
+            <header>
+              <h2>Final Placements</h2>
+            </header>
+            {% for error in publication_review.errors %}
+              <div class="fac-waiting-banner">{{ error }}</div>
+            {% endfor %}
+            {% if can_approve_role and publication_review.can_insert_playoff %}
+              <form method="post" action="{% url 'faculty_publication_review' event.id %}">
+                {% csrf_token %}
+                <button class="fac-btn fac-btn-sm" name="action" value="insert_playoff">Insert Missing Third-Place Playoff</button>
+              </form>
+            {% endif %}
+            <div class="fac-table-wrap">
+              <table class="fac-table">
+                <thead>
+                  <tr>
+                    <th>Placement</th>
+                    <th>Team</th>
+                    <th>Source</th>
+                    <th>Championship Points</th>
+                    <th>Verification</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in publication_review.standings %}
+                    <tr>
+                      <td>{{ row.placement }}</td>
+                      <td>{{ row.name }}</td>
+                      <td>{{ row.source }}</td>
+                      <td>{{ row.points }}</td>
+                      <td>{% if publication_review.review_ready or publication_review.published %}Verified{% else %}Awaiting validation{% endif %}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </section>
+          {% if tab == 'results' %}
+            <section class="fac-card">
+              <header>
+                <div>
+                  <h2>Official Results</h2>
+                  <p>{% if publication_review.published %}Published results are read-only. Corrections require explicit authorization and an audit record.{% else %}Review the final placements above and confirm official publication.{% endif %}</p>
+                </div>
+              </header>
+              <div class="fac-toolbar">
+                {% if publication_row.show_publication_button %}
+                  <button class="fac-btn fac-btn-yellow" type="button" data-open-publication="event-publication">Publish Official Results</button>
+                {% endif %}
+                {% if publication_review.published %}
+                  <a class="fac-btn" href="{% url 'public_result_detail' event.id %}">View Public Results</a>
+                {% endif %}
+              </div>
+              {% for error in publication_review.approval_errors %}
+                <div class="fac-waiting-banner">{{ error }}</div>
+              {% endfor %}
+            </section>
+          {% endif %}
+          {% if tab == 'overview' %}
+            <section class="fac-card">
+              <header>
+                <div>
+                  <h2>Event & assignment information</h2>
+                  <p>Read-only details provided by the administrator.</p>
+                </div>
+              </header>
+              <div class="fac-readonly">
+                <div>
+                  <span>Event Name</span>
+                  <strong>{{ detail.name }}</strong>
+                </div>
+                <div>
+                  <span>Category</span>
+                  <strong>{{ detail.category }}</strong>
+                </div>
+                <div>
+                  <span>Classification</span>
+                  <strong>{{ detail.classification }}</strong>
+                </div>
+                <div>
+                  <span>Division</span>
+                  <strong>{{ detail.division }}</strong>
+                </div>
+                <div>
+                  <span>Venue</span>
+                  <strong>{{ detail.venue }}</strong>
+                </div>
+                <div>
+                  <span>Schedule</span>
+                  <strong>{{ detail.schedule }}</strong>
+                </div>
+                <div>
+                  <span>Event Type</span>
+                  <strong>{{ detail.event_type }}</strong>
+                </div>
+                <div>
+                  <span>Competition Structure</span>
+                  <strong>{{ detail.structure }}</strong>
+                </div>
+                <div>
+                  <span>Result Format</span>
+                  <strong>{{ detail.result_entry_format }}</strong>
+                </div>
+                <div>
+                  <span>Faculty In-Charge</span>
+                  <strong>{{ detail.faculty_name }}</strong>
+                </div>
+                <div>
+                  <span>Teams</span>
+                  <strong>{{ detail.participants|length }}</strong>
+                </div>
+              </div>
+            </section>
+          {% endif %}
+          {% if tab == 'matches' %}
+            {% if not publication_review.published %}
+              <div class="fac-toolbar">
+                {% if can_approve_role and publication_review.review_ready and publication_review.approval_errors %}
+                  <form method="post" action="{% url 'faculty_publication_review' event.id %}">
+                    {% csrf_token %}
+                    <button class="fac-btn fac-btn-sm" name="action" value="approve">Approve Final Results</button>
+                  </form>
+                {% elif publication_review.review_ready and not publication_review.submitted and not publication_review.can_publish %}
+                  <form method="post" action="{% url 'faculty_publication_review' event.id %}">
+                    {% csrf_token %}
+                    <button class="fac-btn fac-btn-sm" name="action" value="submit">Submit for Publication</button>
+                  </form>
+                {% endif %}
+                {% if publication_row.show_publication_button %}
+                  <button class="fac-btn fac-btn-sm fac-btn-yellow" type="button" data-open-publication="event-publication">Publish Official Results</button>
+                {% endif %}
+              </div>
+            {% endif %}
+            <section class="fac-match-summary">
+              <div>
+                <span>Match progress</span>
+                <strong>{{ confirmed_count }} of {{ match_count }} confirmed</strong>
+              </div>
+              <div class="fac-progress-bar">
+                <i style="width:{{ progress_percent }}%">
+                </i>
+              </div>
+            </section>
+            {% if match_count and confirmed_count == match_count %}
+              <div class="fac-waiting-banner" role="status">
+                <strong>All match results confirmed</strong>
+                <span>{% if publication_review.published %}Official results are published and read-only.{% elif publication_review.can_publish %}Review the Results tab and confirm official publication.{% else %}Resolve the publication requirements shown above.{% endif %}</span>
+              </div>
+            {% endif %}
+            <nav class="fac-status-filters" aria-label="Match status filters">
+              <a class="{% if match_filter == 'all' %}is-active{% endif %}" href="?tab=matches&amp;status=all">All</a>
+              <a class="{% if match_filter == 'pending' %}is-active{% endif %}" href="?tab=matches&amp;status=pending">Pending</a>
+              <a class="{% if match_filter == 'draft' %}is-active{% endif %}" href="?tab=matches&amp;status=draft">Draft</a>
+              <a class="{% if match_filter == 'confirmed' %}is-active{% endif %}" href="?tab=matches&amp;status=confirmed">Confirmed</a>
+            </nav>
+            <section class="fac-card">
+              <div class="fac-table-wrap">
+                <table class="fac-table fac-match-table">
+                  <thead>
+                    <tr>
+                      <th>Game / Stage</th>
+                      <th>Matchup</th>
+                      <th>Schedule</th>
+                      <th>Venue</th>
+                      <th>Status</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for row in match_schedule %}
+                      <tr id="match-{{ row.id }}">
+                        <td>
+                          <strong>{{ row.game }}</strong>
+                          <small>{{ row.stage }}</small>
+                        </td>
+                        <td>{{ row.matchup }}</td>
+                        <td>{{ row.date|default:"—" }}<small>{{ row.time|default:"—" }}</small></td>
+                        <td>{{ row.venue }}</td>
+                        <td>
+                          <span class="fac-pill fac-pill--{{ row.result_status_key }}">{{ row.result_status }}</span>
+                        </td>
+                        <td>
+                          {% if row.team_a_id and row.team_b_id %}
+                            <button type="button" class="fac-btn fac-btn-sm{% if row.is_confirmed %} fac-btn-secondary{% endif %}" data-open-match="{{ row.id }}">
                     {% if row.is_confirmed %}View Match{% elif row.result_status_key == 'draft' %}Edit Draft{% else %}Enter Result{% endif %}
                   </button>
-                  {% else %}<span class="fac-muted">Teams pending</span>{% endif %}
-                </td>
-              </tr>
-              {% empty %}
-              <tr><td colspan="6"><div class="fac-empty"><strong>No {{ match_filter|title }} matches</strong><span>Choose another status filter to see more matches.</span></div></td></tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      {% for row in match_schedule %}
-      <dialog class="fac-dialog fac-result-dialog" data-match-dialog="{{ row.id }}" aria-labelledby="match-title-{{ row.id }}">
-        <div class="fac-dialog-shell" data-match-form="{{ row.id }}" data-team-a="{{ row.team_a }}" data-team-b="{{ row.team_b }}" data-confirmed="{% if row.is_confirmed %}true{% else %}false{% endif %}">
-          <header>
-            <div><p>{{ row.game }} · {{ row.stage }}</p><h2 id="match-title-{{ row.id }}">{{ row.team_a }} vs {{ row.team_b }}</h2></div>
-            <button type="button" data-close-match aria-label="Close dialog">×</button>
-          </header>
-          <div class="fac-dialog-body">
-            <div class="fac-match-meta"><span>{{ row.date|default:"Date TBD" }}</span><span>{{ row.time|default:"Time TBD" }}</span><span>{{ row.venue }}</span></div>
-            {% if row.is_confirmed %}<div class="fac-confirmed-banner"><strong>Confirmed result</strong><span>{% if row.confirmed_at %}Confirmed by {{ row.confirmed_by|default:"Faculty" }} on {{ row.confirmed_at }}{% else %}This result is locked.{% endif %}</span></div>{% endif %}
-            <div class="fac-score-grid">
-              <label><span>Team A</span><strong>{{ row.team_a }}</strong><b>Score A</b><input type="number" min="0" step="0.01" name="score_a" value="{{ row.score_a }}" {% if row.is_confirmed or publication_review.published %}disabled{% endif %} required></label>
-              <span class="fac-versus">VS</span>
-              <label><span>Team B</span><strong>{{ row.team_b }}</strong><b>Score B</b><input type="number" min="0" step="0.01" name="score_b" value="{{ row.score_b }}" {% if row.is_confirmed or publication_review.published %}disabled{% endif %} required></label>
+                          {% else %}
+                            <span class="fac-muted">Teams pending</span>
+                          {% endif %}
+                        </td>
+                      </tr>
+                    {% empty %}
+                      <tr>
+                        <td colspan="6">
+                          <div class="fac-empty">
+                            <strong>No {{ match_filter|title }} matches</strong>
+                            <span>Choose another status filter to see more matches.</span>
+                          </div>
+                        </td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+            {% for row in match_schedule %}
+              <dialog class="fac-dialog fac-result-dialog" data-match-dialog="{{ row.id }}" aria-labelledby="match-title-{{ row.id }}">
+                <div class="fac-dialog-shell" data-match-form="{{ row.id }}" data-team-a="{{ row.team_a }}" data-team-b="{{ row.team_b }}" data-confirmed="{% if row.is_confirmed %}true{% else %}false{% endif %}">
+                  <header>
+                    <div>
+                      <p>{{ row.game }} · {{ row.stage }}</p>
+                      <h2 id="match-title-{{ row.id }}">{{ row.team_a }} vs {{ row.team_b }}</h2>
+                    </div>
+                    <button type="button" data-close-match aria-label="Close dialog">×</button>
+                  </header>
+                  <div class="fac-dialog-body">
+                    <div class="fac-match-meta">
+                      <span>{{ row.date|default:"Date TBD" }}</span>
+                      <span>{{ row.time|default:"Time TBD" }}</span>
+                      <span>{{ row.venue }}</span>
+                    </div>
+                    {% if row.is_confirmed %}
+                      <div class="fac-confirmed-banner">
+                        <strong>Confirmed result</strong>
+                        <span>{% if row.confirmed_at %}Confirmed by {{ row.confirmed_by|default:"Faculty" }} on {{ row.confirmed_at }}{% else %}This result is locked.{% endif %}</span>
+                      </div>
+                    {% endif %}
+                    <div class="fac-score-grid">
+                      <label>
+                        <span>Team A</span>
+                        <strong>{{ row.team_a }}</strong>
+                        <b>Score A</b>
+                        <input type="number" min="0" step="0.01" name="score_a" value="{{ row.score_a }}" {% if row.is_confirmed or publication_review.published %}disabled{% endif %} required>
+                      </label>
+                      <span class="fac-versus">VS</span>
+                      <label>
+                        <span>Team B</span>
+                        <strong>{{ row.team_b }}</strong>
+                        <b>Score B</b>
+                        <input type="number" min="0" step="0.01" name="score_b" value="{{ row.score_b }}" {% if row.is_confirmed or publication_review.published %}disabled{% endif %} required>
+                      </label>
+                    </div>
+                    <div class="fac-field">
+                      <span>Winner</span>
+                      <strong data-winner-display aria-live="polite">{% if row.is_confirmed %}{% if row.winner_id == row.team_a_id %}{{ row.team_a }}{% elif row.winner_id == row.team_b_id %}{{ row.team_b }}{% else %}Not determined{% endif %}{% else %}Enter both scores to determine the winner.{% endif %}</strong>
+                    </div>
+                    <p class="fac-form-error" role="alert" aria-live="polite">
+                    </p>
+                  </div>
+                  <footer>
+                    {% if row.is_confirmed or publication_review.published %}
+                      <button type="button" class="fac-btn fac-btn-secondary" data-close-match>Back to Matches</button>
+                    {% else %}
+                      <button type="button" class="fac-btn fac-btn-secondary" data-close-match>Cancel</button>
+                      <button type="button" class="fac-btn fac-btn-secondary" data-save-draft="{{ row.id }}">Save Draft</button>
+                      <button type="button" class="fac-btn fac-btn-success" data-review-result="{{ row.id }}">Confirm Result</button>
+                    {% endif %}
+                  </footer>
+                </div>
+              </dialog>
+            {% endfor %}
+            <dialog class="fac-dialog fac-confirm-dialog" id="result-confirm-dialog" aria-labelledby="confirm-result-title">
+              <div class="fac-dialog-shell">
+                <header>
+                  <div>
+                    <p>Final confirmation</p>
+                    <h2 id="confirm-result-title">Confirm match result?</h2>
+                  </div>
+                  <button type="button" data-close-confirm aria-label="Close dialog">×</button>
+                </header>
+                <div class="fac-dialog-body">
+                  <p>This result becomes read-only and updates bracket progression.</p>
+                  <div id="result-confirm-summary" class="fac-confirm-summary">
+                  </div>
+                </div>
+                <footer>
+                  <button type="button" class="fac-btn fac-btn-secondary" data-close-confirm>Go Back</button>
+                  <button type="button" class="fac-btn fac-btn-success" id="confirm-result-submit">Confirm Result</button>
+                </footer>
+              </div>
+            </dialog>
+          {% endif %}
+          {% if tab == 'participants' %}
+            <section class="fac-card">
+              <header>
+                <div>
+                  <h2>Participants</h2>
+                  <p>Read-only team list for this event.</p>
+                </div>
+              </header>
+              <div class="fac-table-wrap">
+                <table class="fac-table fac-responsive-table">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Team / Participant</th>
+                      <th>Department</th>
+                      <th>Seed</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for participant in detail.participant_rows %}
+                      <tr>
+                        <td data-label="#">{{ forloop.counter }}</td>
+                        <td data-label="Team">
+                          <strong>{{ participant.name }}</strong>
+                        </td>
+                        <td data-label="Department">{{ participant.department }}</td>
+                        <td data-label="Seed">{{ participant.seed }}</td>
+                        <td data-label="Status">{{ participant.status }}</td>
+                      </tr>
+                    {% empty %}
+                      <tr>
+                        <td colspan="5">
+                          <div class="fac-empty">
+                            <strong>No participants listed</strong>
+                            <span>Participant assignments will appear here when available.</span>
+                          </div>
+                        </td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          {% endif %}
+        </main>
+        {% if publication_row.show_publication_button %}
+          <dialog id="event-publication" class="fac-dialog" aria-labelledby="event-publication-title">
+            <div class="fac-dialog-shell">
+              <header>
+                <h2 id="event-publication-title">Publish Official Results?</h2>
+                <button type="button" data-close-publication aria-label="Close">&times;</button>
+              </header>
+              <div class="fac-dialog-body">
+                <p>You are about to publish the final results for {{ event.name }}. The winners and championship points will become visible on the public EventTab Results and Leaderboard pages.</p>
+                <div class="fac-table-wrap">
+                  <table class="fac-table">
+                    <thead>
+                      <tr>
+                        <th>Placement</th>
+                        <th>Team</th>
+                        <th>Championship Points</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for row in publication_review.standings %}
+                        <tr>
+                          <td>{{ row.placement }}</td>
+                          <td>{{ row.name }}</td>
+                          <td>{{ row.points }}</td>
+                        </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+                <form method="post" action="{% url 'faculty_publication_review' event.id %}">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="publish">
+                  <input type="hidden" name="confirm" value="yes">
+                  <div class="d-flex justify-content-end gap-2 mt-3">
+                    <button type="button" class="fac-btn fac-btn-secondary" data-close-publication>Cancel</button>
+                    <button class="fac-btn fac-btn-yellow" type="submit">Confirm Publication</button>
+                  </div>
+                </form>
+              </div>
             </div>
-            <div class="fac-field"><span>Winner</span><strong data-winner-display aria-live="polite">{% if row.is_confirmed %}{% if row.winner_id == row.team_a_id %}{{ row.team_a }}{% elif row.winner_id == row.team_b_id %}{{ row.team_b }}{% else %}Not determined{% endif %}{% else %}Enter both scores to determine the winner.{% endif %}</strong></div>
-            <p class="fac-form-error" role="alert" aria-live="polite"></p>
-          </div>
-          <footer>
-            {% if row.is_confirmed or publication_review.published %}
-            <button type="button" class="fac-btn fac-btn-secondary" data-close-match>Back to Matches</button>
-            {% else %}
-            <button type="button" class="fac-btn fac-btn-secondary" data-close-match>Cancel</button>
-            <button type="button" class="fac-btn fac-btn-secondary" data-save-draft="{{ row.id }}">Save Draft</button>
-            <button type="button" class="fac-btn fac-btn-success" data-review-result="{{ row.id }}">Confirm Result</button>
-            {% endif %}
-          </footer>
-        </div>
-      </dialog>
-      {% endfor %}
-
-      <dialog class="fac-dialog fac-confirm-dialog" id="result-confirm-dialog" aria-labelledby="confirm-result-title">
-        <div class="fac-dialog-shell">
-          <header><div><p>Final confirmation</p><h2 id="confirm-result-title">Confirm match result?</h2></div><button type="button" data-close-confirm aria-label="Close dialog">×</button></header>
-          <div class="fac-dialog-body"><p>This result becomes read-only and updates bracket progression.</p><div id="result-confirm-summary" class="fac-confirm-summary"></div></div>
-          <footer><button type="button" class="fac-btn fac-btn-secondary" data-close-confirm>Go Back</button><button type="button" class="fac-btn fac-btn-success" id="confirm-result-submit">Confirm Result</button></footer>
-        </div>
-      </dialog>
-      {% endif %}
-
-      {% if tab == 'participants' %}
-      <section class="fac-card">
-        <header><div><h2>Participants</h2><p>Read-only team list for this event.</p></div></header>
-        <div class="fac-table-wrap">
-          <table class="fac-table fac-responsive-table">
-            <thead><tr><th>#</th><th>Team / Participant</th><th>Department</th><th>Seed</th><th>Status</th></tr></thead>
-            <tbody>
-              {% for participant in detail.participant_rows %}
-              <tr><td data-label="#">{{ forloop.counter }}</td><td data-label="Team"><strong>{{ participant.name }}</strong></td><td data-label="Department">{{ participant.department }}</td><td data-label="Seed">{{ participant.seed }}</td><td data-label="Status">{{ participant.status }}</td></tr>
-              {% empty %}
-              <tr><td colspan="5"><div class="fac-empty"><strong>No participants listed</strong><span>Participant assignments will appear here when available.</span></div></td></tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      </section>
-      {% endif %}
-    </main>
-    {% if publication_row.show_publication_button %}
-    <dialog id="event-publication" class="fac-dialog" aria-labelledby="event-publication-title"><div class="fac-dialog-shell">
-      <header><h2 id="event-publication-title">Publish Official Results?</h2><button type="button" data-close-publication aria-label="Close">&times;</button></header>
-      <div class="fac-dialog-body"><p>You are about to publish the final results for {{ event.name }}. The winners and championship points will become visible on the public EventTab Results and Leaderboard pages.</p>
-        <div class="fac-table-wrap"><table class="fac-table"><thead><tr><th>Placement</th><th>Team</th><th>Championship Points</th></tr></thead><tbody>{% for row in publication_review.standings %}<tr><td>{{ row.placement }}</td><td>{{ row.name }}</td><td>{{ row.points }}</td></tr>{% endfor %}</tbody></table></div>
-        <form method="post" action="{% url 'faculty_publication_review' event.id %}">{% csrf_token %}<input type="hidden" name="action" value="publish"><input type="hidden" name="confirm" value="yes"><div class="d-flex justify-content-end gap-2 mt-3"><button type="button" class="fac-btn fac-btn-secondary" data-close-publication>Cancel</button><button class="fac-btn fac-btn-yellow" type="submit">Confirm Publication</button></div></form>
-      </div></div></dialog>
-    {% endif %}
-  </div>
-</div>
-<script src="{% static 'facultydash/faculty.js' %}?v=20261011autowinner"></script>
-</body>
+          </dialog>
+        {% endif %}
+      </div>
+    </div>
+    <script src="{% static 'facultydash/faculty.js' %}?v=20261011autowinner"></script>
+  </body>
 </html>

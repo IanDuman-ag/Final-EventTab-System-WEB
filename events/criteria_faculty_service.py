@@ -39,7 +39,9 @@ def round_participant_ids(event, round_index):
         raise FacultyServiceError('Round participants are invalid.') from exc
     if len(cleaned) != len(set(cleaned)) or not set(cleaned).issubset(set(event.participant_ids)):
         raise FacultyServiceError('Round participants contain duplicates or unknown entries.')
-    return cleaned
+    from .participant_removal_service import excluded_participant_ids
+    excluded = excluded_participant_ids(event, round_index)
+    return [participant_id for participant_id in cleaned if participant_id not in excluded]
 
 
 def round_is_scoreable(event, round_index):
@@ -124,6 +126,8 @@ def _round_data(event, index, participants, judges, *, require_verification=True
     cfg = event.result_processing_config or {}
     approval = (cfg.get('confirmed_stages') or {}).get(str(index), {})
     eligible = round_participant_ids(event, index)
+    from .participant_removal_service import excluded_participant_ids
+    rank_limit = len(event.participant_ids) if excluded_participant_ids(event, index) else len(eligible)
     errors, results, monitor = [], [], []
     categories = list(event.scoring_categories.filter(assigned_round_id=round_cfg['id'], purpose='official').prefetch_related('criteria'))
     required = {criterion.pk: criterion for category in categories for criterion in category.criteria.all()}
@@ -142,7 +146,7 @@ def _round_data(event, index, participants, judges, *, require_verification=True
                 continue
             try:
                 if score.category.judge_mode == 'ranking':
-                    if score.raw_score != score.raw_score.to_integral_value() or not 1 <= score.raw_score <= len(eligible):
+                    if score.raw_score != score.raw_score.to_integral_value() or not 1 <= score.raw_score <= rank_limit:
                         raise ValueError('Ranking scores must be valid ordinal ranks.')
                 else:
                     normalized_criterion_score(score.raw_score, score.criterion.max_score, score.criterion.weight_percent)
@@ -192,6 +196,9 @@ def _round_data(event, index, participants, judges, *, require_verification=True
                 matches = by_name.get(candidate.name, [])
                 if len(matches) == 1:
                     candidate_to_entry[candidate.pk] = matches[0]
+        candidate_to_entry = {key: value for key, value in candidate_to_entry.items() if value in eligible}
+        candidates = [row for row in candidates if row.pk in candidate_to_entry]
+        legacy = [row for row in legacy if row.candidate_id in candidate_to_entry]
         if set(candidate_to_entry.values()) != set(eligible) or len(candidate_to_entry) != len(candidates):
             errors.append('Legacy participants need an explicit validated mobile mapping.')
         expected_keys = {(candidate.pk, criterion.pk) for candidate in candidates for criterion in legacy_criteria}
@@ -212,7 +219,8 @@ def _round_data(event, index, participants, judges, *, require_verification=True
             errors.append('This legacy scoring configuration needs normalized round scores before faculty approval.')
         if judges and all(row['status'] == 'Submitted' for row in monitor) and not errors:
             for row in compute_criteria_rankings(event):
-                results.append({'participant_id': candidate_to_entry[row['candidate_id']], 'name': row['name'], 'final_score': row['final_score'], 'rank': row['rank'], 'complete': True, 'judge_scores': [], 'criteria_breakdown': []})
+                if row['candidate_id'] in candidate_to_entry:
+                    results.append({'participant_id': candidate_to_entry[row['candidate_id']], 'name': row['name'], 'final_score': row['final_score'], 'rank': len(results) + 1, 'complete': True, 'judge_scores': [], 'criteria_breakdown': []})
     else:
         errors.append('No official scoring criteria are configured for this round.')
     if not eligible:
@@ -320,6 +328,7 @@ def _round_data(event, index, participants, judges, *, require_verification=True
 
 
 def criteria_faculty_portal(event, user, selected_round_index=0):
+    from .participant_removal_service import excluded_participant_ids, participant_change_round
     participants = _participants(event)
     judges = list(event.assigned_judges.filter(is_active=True))
     rounds = [_round_data(event, index, participants, judges) for index in range(len(criteria_rounds(event)))]
@@ -329,6 +338,14 @@ def criteria_faculty_portal(event, user, selected_round_index=0):
         row['can_unlock'] &= authorized
     selected = rounds[max(0, min(int(selected_round_index), len(rounds) - 1))]
     cfg = event.result_processing_config or {}
+    excluded = excluded_participant_ids(event)
+    active_participants = [row for row in participants if row['id'] not in excluded]
+    try:
+        change_index = participant_change_round(event)
+        can_manage_participants = authorized
+    except FacultyServiceError:
+        change_index = None
+        can_manage_participants = False
     current = rounds[max(0, min(int(cfg.get('active_stage_index') or 0), len(rounds) - 1))]
     publication_errors = []
     if not (cfg.get('confirmed_stages') or {}).get(str(len(rounds) - 1), {}).get('approved_at'):
@@ -351,18 +368,22 @@ def criteria_faculty_portal(event, user, selected_round_index=0):
         'header': {
             'name': event.name, 'category': event.category.title() if event.category.isupper() else event.category, 'venue': event.venue,
             'schedule': _schedule_label(event),
-            'participant_count': len(participants),
+            'participant_count': len(active_participants),
             'faculty_name': _name(event.faculty_account), 'tabulator_name': _name(tabulator),
             'status': event_status, 'status_key': event.status,
         },
         'summary': {
-            'participant_count': len(participants), 'judge_count': len(judges),
+            'participant_count': len(active_participants), 'judge_count': len(judges),
             'round_count': len(rounds), 'current_round_name': current['name'],
             'submitted_judges': current['submitted_judges'], 'total_judges': len(judges),
             'progress_percent': current['progress_percent'], 'event_status': event_status,
         },
         'rounds': rounds, 'current_round': current, 'selected_round': selected,
-        'judges': selected['judges'], 'results': selected['results'], 'participants': participants,
+        'judges': selected['judges'], 'results': selected['results'], 'participants': active_participants,
+        'can_manage_participants': can_manage_participants,
+        'participant_change_round_index': change_index,
+        'participant_change_round_name': criteria_rounds(event)[change_index].get('name', 'Round') if change_index is not None else '',
+        'removal_history': list(reversed(cfg.get('participant_removals') or [])),
         'publication': {
             'status': publication_status,
             'can_submit': authorized and not publication_errors and not cfg.get('faculty_submitted_at'),

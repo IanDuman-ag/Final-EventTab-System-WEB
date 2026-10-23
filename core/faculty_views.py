@@ -292,7 +292,7 @@ def faculty_event_manage(request, event_id):
         if request.method not in {'GET', 'HEAD', 'POST'}:
             return HttpResponse('Method not allowed.', status=405)
         selected_tab = request.POST.get('tab') if request.method == 'POST' else request.GET.get('tab')
-        selected_tab = selected_tab if selected_tab in {'overview', 'rounds', 'judges', 'participants', 'results'} else 'rounds'
+        selected_tab = selected_tab if selected_tab in {'overview', 'rounds', 'judges', 'participants', 'removal_history', 'results'} else 'rounds'
         current_index = (event.result_processing_config or {}).get('active_stage_index', 0)
         raw_index = request.POST.get('selected_round_index', current_index) if request.method == 'POST' else request.GET.get('round', current_index)
         try:
@@ -305,7 +305,18 @@ def faculty_event_manage(request, event_id):
                 return HttpResponse('Assigned Faculty-in-Charge access required.', status=403)
             action = request.POST.get('action', '')
             try:
-                if action in {'approve_round', 'unlock_round'}:
+                if action in {'remove_participant', 'restore_participant'}:
+                    from events.participant_removal_service import remove_criteria_participant, restore_criteria_participant
+                    if request.POST.get('confirm') != 'yes':
+                        raise FacultyServiceError('Explicit confirmation is required.')
+                    if action == 'remove_participant':
+                        remove_criteria_participant(event, request.user, request.POST.get('participant_id'),
+                                                    request.POST.get('reason'), request.POST.get('explanation', ''))
+                        messages.success(request, 'Participant removed. Previous scores are preserved.')
+                    else:
+                        restore_criteria_participant(event, request.user, request.POST.get('removal_id'))
+                        messages.success(request, 'Participant restored, subject to round qualification rules.')
+                elif action in {'approve_round', 'unlock_round'}:
                     try:
                         round_index = int(request.POST.get('round_index', ''))
                     except (TypeError, ValueError) as exc:
