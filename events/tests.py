@@ -300,6 +300,31 @@ class MatchEventWorkflowTests(TestCase):
         data.update(overrides)
         return data
 
+    def test_wizard_json_save_returns_id_and_validation_errors(self):
+        url = reverse('admin_match_events')
+        invalid = self.client.post(url, self.payload(venue=''), HTTP_ACCEPT='application/json')
+        self.assertEqual(invalid.status_code, 400)
+        self.assertFalse(invalid.json()['success'])
+        self.assertFalse(Event.objects.filter(name='Basketball Championship').exists())
+        saved = self.client.post(url, self.payload(), HTTP_ACCEPT='application/json')
+        self.assertEqual(saved.status_code, 200)
+        event = Event.objects.get(pk=saved.json()['id'])
+        self.assertTrue(saved.json()['success'])
+        self.assertEqual(event.publication_status, Event.PUBLICATION_DRAFT)
+
+    def test_new_sports_can_be_saved_without_custom_sport_name(self):
+        for sport in ('Pickleball', 'Dart'):
+            with self.subTest(sport=sport):
+                response = self.client.post(
+                    reverse('admin_match_events'),
+                    self.payload(event_name=f'{sport} Cup', sport_type=sport, result_entry_format=''),
+                    HTTP_ACCEPT='application/json',
+                )
+                self.assertEqual(response.status_code, 200)
+                event = Event.objects.get(pk=response.json()['id'])
+                self.assertEqual(event.sport_type, sport)
+                self.assertEqual(event.result_entry_format, 'manual_winner')
+
     def test_create_draft_persists_teams_bracket_and_schedule(self):
         response = self.client.post(reverse('admin_match_events'), self.payload())
         self.assertRedirects(response, reverse('admin_match_events'))

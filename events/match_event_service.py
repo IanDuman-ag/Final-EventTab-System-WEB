@@ -25,7 +25,7 @@ ALLOWED_FORMATS = {'single_elimination', 'double_elimination', 'round_robin'}
 ALLOWED_PAIRING = {'random_draw', 'seeded_draw', 'manual_pairing'}
 ALLOWED_SPORT_TYPES = {
     'Basketball', 'Volleyball', 'Badminton', 'Table Tennis', 'Chess',
-    'Sepak Takraw', 'Esports', 'Custom',
+    'Sepak Takraw', 'Pickleball', 'Dart', 'Esports', 'Custom',
 }
 RESULT_FORMAT_BY_SPORT = {
     'Basketball': 'team_final_score',
@@ -34,6 +34,8 @@ RESULT_FORMAT_BY_SPORT = {
     'Table Tennis': 'best_of_games',
     'Chess': 'win_draw_loss',
     'Sepak Takraw': 'best_of_sets',
+    'Pickleball': 'manual_winner',
+    'Dart': 'manual_winner',
     'Esports': 'maps_rounds_custom',
     'Custom': 'manual_winner',
 }

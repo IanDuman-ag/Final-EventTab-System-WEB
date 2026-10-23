@@ -3102,6 +3102,8 @@ def admin_match_events(request, event_id=None):
         try:
             event = save_match_event(request.POST, request.user, instance=instance, files=request.FILES)
         except MatchEventValidationError as exc:
+            if request.headers.get('Accept') == 'application/json':
+                return JsonResponse({'success': False, 'message': str(exc)}, status=400)
             messages.error(request, str(exc))
             target = f"{request.path}?edit={event_id}" if event_id else request.path
             return redirect(target)
@@ -3110,6 +3112,8 @@ def admin_match_events(request, event_id=None):
             f'Event "{event.name}" {"created" if instance is None else "updated"} as '
             f'{event.get_publication_status_display()}.',
         )
+        if request.headers.get('Accept') == 'application/json':
+            return JsonResponse({'success': True, 'id': event.pk})
         return redirect('admin_match_events')
 
     search_query = request.GET.get('q', '').strip()
