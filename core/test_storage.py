@@ -27,6 +27,14 @@ class ImageMediaStorageTests(SimpleTestCase):
         self.cloud.url.assert_called_once_with('event_images/photo_123')
 
     @override_settings(USE_CLOUDINARY=True)
+    def test_event_covers_use_existing_cloudinary_image_storage(self):
+        self.cloud.save.return_value = 'event_covers/volleyball_123'
+        name = self.storage.save('event_covers/volleyball.webp', ContentFile(b'image'))
+        self.assertEqual(name, 'cloudinary/event_covers/volleyball_123')
+        self.storage.url(name)
+        self.cloud.url.assert_called_once_with('event_covers/volleyball_123')
+
+    @override_settings(USE_CLOUDINARY=True)
     def test_long_image_names_leave_room_for_remote_marker(self):
         self.cloud.save.side_effect = lambda name, content: name + '_abcdef'
         name = self.storage.save(

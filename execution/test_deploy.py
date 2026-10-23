@@ -60,6 +60,7 @@ class ReleaseTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertFalse(release.allowed(name))
         for name in ['core/settings.py', 'events/models.py', 'events/migrations/0001_initial.py',
+            'events/management/commands/prepare_event_covers.py',
             'frontend/admindash/vendor/bootstrap-5.3.8.min.css',
             'frontend/admindash/vendor/LICENSE.bootstrap', 'assets/USTP BG.png']:
             self.assertTrue(release.allowed(name), name)

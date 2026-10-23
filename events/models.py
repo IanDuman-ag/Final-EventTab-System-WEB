@@ -8,6 +8,24 @@ from .ocr_storage import PrivateScoreSheetStorage
 User = get_user_model()
 
 
+class EventCoverAsset(models.Model):
+    """One reusable cover per curated event type; never stores credentials."""
+    key = models.CharField(max_length=40, unique=True)
+    image = models.ImageField(upload_to='event_covers/', blank=True)
+    status = models.CharField(max_length=12, default='pending', choices=[
+        (value, value.title()) for value in ('pending', 'generating', 'ready', 'failed')])
+    source = models.CharField(max_length=12, blank=True)
+    attempts = models.PositiveSmallIntegerField(default=0)
+    error = models.CharField(max_length=200, blank=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class EventCoverBudget(models.Model):
+    day = models.DateField(unique=True)
+    attempts = models.PositiveIntegerField(default=0)
+
+
 class OCRScoreSheet(models.Model):
     """Untrusted extraction drafts; official scores remain CriteriaScoreSubmission."""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

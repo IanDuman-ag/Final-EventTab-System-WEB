@@ -52,7 +52,7 @@ def allowed(name):
         return False
     if path.parts[0] in {'core', 'accounts', 'events'}:
         if 'management' in path.parts:
-            return path.name == '__init__.py'
+            return path.name == '__init__.py' or name == 'events/management/commands/prepare_event_covers.py'
         return path.suffix == '.py' and path.name != 'tests.py'
     return path.parts[0] == 'frontend' and path.suffix.lower() in STATIC_EXTENSIONS
 

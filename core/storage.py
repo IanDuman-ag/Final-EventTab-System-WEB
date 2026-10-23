@@ -12,7 +12,7 @@ class ImageMediaStorage(Storage):
     # Persist a marker so existing local paths remain valid after enabling Cloudinary.
     cloud_prefix = 'cloudinary/'
     image_directories = (
-        'event_images/', 'department_logos/', 'teams/', 'candidates/',
+        'event_images/', 'event_covers/', 'department_logos/', 'teams/', 'candidates/',
         'registry_candidates/', 'scoresheets/ocr/', 'system/',
     )
 

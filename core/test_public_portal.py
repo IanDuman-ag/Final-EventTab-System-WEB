@@ -32,11 +32,11 @@ class PublicPortalTests(TestCase):
         from pathlib import Path
         from django.conf import settings
         from core.public_views import game_artwork_path
-        for name, asset in [('Spoken Poetry', 'speech.svg'), ('Charcoal Painting', 'art.svg'),
-                            ('Film on Stage', 'film.svg'), ('Photo Contest', 'photography.svg'),
-                            ('Live Band Competition', 'band.svg'), ('Quiz Bee', 'quiz.svg'),
-                            ('Radio Drama', 'radio.svg'), ('Short & Sweet Play', 'theater.svg'),
-                            ('Most Disciplined Unit', 'unit.svg'), ('Amazing Race', 'race.svg'),
+        for name, asset in [('Spoken Poetry', 'intramurals-cover.webp'), ('Charcoal Painting', 'art-cover.webp'),
+                            ('Film on Stage', 'intramurals-cover.webp'), ('Photo Contest', 'photography-cover.webp'),
+                            ('Live Band Competition', 'intramurals-cover.webp'), ('Quiz Bee', 'quiz-cover.webp'),
+                            ('Radio Drama', 'intramurals-cover.webp'), ('Short & Sweet Play', 'intramurals-cover.webp'),
+                            ('Most Disciplined Unit', 'intramurals-cover.webp'), ('Amazing Race', 'intramurals-cover.webp'),
                             ('Mr. & Ms. USTP Ambassador 2026', 'pageant.webp')]:
             with self.subTest(name=name):
                 self.event.name = name
@@ -50,7 +50,7 @@ class PublicPortalTests(TestCase):
         self.event.save()
         response = self.client.get(reverse('public_games'))
         self.assertContains(response, f'src="{self.event.image.url}"')
-        self.assertContains(response, 'data-banner-fallback="data:image/svg+xml;base64,')
+        self.assertContains(response, 'data-banner-fallback="data:image/webp;base64,')
 
     def test_classification_tags_use_saved_values_on_public_pages(self):
         for value, label in [('major', 'Major Event'), ('minor', 'Minor Event'), ('', '')]:

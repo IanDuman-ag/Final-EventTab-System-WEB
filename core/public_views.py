@@ -241,39 +241,18 @@ def featured_banner_key(event):
 
 
 def game_artwork_path(event):
-    """Use existing photos first, then artwork matching the competition."""
-    photo = featured_banner_key(event)
-    if photo:
-        return f'landingpage/assets/competitions/{photo}.webp'
-    name = ' '.join((event.name, event.sport_type, event.special_event_type)).lower()
-    for keywords, key in (
-        (('ambassador', 'mr.', 'ms.'), 'pageant'),
-        (('band', 'showchoir', 'yell'), 'band'),
-        (('poetry', 'speech', 'talumpati', 'debate'), 'speech'),
-        (('painting', 'charcoal', 'poster', 'banner', 'designing'), 'art'),
-        (('film',), 'film'),
-        (('photo',), 'photography'),
-        (('quiz',), 'quiz'),
-        (('radio',), 'radio'),
-        (('play', 'drama', 'theater', 'theatre'), 'theater'),
-        (('disciplined', 'character', 'unit'), 'unit'),
-        (('race', 'fiesta'), 'race'),
-        (('table tennis', 'ping pong', 'pickleball'), 'paddle'),
-        (('dart',), 'darts'),
-        (('chess',), 'chess'),
-    ):
-        if any(keyword in name for keyword in keywords):
-            extension = 'webp' if key == 'pageant' else 'svg'
-            return f'landingpage/assets/competitions/{key}.{extension}'
-    return 'landingpage/assets/competitions/competition.svg'
+    """Read-only fallback: generation/import never runs from a public request."""
+    from events.cover_catalog import cover_for_event
+    definition = cover_for_event(event)
+    return 'landingpage/assets/competitions/' + (definition.bundled or 'intramurals-cover.webp')
 
 
 @lru_cache(maxsize=32)
 def game_artwork_url(path):
-    """Embed trusted bundled illustrations; existing photos retain static URLs."""
-    if path.endswith('.svg'):
+    """Small new photo fallbacks also work with protected static publishing."""
+    if path.endswith('-cover.webp'):
         artwork = (Path(settings.BASE_DIR) / 'frontend' / path).read_bytes()
-        return 'data:image/svg+xml;base64,' + base64.b64encode(artwork).decode('ascii')
+        return 'data:image/webp;base64,' + base64.b64encode(artwork).decode('ascii')
     return static(path)
 
 
