@@ -8,7 +8,7 @@ from urllib.parse import urlencode
 from django.core.paginator import Paginator
 from django.conf import settings
 from django.db import DatabaseError
-from django.db.models import Case, CharField, Exists, F, OuterRef, Q, Value, When
+from django.db.models import Case, CharField, Exists, F, IntegerField, OuterRef, Q, Value, When
 from django.db.models.functions import Coalesce, Concat
 from django.http import Http404
 from django.shortcuts import get_object_or_404, render
@@ -126,6 +126,7 @@ def schedule_queryset(filters, future_only=False):
     )
     today = timezone.localdate(timezone=PUBLIC_TIMEZONE)
     event_rows = events.annotate(has_fixtures=Exists(dated_matches)).filter(has_fixtures=False).annotate(
+        fixture_id=Value(0, output_field=IntegerField()),
         public_event_id=F('pk'), event_name=F('name'), event_category=F('category'),
         public_classification=F('event_classification'),
         event_kind=F('public_kind'), round=Value('', output_field=CharField()),
@@ -140,6 +141,7 @@ def schedule_queryset(filters, future_only=False):
     match_rows = BracketMatch.objects.filter(
         event__in=events, is_automatic_advance=False, match_date__isnull=False,
     ).annotate(
+        fixture_id=F('pk'),
         public_event_id=F('event_id'), event_name=F('event__name'), event_category=F('event__category'),
         public_classification=F('event__event_classification'),
         event_kind=Case(When(criteria_condition('event__'), then=Value('criteria')),
@@ -154,7 +156,7 @@ def schedule_queryset(filters, future_only=False):
             default=Value('upcoming'), output_field=CharField(),
         ),
     )
-    fields = ('public_event_id', 'event_name', 'event_category', 'event_kind', 'round',
+    fields = ('fixture_id', 'public_event_id', 'event_name', 'event_category', 'event_kind', 'round',
               'date', 'time', 'public_venue', 'participants', 'public_status', 'public_classification')
     rows = []
     for qs in (event_rows, match_rows):
@@ -297,11 +299,35 @@ def games(request):
     return context
 
 
+def schedule_matchups(rows):
+    """Load both public opponents in one query for this page only."""
+    fixtures = BracketMatch.objects.filter(
+        pk__in=[row['fixture_id'] for row in rows if row['event_kind'] == 'match' and row['fixture_id']],
+    ).select_related(
+        'team_a__department', 'team_b__department',
+        'team_a__source_team__department', 'team_b__source_team__department',
+    )
+
+    def side(team):
+        source = team.source_team if team else None
+        department = (team.department or (source.department if source else None)) if team else None
+        name = team.name if team else 'TBD'
+        logo = (source.image if source else None) or (department.logo if department else None)
+        return {'name': name, 'department': department.name if department else '',
+                'initials': ''.join(word[0] for word in name.split()[:2]).upper(),
+                'logo_url': image_url(logo)}
+
+    return {match.pk: [side(match.team_a), side(match.team_b)] for match in fixtures}
+
+
 @public_page('schedules')
 def schedules(request):
     page, context = paginate(request, schedule_queryset(filters_for(request)))
+    rows = list(page)
+    matchups = schedule_matchups(rows)
     context.update(filter_options(), page_title='Event Schedules — EventTab',
-                   schedules=[serialize_schedule(row) for row in page])
+                   schedules=[{**serialize_schedule(row), 'matchup': matchups.get(row['fixture_id'])}
+                              for row in rows])
     return context
 
 

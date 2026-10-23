@@ -17,6 +17,28 @@ from events.public_service import PUBLIC_TIMEZONE, result_is_published
 
 
 class PublicPortalTests(TestCase):
+
+    def test_schedule_shows_real_opponents_and_department_logo(self):
+        self.department.logo = 'department_logos/engineering.png'
+        self.department.save(update_fields=['logo'])
+        response = self.client.get(reverse('public_schedules'))
+        matchup = response.context['schedules'][0]['matchup']
+        self.assertEqual([side['name'] for side in matchup], ['Falcons', 'Eagles'])
+        self.assertEqual(matchup[0]['department'], 'Engineering')
+        self.assertTrue(matchup[0]['logo_url'].endswith('department_logos/engineering.png'))
+        self.assertContains(response, 'matchup-vs')
+        self.assertNotContains(response, 'PRIVATE MEMBER INFORMATION')
+        self.assertNotContains(response, 'PRIVATE STAFF NOTES')
+        self.assertNotContains(self.client.get(reverse('home')), 'schedule-row--match')
+
+    def test_schedule_handles_unknown_opponent_without_inventing_a_team(self):
+        self.match.team_b = None
+        self.match.save(update_fields=['team_b'])
+        response = self.client.get(reverse('public_schedules'))
+        self.assertEqual(response.context['schedules'][0]['matchup'][1]['name'], 'TBD')
+        self.assertEqual(response.context['schedules'][0]['matchup'][1]['logo_url'], '')
+
+
     def test_home_classification_filter_combines_with_type_and_search(self):
         major = self.create_event('Major Vocal Duet', scoring_method='criteria', event_classification='major')
         self.create_event('Minor Vocal Duet', scoring_method='criteria', event_classification='minor')

@@ -1,4 +1,4 @@
-<article class="schedule-row">
+<article class="schedule-row{% if active == 'schedules' and item.matchup %} schedule-row--match{% endif %}">
 <div class="schedule-date">
 {% if item.date %}<strong>{{ item.date|date:"d" }}</strong><span>{{ item.date|date:"M" }}</span><small>{{ item.date|date:"Y" }}</small>{% else %}<strong>&mdash;</strong><span>TBA</span>{% endif %}
 </div>
@@ -9,7 +9,7 @@
 <a href="{{ item.detail_url }}">{{ item.event_name }}</a>
 </h3>
 {% if item.classification_label %}<span class="classification-tag classification-{{ item.classification }}" aria-label="Event classification">{{ item.classification_label }}</span>{% endif %}
-{% if item.participants %}
+{% if item.participants and not item.matchup %}
 <p>
 {{ item.participants }}
 </p>
@@ -18,6 +18,17 @@
 <div class="schedule-location">
 <strong>{% if active == 'schedules' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg>{% endif %}{% if item.time %}{{ item.time|time:"g:i A" }}{% else %}Time to be announced{% endif %}</strong><span>{% if active == 'schedules' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 1 1 14 0Z"/><circle cx="12" cy="10" r="2"/></svg>{% endif %}{{ item.venue|default:"Venue to be announced" }}</span>
 </div>
+{% if active == 'schedules' and item.matchup %}
+<div class="schedule-matchup" aria-label="Match opponents">
+{% for side in item.matchup %}
+{% if not forloop.first %}<span class="matchup-vs">VS</span>{% endif %}
+<div class="matchup-team">
+<span class="matchup-logo">{% if side.logo_url %}<img src="{{ side.logo_url }}" alt="" loading="lazy" data-fallback="{{ side.initials }}">{% else %}{{ side.initials }}{% endif %}</span>
+<span class="matchup-name"><strong>{{ side.name }}</strong>{% if side.department %}<small>{{ side.department }}</small>{% endif %}</span>
+</div>
+{% endfor %}
+</div>
+{% endif %}
 <span class="status status-{{ item.status }}">{{ item.status_label }}</span><a class="schedule-detail" href="{{ item.detail_url }}">View Details <span aria-hidden="true">{% if active == 'schedules' %}&#8594;{% else %}&#8599;{% endif %}</span>
 </a>
 </article>
