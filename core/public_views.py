@@ -354,7 +354,7 @@ def results(request):
     cards = []
     for event in page:
         card = serialize_event(event)
-        if event_kind(event) == 'criteria' and not is_multiround(event) and len(result_rounds(event)) <= 1:
+        if event_kind(event) == 'criteria' and standings_eligible(event):
             card['official_placements'], _ = criteria_results(event)
         card['official_placements'].sort(key=lambda row: row['rank'] or 999999)
         card['banner_key'] = featured_banner_key(event)
@@ -461,6 +461,7 @@ def leaderboard(request):
     return dict(pagination, page_title='Leaderboards — EventTab', standings=list(page), filters=filters,
                 categories=categories, event_options=event_options, selected_event_id=selected_event_id,
                 podium=podium, school_years=years, selected_year=selected_year,
+                awaiting_championship_points=bool(eligible) and not rows,
                 leader_points=leader_points, points_ticks=[leader_points * step / 4 for step in range(5)])
 
 

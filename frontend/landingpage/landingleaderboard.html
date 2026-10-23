@@ -1,7 +1,13 @@
 {% extends "landingpage/base.html" %}{% load static %}
 {% block body_class %}public-standings{% endblock %}
+{% block extra_head %}<style>
+.public-standings .standings-hero--empty .standings-hero-inner { height:auto; min-height:170px; padding-bottom:30px; }
+@media(max-width:640px) {
+  .public-standings .standings-hero--empty .standings-hero-inner { min-height:230px; }
+}
+</style>{% endblock %}
 {% block content %}
-<section class="standings-hero" aria-labelledby="standings-title">
+<section class="standings-hero{% if not podium %} standings-hero--empty{% endif %}" aria-labelledby="standings-title">
   <img class="standings-hero-photo" src="{% static 'landingpage/assets/hero.webp' %}" alt="">
   <div class="container standings-hero-inner">
     <div class="standings-heading"><p class="standings-eyebrow">Intramurals{% if selected_year %} {{ selected_year }}{% endif %}</p><h1 id="standings-title"><span>Leaderboards</span></h1><p>Track official department rankings and championship points.</p></div>
@@ -39,7 +45,7 @@
         <div class="standing-stat stat-events"><svg viewBox="0 0 28 28" aria-hidden="true"><circle cx="14" cy="6" r="4"/><circle cx="4" cy="9" r="3"/><circle cx="24" cy="9" r="3"/><path d="M8 26V16c0-7 12-7 12 0v10ZM0 25V16c0-4 6-5 7-1v10Zm21 0V15c1-4 7-3 7 1v9Z"/></svg><strong>{{ team.events_joined|default_if_none:"&mdash;" }}</strong><span>EVENTS<br>JOINED</span></div>
       </div>
     </article>{% endfor %}
-  </div>{% else %}<div class="empty-state"><h2>{% if filters.q %}No matching departments.{% else %}Awaiting official standings.{% endif %}</h2><p>{% if filters.q %}Try another department name or reset the filters.{% else %}Department rankings will be available after competition outcomes are approved and published.{% endif %}</p></div>{% endif %}
+  </div>{% else %}<div class="empty-state"><h2>{% if filters.q %}No matching departments.{% elif awaiting_championship_points %}Awaiting published championship points.{% else %}Awaiting official standings.{% endif %}</h2><p>{% if filters.q %}Try another department name or reset the filters.{% elif awaiting_championship_points %}Official event results are available. Department standings will appear once championship points are assigned and published.{% else %}Department rankings will be available after competition outcomes are approved and published.{% endif %}</p></div>{% endif %}
   {% include "landingpage/_pagination.html" %}
 </section>
 {% endblock %}

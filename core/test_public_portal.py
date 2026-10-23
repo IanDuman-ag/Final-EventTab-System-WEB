@@ -18,6 +18,40 @@ from events.public_service import PUBLIC_TIMEZONE, result_is_published
 
 class PublicPortalTests(TestCase):
 
+    def test_approved_multiround_final_is_previewed_and_counts_published_awards(self):
+        event = self.create_event('Approved Pageant', scoring_method='criteria',
+            event_format='multiple_stage', rounds_config=[
+                {'id': 'first', 'name': 'Preliminary'}, {'id': 'final', 'name': 'Final'}])
+        entry = CriteriaEventEntry.objects.create(event=event, entry_type='individual',
+            display_name='Approved Finalist', department=self.department, display_order=1)
+        event.participant_ids = [entry.pk]
+        event.save()
+        stamp = timezone.now().isoformat()
+        self.publish(event, faculty_submitted_at=stamp,
+            championship_scoring={'approval_required': False}, published_championship_awards={str(self.department.pk): 100},
+            qualified_participant_ids={'1': [entry.pk]},
+            confirmed_stages={'1': {'approved_at': stamp, 'results': [
+                {'participant_id': entry.pk, 'rank': 1, 'complete': True, 'final_score': 'PRIVATE_SCORE'}]}})
+        response = self.client.get(reverse('public_results'))
+        card = next(row for row in response.context['events'] if row['id'] == event.pk)
+        self.assertEqual(card['official_placements'][0]['name'], 'Approved Finalist')
+        self.assertNotContains(response, 'PRIVATE_SCORE')
+        response = self.client.get(reverse('public_leaderboard'))
+        self.assertEqual(response.context['standings'][0]['points'], 100)
+        self.assertEqual(response.context['standings'][0]['gold'], 1)
+        # Published placements alone cannot invent department championship points.
+        event.result_processing_config.pop('published_championship_awards')
+        event.save(update_fields=['result_processing_config'])
+        response = self.client.get(reverse('public_leaderboard'))
+        self.assertEqual(response.context['standings'], [])
+        self.assertContains(response, 'Awaiting published championship points.')
+        # Publication does not make an unapproved final eligible.
+        event.result_processing_config['confirmed_stages'] = {}
+        event.save(update_fields=['result_processing_config'])
+        self.assertEqual(self.client.get(reverse('public_leaderboard')).context['standings'], [])
+
+
+
     def test_schedule_shows_real_opponents_and_department_logo(self):
         self.department.logo = 'department_logos/engineering.png'
         self.department.save(update_fields=['logo'])

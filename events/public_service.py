@@ -336,7 +336,13 @@ def standings_eligible(event):
         return False
     if event_kind(event) == 'criteria':
         if is_multiround(event) or len(result_rounds(event)) > 1:
-            return False
+            from .criteria_faculty_service import approved_final_rankings
+            from .faculty_service import FacultyServiceError
+            try:
+                if approved_final_rankings(event) is None:
+                    return False
+            except FacultyServiceError:
+                return False
         return bool(criteria_results(event)[0])
     matches = event.bracket_matches.filter(is_automatic_advance=False)
     return (matches.exists() and not matches.exclude(status__in=TERMINAL_MATCH_STATUSES).exists()
