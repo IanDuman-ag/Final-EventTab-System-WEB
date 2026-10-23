@@ -22,49 +22,6 @@ Your official hub for intramural events,<br class="desktop-break"> schedules, li
 </div>
 </div>
 </section>
-<section class="quick-section container" aria-label="Quick access">
-<a href="{% url 'public_schedules' %}" class="quick-link"><span class="quick-icon" aria-hidden="true">{% include "landingpage/_icon.html" with icon="calendar" %}</span>
-<div>
-<h2>
-Event Schedules
-</h2>
-<p>
-Find your next competition.
-</p>
-</div>
-<span aria-hidden="true">&#8599;</span>
-</a><a href="{% url 'public_games' %}" class="quick-link"><span class="quick-icon" aria-hidden="true">{% include "landingpage/_icon.html" with icon="trophy" %}</span>
-<div>
-<h2>
-All Competitions
-</h2>
-<p>
-Sports, talent, and everything between.
-</p>
-</div>
-<span aria-hidden="true">&#8599;</span>
-</a><a href="{% url 'public_results' %}" class="quick-link"><span class="quick-icon" aria-hidden="true">{% include "landingpage/_icon.html" with icon="flag" %}</span>
-<div>
-<h2>
-Official Results
-</h2>
-<p>
-Celebrate the confirmed winners.
-</p>
-</div>
-<span aria-hidden="true">&#8599;</span>
-</a><a href="{% url 'public_leaderboard' %}" class="quick-link"><span class="quick-icon" aria-hidden="true">{% include "landingpage/_icon.html" with icon="chart" %}</span>
-<div>
-<h2>
-Leaderboards
-</h2>
-<p>
-Follow the race to the top.
-</p>
-</div>
-<span aria-hidden="true">&#8599;</span>
-</a>
-</section>
 <section class="featured-competitions" id="featured-competitions" aria-labelledby="featured-title">
   <div class="container section-space">
     <div class="section-heading">
@@ -117,13 +74,6 @@ Follow the race to the top.
         </div>
       {% endfor %}
     </div>
-    {% if featured_page_obj.has_other_pages %}
-      <nav class="pagination-bar" aria-label="Featured competitions pagination">
-        {% if featured_page_obj.has_previous %}<a class="btn btn-outline-navy" href="?{{ featured_query_string }}&amp;featured_page={{ featured_page_obj.previous_page_number }}#featured-competitions">&#8592; Previous</a>{% endif %}
-        <span>Page {{ featured_page_obj.number }} of {{ featured_page_obj.paginator.num_pages }}</span>
-        {% if featured_page_obj.has_next %}<a class="btn btn-outline-navy" href="?{{ featured_query_string }}&amp;featured_page={{ featured_page_obj.next_page_number }}#featured-competitions">Next &#8594;</a>{% endif %}
-      </nav>
-    {% endif %}
   </div>
 </section>
 <section class="upcoming-section">
