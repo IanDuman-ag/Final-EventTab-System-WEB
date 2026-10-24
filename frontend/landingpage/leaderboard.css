@@ -3,9 +3,9 @@
 .public-standings .standings-content,
 .public-standings .standings-tab-inner { width:calc(100% - 70px); max-width:1120px; padding-inline:0; }
 .public-standings .standings-hero { background:#031d3b; }
-.public-standings .standings-hero-photo { opacity:.16; object-position:center 48%; }
-.public-standings .standings-hero::before { background:#ffcf21; clip-path:polygon(0 76%,12% 100%,17% 100%,0 84%,0 80%,13% 97%,32% 85%,36% 86%,13% 100%,0 91%); }
-.public-standings .standings-hero::after { background:#ffcf21; clip-path:polygon(100% 5%,100% 23%,97% 36%,97% 18%,100% 5%,100% 100%,83% 87%,86% 86%,100% 95%); }
+.public-standings .standings-hero-photo { opacity:1; object-position:center 58%; }
+.public-standings .standings-hero::before,
+.public-standings .standings-hero::after { display:none; }
 .public-standings .standings-hero-inner { width:calc(100% - 120px); max-width:1070px; height:clamp(178px,22vw,264px); padding:0; }
 .public-standings .standings-heading { max-width:32%; padding-top:clamp(28px,4vw,48px); }
 .public-standings .standings-eyebrow { color:#bdcfe1; font-size:clamp(7px,.75vw,9px); letter-spacing:3px; margin-bottom:8px; }
@@ -13,7 +13,6 @@
 .public-standings .standings-heading h1 { font-size:clamp(27px,3.6vw,43px); line-height:1.04; letter-spacing:-1.5px; margin-bottom:8px; }
 .public-standings .standings-heading h1 span { color:#ffce1c; }
 .public-standings .standings-heading>p:last-child { max-width:250px; font-size:clamp(9px,1.15vw,13px); line-height:1.4; color:#b4c8dc; }
-.standings-torch { position:absolute; right:3%; bottom:0; height:94%; width:auto; opacity:.95; }
 .public-standings .standings-podium { left:34%; transform:none; width:52%; gap:5px; grid-template-columns:1fr 1.08fr 1fr; }
 .public-standings .podium-crest { width:clamp(44px,6vw,68px); height:clamp(44px,6vw,68px); margin-bottom:4px; }
 .public-standings .place-1 .podium-crest { width:clamp(56px,7.6vw,88px); height:clamp(56px,7.6vw,88px); margin-bottom:5px; }
@@ -132,7 +131,6 @@
   .public-standings .standings-heading h1 { font-size:32px; }
   .public-standings .standings-heading>p:last-child { font-size:11px; max-width:240px; }
   .public-standings .standings-eyebrow { font-size:8px; }
-  .standings-torch { right:0; height:52%; opacity:.5; }
   .public-standings .standings-podium { left:0; width:100%; }
   .public-standings .podium-crest { width:46px; height:46px; }
   .public-standings .place-1 .podium-crest { width:58px; height:58px; }

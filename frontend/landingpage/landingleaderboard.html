@@ -3,8 +3,7 @@
 {% block extra_head %}<style>{% include "landingpage/leaderboard.css" %}</style>{% endblock %}
 {% block content %}
 <section class="standings-hero{% if not podium %} standings-hero--empty{% endif %}" aria-labelledby="standings-title">
-  <img class="standings-hero-photo" src="{% static 'landingpage/assets/hero.webp' %}" alt="">
-  <svg class="standings-torch" viewBox="0 0 110 230" aria-hidden="true"><path fill="#e8a414" d="M24 93C5 67 31 47 33 23c14 16 0 28 8 37C40 31 65 23 60 0c32 28 8 48 14 66 10-8 12-18 11-28 26 33 17 54 5 64Z"/><path fill="#ffdb39" d="M35 96c-12-24 13-32 14-53 15 13 0 26 8 34 4-17 17-25 17-38 18 26 12 40 4 58Z"/><path fill="#345e84" d="m15 96 82 2-11 27-59-1z"/><path fill="#0d345c" d="m26 111 62 1-9 17-44-1 12 102H35L23 131Z"/><path fill="#061e3c" d="m51 128 28 1-11 101H53Z"/><path d="m19 100 72 2m-56 14 42 1" stroke="#6684a3" stroke-width="4"/></svg>
+  <img class="standings-hero-photo" src="{% static 'landingpage/assets/Leaderbordbg.png' %}" alt="">
   <div class="container standings-hero-inner">
     <div class="standings-heading"><p class="standings-eyebrow">Intramurals{% if selected_year %} {{ selected_year }}{% endif %}</p><h1 id="standings-title">Championship<br><span>Leaderboard</span></h1><p>Track official department rankings and championship points.</p></div>
     {% if podium %}<div class="standings-podium" aria-label="Top three departments">
