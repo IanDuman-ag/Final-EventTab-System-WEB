@@ -1,26 +1,21 @@
 {% extends "landingpage/base.html" %}{% load static %}
 {% block body_class %}public-standings{% endblock %}
-{% block extra_head %}<style>
-.public-standings .standings-hero--empty .standings-hero-inner { height:auto; min-height:170px; padding-bottom:30px; }
-@media(max-width:640px) {
-  .public-standings .standings-hero--empty .standings-hero-inner { min-height:230px; }
-}
-</style>{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'landingpage/leaderboard.css' %}?v=20261024reference">{% endblock %}
 {% block content %}
 <section class="standings-hero{% if not podium %} standings-hero--empty{% endif %}" aria-labelledby="standings-title">
   <img class="standings-hero-photo" src="{% static 'landingpage/assets/hero.webp' %}" alt="">
+  <svg class="standings-torch" viewBox="0 0 110 230" aria-hidden="true"><path fill="#e8a414" d="M24 93C5 67 31 47 33 23c14 16 0 28 8 37C40 31 65 23 60 0c32 28 8 48 14 66 10-8 12-18 11-28 26 33 17 54 5 64Z"/><path fill="#ffdb39" d="M35 96c-12-24 13-32 14-53 15 13 0 26 8 34 4-17 17-25 17-38 18 26 12 40 4 58Z"/><path fill="#345e84" d="m15 96 82 2-11 27-59-1z"/><path fill="#0d345c" d="m26 111 62 1-9 17-44-1 12 102H35L23 131Z"/><path fill="#061e3c" d="m51 128 28 1-11 101H53Z"/><path d="m19 100 72 2m-56 14 42 1" stroke="#6684a3" stroke-width="4"/></svg>
   <div class="container standings-hero-inner">
-    <div class="standings-heading"><p class="standings-eyebrow">Intramurals{% if selected_year %} {{ selected_year }}{% endif %}</p><h1 id="standings-title"><span>Leaderboards</span></h1><p>Track official department rankings and championship points.</p></div>
-    <div class="standings-year"><label for="standings-year">{% include "landingpage/_icon.html" with icon="calendar" %} School Year</label><select id="standings-year" name="year" form="standings-filters"><option value="">All school years</option>{% for year in school_years %}<option value="{{ year }}" {% if selected_year == year %}selected{% endif %}>{{ year }}</option>{% endfor %}</select></div>
+    <div class="standings-heading"><p class="standings-eyebrow">Intramurals{% if selected_year %} {{ selected_year }}{% endif %}</p><h1 id="standings-title">Championship<br><span>Leaderboard</span></h1><p>Track official department rankings and championship points.</p></div>
     {% if podium %}<div class="standings-podium" aria-label="Top three departments">
       {% for team in podium %}<article class="podium-place place-{{ team.rank }}" aria-label="Rank {{ team.rank }}: {{ team.department }}">
-        <div class="podium-crest"><svg class="podium-crown" viewBox="0 0 40 30" aria-hidden="true"><path d="m3 6 9 8L20 2l8 12 9-8-5 21H8L3 6Zm5 22h24v2H8z"/></svg>{% if team.rank == 1 %}<svg class="podium-laurel" viewBox="0 0 140 100" aria-hidden="true"><path d="M34 89C3 76 1 43 19 14m87 75c31-13 33-46 15-75" fill="none" stroke="currentColor" stroke-width="2"/><path d="M18 24 9 17l1 15 7 4m-4 2L2 32l5 16 8 1m1 7L4 50l8 16 9 1m2 8-11-5 12 13 9 1m89-60 9-7-1 15-7 4m4 2 11-6-5 16-8 1m-1 7 12-6-8 16-9 1m-2 8 11-5-12 13-9 1"/></svg>{% endif %}<div class="podium-medallion">{% if team.logo_url %}<img src="{{ team.logo_url }}" alt="" data-fallback="{{ team.department|slice:':1' }}">{% else %}<span>{{ team.department|slice:':1' }}</span>{% endif %}</div></div>
+        <div class="podium-crest"><svg class="podium-crown" viewBox="0 0 40 30" aria-hidden="true"><path d="m3 6 9 8L20 2l8 12 9-8-5 21H8L3 6Zm5 22h24v2H8z"/></svg><svg class="podium-laurel" viewBox="0 0 140 100" aria-hidden="true"><path d="M34 89C3 76 1 43 19 14m87 75c31-13 33-46 15-75" fill="none" stroke="currentColor" stroke-width="2"/><path d="M18 24 9 17l1 15 7 4m-4 2L2 32l5 16 8 1m1 7L4 50l8 16 9 1m2 8-11-5 12 13 9 1m89-60 9-7-1 15-7 4m4 2 11-6-5 16-8 1m-1 7 12-6-8 16-9 1m-2 8 11-5-12 13-9 1"/></svg><div class="podium-medallion">{% if team.logo_url %}<img src="{{ team.logo_url }}" alt="" data-fallback="{{ team.department|slice:':1' }}">{% else %}<span>{{ team.department|slice:':1' }}</span>{% endif %}</div></div>
         <div class="podium-block"><strong class="podium-rank">{{ team.rank }}{% if team.rank == 1 %}st{% elif team.rank == 2 %}nd{% else %}rd{% endif %}</strong><h2>{{ team.department }}</h2><span class="podium-points"><strong>{{ team.points }}</strong> pts</span></div>
       </article>{% endfor %}
     </div>{% endif %}
   </div>
 </section>
-<div class="standings-tab-bar"><div class="container"><form class="standings-tabs" method="get" aria-label="Standings category"><input type="hidden" name="year" value="{{ selected_year }}"><input type="hidden" name="q" value="{{ filters.q }}"><button class="{% if filters.type == 'all' %}selected{% endif %}" name="type" value="all">Overall</button><button class="{% if filters.type == 'match' %}selected{% endif %}" name="type" value="match">Match Based</button><button class="{% if filters.type == 'criteria' %}selected{% endif %}" name="type" value="criteria">Criteria-Based</button></form></div></div>
+<div class="standings-tab-bar"><div class="container standings-tab-inner"><form class="standings-tabs" method="get" aria-label="Standings category"><input type="hidden" name="year" value="{{ selected_year }}"><input type="hidden" name="q" value="{{ filters.q }}"><button class="{% if filters.type == 'all' %}selected{% endif %}" name="type" value="all">Overall</button><button class="{% if filters.type == 'match' %}selected{% endif %}" name="type" value="match">Match Based</button><button class="{% if filters.type == 'criteria' %}selected{% endif %}" name="type" value="criteria">Criteria-Based</button></form><div class="standings-year"><label class="visually-hidden" for="standings-year">School Year</label>{% include "landingpage/_icon.html" with icon="calendar" %}<select id="standings-year" name="year" form="standings-filters"><option value="">All school years</option>{% for year in school_years %}<option value="{{ year }}" {% if selected_year == year %}selected{% endif %}>Intramurals {{ year }}</option>{% endfor %}</select></div></div></div>
 <section class="container standings-content">
   <form id="standings-filters" class="standings-filters" method="get" aria-label="Filter standings">
     <div class="standings-search"><label class="visually-hidden" for="standings-search">Search department</label><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></svg><input type="search" id="standings-search" name="q" value="{{ filters.q }}" placeholder="Search department..."></div>
@@ -28,23 +23,34 @@
     <input type="hidden" name="type" value="{{ filters.type }}">
     <div class="standings-select"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 2v6M17 2v6M3 11h18"/></svg><label class="visually-hidden" for="standings-event">Event</label><select id="standings-event" name="event_id"><option value="">All events</option>{% for event in event_options %}<option value="{{ event.id }}" {% if selected_event_id == event.id %}selected{% endif %}>{{ event.name }}</option>{% endfor %}</select></div>
   </form>
-  {% if standings %}<div class="standings-cards" aria-label="Official department standings">
-    {% for team in standings %}<article class="standing-card standing-rank-{{ team.rank }}" aria-label="Rank {{ team.rank }}: {{ team.department }}">
-      <div class="standing-ribbon" aria-hidden="true">
-        <svg viewBox="0 0 76 118"><defs><linearGradient id="rank-shine-{{ forloop.counter }}" x1="0" x2="1"><stop stop-color="currentColor"/><stop offset=".5" stop-color="#fff" stop-opacity=".3"/><stop offset="1" stop-color="currentColor"/></linearGradient></defs>{% if team.rank == 1 %}<path class="ribbon-crown" d="m20 17 4-14 12 11L43 0l7 14L63 4l-5 21H25Z"/>{% endif %}<path class="ribbon-tail" d="M16 53h44v61L38 99l-22 15Z"/><path class="ribbon-face" fill="url(#rank-shine-{{ forloop.counter }})" d="m38 23 25 15v36L38 89 13 74V38Z"/><path class="ribbon-laurel" d="M12 74C1 62 2 43 7 35M64 74c11-12 10-31 5-39M9 47 2 41m6 15-7-7m9 16-8-6m10 12-8-3m64-21 7-6m-6 15 7-7m-9 16 8-6m-10 12 8-3"/></svg><strong>{{ team.rank|stringformat:"02d" }}</strong>
-      </div>
-      <div class="standing-identity">{% if team.logo_url %}<img src="{{ team.logo_url }}" alt="" loading="lazy" data-fallback="{{ team.department|slice:':1' }}">{% else %}<span class="standing-initial" aria-hidden="true">{{ team.department|slice:':1' }}</span>{% endif %}<div><h2>{{ team.department }}</h2>{% if team.rank == 1 %}<span class="standing-leading"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m2 5 6 5 4-8 4 8 6-5-3 15H5Z"/></svg>{% if team.is_tied_leader %}JOINT LEAD{% else %}LEADING{% endif %}</span>{% endif %}</div></div>
-      <div class="standing-points"><div class="standing-points-top"><div><span class="standing-label">TOTAL POINTS</span><div class="standing-total"><strong>{{ team.points }}</strong><span>/ {{ leader_points }}</span></div></div>{% if team.is_tied_leader %}<span class="standing-gap is-leading">Tied for lead</span>{% elif team.rank == 1 %}<span class="standing-gap is-leading"><svg class="standing-gap-trophy" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v6a6 6 0 0 1-12 0ZM9 20h6M12 15v5M6 5H2v3c0 3 2 5 5 5M18 5h4v3c0 3-2 5-5 5"/></svg> {% if team.lead_margin != None %}Leading by {{ team.lead_margin }} points!{% else %}Leading{% endif %}</span>{% elif team.points_gap %}<span class="standing-gap"><span aria-hidden="true">▼</span> {{ team.points_gap }} points behind</span>{% endif %}</div>
-        <div class="standing-progress" role="progressbar" aria-label="{{ team.department }}: {{ team.points }} championship points" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ team.progress_percent }}" style="--progress:{{ team.progress_percent }}%"><span class="standing-progress-fill"></span><span class="standing-progress-knob"></span><span class="standing-percentage">{{ team.progress_percent }}%</span></div>
-        <div class="standing-ticks" aria-hidden="true">{% for tick in points_ticks %}<span>{{ tick|floatformat:"-2" }}</span>{% endfor %}</div>
-      </div>
-      <div class="standing-stats">
-        <div class="standing-stat stat-gold"><svg viewBox="0 0 28 34" aria-hidden="true"><path d="m7 18-1 15 8-4 8 4-1-15"/><circle cx="14" cy="12" r="11"/><path class="medal-star" d="m14 5 2 4 4 .6-3 3 .7 4.4-3.7-2-3.7 2 .7-4.4-3-3 4-.6Z"/></svg><strong>{% if team.medals_known %}{{ team.gold }}{% else %}&mdash;{% endif %}</strong><span>GOLD</span></div>
-        <div class="standing-stat stat-silver"><svg viewBox="0 0 28 34" aria-hidden="true"><path d="m7 18-1 15 8-4 8 4-1-15"/><circle cx="14" cy="12" r="11"/><path class="medal-star" d="m14 5 2 4 4 .6-3 3 .7 4.4-3.7-2-3.7 2 .7-4.4-3-3 4-.6Z"/></svg><strong>{% if team.medals_known %}{{ team.silver }}{% else %}&mdash;{% endif %}</strong><span>SILVER</span></div>
-        <div class="standing-stat stat-bronze"><svg viewBox="0 0 28 34" aria-hidden="true"><path d="m7 18-1 15 8-4 8 4-1-15"/><circle cx="14" cy="12" r="11"/><path class="medal-star" d="m14 5 2 4 4 .6-3 3 .7 4.4-3.7-2-3.7 2 .7-4.4-3-3 4-.6Z"/></svg><strong>{% if team.medals_known %}{{ team.bronze }}{% else %}&mdash;{% endif %}</strong><span>BRONZE</span></div>
-        <div class="standing-stat stat-events"><svg viewBox="0 0 28 28" aria-hidden="true"><circle cx="14" cy="6" r="4"/><circle cx="4" cy="9" r="3"/><circle cx="24" cy="9" r="3"/><path d="M8 26V16c0-7 12-7 12 0v10ZM0 25V16c0-4 6-5 7-1v10Zm21 0V15c1-4 7-3 7 1v9Z"/></svg><strong>{{ team.events_joined|default_if_none:"&mdash;" }}</strong><span>EVENTS<br>JOINED</span></div>
-      </div>
-    </article>{% endfor %}
+  {% if standings %}
+  <svg class="standings-symbols" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><defs>
+    <symbol id="standings-medal" viewBox="0 0 28 34"><path d="m7 18-1 15 8-4 8 4-1-15"/><circle cx="14" cy="12" r="11"/><path fill="#fff" d="m14 5 2 4 4 .6-3 3 .7 4.4-3.7-2-3.7 2 .7-4.4-3-3 4-.6Z"/></symbol>
+    <symbol id="standings-people" viewBox="0 0 28 28"><circle cx="14" cy="6" r="4"/><circle cx="4" cy="9" r="3"/><circle cx="24" cy="9" r="3"/><path d="M8 26V16c0-7 12-7 12 0v10ZM0 25V16c0-4 6-5 7-1v10Zm21 0V15c1-4 7-3 7 1v9Z"/></symbol>
+  </defs></svg>
+  <div class="championship-table-scroll" tabindex="0" role="region" aria-label="Official department standings">
+  <table class="championship-table">
+    <caption class="visually-hidden">Published department championship points and medal tally</caption>
+    <colgroup><col class="col-rank"><col class="col-department"><col class="col-points"><col class="col-progress"><col class="col-medal"><col class="col-medal"><col class="col-medal"><col class="col-events"></colgroup>
+    <thead><tr><th scope="col">Rank</th><th scope="col">Department</th><th scope="col">Championship points</th><th scope="col">Progress</th>
+      <th scope="col"><svg class="tally-icon gold" aria-hidden="true"><use href="#standings-medal"/></svg>Gold</th>
+      <th scope="col"><svg class="tally-icon silver" aria-hidden="true"><use href="#standings-medal"/></svg>Silver</th>
+      <th scope="col"><svg class="tally-icon bronze" aria-hidden="true"><use href="#standings-medal"/></svg>Bronze</th>
+      <th scope="col"><span class="events-column-heading"><svg class="tally-icon people" aria-hidden="true"><use href="#standings-people"/></svg><span>Events<br>joined</span></span></th>
+    </tr></thead>
+    <tbody>{% for team in standings %}
+      <tr class="championship-row rank-{{ team.rank }}">
+        <td><span class="championship-rank">{{ team.rank }}</span></td>
+        <th scope="row"><div class="championship-department">{% if team.logo_url %}<img src="{{ team.logo_url }}" alt="" loading="lazy" data-fallback="{{ team.department|slice:':1' }}">{% else %}<span class="championship-initial" aria-hidden="true">{{ team.department|slice:':1' }}</span>{% endif %}<span>{{ team.department }}</span></div></th>
+        <td class="championship-points"><strong>{{ team.points }}</strong><span>pts</span></td>
+        <td><div class="championship-progress"><div class="championship-track" role="progressbar" aria-label="{{ team.department }}: {{ team.points }} championship points" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ team.progress_percent }}" style="--progress:{{ team.progress_percent }}%"><span></span></div><span class="championship-percentage">{{ team.progress_percent }}%</span></div></td>
+        <td class="championship-tally"><svg class="tally-icon gold" aria-hidden="true"><use href="#standings-medal"/></svg><span>{% if team.medals_known %}{{ team.gold }}{% else %}&mdash;{% endif %}</span></td>
+        <td class="championship-tally"><svg class="tally-icon silver" aria-hidden="true"><use href="#standings-medal"/></svg><span>{% if team.medals_known %}{{ team.silver }}{% else %}&mdash;{% endif %}</span></td>
+        <td class="championship-tally"><svg class="tally-icon bronze" aria-hidden="true"><use href="#standings-medal"/></svg><span>{% if team.medals_known %}{{ team.bronze }}{% else %}&mdash;{% endif %}</span></td>
+        <td class="championship-tally"><svg class="tally-icon people" aria-hidden="true"><use href="#standings-people"/></svg><span>{{ team.events_joined|default_if_none:"&mdash;" }}</span></td>
+      </tr>{% endfor %}
+    </tbody>
+  </table>
   </div>{% else %}<div class="empty-state"><h2>{% if filters.q %}No matching departments.{% elif awaiting_championship_points %}Awaiting published championship points.{% else %}Awaiting official standings.{% endif %}</h2><p>{% if filters.q %}Try another department name or reset the filters.{% elif awaiting_championship_points %}Official event results are available. Department standings will appear once championship points are assigned and published.{% else %}Department rankings will be available after competition outcomes are approved and published.{% endif %}</p></div>{% endif %}
   {% include "landingpage/_pagination.html" %}
 </section>
