@@ -1,6 +1,6 @@
 {% extends "landingpage/base.html" %}{% load static %}
 {% block body_class %}public-standings{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="{% static 'landingpage/leaderboard.css' %}?v=20261024reference">{% endblock %}
+{% block extra_head %}<style>{% include "landingpage/leaderboard.css" %}</style>{% endblock %}
 {% block content %}
 <section class="standings-hero{% if not podium %} standings-hero--empty{% endif %}" aria-labelledby="standings-title">
   <img class="standings-hero-photo" src="{% static 'landingpage/assets/hero.webp' %}" alt="">
