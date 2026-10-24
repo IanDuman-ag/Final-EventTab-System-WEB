@@ -525,11 +525,32 @@ def official_department_awards(event_ids=None):
             continue
         cfg = event.result_processing_config or {}
         if cfg.get('championship_scoring'):
-            if cfg.get('championship_pending') or 'published_championship_awards' not in cfg:
+            if cfg.get('championship_pending'):
                 continue
-            for department_id, value in cfg['published_championship_awards'].items():
-                yield event, int(department_id), value
+            if 'published_championship_awards' in cfg:
+                for department_id, value in cfg['published_championship_awards'].items():
+                    yield event, int(department_id), value
+                continue
+        if event.scoring_method == 'criteria':
+            # Older publications did not persist criteria department awards.
+            # Recover only from this event's saved rules and verified final ranks.
+            # Never substitute current global settings or unpublished awards.
+            if cfg.get('championship_requires_republication') or not event.apply_championship_points:
+                continue
+            rules = cfg.get('championship_scoring') or match_championship_rules(event)
+            if (not rules or rules.get('classification') not in {'major', 'minor'}
+                    or not rules.get('placements')):
+                continue
+            placements, pending = criteria_placements(event, rules)
+            if pending:
+                continue
+            table = {row['rank']: row[rules['classification']] for row in rules['placements']}
+            for row in placements:
+                if row['department_id']:
+                    yield event, row['department_id'], table.get(row['rank'], 0)
         else:
+            if cfg.get('championship_scoring'):
+                continue
             for team in event.bracket_teams.all():
                 if team.department_id:
                     yield event, team.department_id, team.points

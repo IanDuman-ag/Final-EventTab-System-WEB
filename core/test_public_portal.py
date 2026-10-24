@@ -18,6 +18,37 @@ from events.public_service import PUBLIC_TIMEZONE, result_is_published
 
 class PublicPortalTests(TestCase):
 
+    def test_legacy_published_criteria_contributes_partial_department_tally(self):
+        event = self.create_event('Published Singing', scoring_method='criteria',
+            event_classification='major', apply_championship_points=True,
+            championship_points_config=[{'points': 100}, {'points': 75}])
+        entries = [CriteriaEventEntry.objects.create(event=event, entry_type='individual',
+            display_name=name, department=self.department, display_order=index)
+            for index, name in enumerate(['Singer A', 'Singer B'], 1)]
+        event.participant_ids = [entry.pk for entry in entries]
+        event.save()
+        stamp = timezone.now().isoformat()
+        self.publish(event, faculty_submitted_at=stamp, confirmed_stages={'0': {
+            'approved_at': stamp, 'results': [
+                {'participant_id': entry.pk, 'rank': index, 'complete': True, 'final_score': 90 - index}
+                for index, entry in enumerate(entries, 1)]}})
+        self.assertEqual(leaderboard_rows(), [
+            {'department': 'Engineering', 'points': 175, 'rank': 1}])
+        for params in ({}, {'type': 'criteria'}, {'event_id': str(event.pk)}):
+            response = self.client.get(reverse('public_leaderboard'), params)
+            self.assertEqual(response.context['standings'][0]['points'], 175)
+        # Reads do not change publication data or accumulate awards.
+        event.refresh_from_db()
+        self.assertNotIn('published_championship_awards', event.result_processing_config)
+        self.assertEqual(leaderboard_rows()[0]['points'], 175)
+        event.apply_championship_points = False
+        event.save()
+        self.assertEqual(leaderboard_rows(), [])
+        event.apply_championship_points = True
+        event.results_finalized = False
+        event.save()
+        self.assertEqual(leaderboard_rows(), [])
+
     def test_approved_multiround_final_is_previewed_and_counts_published_awards(self):
         event = self.create_event('Approved Pageant', scoring_method='criteria',
             event_format='multiple_stage', rounds_config=[

@@ -985,6 +985,14 @@ def publish_results(event, user):
             event.result_processing_config = cfg
             event.save(update_fields=['result_processing_config'])
     cfg = dict(event.result_processing_config or {})
+    if event.scoring_method == 'criteria' and not cfg.get('championship_scoring'):
+        from .points_settings_service import match_championship_rules
+        # The legacy placement-table adapter also applies to criteria events.
+        legacy_rules = match_championship_rules(event)
+        if legacy_rules:
+            cfg['championship_scoring'] = legacy_rules
+            event.result_processing_config = cfg
+            event.save(update_fields=['result_processing_config'])
     faculty_workflow = faculty_publication_workflow(event)
     if faculty_workflow:
         # The explicitly confirmed publication is the assigned faculty's final approval.

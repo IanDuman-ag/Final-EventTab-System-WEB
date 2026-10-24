@@ -154,6 +154,29 @@ class FacultyCriteriaPortalTests(TestCase):
         self.assertEqual(len(criteria_results(self.event)[0]), 2)
         self.assertEqual(self.client.get(reverse('faculty_dashboard')).context['publication_queue'], [])
 
+    def test_legacy_criteria_publication_saves_department_points_snapshot(self):
+        from events.faculty_service import leaderboard_rows, publish_results
+        from events.models import Department
+        department = Department.objects.create(name='Arts', code='ART')
+        self.event.rounds_config = [self.event.rounds_config[0]]
+        self.event.event_classification = 'major'
+        self.event.apply_championship_points = True
+        self.event.championship_points_config = [{'points': 100}, {'points': 75}]
+        self.event.save()
+        for entry in self.entries:
+            entry.department = department
+            entry.save()
+        self.complete()
+        approve_criteria_round(self.event, self.faculty, 0)
+        response = self.client.post(self.url, {'action': 'publish', 'confirm': 'yes'}, follow=True)
+        self.assertContains(response, 'Official results published.')
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.result_processing_config['published_championship_awards'],
+                         {str(department.pk): 175})
+        self.assertEqual(leaderboard_rows()[0]['points'], 175)
+        publish_results(self.event, self.faculty)
+        self.assertEqual(leaderboard_rows()[0]['points'], 175)
+
     def test_previously_submitted_multi_round_results_can_be_published(self):
         self.complete()
         approve_criteria_round(self.event, self.faculty, 0)
