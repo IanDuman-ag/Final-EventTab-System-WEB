@@ -27,13 +27,13 @@
         {% if not override_event %}
         <section class="scoring-card mb-4" id="schedule-navigation" aria-labelledby="schedule-navigation-title">
           <h2 id="schedule-navigation-title">Public schedule days</h2>
-          <p class="scoring-help">Day 1 is the official intramurals start date in Asia/Manila. Excluded dates do not advance the day number. Saved schedules remain visible under All dates.</p>
+          <p class="scoring-help">Public Day 1, Day 2, and subsequent days follow unique dates with published schedules in Asia/Manila. Calendar references below do not create empty days or override active-day numbering.</p>
           <form method="post" action="{% url 'admin_settings' %}">
             {% csrf_token %}<input type="hidden" name="operation" value="schedule_navigation">
             <div class="row g-3">
               {% for field in schedule_form %}<div class="col-md-6 scoring-field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% for error in field.errors %}<p class="text-danger small mt-1" role="alert">{{ error }}</p>{% endfor %}</div>{% endfor %}
             </div>
-            <p class="scoring-help mt-2">Enter excluded dates as YYYY-MM-DD, separated by commas or new lines. Leave the start date empty to use the earliest Admin-set start date among public events as Day 1.</p>
+            <p class="scoring-help mt-2">Enter reference dates as YYYY-MM-DD, separated by commas or new lines. Actual published competitions remain visible and determine public day numbers.</p>
             <button class="btn btn-primary mt-2" type="submit">Save schedule days</button>
           </form>
         </section>

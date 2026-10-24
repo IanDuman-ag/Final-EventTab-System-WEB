@@ -22,7 +22,7 @@ from django.views.decorators.http import require_safe
 
 from events.faculty_service import leaderboard_rows
 from events.models import BracketMatch, Department, Event, SystemSettings
-from events.schedule_navigation import calendar_date, calendar_days, competition_day, expand_schedule_rows
+from events.schedule_navigation import active_schedule_days, calendar_date, expand_schedule_rows
 from events.public_service import (
     PUBLIC_TIMEZONE, TERMINAL_MATCH_STATUSES, criteria_condition, criteria_results,
     event_kind, fixture_queryset, image_url, is_multiround,
@@ -330,28 +330,31 @@ def schedules(request):
     filters = filters_for(request)
     # Date/venue/status are applied after projecting criteria sessions and spans.
     projection_filters = dict(filters, date='', venue='', status='all')
-    source_rows = list(schedule_queryset(projection_filters))
+    unfiltered = dict(projection_filters, q='', type='all', category='')
+    source_rows = list(schedule_queryset(unfiltered))
     events = {event.pk: event for event in public_events().filter(
         pk__in={row['public_event_id'] for row in source_rows if not row['fixture_id']})}
     rows = expand_schedule_rows(source_rows, events)
+    day_mapping = active_schedule_days(rows)
+    dates = list(day_mapping)
+    matching_events = set(apply_filters(public_events(), projection_filters).values_list('pk', flat=True))
+    filters['team'] = request.GET.get('team', '').strip()[:200]
+    matching_fixtures = None
+    if filters['team']:
+        team = filters['team']
+        teams = (Q(team_a_id=int(team)) | Q(team_b_id=int(team))) if team.isascii() and team.isdecimal() and len(team) <= 9 else (
+            Q(team_a__name__icontains=team) | Q(team_b__name__icontains=team))
+        matching_fixtures = set(BracketMatch.objects.filter(event__in=public_events()).filter(teams).values_list('pk', flat=True))
     venues = sorted({row['public_venue'] for row in rows if row['public_venue']})
     configuration = SystemSettings.objects.filter(pk=1).first()
     official_start = configuration.intramurals_start_date if configuration else None
-    # Admin-entered event dates establish Day 1 when no official override is set.
-    # Use all public events so search and category filters cannot renumber days.
-    start = official_start or public_events().order_by('event_date', 'pk').values_list('event_date', flat=True).first()
-    excluded = {date for raw in (configuration.non_competition_dates or [])
-                if (date := calendar_date(raw)) and start and date > start} if configuration else set()
-    dates = calendar_days((row['date'] for row in rows), start, excluded)
     day_value = request.GET.get('day', '')[:10]
     selected_date = calendar_date(day_value) if day_value != 'all' else None
     if not day_value and filters['date']:
         selected_date = calendar_date(filters['date'])
     elif not day_value and official_start:
         today = timezone.localdate(timezone=PUBLIC_TIMEZONE)
-        selected_date = today if today in dates else start
-    if selected_date and selected_date not in dates:
-        dates = sorted([*dates, selected_date])
+        selected_date = today if today in day_mapping else next(iter(day_mapping), None)
     navigation = []
     for date in dates:
         params = request.GET.copy()
@@ -359,13 +362,15 @@ def schedules(request):
         params['day'] = date.isoformat()
         if filters['date']:
             params['date'] = date.isoformat()
-        navigation.append({'date': date, 'number': competition_day(date, start, excluded),
+        navigation.append({'date': date, **day_mapping[date],
             'selected': date == selected_date, 'url': '?' + params.urlencode()})
     all_params = request.GET.copy()
     all_params.pop('page', None)
     all_params.pop('date', None)
     all_params['day'] = 'all'
-    filtered = [row for row in rows if (not selected_date or row['date'] == selected_date)
+    filtered = [row for row in rows if row['public_event_id'] in matching_events
+                and (matching_fixtures is None or row['fixture_id'] in matching_fixtures)
+                and (not selected_date or row['date'] == selected_date)
                 and (not filters['date'] or row['date'] == calendar_date(filters['date']))
                 and (not filters['venue'] or row['public_venue'] == filters['venue'])
                 and (filters['status'] == 'all' or row['public_status'] == filters['status'])]
@@ -383,9 +388,9 @@ def schedules(request):
     context.update(filter_options(), page_title='Event Schedules — EventTab',
         schedules=serialized, filters=filters, venues=venues, day_tabs=navigation,
         selected_day=selected_day, selected_schedule_date=selected_date,
-        all_days_url='?' + all_params.urlencode(), official_start_date=start,
+        all_days_url='?' + all_params.urlencode(), official_start_date=next(iter(day_mapping), None),
         query_string=page_params.urlencode(),
-        schedule_groups=[{'date': date, 'number': competition_day(date, start, excluded),
+        schedule_groups=[{'date': date, 'number': day_mapping[date]['number'],
                           'items': list(items)} for date, items in groupby(serialized, key=lambda row: row['date'])])
     return context
 

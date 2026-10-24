@@ -1,5 +1,6 @@
 <form class="filter-panel" method="get" aria-label="Filter competitions">
 {% if active == 'schedules' and selected_day %}<input type="hidden" name="day" value="{{ selected_day }}">{% endif %}
+{% if active == 'schedules' and filters.team %}<input type="hidden" name="team" value="{{ filters.team }}">{% endif %}
 <div class="filter-grid">
 <div class="filter-search">
 <label for="search">{% if active == 'games' or active == 'schedules' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 6 6"/></svg>{% endif %}{% if active == 'schedules' %}Search by event name{% else %}Search{% endif %}</label><input class="form-control" id="search" type="search" name="q" value="{{ filters.q }}" placeholder="Search by event name">

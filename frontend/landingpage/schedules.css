@@ -29,6 +29,8 @@
 .public-schedules .schedule-day-tab { flex:0 0 auto; min-width:108px; padding:10px 15px; border:1px solid #d9e4f2; border-radius:5px; background:#fff; color:#183a61; line-height:1.35; scroll-snap-align:start; text-align:left; }
 .public-schedules .schedule-day-tab strong { display:block; font-size:12px; font-weight:750; }
 .public-schedules .schedule-day-tab>span { display:block; font-size:10px; color:#59718e; margin-top:3px; }
+.public-schedules .schedule-day-count { display:block; font-size:9px; margin-top:4px; color:#59718e; }
+.public-schedules .schedule-day-tab.selected .schedule-day-count { color:#e2ebf7; }
 .public-schedules .schedule-day-tab:hover { border-color:#9aacc2; }
 .public-schedules .schedule-day-tab.selected { color:#fff; background:#092c51; border-color:#092c51; border-bottom:3px solid #ffce1c; padding-bottom:8px; }
 .public-schedules .schedule-day-tab.selected>span { color:#e2ebf7; }

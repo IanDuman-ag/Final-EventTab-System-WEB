@@ -8,7 +8,7 @@ from django.test import Client, TestCase
 from django.urls import reverse
 
 from events.models import BracketMatch, BracketTeam, Department, Event, SystemSettings
-from events.schedule_navigation import ScheduleNavigationForm, competition_day
+from events.schedule_navigation import ScheduleNavigationForm, active_schedule_days
 
 
 class ScheduleDayNavigationTests(TestCase):
@@ -25,7 +25,7 @@ class ScheduleDayNavigationTests(TestCase):
         values.update(kwargs)
         return Event.objects.create(**values)
 
-    def test_day_number_uses_official_start_and_excludes_breaks(self):
+    def test_day_number_uses_unique_published_schedule_dates(self):
         first = self.event()
         second = self.event('Debate', event_date=self.start + timedelta(days=2))
         Event.objects.filter(pk__in=[first.pk, second.pk]).update(
@@ -54,13 +54,14 @@ class ScheduleDayNavigationTests(TestCase):
         self.assertEqual(query['date'], ['2026-11-03'])
         self.assertNotContains(response, 'Vocal Duet</a>')
 
-    def test_empty_competition_days_are_selectable_without_compressing_numbering(self):
+    def test_empty_dates_do_not_create_tabs_or_advance_numbering(self):
         self.settings.non_competition_dates = []
         self.settings.save()
         self.event('Opening')
         self.event('Final', event_date=date(2026, 11, 3))
         response = self.client.get(self.url, {'day': '2026-11-02'})
-        self.assertEqual([tab['number'] for tab in response.context['day_tabs']], [1, 2, 3])
+        self.assertEqual([tab['number'] for tab in response.context['day_tabs']], [1, 2])
+        self.assertNotIn(date(2026, 11, 2), [tab['date'] for tab in response.context['day_tabs']])
         self.assertEqual(response.context['schedules'], [])
         self.assertContains(response, 'No schedules for this day.')
 
@@ -88,8 +89,9 @@ class ScheduleDayNavigationTests(TestCase):
         self.assertEqual([row['date'] for row in response.context['schedules']],
                          [self.start, date(2026, 11, 2), date(2026, 11, 3)])
         self.assertEqual(len(response.context['schedule_groups']), 3)
-        # Excluding a non-competition day never silently erases an actual schedule.
-        self.assertNotIn(date(2026, 11, 2), [tab['date'] for tab in response.context['day_tabs']])
+        # Actual public schedules determine active days, including dated event spans.
+        self.assertIn(date(2026, 11, 2), [tab['date'] for tab in response.context['day_tabs']])
+        self.assertEqual([tab['number'] for tab in response.context['day_tabs']], [1, 2, 3])
         self.assertEqual(len(self.client.get(self.url, {'day': '2026-11-02'}).context['schedules']), 1)
 
     def test_match_reschedule_moves_only_its_fixture_and_keeps_team_logos(self):
@@ -111,7 +113,7 @@ class ScheduleDayNavigationTests(TestCase):
         self.assertEqual(len(self.client.get(self.url, {'day': '2026-11-04'}).context['schedules']), 1)
         self.assertEqual(len(self.client.get(self.url, {'day': 'all'}).context['schedules']), 2)
 
-    def test_missing_official_start_uses_admin_event_date_without_writing_settings(self):
+    def test_active_numbering_does_not_require_or_write_settings(self):
         SystemSettings.objects.all().delete()
         self.event()
         response = self.client.get(self.url)
@@ -129,13 +131,14 @@ class ScheduleDayNavigationTests(TestCase):
         self.event('Private earlier event', publication_status='draft', event_date=date(2026, 10, 1))
         Event.objects.filter(pk=first.pk).update(created_at=datetime(2020, 1, 1, tzinfo=datetime_timezone.utc))
         response = self.client.get(self.url, {'day': '2026-11-03', 'category': 'Sports', 'q': 'Basketball'})
-        self.assertEqual(response.context['schedule_groups'][0]['number'], 3)
-        self.assertContains(response, '<strong>Day 3</strong>')
-        # Changing the Admin-entered event start date recalculates the calendar.
+        self.assertEqual(response.context['schedule_groups'][0]['number'], 2)
+        self.assertContains(response, '<strong>Day 2</strong>')
+        # Moving an active date preserves chronological, consecutive numbering.
         first.event_date = date(2026, 11, 2)
         first.save(update_fields=['event_date'])
         response = self.client.get(self.url, {'day': '2026-11-03', 'category': 'Sports'})
         self.assertEqual(response.context['schedule_groups'][0]['number'], 2)
+        self.assertEqual(response.context['day_tabs'][0]['date'], date(2026, 11, 2))
 
     def test_pagination_keeps_day_and_hidden_events_never_create_tabs(self):
         for index in range(14):
@@ -163,7 +166,41 @@ class ScheduleDayNavigationTests(TestCase):
         response = self.client.get(self.url, {'day': '2026-11-01', 'date': '2026-11-03'})
         self.assertEqual(response.context['schedules'], [])
         self.assertContains(response, 'No schedules for this day.')
-        self.assertIsNone(competition_day(date(2026, 10, 31), self.start, set()))
+        self.assertEqual(active_schedule_days([]), {})
+
+    def test_sparse_example_counts_and_day_mapping_stay_fixed_under_every_filter(self):
+        self.settings.intramurals_start_date = date(2026, 1, 1)
+        self.settings.non_competition_dates = ['2026-11-05']
+        self.settings.save()
+        self.event('Opening', event_date=date(2026, 10, 22))
+        self.event('Speech', event_date=date(2026, 11, 2))
+        self.event('Painting', event_date=date(2026, 11, 5))
+        self.event('Closing', event_date=date(2026, 11, 10))
+        self.event('Private', event_date=date(2026, 10, 1), publication_status='draft')
+        match_event = self.event('Basketball', event_date=date(2026, 10, 10), scoring_method='match', category='Sports')
+        a = BracketTeam.objects.create(event=match_event, name='Falcons')
+        b = BracketTeam.objects.create(event=match_event, name='Eagles')
+        match = BracketMatch.objects.create(event=match_event, match_number=1, team_a=a, team_b=b,
+            match_date=date(2026, 11, 5), match_time=time(10), venue='Court', status='pending')
+        expected = [(date(2026, 10, 22), 1, 1), (date(2026, 11, 2), 2, 1),
+                    (date(2026, 11, 5), 3, 2), (date(2026, 11, 10), 4, 1)]
+        for filters in ({}, {'q': 'Basketball'}, {'category': 'Sports'}, {'type': 'match'},
+                        {'venue': 'Court'}, {'status': 'completed'}, {'team': str(a.pk)},
+                        {'team': 'Falcons'}, {'date': '2026-11-05'}):
+            with self.subTest(filters=filters):
+                response = self.client.get(self.url, {'day': 'all', **filters})
+                self.assertEqual([(tab['date'], tab['number'], tab['count']) for tab in response.context['day_tabs']], expected)
+                self.assertContains(response, '2 scheduled events')
+                if filters.get('team'):
+                    self.assertEqual(len(response.context['schedules']), 1)
+                    self.assertEqual(response.context['schedule_groups'][0]['number'], 3)
+        # Rescheduling moves the last match off its old date without keeping a ghost day.
+        match.match_date = date(2026, 11, 1)
+        match.save(update_fields=['match_date'])
+        response = self.client.get(self.url, {'day': 'all'})
+        self.assertEqual([(tab['date'], tab['number']) for tab in response.context['day_tabs']],
+            [(date(2026, 10, 22), 1), (date(2026, 11, 1), 2), (date(2026, 11, 2), 3),
+             (date(2026, 11, 5), 4), (date(2026, 11, 10), 5)])
 
 
 class AdminScheduleSettingsTests(TestCase):

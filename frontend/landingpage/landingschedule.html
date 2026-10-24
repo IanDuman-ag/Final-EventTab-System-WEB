@@ -26,7 +26,7 @@ Stay updated with upcoming, ongoing, and completed competitions.
 {% if day_tabs %}
 <nav class="schedule-day-nav" aria-label="Competition days">
   <a class="schedule-day-tab{% if selected_day == 'all' %} selected{% endif %}" href="{{ all_days_url }}" {% if selected_day == 'all' %}aria-current="true"{% endif %}><strong>All dates</strong><span>Full schedule</span></a>
-  {% for day in day_tabs %}<a class="schedule-day-tab{% if day.selected %} selected{% endif %}" href="{{ day.url }}" {% if day.selected %}aria-current="date"{% endif %}><strong>{% if day.number %}Day {{ day.number }}{% else %}{{ day.date|date:"D" }}{% endif %}</strong><span>{{ day.date|date:"M j, Y" }}</span></a>{% endfor %}
+  {% for day in day_tabs %}<a class="schedule-day-tab{% if day.selected %} selected{% endif %}" href="{{ day.url }}" {% if day.selected %}aria-current="date"{% endif %}><strong>Day {{ day.number }}</strong><span>{{ day.date|date:"M j, Y" }}</span><small class="schedule-day-count">{{ day.count }} scheduled event{{ day.count|pluralize }}</small></a>{% endfor %}
 </nav>
 {% endif %}
 <p class="timezone-note">

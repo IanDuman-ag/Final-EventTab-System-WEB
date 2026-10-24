@@ -1,4 +1,5 @@
-"""Read-only calendar projection and validated intramurals day numbering."""
+"""Read-only schedule projection and consecutive published active days."""
+from collections import Counter
 from datetime import timedelta
 
 from django import forms
@@ -37,25 +38,11 @@ class ScheduleNavigationForm(forms.Form):
         return sorted({value.isoformat() for value in dates})
 
 
-def competition_day(date, start, excluded):
-    if not date or not start or date < start or date in excluded:
-        return None
-    return (date - start).days + 1 - sum(start <= value <= date for value in excluded)
-
-
-def calendar_days(scheduled_dates, start, excluded):
-    """Include empty competition days without renumbering sparse schedules."""
-    dates = {date for date in scheduled_dates if date and date not in excluded}
-    if start:
-        end = max(dates | {start})
-        current = start
-        while current <= end:
-            if current not in excluded:
-                dates.add(current)
-            if current == end:
-                break
-            current += timedelta(days=1)
-    return sorted(dates)
+def active_schedule_days(rows):
+    """Number unique, populated public schedule dates before any viewer filters."""
+    counts = Counter(row['date'] for row in rows if row['date'])
+    return {date: {'number': number, 'count': counts[date]}
+            for number, date in enumerate(sorted(counts), 1)}
 
 
 def expand_schedule_rows(rows, events):
