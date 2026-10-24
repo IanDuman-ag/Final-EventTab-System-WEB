@@ -35,7 +35,7 @@ Stay updated with upcoming, ongoing, and completed competitions.
 <div class="schedule-list">
 {% for group in schedule_groups %}
 <section class="schedule-day-group" aria-label="Schedules for {{ group.date|date:'F j, Y' }}">
-<h2 class="schedule-day-heading">{% if group.number %}Day {{ group.number }} <span aria-hidden="true">&middot;</span> {% endif %}{{ group.date|date:"l, F j, Y" }}</h2>
+<h2 class="schedule-day-heading">{% if group.number %}Day {{ group.number }} <span aria-hidden="true">&middot;</span> {% endif %}{{ group.date|date:"F j, Y" }}</h2>
 {% for item in group.items %}{% include "landingpage/_schedule_row.html" %}{% endfor %}
 </section>
 {% empty %}

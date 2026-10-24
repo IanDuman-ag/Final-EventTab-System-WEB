@@ -33,7 +33,7 @@
             <div class="row g-3">
               {% for field in schedule_form %}<div class="col-md-6 scoring-field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% for error in field.errors %}<p class="text-danger small mt-1" role="alert">{{ error }}</p>{% endfor %}</div>{% endfor %}
             </div>
-            <p class="scoring-help mt-2">Enter excluded dates as YYYY-MM-DD, separated by commas or new lines. Leave the start date empty to use the standard schedule view.</p>
+            <p class="scoring-help mt-2">Enter excluded dates as YYYY-MM-DD, separated by commas or new lines. Leave the start date empty to use the earliest Admin-set start date among public events as Day 1.</p>
             <button class="btn btn-primary mt-2" type="submit">Save schedule days</button>
           </form>
         </section>

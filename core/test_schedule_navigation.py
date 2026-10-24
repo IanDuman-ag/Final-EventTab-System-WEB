@@ -111,14 +111,31 @@ class ScheduleDayNavigationTests(TestCase):
         self.assertEqual(len(self.client.get(self.url, {'day': '2026-11-04'}).context['schedules']), 1)
         self.assertEqual(len(self.client.get(self.url, {'day': 'all'}).context['schedules']), 2)
 
-    def test_missing_start_does_not_invent_day_numbers_or_write_settings(self):
+    def test_missing_official_start_uses_admin_event_date_without_writing_settings(self):
         SystemSettings.objects.all().delete()
         self.event()
         response = self.client.get(self.url)
         self.assertFalse(SystemSettings.objects.exists())
         self.assertEqual(response.context['selected_day'], 'all')
-        self.assertTrue(all(tab['number'] is None for tab in response.context['day_tabs']))
+        self.assertEqual(response.context['day_tabs'][0]['number'], 1)
         self.assertEqual(len(response.context['schedules']), 1)
+
+    def test_automatic_day_numbers_ignore_creation_dates_filters_and_private_events(self):
+        self.settings.intramurals_start_date = None
+        self.settings.non_competition_dates = []
+        self.settings.save()
+        first = self.event('Opening')
+        self.event('Basketball', category='Sports', event_date=date(2026, 11, 3))
+        self.event('Private earlier event', publication_status='draft', event_date=date(2026, 10, 1))
+        Event.objects.filter(pk=first.pk).update(created_at=datetime(2020, 1, 1, tzinfo=datetime_timezone.utc))
+        response = self.client.get(self.url, {'day': '2026-11-03', 'category': 'Sports', 'q': 'Basketball'})
+        self.assertEqual(response.context['schedule_groups'][0]['number'], 3)
+        self.assertContains(response, '<strong>Day 3</strong>')
+        # Changing the Admin-entered event start date recalculates the calendar.
+        first.event_date = date(2026, 11, 2)
+        first.save(update_fields=['event_date'])
+        response = self.client.get(self.url, {'day': '2026-11-03', 'category': 'Sports'})
+        self.assertEqual(response.context['schedule_groups'][0]['number'], 2)
 
     def test_pagination_keeps_day_and_hidden_events_never_create_tabs(self):
         for index in range(14):

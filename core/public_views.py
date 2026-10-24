@@ -336,7 +336,10 @@ def schedules(request):
     rows = expand_schedule_rows(source_rows, events)
     venues = sorted({row['public_venue'] for row in rows if row['public_venue']})
     configuration = SystemSettings.objects.filter(pk=1).first()
-    start = configuration.intramurals_start_date if configuration else None
+    official_start = configuration.intramurals_start_date if configuration else None
+    # Admin-entered event dates establish Day 1 when no official override is set.
+    # Use all public events so search and category filters cannot renumber days.
+    start = official_start or public_events().order_by('event_date', 'pk').values_list('event_date', flat=True).first()
     excluded = {date for raw in (configuration.non_competition_dates or [])
                 if (date := calendar_date(raw)) and start and date > start} if configuration else set()
     dates = calendar_days((row['date'] for row in rows), start, excluded)
@@ -344,7 +347,7 @@ def schedules(request):
     selected_date = calendar_date(day_value) if day_value != 'all' else None
     if not day_value and filters['date']:
         selected_date = calendar_date(filters['date'])
-    elif not day_value and start:
+    elif not day_value and official_start:
         today = timezone.localdate(timezone=PUBLIC_TIMEZONE)
         selected_date = today if today in dates else start
     if selected_date and selected_date not in dates:
