@@ -153,7 +153,12 @@ class PublicPortalTests(TestCase):
                             ('Live Band Competition', 'band.svg'), ('Quiz Bee', 'quiz.svg'),
                             ('Radio Drama', 'radio.svg'), ('Short & Sweet Play', 'theater.svg'),
                             ('Most Disciplined Unit', 'unit.svg'), ('Amazing Race', 'race.svg'),
-                            ('Mr. & Ms. USTP Ambassador 2026', 'pageant.webp')]:
+                            ('Mr. & Ms. USTP Ambassador 2026', 'pageant.svg'),
+                            ('Singing', 'singing.svg'), ('Vocal Solo', 'singing.svg'),
+                            ('Vocal Duet', 'duet.svg'), ('Cheerdance Competition', 'dance.svg'),
+                            ('Modern Dance Contemporary', 'dance.svg'),
+                            ("Men's Basketball", 'basketball.svg'),
+                            ("Women's Badminton", 'badminton.svg')]:
             with self.subTest(name=name):
                 self.event.name = name
                 self.event.sport_type = ''

@@ -251,10 +251,10 @@ def featured_banner_key(event):
 
 
 def game_artwork_path(event):
-    """Use existing photos first, then artwork matching the competition."""
-    photo = featured_banner_key(event)
-    if photo:
-        return f'landingpage/assets/competitions/{photo}.webp'
+    """Use matching SVG illustrations for every Events directory card."""
+    banner = featured_banner_key(event)
+    if banner:
+        return f'landingpage/assets/competitions/{banner}.svg'
     name = ' '.join((event.name, event.sport_type, event.special_event_type)).lower()
     for keywords, key in (
         (('ambassador', 'mr.', 'ms.'), 'pageant'),
@@ -273,8 +273,7 @@ def game_artwork_path(event):
         (('chess',), 'chess'),
     ):
         if any(keyword in name for keyword in keywords):
-            extension = 'webp' if key == 'pageant' else 'svg'
-            return f'landingpage/assets/competitions/{key}.{extension}'
+            return f'landingpage/assets/competitions/{key}.svg'
     return 'landingpage/assets/competitions/competition.svg'
 
 
