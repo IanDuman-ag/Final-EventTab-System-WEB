@@ -229,11 +229,14 @@ def home(request):
         'featured_classification': featured_filters['classification'],
     }
     upcoming = dict(filters_for(request), status='upcoming')
+    upcoming_rows = list(schedule_queryset(upcoming, future_only=True)[:5])
+    matchups = schedule_matchups(upcoming_rows)
     return {
         'page_title': 'EventTab — One event. One community.',
         'featured_events': featured_events, 'featured_filters': featured_filters,
         'featured_page_obj': featured_page, 'featured_query_string': urlencode(featured_params),
-        'upcoming_schedules': [serialize_schedule(row) for row in schedule_queryset(upcoming, future_only=True)[:5]],
+        'upcoming_schedules': [{**serialize_schedule(row), 'matchup': matchups.get(row['fixture_id'])}
+                               for row in upcoming_rows],
     }
 
 

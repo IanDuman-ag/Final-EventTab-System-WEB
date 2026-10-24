@@ -1,4 +1,4 @@
-{% extends "landingpage/base.html" %}{% load static %}{% block extra_head %}<style id="home-reference-styles">{% include "landingpage/home.css" %}</style>{% endblock %}{% block public_scripts %}<script>{% include "landingpage/public.js" %}</script>{% endblock %}{% block body_class %}public-home home-reference{% endblock %}{% block content %}
+{% extends "landingpage/base.html" %}{% load static %}{% block extra_head %}<style id="home-reference-styles">{% include "landingpage/schedules.css" %}{% include "landingpage/home.css" %}</style>{% endblock %}{% block public_scripts %}<script>{% include "landingpage/public.js" %}</script>{% endblock %}{% block body_class %}public-home home-reference{% endblock %}{% block content %}
 <section class="hero">
 <div class="home-athlete-art" aria-hidden="true">
   <img class="home-arena-photo" src="{% static 'landingpage/assets/hero.webp' %}" alt="" fetchpriority="high">

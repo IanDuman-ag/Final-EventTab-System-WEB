@@ -94,7 +94,17 @@ class PublicPortalTests(TestCase):
         self.assertContains(response, 'matchup-vs')
         self.assertNotContains(response, 'PRIVATE MEMBER INFORMATION')
         self.assertNotContains(response, 'PRIVATE STAFF NOTES')
-        self.assertNotContains(self.client.get(reverse('home')), 'schedule-row--match')
+        self.match.status = BracketMatch.STATUS_PENDING
+        self.match.match_date = self.today + timedelta(days=1)
+        self.match.save(update_fields=['status', 'match_date'])
+        home = self.client.get(reverse('home'))
+        home_matchup = home.context['upcoming_schedules'][0]['matchup']
+        self.assertEqual(home_matchup, matchup)
+        self.assertContains(home, 'schedule-row--match')
+        self.assertContains(home, 'matchup-vs')
+        self.assertContains(home, f'src="{home_matchup[0]["logo_url"]}"')
+        self.assertNotContains(home, 'PRIVATE MEMBER INFORMATION')
+        self.assertNotContains(home, 'PRIVATE STAFF NOTES')
 
     def test_schedule_handles_unknown_opponent_without_inventing_a_team(self):
         self.match.team_b = None
@@ -102,6 +112,12 @@ class PublicPortalTests(TestCase):
         response = self.client.get(reverse('public_schedules'))
         self.assertEqual(response.context['schedules'][0]['matchup'][1]['name'], 'TBD')
         self.assertEqual(response.context['schedules'][0]['matchup'][1]['logo_url'], '')
+        self.match.status = BracketMatch.STATUS_PENDING
+        self.match.match_date = self.today + timedelta(days=1)
+        self.match.save(update_fields=['status', 'match_date'])
+        home = self.client.get(reverse('home'))
+        self.assertEqual(home.context['upcoming_schedules'][0]['matchup'][1]['name'], 'TBD')
+        self.assertContains(home, 'matchup-vs')
 
 
     def test_home_classification_filter_combines_with_type_and_search(self):
