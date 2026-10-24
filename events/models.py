@@ -1022,6 +1022,8 @@ class SystemSettings(models.Model):
     report_subtitle = models.CharField(max_length=200, blank=True, default='')
     academic_year = models.CharField(max_length=40, blank=True, default='')
     intramurals_name = models.CharField(max_length=200, blank=True, default='')
+    intramurals_start_date = models.DateField(null=True, blank=True)
+    non_competition_dates = models.JSONField(default=list, blank=True)
     password_min_length = models.PositiveSmallIntegerField(default=8)
     password_require_uppercase = models.BooleanField(default=False)
     password_require_number = models.BooleanField(default=False)

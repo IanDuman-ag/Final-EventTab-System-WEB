@@ -72,7 +72,11 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     form.querySelectorAll('select, input[type="date"], input[type="radio"]').forEach((control) => {
       if (form.classList.contains('featured-controls') && control.tagName === 'SELECT') return;
-      control.addEventListener('change', submitFilters);
+      control.addEventListener('change', () => {
+        const selectedDay = form.querySelector('input[name="day"]');
+        if (selectedDay && control.name === 'date') selectedDay.value = control.value || 'all';
+        submitFilters();
+      });
     });
     form.querySelectorAll('input[type="search"]').forEach((control) => {
       control.addEventListener('input', (event) => {
@@ -91,6 +95,13 @@ document.addEventListener('DOMContentLoaded', () => {
       form.setAttribute('aria-busy', 'true');
     });
   });
+  const dayNavigation = document.querySelector('.schedule-day-nav');
+  const selectedDayTab = dayNavigation?.querySelector('[aria-current]');
+  if (selectedDayTab) {
+    dayNavigation.scrollLeft += selectedDayTab.getBoundingClientRect().left
+      - dayNavigation.getBoundingClientRect().left
+      - (dayNavigation.clientWidth - selectedDayTab.offsetWidth) / 2;
+  }
   const standingsFilters = document.getElementById('standings-filters');
   if (standingsFilters) {
     const search = document.getElementById('standings-search');

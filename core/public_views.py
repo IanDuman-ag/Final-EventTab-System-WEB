@@ -2,6 +2,7 @@
 import base64
 import logging
 from functools import lru_cache, wraps
+from itertools import groupby
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -20,7 +21,8 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_safe
 
 from events.faculty_service import leaderboard_rows
-from events.models import BracketMatch, Department, Event
+from events.models import BracketMatch, Department, Event, SystemSettings
+from events.schedule_navigation import calendar_date, calendar_days, competition_day, expand_schedule_rows
 from events.public_service import (
     PUBLIC_TIMEZONE, TERMINAL_MATCH_STATUSES, criteria_condition, criteria_results,
     event_kind, fixture_queryset, image_url, is_multiround,
@@ -181,6 +183,7 @@ def serialize_schedule(row):
         'type': row['event_kind'], 'type_label': 'Match-Based' if row['event_kind'] == 'match' else 'Criteria-Based',
         'category': row['event_category'], 'round': row['round'],
         'date': row['date'], 'time': row['time'], 'venue': row['public_venue'],
+        'end_time': row.get('end_time'),
         'participants': row['participants'], 'status': row['public_status'],
         'status_label': row['public_status'].title(),
     }
@@ -324,12 +327,63 @@ def schedule_matchups(rows):
 
 @public_page('schedules')
 def schedules(request):
-    page, context = paginate(request, schedule_queryset(filters_for(request)))
+    filters = filters_for(request)
+    # Date/venue/status are applied after projecting criteria sessions and spans.
+    projection_filters = dict(filters, date='', venue='', status='all')
+    source_rows = list(schedule_queryset(projection_filters))
+    events = {event.pk: event for event in public_events().filter(
+        pk__in={row['public_event_id'] for row in source_rows if not row['fixture_id']})}
+    rows = expand_schedule_rows(source_rows, events)
+    venues = sorted({row['public_venue'] for row in rows if row['public_venue']})
+    configuration = SystemSettings.objects.filter(pk=1).first()
+    start = configuration.intramurals_start_date if configuration else None
+    excluded = {date for raw in (configuration.non_competition_dates or [])
+                if (date := calendar_date(raw)) and start and date > start} if configuration else set()
+    dates = calendar_days((row['date'] for row in rows), start, excluded)
+    day_value = request.GET.get('day', '')[:10]
+    selected_date = calendar_date(day_value) if day_value != 'all' else None
+    if not day_value and filters['date']:
+        selected_date = calendar_date(filters['date'])
+    elif not day_value and start:
+        today = timezone.localdate(timezone=PUBLIC_TIMEZONE)
+        selected_date = today if today in dates else start
+    if selected_date and selected_date not in dates:
+        dates = sorted([*dates, selected_date])
+    navigation = []
+    for date in dates:
+        params = request.GET.copy()
+        params.pop('page', None)
+        params['day'] = date.isoformat()
+        if filters['date']:
+            params['date'] = date.isoformat()
+        navigation.append({'date': date, 'number': competition_day(date, start, excluded),
+            'selected': date == selected_date, 'url': '?' + params.urlencode()})
+    all_params = request.GET.copy()
+    all_params.pop('page', None)
+    all_params.pop('date', None)
+    all_params['day'] = 'all'
+    filtered = [row for row in rows if (not selected_date or row['date'] == selected_date)
+                and (not filters['date'] or row['date'] == calendar_date(filters['date']))
+                and (not filters['venue'] or row['public_venue'] == filters['venue'])
+                and (filters['status'] == 'all' or row['public_status'] == filters['status'])]
+    filtered.sort(key=lambda row: (row['date'], row['time'] is None, row['time'] or '',
+                                  row['event_name'], row['round'], row['public_event_id']))
+    page, context = paginate(request, filtered)
     rows = list(page)
     matchups = schedule_matchups(rows)
+    serialized = [{**serialize_schedule(row), 'matchup': matchups.get(row['fixture_id'])} for row in rows]
+    selected_day = selected_date.isoformat() if selected_date else 'all'
+    # Keep the selected day through pagination and every filter submission.
+    page_params = request.GET.copy()
+    page_params.pop('page', None)
+    page_params['day'] = selected_day
     context.update(filter_options(), page_title='Event Schedules — EventTab',
-                   schedules=[{**serialize_schedule(row), 'matchup': matchups.get(row['fixture_id'])}
-                              for row in rows])
+        schedules=serialized, filters=filters, venues=venues, day_tabs=navigation,
+        selected_day=selected_day, selected_schedule_date=selected_date,
+        all_days_url='?' + all_params.urlencode(), official_start_date=start,
+        query_string=page_params.urlencode(),
+        schedule_groups=[{'date': date, 'number': competition_day(date, start, excluded),
+                          'items': list(items)} for date, items in groupby(serialized, key=lambda row: row['date'])])
     return context
 
 

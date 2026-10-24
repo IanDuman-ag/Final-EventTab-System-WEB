@@ -8,6 +8,7 @@ from django.views.decorators.http import require_http_methods
 
 from events.audit_service import record_audit
 from events.models import AuditLog, Event, SystemSettings
+from events.schedule_navigation import ScheduleNavigationForm
 from events.points_settings_service import (
     ScoringRulesError, default_rules, event_snapshot, placement_schedule,
     reconcile_championship_points, scoring_rules, validate_scoring_rules,
@@ -75,6 +76,34 @@ def admin_settings(request):
     config = deepcopy(previous or scoring_rules())
     error = ''
     field_errors = {}
+    if request.method == 'POST' and request.POST.get('operation') == 'schedule_navigation':
+        if event:
+            return HttpResponseBadRequest('Competition day settings are system-wide, not event overrides.')
+        form = ScheduleNavigationForm(request.POST)
+        if form.is_valid():
+            try:
+                with transaction.atomic():
+                    obj = SystemSettings.load()
+                    obj = SystemSettings.objects.select_for_update().get(pk=obj.pk)
+                    previous_schedule = {'start_date': str(obj.intramurals_start_date or ''),
+                                         'excluded_dates': obj.non_competition_dates}
+                    obj.intramurals_start_date = form.cleaned_data['intramurals_start_date']
+                    obj.non_competition_dates = form.cleaned_data['non_competition_dates']
+                    obj.updated_by = request.user
+                    obj.save(update_fields=['intramurals_start_date', 'non_competition_dates',
+                                            'updated_by', 'updated_at'])
+                    record_audit(user=request.user, action='Updated Competition Day Navigation',
+                        module='Schedules', request=request,
+                        description='Updated the official intramurals calendar. Competition results are unchanged.',
+                        metadata={'previous': previous_schedule,
+                                  'start_date': str(obj.intramurals_start_date or ''),
+                                  'excluded_dates': obj.non_competition_dates})
+            except DatabaseError:
+                return _render_settings(request, event, config,
+                    'Unable to save schedule settings. Please try again.', {}, form)
+            messages.success(request, 'Competition day settings saved. Scoring and results are unchanged.')
+            return redirect(reverse('admin_settings') + '#schedule-navigation')
+        return _render_settings(request, event, config, 'Please correct the schedule settings.', {}, form)
     if request.method == 'POST':
         config = _draft_config(request.POST, config)
         if event and request.POST.get('operation') == 'reopen':
@@ -156,8 +185,15 @@ def admin_settings(request):
     return _render_settings(request, event, config, error, field_errors)
 
 
-def _render_settings(request, event, config, error, field_errors):
+def _render_settings(request, event, config, error, field_errors, schedule_form=None):
+    if schedule_form is None:
+        settings_row = SystemSettings.objects.filter(pk=1).first()
+        schedule_form = ScheduleNavigationForm(initial={
+            'intramurals_start_date': settings_row.intramurals_start_date if settings_row else None,
+            'non_competition_dates': '\n'.join(settings_row.non_competition_dates or []) if settings_row else '',
+        })
     return render(request, 'admindash/settings.html', {
+        'schedule_form': schedule_form,
         'config': config, 'default_config': default_rules(), 'placements': config['placements'],
         'saved_config': ((event.result_processing_config or {}).get('championship_scoring') or scoring_rules()) if event else scoring_rules(),
         'error': error, 'field_errors': field_errors,

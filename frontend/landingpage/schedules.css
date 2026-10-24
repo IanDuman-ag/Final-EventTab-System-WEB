@@ -24,3 +24,22 @@
 :is(.public-schedules,.public-home) .matchup-name strong { font-size:10px; }
 :is(.public-schedules,.public-home) .matchup-name small { font-size:8px; }
 }
+/* Calendar navigation remains usable with keyboard, touch, and without JavaScript. */
+.public-schedules .schedule-day-nav { display:flex; gap:7px; overflow-x:auto; padding:2px 1px 9px; margin:0 0 5px; scrollbar-width:thin; scroll-snap-type:x proximity; }
+.public-schedules .schedule-day-tab { flex:0 0 auto; min-width:108px; padding:10px 15px; border:1px solid #d9e4f2; border-radius:5px; background:#fff; color:#183a61; line-height:1.35; scroll-snap-align:start; text-align:left; }
+.public-schedules .schedule-day-tab strong { display:block; font-size:12px; font-weight:750; }
+.public-schedules .schedule-day-tab>span { display:block; font-size:10px; color:#59718e; margin-top:3px; }
+.public-schedules .schedule-day-tab:hover { border-color:#9aacc2; }
+.public-schedules .schedule-day-tab.selected { color:#fff; background:#092c51; border-color:#092c51; border-bottom:3px solid #ffce1c; padding-bottom:8px; }
+.public-schedules .schedule-day-tab.selected>span { color:#e2ebf7; }
+.public-schedules .schedule-day-tab:focus-visible { outline:2px solid #175cd9; outline-offset:2px; }
+.public-schedules .schedule-day-group { display:grid; gap:7px; min-width:0; }
+.public-schedules .schedule-day-heading { display:flex; gap:7px; align-items:center; color:#193b61; font-size:13px; line-height:1.4; letter-spacing:0; margin:8px 0 2px; font-weight:750; }
+.public-schedules .schedule-day-heading>span { color:#8da0b9; }
+.public-schedules .schedule-category-label { display:inline-block; color:#637a98; font-size:9px; margin-left:5px; }
+@media(max-width:640px) {
+  .public-schedules .schedule-day-tab { min-width:100px; padding:9px 12px; }
+  .public-schedules .schedule-day-tab.selected { padding-bottom:7px; }
+  .public-schedules .schedule-day-heading { font-size:12px; }
+  .public-schedules .schedule-category-label { font-size:8px; }
+}

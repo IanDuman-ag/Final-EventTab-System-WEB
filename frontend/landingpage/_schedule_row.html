@@ -9,6 +9,7 @@
 <a href="{{ item.detail_url }}">{{ item.event_name }}</a>
 </h3>
 {% if item.classification_label %}<span class="classification-tag classification-{{ item.classification }}" aria-label="Event classification">{{ item.classification_label }}</span>{% endif %}
+{% if active == 'schedules' and item.category %}<span class="schedule-category-label">{{ item.category }}</span>{% endif %}
 {% if item.participants and not item.matchup %}
 <p>
 {{ item.participants }}
@@ -16,7 +17,7 @@
 {% endif %}
 </div>
 <div class="schedule-location">
-<strong>{% if active == 'schedules' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg>{% endif %}{% if item.time %}{{ item.time|time:"g:i A" }}{% else %}Time to be announced{% endif %}</strong><span>{% if active == 'schedules' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 1 1 14 0Z"/><circle cx="12" cy="10" r="2"/></svg>{% endif %}{{ item.venue|default:"Venue to be announced" }}</span>
+<strong>{% if active == 'schedules' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg>{% endif %}{% if item.time %}{{ item.time|time:"g:i A" }}{% if item.end_time %} ? {{ item.end_time|time:"g:i A" }}{% endif %}{% else %}Time to be announced{% endif %}</strong><span>{% if active == 'schedules' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 1 1 14 0Z"/><circle cx="12" cy="10" r="2"/></svg>{% endif %}{{ item.venue|default:"Venue to be announced" }}</span>
 </div>
 {% if item.matchup %}
 <div class="schedule-matchup" aria-label="Match opponents">

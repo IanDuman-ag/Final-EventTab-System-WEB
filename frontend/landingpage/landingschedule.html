@@ -1,6 +1,7 @@
 {% extends "landingpage/base.html" %}{% load static %}
 {% block body_class %}public-schedules{% endblock %}
 {% block extra_head %}<style>{% include "landingpage/schedules.css" %}</style>{% endblock %}
+{% block public_scripts %}<script>{% include "landingpage/public.js" %}</script>{% endblock %}
 {% block content %}
 <section class="schedules-hero">
 <div class="schedules-hero-art" aria-hidden="true">
@@ -22,15 +23,26 @@ Stay updated with upcoming, ongoing, and completed competitions.
 </section>
 <section class="container page-content schedules-directory">
 {% include "landingpage/_filters.html" %}
+{% if day_tabs %}
+<nav class="schedule-day-nav" aria-label="Competition days">
+  <a class="schedule-day-tab{% if selected_day == 'all' %} selected{% endif %}" href="{{ all_days_url }}" {% if selected_day == 'all' %}aria-current="true"{% endif %}><strong>All dates</strong><span>Full schedule</span></a>
+  {% for day in day_tabs %}<a class="schedule-day-tab{% if day.selected %} selected{% endif %}" href="{{ day.url }}" {% if day.selected %}aria-current="date"{% endif %}><strong>{% if day.number %}Day {{ day.number }}{% else %}{{ day.date|date:"D" }}{% endif %}</strong><span>{{ day.date|date:"M j, Y" }}</span></a>{% endfor %}
+</nav>
+{% endif %}
 <p class="timezone-note">
 <span class="timezone-info" aria-hidden="true">i</span><span>Dates and times in <strong>{{ timezone_label }}</strong>. Unannounced schedules are marked accordingly.</span>
 </p>
 <div class="schedule-list">
-{% for item in schedules %}{% include "landingpage/_schedule_row.html" %}{% empty %}
+{% for group in schedule_groups %}
+<section class="schedule-day-group" aria-label="Schedules for {{ group.date|date:'F j, Y' }}">
+<h2 class="schedule-day-heading">{% if group.number %}Day {{ group.number }} <span aria-hidden="true">&middot;</span> {% endif %}{{ group.date|date:"l, F j, Y" }}</h2>
+{% for item in group.items %}{% include "landingpage/_schedule_row.html" %}{% endfor %}
+</section>
+{% empty %}
 <div class="empty-state">
 <span class="empty-icon">{% include "landingpage/_icon.html" with icon="calendar" %}</span>
 <h2>
-No schedules found.
+{% if selected_schedule_date %}No schedules for this day.{% else %}No schedules found.{% endif %}
 </h2>
 <p>
 Try adjusting your filters. Confirmed event dates will appear here when available.
