@@ -232,7 +232,7 @@ class SuperadminDashboardTests(TestCase):
         response = self.client.get(reverse('superadmin_dashboard'))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context['cards']['published_results'], 1)
-        self.assertContains(response, 'data-sa-chart=', count=7)
+        self.assertContains(response, 'data-sa-chart=', count=5)
         self.assertContains(response, 'User activity · last 30 days')
         self.assertContains(response, reverse('superadmin_reports'))
 

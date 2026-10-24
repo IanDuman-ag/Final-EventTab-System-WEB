@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Dashboard · Super Admin · EventTab</title>
-  <link rel="stylesheet" href="{% static 'superadmin_dashboard.css' %}?v=20261019reference">
+  <link rel="stylesheet" href="{% static 'superadmin_dashboard.css' %}?v=20261025charts">
   <link rel="stylesheet" href="{% static 'admin_v2.css' %}?v=20261019sidebar">
   <link rel="stylesheet" href="{% static 'superadmindash/pages.css' %}?v=20260803a">
 </head>
@@ -50,9 +50,7 @@
       <div class="sa-charts">
         <section class="sa-card"><header><svg class="sa-panel-icon"><use href="#sa-bars"/></svg><div><h2>Events by Category</h2><p>Number of events per category</p></div><span class="sa-chart-scope">All events</span></header><div class="sa-chart-box" id="chart-category" data-sa-chart="data-chart-category" data-kind="bars" role="img" aria-label="Events by category"></div></section>
         <section class="sa-card"><header><svg class="sa-panel-icon"><use href="#sa-donut"/></svg><div><h2>Event Status Distribution</h2><p>Current status of all events</p></div><span class="sa-chart-scope">Overview</span></header><div class="sa-chart-box" id="chart-status" data-sa-chart="data-chart-status" data-kind="donut" data-unit="Events" role="img" aria-label="Event status distribution"></div></section>
-        <section class="sa-card"><header><svg class="sa-panel-icon gold-icon"><use href="#sa-trophy"/></svg><div><h2>Department Championship Points</h2><p>Total points per department</p></div><span class="sa-chart-scope">Overall</span></header><div class="sa-chart-box" id="chart-points" data-sa-chart="data-chart-points" data-kind="horizontal" role="img" aria-label="Department championship points"></div></section>
         <section class="sa-card"><header><svg class="sa-panel-icon"><use href="#sa-users"/></svg><div><h2>User Role Distribution</h2><p>Total users per role</p></div><span class="sa-chart-scope">Overview</span></header><div class="sa-chart-box" id="chart-roles" data-sa-chart="data-chart-roles" data-kind="donut" data-unit="Users" role="img" aria-label="User role distribution"></div></section>
-        <section class="sa-card"><header><svg class="sa-panel-icon"><use href="#sa-bars"/></svg><div><h2>Events by Month</h2><p>Monthly event activity</p></div><span class="sa-chart-scope">12 months</span></header><div class="sa-chart-box" id="chart-month" data-sa-chart="data-chart-month" data-kind="line" role="img" aria-label="Events by month"></div></section>
         <section class="sa-card"><header><svg class="sa-panel-icon"><use href="#sa-file"/></svg><div><h2>Results Publication Status</h2><p>Status of event results</p></div><span class="sa-chart-scope">Overview</span></header><div class="sa-chart-box" id="chart-publication" data-sa-chart="data-chart-publication" data-kind="bars" role="img" aria-label="Results publication status"></div></section>
       </div>
       <div class="sa-grid-2">
@@ -63,8 +61,6 @@
   </div>
 </div>
 {{ chart_category|json_script:"data-chart-category" }}
-{{ chart_month|json_script:"data-chart-month" }}
-{{ chart_points|json_script:"data-chart-points" }}
 {{ chart_activity|json_script:"data-chart-activity" }}
 {{ chart_status|json_script:"data-chart-status" }}
 {{ chart_roles|json_script:"data-chart-roles" }}
