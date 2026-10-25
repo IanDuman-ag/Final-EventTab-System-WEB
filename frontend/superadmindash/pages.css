@@ -666,3 +666,46 @@
  .sa-profile-page .sp-identity,.sa-profile-page .sp-security-heading,.sa-profile-page .sa-form { padding:20px; }
  .sa-profile-page .sp-details { padding-left:20px; padding-right:20px; }
 }
+
+/* Read-only event progress monitoring. */
+.sa-monitor-detail .v2sa-topbar { height:auto; min-height:88px; padding:22px 28px; gap:20px; background:#f0f7ff; border-bottom:1px solid #dce8f6; }
+.sa-monitor-detail .topbar-context { flex:1; min-width:0; }
+.sa-monitor-detail .sa-page-title { overflow-wrap:anywhere; }
+.sa-monitor-detail .md-back { margin-left:auto; background:#fff; color:#254363; font-size:13px; white-space:nowrap; }
+.sa-monitor-detail .sa-page-main { padding:22px 28px 28px; }
+.sa-monitor-detail .md-status { margin:0 0 18px; font-size:13px; color:#607793; }
+.sa-monitor-detail .sa-card { background:#fff; border:1px solid #dfe9f6; border-radius:10px; overflow:hidden; box-shadow:0 4px 16px #173b6806; min-width:0; }
+.sa-monitor-detail .sa-card > header { padding:19px 22px; border-bottom:1px solid #e5edf7; }
+.sa-monitor-detail .sa-card > header h2 { margin:0; font-size:16px; color:#112e53; text-transform:none; letter-spacing:0; }
+.sa-monitor-detail .md-information { margin-bottom:20px; }
+.sa-monitor-detail .md-information-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:0 24px; padding:4px 22px 14px; }
+.sa-monitor-detail .md-information-grid > div { background:transparent; border:0; border-bottom:1px solid #edf2f9; border-radius:0; padding:16px 0; min-width:0; }
+.sa-monitor-detail .md-information-grid span { font-size:12px; font-weight:400; text-transform:none; color:#607793; }
+.sa-monitor-detail .md-information-grid strong { font-size:14px; font-weight:600; line-height:1.5; color:#193959; overflow-wrap:anywhere; }
+.sa-monitor-detail .md-progress-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:20px; align-items:start; }
+.sa-monitor-detail .md-progress { padding:4px 22px; gap:0; }
+.sa-monitor-detail .md-progress .sa-progress-row { padding:16px 0; margin:0; gap:0; }
+.sa-monitor-detail .md-progress .sa-progress-row + .sa-progress-row { border-top:1px solid #edf2f9; }
+.sa-monitor-detail .md-progress-label { display:flex; align-items:center; justify-content:space-between; gap:16px; font-size:13px; color:#254363; margin-bottom:11px; }
+.sa-monitor-detail .md-progress-label strong { font-size:15px; color:#1256b2; font-variant-numeric:tabular-nums; }
+.sa-monitor-detail .sa-progress-bar { height:8px; background:#edf2f8; border-radius:6px; overflow:hidden; }
+.sa-monitor-detail .sa-progress-bar i { display:block; height:100%; background:#0878ff; border-radius:6px; }
+.sa-monitor-detail .md-progress p { margin:8px 0 0; font-size:12px; line-height:1.5; color:#607793; }
+.sa-monitor-detail .md-judge-table { min-width:0; width:100%; }
+.sa-monitor-detail .sa-table th { font-size:11px; text-transform:none; letter-spacing:0; background:#f7faff; padding:13px 18px; color:#526b89; }
+.sa-monitor-detail .sa-table td { font-size:13px; padding:15px 18px; color:#254363; line-height:1.5; white-space:normal; overflow-wrap:anywhere; }
+.sa-monitor-detail .md-judge-status { display:inline-block; padding:4px 9px; border-radius:16px; background:#fff6d9; color:#806000; font-size:12px; }
+.sa-monitor-detail .md-judge-status.is-complete { background:#e8f8ee; color:#167044; }
+.sa-monitor-detail .md-schedule { margin-top:20px; }
+.sa-monitor-detail .md-schedule .sa-table { min-width:700px; }
+@media(max-width:1100px) { .sa-monitor-detail .md-information-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }.sa-monitor-detail .md-progress-grid { grid-template-columns:1fr; } }
+@media(max-width:600px) {
+ .sa-monitor-detail .v2sa-topbar { padding:18px 16px; flex-wrap:wrap; }
+ .sa-monitor-detail .sa-page-title { font-size:24px; }
+ .sa-monitor-detail .md-back { margin-left:0; }
+ .sa-monitor-detail .sa-page-main { padding:16px; }
+ .sa-monitor-detail .md-information-grid { grid-template-columns:1fr; padding:0 18px 12px; }
+ .sa-monitor-detail .sa-card > header { padding:18px; }
+ .sa-monitor-detail .md-progress { padding:0 18px; }
+ .sa-monitor-detail .sa-table th,.sa-monitor-detail .sa-table td { padding:12px 10px; }
+}
