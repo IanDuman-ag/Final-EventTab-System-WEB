@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from django.views.decorators.cache import never_cache
+from django.views.decorators.debug import sensitive_post_parameters
 
 import json
 import csv
@@ -415,14 +416,14 @@ def superadmin_leaderboard_export(request):
 
 @_superadmin_required
 def superadmin_settings(request):
-    from django.conf import settings as dj_settings
     settings_obj = get_system_settings()
+    from events.database_recovery import worker_ready
     return render(request, 'superadmindash/settings.html', {
         'active': 'settings',
         'user_display': _display_name(request.user),
         'settings': settings_obj,
         'section': request.GET.get('section', 'general'),
-        'allow_restore': bool(getattr(dj_settings, 'SUPERADMIN_ALLOW_RESTORE', False)),
+        'allow_restore': worker_ready(),
     })
 
 
@@ -454,6 +455,38 @@ def superadmin_database_export(request):
         return JsonResponse({'success': False, 'message': error_message}, status=503)
     messages.error(request, error_message)
     return redirect('superadmin_settings')
+
+
+@require_POST
+@_superadmin_required
+@never_cache
+@sensitive_post_parameters('current_password')
+def superadmin_database_restore(request):
+    from events.database_recovery import DatabaseRecoveryError, queue_recovery
+    if not request.user.check_password(request.POST.get('current_password', '')):
+        return JsonResponse({'success': False, 'message': 'Your Super Admin password is incorrect.'}, status=400)
+    if request.POST.get('confirmation') != 'RESTORE':
+        return JsonResponse({'success': False, 'message': 'Type RESTORE to confirm database recovery.'}, status=400)
+    upload = request.FILES.get('backup')
+    if upload is None:
+        return JsonResponse({'success': False, 'message': 'Choose an EventTab .dump backup.'}, status=400)
+    try:
+        job = queue_recovery(upload, request.user, request=request)
+        return JsonResponse({'success': True, 'job_id': job['id'], 'message': 'Recovery queued. The application will pause while the database is restored.'}, status=202)
+    except DatabaseRecoveryError as exc:
+        return JsonResponse({'success': False, 'message': str(exc)}, status=400)
+    except Exception:
+        return JsonResponse({'success': False, 'message': 'Recovery could not be queued. Please try again.'}, status=503)
+
+
+@_superadmin_required
+@never_cache
+def superadmin_recovery_status(request, job_id):
+    from events.database_recovery import read_json, root
+    job = read_json(root() / (job_id.hex + '.json'))
+    if not job:
+        return JsonResponse({'success': False, 'message': 'Recovery job not found.'}, status=404)
+    return JsonResponse({'success': True, 'state': job['state'], 'message': job.get('message', 'Recovery is queued.')})
 
 
 @require_POST

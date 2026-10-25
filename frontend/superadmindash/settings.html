@@ -5,9 +5,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>System Settings · Superadmin · EventTab</title>
-  <link rel="stylesheet" href="{% static 'superadmin_dashboard.css' %}?v=20261025export">
+  <link rel="stylesheet" href="{% static 'superadmin_dashboard.css' %}?v=20261025recovery">
   <link rel="stylesheet" href="{% static 'admin_v2.css' %}?v=20261019sidebar">
-  <link rel="stylesheet" href="{% static 'superadmindash/pages.css' %}?v=20261025export">
+  <link rel="stylesheet" href="{% static 'superadmindash/pages.css' %}?v=20261025recovery">
 </head>
 <body class="admin-v2-page sa-settings-page">
   <div class="dashboard-shell">
@@ -39,15 +39,58 @@
             </form>
           </div>
           <div class="ss-setting-row">
-            <div><h3>Database Restore</h3><p>{% if allow_restore %}Restore is enabled on this server. Contact your system administrator to perform a recovery.{% else %}Restore is disabled on this server. Contact your system administrator if a recovery is needed.{% endif %}</p></div>
+            <div><h3>Database Restore</h3><p>{% if allow_restore %}Restore an EventTab backup to recover database records. The application pauses during recovery; a safety backup is created first.{% else %}Recovery requires the server recovery worker. Contact your system administrator to enable it.{% endif %}</p></div>
             <span class="ss-status {% if allow_restore %}ss-status-enabled{% endif %}">{% if allow_restore %}Enabled{% else %}Disabled{% endif %}</span>
           </div>
+          {% if allow_restore %}
+          <form class="ss-restore-form" id="ss-restore-form" method="post" enctype="multipart/form-data" action="{% url 'superadmin_database_restore' %}">
+            {% csrf_token %}
+            <p class="ss-restore-note">Restoring replaces current records and account passwords with the backup contents. Use only a trusted EventTab backup. Uploaded images and files are not restored.</p>
+            <div class="ss-restore-fields">
+              <label>Backup file (.dump)<input type="file" name="backup" accept=".dump" required><small>Maximum size: 100 MB</small></label>
+              <label>Your Super Admin password<input type="password" name="current_password" autocomplete="current-password" required></label>
+              <label>Type RESTORE to confirm<input name="confirmation" autocomplete="off" pattern="RESTORE" required></label>
+            </div>
+            <div class="ss-restore-actions"><button class="sa-btn" type="submit" id="ss-restore-button">Restore Database</button><span id="ss-restore-status" role="status" aria-live="polite"></span></div>
+          </form>
+          {% endif %}
         </section>
       </main>
     </div>
   </div>
 <script>
 (function () {
+  var restoreForm = document.getElementById('ss-restore-form');
+  if (restoreForm) restoreForm.addEventListener('submit', async function (event) {
+    event.preventDefault();
+    var button = document.getElementById('ss-restore-button');
+    var status = document.getElementById('ss-restore-status');
+    var file = restoreForm.elements.backup.files[0];
+    if (!file || file.size > 100 * 1024 * 1024) { status.textContent = 'Choose a .dump backup up to 100 MB.'; return; }
+    button.disabled = true; status.textContent = 'Uploading and validating backup?';
+    try {
+      var response = await fetch(restoreForm.action, {method:'POST', credentials:'same-origin', cache:'no-store', body:new FormData(restoreForm)});
+      if (response.redirected) throw new Error('Your session has expired. Sign in again.');
+      if (response.status === 413) throw new Error('The server upload limit was exceeded. Contact your system administrator.');
+      if (!(response.headers.get('Content-Type') || '').includes('application/json')) throw new Error('Recovery could not be started. Check your session and try again.');
+      var result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.message || 'Recovery could not be started.');
+      restoreForm.reset(); status.textContent = result.message;
+      var jobUrl = "{% url 'superadmin_settings' %}recovery/" + result.job_id + '/';
+      async function checkRecovery() {
+        try {
+          var progress = await fetch(jobUrl, {credentials:'same-origin', cache:'no-store'});
+          if (progress.redirected) { status.textContent = 'The server is available again. Sign in using an account from the backup to check recovery.'; return; }
+          if (!progress.ok) throw new Error('Service paused');
+          var data = await progress.json(); status.textContent = data.message;
+          if (['completed','failed','needs_attention'].includes(data.state)) { button.disabled = data.state !== 'failed'; return; }
+        } catch (error) { status.textContent = 'Recovery is in progress. The application may be temporarily unavailable. Please wait.'; }
+        setTimeout(checkRecovery, 5000);
+      }
+      setTimeout(checkRecovery, 5000);
+    } catch (error) { status.textContent = error.message || 'Recovery could not be started.'; button.disabled = false; }
+    finally { restoreForm.elements.current_password.value = ''; }
+  });
   var form = document.querySelector('.ss-export-form');
   form.addEventListener('submit', async function (event) {
     event.preventDefault();

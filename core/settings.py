@@ -201,8 +201,10 @@ STORAGES = {
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Superadmin: restore remains opt-in for safety
-SUPERADMIN_ALLOW_RESTORE = config_bool('SUPERADMIN_ALLOW_RESTORE', default=False)
+# Recovery additionally requires a healthy, separately installed recovery worker.
+SUPERADMIN_ALLOW_RESTORE = config_bool('SUPERADMIN_ALLOW_RESTORE', default=True)
+DATABASE_RECOVERY_ROOT = Path(config('DATABASE_RECOVERY_ROOT', default=str(BASE_DIR / 'private_uploads' / 'database_recovery')))
+DATABASE_RECOVERY_MAX_BYTES = 100 * 1024 * 1024
 
 # Email — Gmail SMTP when credentials are set; otherwise console (dev only)
 EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')

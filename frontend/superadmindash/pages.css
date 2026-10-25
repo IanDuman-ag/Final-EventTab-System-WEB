@@ -625,3 +625,12 @@
 .sa-settings-page .ss-export-form .sa-btn { white-space:nowrap; }
 .sa-settings-page #ss-export-status { font-size:12px; line-height:1.5; color:#526b88; }
 .sa-settings-page #ss-export-status:empty { display:none; }
+
+.sa-settings-page .ss-restore-form { border-top:1px solid #e5edf7; padding:24px; }
+.sa-settings-page .ss-restore-note { margin:0 0 20px; color:#5b4a26; background:#fff8e5; border:1px solid #f4e4b6; padding:13px 15px; border-radius:7px; font-size:13px; line-height:1.6; }
+.sa-settings-page .ss-restore-fields { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:18px; }
+.sa-settings-page .ss-restore-fields label { display:grid; gap:8px; color:#254363; font-size:13px; font-weight:600; }
+.sa-settings-page .ss-restore-fields input { min-width:0; width:100%; box-sizing:border-box; padding:11px; border:1px solid #cedbe8; border-radius:7px; font:inherit; }
+.sa-settings-page .ss-restore-fields small { color:#607793; font-size:12px; font-weight:400; }
+.sa-settings-page .ss-restore-actions { display:flex; align-items:center; gap:18px; margin-top:22px; font-size:13px; color:#526b88; }
+@media(max-width:900px) { .sa-settings-page .ss-restore-fields { grid-template-columns:1fr; }.sa-settings-page .ss-restore-actions { flex-wrap:wrap; } }

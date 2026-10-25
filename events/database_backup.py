@@ -12,6 +12,20 @@ class DatabaseExportError(Exception):
     pass
 
 
+def database_environment(database=None):
+    database = database or connections['default'].settings_dict
+    environment = os.environ.copy()
+    # Credentials stay in the child environment, never command arguments or responses.
+    for key, value in {'PGDATABASE': database['NAME'], 'PGUSER': database.get('USER', ''),
+                       'PGPASSWORD': database.get('PASSWORD', ''), 'PGHOST': database.get('HOST', ''),
+                       'PGPORT': database.get('PORT', ''), 'PGCONNECT_TIMEOUT': '10'}.items():
+        environment[key] = str(value or '')
+    for key in ('sslmode', 'sslcert', 'sslkey', 'sslrootcert'):
+        if database.get('OPTIONS', {}).get(key):
+            environment['PG' + key.upper()] = str(database['OPTIONS'][key])
+    return environment
+
+
 def export_database():
     database = connections['default'].settings_dict
     if database['ENGINE'] != 'django.db.backends.postgresql':
@@ -23,15 +37,7 @@ def export_database():
             binary = str(candidate)
     if not binary:
         raise DatabaseExportError('The database backup tool is unavailable. Contact your system administrator.')
-    environment = os.environ.copy()
-    # Credentials stay in the child environment, never command arguments or responses.
-    for key, value in {'PGDATABASE': database['NAME'], 'PGUSER': database.get('USER', ''),
-                       'PGPASSWORD': database.get('PASSWORD', ''), 'PGHOST': database.get('HOST', ''),
-                       'PGPORT': database.get('PORT', ''), 'PGCONNECT_TIMEOUT': '10'}.items():
-        environment[key] = str(value or '')
-    for key in ('sslmode', 'sslcert', 'sslkey', 'sslrootcert'):
-        if database.get('OPTIONS', {}).get(key):
-            environment['PG' + key.upper()] = str(database['OPTIONS'][key])
+    environment = database_environment(database)
     archive = tempfile.TemporaryFile(mode='w+b')
     try:
         result = subprocess.run([binary, '--format=custom', '--no-owner', '--no-acl', '--no-password'],

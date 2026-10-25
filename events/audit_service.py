@@ -66,6 +66,9 @@ ACTIONS = [
     'Changed System Settings',
     'Exported Audit Logs',
     'Exported Database',
+    'Requested Database Restore',
+    'Restored Database',
+    'Failed Database Restore',
 ]
 
 
