@@ -13,8 +13,8 @@ from rest_framework.response import Response
 
 from .criteria_faculty_service import criteria_rounds, round_is_scoreable, round_participant_ids
 from .faculty_service import FacultyServiceError
-from .judging_views import IsJudgeUser
-from .models import CriteriaScoreSubmission, Event, EventScoringCriterion, JudgeScore, JudgingEvent
+from .judging_views import IsJudgeUser, _client_ip
+from .models import JudgeActivityLog, CriteriaScoreSubmission, Event, EventScoringCriterion, JudgeScore, JudgingEvent
 from .public_service import image_url
 from .mobile_scoring_compatibility import legacy_score_is_submitted, read_mobile_mapping, round_mapping_issues
 
@@ -291,7 +291,11 @@ def assignments(request):
 @permission_classes([IsJudgeUser])
 def assignment_detail(request, judging_event_id):
     event = get_object_or_404(assigned_events(request.user), pk=judging_event_id)
-    return Response(detail_payload(request.user, event, request.query_params.get('round_id')))
+    payload = detail_payload(request.user, event, request.query_params.get('round_id'))
+    JudgeActivityLog.log(judge=request.user, action=JudgeActivityLog.ACTION_VIEW_EVENT,
+        details=f'Opened assigned event "{event.title}".', event=event,
+        ip_address=_client_ip(request), request=request)
+    return Response(payload)
 
 
 @api_view(['GET'])
@@ -299,7 +303,11 @@ def assignment_detail(request, judging_event_id):
 def portal_assignment_detail(request, portal_event_id):
     # An explicit portal route prevents numeric ID collisions with JudgingEvent.
     event = get_object_or_404(assigned_events(request.user), portal_event__pk=portal_event_id)
-    return Response(detail_payload(request.user, event, request.query_params.get('round_id')))
+    payload = detail_payload(request.user, event, request.query_params.get('round_id'))
+    JudgeActivityLog.log(judge=request.user, action=JudgeActivityLog.ACTION_VIEW_EVENT,
+        details=f'Opened assigned event "{event.title}".', event=event,
+        ip_address=_client_ip(request), request=request)
+    return Response(payload)
 
 
 def history_payload(user):

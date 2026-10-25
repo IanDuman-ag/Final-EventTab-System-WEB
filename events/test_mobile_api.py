@@ -21,6 +21,9 @@ from .models import (
 @contextmanager
 def read_only_queries():
     def guard(execute, sql, params, many, context):
+        # Read endpoints may append audit records, but cannot mutate scoring or configuration.
+        if sql.lstrip().startswith(('INSERT INTO "events_judgeactivitylog"', 'INSERT INTO "events_auditlog"')):
+            return execute(sql, params, many, context)
         if sql.lstrip().split()[0].upper() in {'INSERT', 'UPDATE', 'DELETE', 'REPLACE', 'CREATE', 'ALTER', 'DROP'}:
             raise AssertionError(f'GET attempted a database mutation: {sql}')
         return execute(sql, params, many, context)

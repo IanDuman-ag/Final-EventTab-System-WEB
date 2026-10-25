@@ -958,7 +958,7 @@ class JudgeActivityLog(models.Model):
         return f'{self.judge.username} — {self.get_action_display()} — {self.timestamp:%Y-%m-%d %H:%M}'
 
     @classmethod
-    def log(cls, judge, action, details='', event=None, candidate=None, ip_address=None):
+    def log(cls, judge, action, details='', event=None, candidate=None, ip_address=None, request=None, metadata=None):
         row = cls.objects.create(
             judge=judge,
             action=action,
@@ -988,12 +988,15 @@ class JudgeActivityLog(models.Model):
             with transaction.atomic():
                 record_audit(
                     user=judge,
-                    action=action_map.get(action, action),
+                    action=('Started Scoring Contestant' if action == cls.ACTION_VIEW_SCORES
+                            and details.startswith('Started scoring contestant') else action_map.get(action, action)),
                     description=details or action_map.get(action, action),
                     module='Criteria-Based Event' if action not in (cls.ACTION_LOGIN, cls.ACTION_LOGOUT) else 'Authentication',
                     event_name=event_name,
                     contestant=contestant,
                     ip_address=ip_address,
+                    request=request,
+                    metadata=dict(metadata or {}, judge_activity_id=row.pk),
                 )
         except Exception:
             pass

@@ -75,6 +75,14 @@ class JudgingEventViewSet(viewsets.ReadOnlyModelViewSet):
             return JudgingEventDetailSerializer
         return JudgingEventListSerializer
 
+    def retrieve(self, request, *args, **kwargs):
+        response = super().retrieve(request, *args, **kwargs)
+        event = self.get_object()
+        JudgeActivityLog.log(judge=request.user, action=JudgeActivityLog.ACTION_VIEW_EVENT,
+            details=f'Opened assigned event "{event.title}".', event=event,
+            ip_address=_client_ip(request), request=request)
+        return response
+
     @action(detail=True, methods=['post'])
     @submit_errors
     @transaction.atomic
@@ -237,11 +245,15 @@ class JudgingEventViewSet(viewsets.ReadOnlyModelViewSet):
             details=(
                 f'{role} scored candidate #{candidate.number} {candidate.name} '
                 f'in "{event.title}" — total: {result["total_score"]} '
-                f'({len(created_scores)} criteria) [VID: {verification_id}]'
+                f'({len(created_scores)} criteria; round: {scoped["round_id"] if scoped else "single round"}) [VID: {verification_id}]'
             ),
             event=event,
             candidate=candidate,
             ip_address=_client_ip(request),
+            request=request,
+            metadata={'judging_event_id': event.pk, 'candidate_id': candidate.pk,
+                      'round_id': scoped['round_id'] if scoped else None,
+                      'verification_id': verification_id, 'criteria_count': len(created_scores)},
         )
 
         request._score_stage = 'commit'
@@ -259,6 +271,12 @@ class JudgingEventViewSet(viewsets.ReadOnlyModelViewSet):
                 raise ValueError
         except (TypeError, ValueError):
             return Response({'detail': 'candidate_id must be a positive integer.'}, status=400)
+
+        candidate = Candidate.objects.filter(pk=candidate_id, event=event).first()
+        if candidate is not None:
+            JudgeActivityLog.log(judge=request.user, action=JudgeActivityLog.ACTION_VIEW_SCORES,
+                details=f'Started scoring contestant #{candidate.number} {candidate.name} in "{event.title}".',
+                event=event, candidate=candidate, ip_address=_client_ip(request), request=request)
 
         scores = JudgeScore.objects.filter(
             judge=request.user,
