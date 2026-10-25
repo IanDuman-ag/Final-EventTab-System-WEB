@@ -65,6 +65,7 @@ ACTIONS = [
     'Resubmitted Score',
     'Changed System Settings',
     'Exported Audit Logs',
+    'Exported Database',
 ]
 
 

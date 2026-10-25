@@ -12,7 +12,7 @@ from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import PasswordChangeForm
 from django.core.paginator import Paginator
-from django.http import HttpResponse, JsonResponse
+from django.http import FileResponse, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -424,6 +424,36 @@ def superadmin_settings(request):
         'section': request.GET.get('section', 'general'),
         'allow_restore': bool(getattr(dj_settings, 'SUPERADMIN_ALLOW_RESTORE', False)),
     })
+
+
+@require_POST
+@_superadmin_required
+@never_cache
+def superadmin_database_export(request):
+    from events.database_backup import DatabaseExportError, export_database
+    from events.audit_service import record_audit
+    archive = None
+    try:
+        archive = export_database()
+        record_audit(user=request.user, action='Exported Database', module='System Settings',
+            description='Generated a PostgreSQL database backup for download.', request=request)
+        stamp = timezone.localtime().strftime('%Y%m%d-%H%M%S')
+        response = FileResponse(archive, as_attachment=True, filename=f'eventtab-database-{stamp}.dump',
+                                content_type='application/octet-stream')
+        response['X-Content-Type-Options'] = 'nosniff'
+        return response
+    except DatabaseExportError as exc:
+        if archive is not None:
+            archive.close()
+        error_message = str(exc)
+    except Exception:
+        if archive is not None:
+            archive.close()
+        error_message = 'The export could not be recorded or completed. Please try again.'
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return JsonResponse({'success': False, 'message': error_message}, status=503)
+    messages.error(request, error_message)
+    return redirect('superadmin_settings')
 
 
 @require_POST

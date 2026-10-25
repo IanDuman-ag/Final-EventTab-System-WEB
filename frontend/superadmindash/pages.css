@@ -618,3 +618,10 @@
  .sa-settings-page .ss-panel-heading { padding:18px; }
  .sa-settings-page .ss-setting-row { padding:18px; align-items:flex-start; flex-direction:column; gap:12px; }
 }
+
+.sa-settings-page .ss-panel-heading { justify-content:flex-start; }
+.sa-settings-page .ss-panel-heading > div { margin-right:auto; }
+.sa-settings-page .ss-export-form { display:grid; gap:8px; flex-shrink:0; max-width:300px; }
+.sa-settings-page .ss-export-form .sa-btn { white-space:nowrap; }
+.sa-settings-page #ss-export-status { font-size:12px; line-height:1.5; color:#526b88; }
+.sa-settings-page #ss-export-status:empty { display:none; }
