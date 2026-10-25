@@ -31,7 +31,7 @@
     }
   }
   function bars(host, data, horizontal) {
-    var svg = node('svg', {viewBox: '0 0 330 135', class: 'sa-chart-svg', preserveAspectRatio: 'none'}, host);
+    var svg = node('svg', {viewBox: horizontal ? '0 0 330 135' : '0 0 330 120', class: 'sa-chart-svg', preserveAspectRatio: 'xMidYMid meet'}, host);
     var max = Math.max.apply(null, data.map(function (row) { return row.value; }).concat([1]));
     max = Math.ceil(max / 4) * 4;
     if (horizontal) {
@@ -57,8 +57,17 @@
       var bar = node('rect', {x: x, y: 112 - height, width: width, height: height, fill: palette[index % palette.length], rx: 1}, svg);
       title(bar, row.label + ': ' + row.value);
       text(svg, x + width / 2, 107 - height, row.value, {'text-anchor': 'middle', fill: '#18345c', 'font-size': 9, 'font-weight': 700});
-      text(svg, x + width / 2, 129, row.label.length > 12 ? row.label.slice(0, 11) + '…' : row.label, {'text-anchor': 'middle', 'font-size': 8});
+
     });
+    var labels = document.createElement('div');
+    labels.className = 'sa-bar-labels';
+    labels.style.gridTemplateColumns = 'repeat(' + data.length + ', minmax(0, 1fr))';
+    data.forEach(function (row) {
+      var label = document.createElement('span');
+      label.textContent = row.label;
+      labels.appendChild(label);
+    });
+    host.appendChild(labels);
   }
   function line(host, data) {
     var svg = node('svg', {viewBox: '0 0 330 135', class: 'sa-chart-svg', preserveAspectRatio: 'none'}, host);

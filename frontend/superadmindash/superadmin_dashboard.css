@@ -440,3 +440,22 @@ body.superadmin-dashboard-page {
 @media(min-width:761px) and (max-width:1100px) {
   .sa-dashboard-reference .sa-welcome-art { width:285px; flex-shrink:0; justify-content:space-between; gap:20px; }
 }
+
+/* Keep analytics labels readable and complete at every dashboard breakpoint. */
+.sa-dashboard-reference .sa-charts .sa-card > header { min-height:58px; padding:14px 16px 6px; }
+.sa-dashboard-reference .sa-charts .sa-card > header h2 { font-size:14px; line-height:1.4; }
+.sa-dashboard-reference .sa-charts .sa-card > header p { font-size:12px; line-height:1.4; color:#526b8b; }
+.sa-dashboard-reference .sa-charts .sa-chart-scope { font-size:10px; }
+.sa-dashboard-reference .sa-charts .sa-chart-box { height:auto; min-height:210px; padding:8px 16px 16px; }
+.sa-dashboard-reference .sa-charts .sa-chart-svg { height:auto; max-width:468px; margin:0 auto; aspect-ratio:330 / 120; }
+.sa-dashboard-reference .sa-bar-labels { box-sizing:border-box; width:100%; max-width:468px; margin:0 auto; display:grid; gap:12px; padding-left:27px; color:#28486f; font-size:12px; line-height:1.5; text-align:center; }
+.sa-dashboard-reference .sa-bar-labels span { min-width:0; overflow-wrap:anywhere; }
+.sa-dashboard-reference .sa-charts .sa-chart-legend { gap:14px; }
+.sa-dashboard-reference .sa-charts .sa-chart-legend li { grid-template-columns:9px minmax(0,1fr) max-content max-content; gap:8px; font-size:12px; line-height:1.5; }
+.sa-dashboard-reference .sa-charts .sa-chart-legend span { white-space:normal; overflow:visible; text-overflow:clip; overflow-wrap:anywhere; }
+.sa-dashboard-reference .sa-charts .sa-chart-legend strong,
+.sa-dashboard-reference .sa-charts .sa-chart-legend small { font-size:12px; color:#28486f; }
+.sa-dashboard-reference .sa-charts .sa-donut-svg { max-height:155px; }
+@media(max-width:1100px) {
+  .sa-dashboard-reference .sa-charts { grid-template-columns:1fr; }
+}

@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Dashboard · Super Admin · EventTab</title>
-  <link rel="stylesheet" href="{% static 'superadmin_dashboard.css' %}?v=20261025charts">
+  <link rel="stylesheet" href="{% static 'superadmin_dashboard.css' %}?v=20261025readable">
   <link rel="stylesheet" href="{% static 'admin_v2.css' %}?v=20261019sidebar">
   <link rel="stylesheet" href="{% static 'superadmindash/pages.css' %}?v=20260803a">
 </head>
@@ -65,5 +65,5 @@
 {{ chart_status|json_script:"data-chart-status" }}
 {{ chart_roles|json_script:"data-chart-roles" }}
 {{ chart_publication|json_script:"data-chart-publication" }}
-<script src="{% static 'js/superadmin_charts.js' %}?v=20261019reference"></script>
+<script src="{% static 'js/superadmin_charts.js' %}?v=20261025readable"></script>
 </body></html>
