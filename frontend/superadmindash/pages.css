@@ -709,3 +709,11 @@
  .sa-monitor-detail .md-progress { padding:0 18px; }
  .sa-monitor-detail .sa-table th,.sa-monitor-detail .sa-table td { padding:12px 10px; }
 }
+
+.sa-monitor-detail .md-participant-activity { margin-top:20px; }
+.sa-monitor-detail .md-participant-activity header p { margin:8px 0 0; color:#607793; font-size:12px; line-height:1.6; max-width:780px; }
+.sa-monitor-detail .md-participant-activity .sa-table { min-width:700px; }
+.sa-monitor-detail .md-activity-state { display:inline-block; padding:4px 10px; border-radius:16px; font-size:12px; background:#f0f4f9; color:#526b88; white-space:nowrap; }
+.sa-monitor-detail .md-state-opened { background:#e7f0ff; color:#1558ba; }
+.sa-monitor-detail .md-state-submitted { background:#e8f8ee; color:#167044; }
+.sa-monitor-detail .md-state-draft,.sa-monitor-detail .md-state-returned { background:#fff6d9; color:#806000; }

@@ -347,6 +347,7 @@ def superadmin_event_monitoring(request):
 
 
 @_superadmin_required
+@never_cache
 def superadmin_event_detail(request, event_id):
     event = get_object_or_404(
         Event.objects.select_related('faculty_account', 'chief_judge')
@@ -362,6 +363,13 @@ def superadmin_event_detail(request, event_id):
         judges = judge_monitoring(event).get('rows', [])
     except Exception:
         pass
+    from events.monitoring_activity import participant_judging_activity
+    activity_error = False
+    try:
+        participant_activity = participant_judging_activity(event)
+    except Exception:
+        participant_activity = []
+        activity_error = True
     return render(request, 'superadmindash/event_monitor_detail.html', {
         'active': 'events',
         'user_display': _display_name(request.user),
@@ -372,6 +380,8 @@ def superadmin_event_detail(request, event_id):
         'progress': progress,
         'schedule': schedule,
         'judges': judges,
+        'participant_activity': participant_activity,
+        'activity_error': activity_error,
         'row': serialize_monitoring_row(event),
     })
 

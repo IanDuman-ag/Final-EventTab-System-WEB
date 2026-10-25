@@ -272,12 +272,6 @@ class JudgingEventViewSet(viewsets.ReadOnlyModelViewSet):
         except (TypeError, ValueError):
             return Response({'detail': 'candidate_id must be a positive integer.'}, status=400)
 
-        candidate = Candidate.objects.filter(pk=candidate_id, event=event).first()
-        if candidate is not None:
-            JudgeActivityLog.log(judge=request.user, action=JudgeActivityLog.ACTION_VIEW_SCORES,
-                details=f'Started scoring contestant #{candidate.number} {candidate.name} in "{event.title}".',
-                event=event, candidate=candidate, ip_address=_client_ip(request), request=request)
-
         scores = JudgeScore.objects.filter(
             judge=request.user,
             candidate_id=candidate_id,
@@ -285,6 +279,14 @@ class JudgingEventViewSet(viewsets.ReadOnlyModelViewSet):
         )
         from .mobile_judge import detail_payload
         detail = detail_payload(request.user, event, request.query_params.get('round_id'))
+        candidate = Candidate.objects.filter(pk=candidate_id, event=event).first()
+        if candidate is not None:
+            JudgeActivityLog.log(judge=request.user, action=JudgeActivityLog.ACTION_VIEW_SCORES,
+                details=f'Started scoring contestant #{candidate.number} {candidate.name} in "{event.title}".',
+                event=event, candidate=candidate, ip_address=_client_ip(request), request=request,
+                metadata={'judging_event_id':event.pk, 'candidate_id':candidate.pk,
+                          'round_id':detail['selected_round_id']})
+
         scores = scores.filter(criterion_id__in=[row['id'] for row in detail['criteria']])
         participant = next((row for row in detail['participants'] if row['id'] == candidate_id), None)
         from .mobile_judge import portal_for

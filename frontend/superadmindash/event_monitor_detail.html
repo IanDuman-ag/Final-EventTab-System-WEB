@@ -5,9 +5,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{ event.name }} · Event Monitoring · EventTab</title>
-  <link rel="stylesheet" href="{% static 'superadmin_dashboard.css' %}?v=20261025monitor">
+  <link rel="stylesheet" href="{% static 'superadmin_dashboard.css' %}?v=20261025judging">
   <link rel="stylesheet" href="{% static 'admin_v2.css' %}?v=20261019sidebar">
-  <link rel="stylesheet" href="{% static 'superadmindash/pages.css' %}?v=20261025monitor">
+  <link rel="stylesheet" href="{% static 'superadmindash/pages.css' %}?v=20261025judging">
 </head>
 <body class="admin-v2-page sa-monitor-detail">
   <div class="dashboard-shell">
@@ -86,6 +86,20 @@
           </section>
         </div>
 
+        {% if event.scoring_method == 'criteria' %}
+        <section class="sa-card md-participant-activity" aria-labelledby="md-activity-title">
+          <header><h2 id="md-activity-title">Participant Scoring Activity</h2><p>Updates every 5 seconds. Shows scoring screens opened in the past 2 minutes and saved scores. Unsaved typing stays on the judge?s device.</p><p id="md-activity-connection" role="status" aria-live="polite">Auto-refresh on</p></header>
+          <div class="sa-table-wrap"><table class="sa-table">
+            <thead><tr><th>Judge</th><th>Participant</th><th>Round</th><th>Activity</th><th>Last activity</th></tr></thead>
+            <tbody>{% for item in participant_activity %}<tr>
+              <td>{{ item.judge }}</td><td>#{{ item.number }} ? {{ item.participant }}</td><td>{{ item.round }}</td>
+              <td><span class="md-activity-state md-state-{{ item.state }}">{{ item.status }}</span></td>
+              <td>{% if item.updated_at %}{{ item.updated_at|date:"M j, Y ? g:i:s A" }}{% else %}?{% endif %}</td>
+            </tr>{% empty %}<tr><td colspan="5" class="sa-empty">{% if activity_error %}Participant activity is unavailable. Review this event?s scoring configuration.{% else %}No eligible participants or assigned judges are available for the current round.{% endif %}</td></tr>{% endfor %}</tbody>
+          </table></div>
+        </section>
+        {% endif %}
+
         <section class="sa-card md-schedule">
           <header><h2>Schedule Progress</h2></header>
           <div class="sa-table-wrap">
@@ -113,5 +127,33 @@
       </main>
     </div>
   </div>
+<script>
+(function () {
+  if (!document.querySelector('.md-participant-activity')) return;
+  var busy = false, stopped = false;
+  function connection(message) { var note = document.getElementById('md-activity-connection'); if (note) note.textContent = message; }
+  async function refresh() {
+    if (busy || stopped || document.hidden) return;
+    busy = true;
+    var controller = new AbortController();
+    var timer = setTimeout(function () { controller.abort(); }, 15000);
+    try {
+      var response = await fetch(location.href, {credentials:'same-origin', cache:'no-store', signal:controller.signal});
+      if (response.redirected || response.status === 401 || response.status === 403) { stopped = true; connection('Session expired. Sign in again for live updates.'); return; }
+      if (!response.ok) { connection('Updates paused. Showing last received activity.'); return; }
+      var page = new DOMParser().parseFromString(await response.text(), 'text/html');
+      if (document.hidden) return;
+      if (!page.querySelector('.md-participant-activity')) { connection('Activity is unavailable. Refresh this page.'); return; }
+      ['.md-participant-activity','.md-progress-grid'].forEach(function (selector) {
+        var old = document.querySelector(selector), next = page.querySelector(selector);
+        if (old && next && old.outerHTML !== next.outerHTML) old.replaceWith(next);
+      });
+    } catch (error) { connection('Updates paused. Showing last received activity.'); }
+    finally { clearTimeout(timer); busy = false; }
+  }
+  setInterval(refresh,5000);
+  document.addEventListener('visibilitychange',function () { if (!document.hidden) refresh(); });
+})();
+</script>
 </body>
 </html>
