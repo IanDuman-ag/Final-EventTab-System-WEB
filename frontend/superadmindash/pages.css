@@ -634,3 +634,35 @@
 .sa-settings-page .ss-restore-fields small { color:#607793; font-size:12px; font-weight:400; }
 .sa-settings-page .ss-restore-actions { display:flex; align-items:center; gap:18px; margin-top:22px; font-size:13px; color:#526b88; }
 @media(max-width:900px) { .sa-settings-page .ss-restore-fields { grid-template-columns:1fr; }.sa-settings-page .ss-restore-actions { flex-wrap:wrap; } }
+
+/* Read-only Super Admin profile and account security. */
+.sa-profile-page .v2sa-topbar { background:#f0f7ff; border-bottom:1px solid #dce8f6; padding:22px 28px; }
+.sa-profile-page .sa-page-main { padding:24px 28px; }
+.sa-profile-page .sp-layout { display:grid; grid-template-columns:minmax(260px,0.8fr) minmax(0,1.2fr); gap:22px; max-width:1200px; align-items:start; }
+.sa-profile-page .sa-card { background:#fff; border:1px solid #dfe9f6; border-radius:10px; overflow:hidden; box-shadow:0 4px 16px #173b6806; }
+.sa-profile-page .sp-identity { padding:28px 24px 24px; border-bottom:1px solid #e5edf7; }
+.sa-profile-page .sp-avatar { display:flex; align-items:center; justify-content:center; width:58px; height:58px; margin-bottom:16px; border-radius:50%; background:#eaf3ff; color:#135cbd; font-size:21px; font-weight:700; }
+.sa-profile-page .sp-identity h2 { margin:0 0 12px; font-size:22px; color:#112e53; overflow-wrap:anywhere; }
+.sa-profile-page .sp-role { display:inline-block; background:#fff4cd; color:#806000; padding:5px 10px; border-radius:20px; font-size:12px; font-weight:600; }
+.sa-profile-page .sp-details { margin:0; padding:4px 24px 10px; }
+.sa-profile-page .sp-details > div { padding:17px 0; }
+.sa-profile-page .sp-details > div + div { border-top:1px solid #edf2f9; }
+.sa-profile-page .sp-details dt { margin-bottom:7px; color:#607793; font-size:12px; }
+.sa-profile-page .sp-details dd { margin:0; color:#193959; font-size:14px; line-height:1.5; overflow-wrap:anywhere; }
+.sa-profile-page .sp-active { color:#167044; }
+.sa-profile-page .sp-security-heading { display:block; padding:24px; border-bottom:1px solid #e5edf7; }
+.sa-profile-page .sp-security-heading h2 { margin:0; color:#112e53; font-size:18px; text-transform:none; letter-spacing:0; }
+.sa-profile-page .sp-security-heading p { margin:8px 0 0; font-size:13px; color:#607793; line-height:1.5; }
+.sa-profile-page .sa-form { padding:24px; gap:20px; max-width:none; }
+.sa-profile-page .sa-form label { font-size:13px; text-transform:none; color:#254363; gap:8px; }
+.sa-profile-page .sa-form input { box-sizing:border-box; width:100%; height:44px; font-size:14px; }
+.sa-profile-page .sp-form-actions { display:flex; justify-content:flex-end; padding-top:4px; }
+.sa-profile-page .sp-form-actions .sa-btn { width:auto; font-size:13px; padding:11px 18px; }
+@media(max-width:900px) { .sa-profile-page .sp-layout { grid-template-columns:1fr; } }
+@media(max-width:600px) {
+ .sa-profile-page .v2sa-topbar { padding:18px 16px; }
+ .sa-profile-page .sa-page-title { font-size:24px; }
+ .sa-profile-page .sa-page-main { padding:16px; }
+ .sa-profile-page .sp-identity,.sa-profile-page .sp-security-heading,.sa-profile-page .sa-form { padding:20px; }
+ .sa-profile-page .sp-details { padding-left:20px; padding-right:20px; }
+}
