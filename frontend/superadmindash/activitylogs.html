@@ -154,8 +154,9 @@
       function close() { modal.classList.remove('is-open'); }
       closeBtn.addEventListener('click', close);
       modal.addEventListener('click', function (e) { if (e.target === modal) close(); });
-      document.querySelectorAll('.sa-view-log').forEach(function (btn) {
-        btn.addEventListener('click', function () {
+      document.addEventListener('click', function (event) {
+          var btn = event.target.closest('.sa-view-log');
+          if (!btn) return;
           document.getElementById('d-user').textContent = btn.dataset.user || '—';
           document.getElementById('d-role').textContent = btn.dataset.role || '—';
           document.getElementById('d-module').textContent = btn.dataset.module || '—';
@@ -169,7 +170,45 @@
           document.getElementById('d-ip').textContent = btn.dataset.ip || '—';
           document.getElementById('d-status').textContent = btn.dataset.status || '—';
           modal.classList.add('is-open');
-        });
+      });
+      var refreshing = false;
+      var stopped = false;
+      async function refreshLogs() {
+        if (refreshing || stopped || document.hidden || modal.classList.contains('is-open') ||
+            (document.activeElement && document.activeElement.closest('form'))) return;
+        refreshing = true;
+        var controller = new AbortController();
+        var timeout = setTimeout(function () { controller.abort(); }, 15000);
+        try {
+          var response = await fetch(window.location.href, {
+            credentials: 'same-origin', cache: 'no-store', signal: controller.signal,
+            headers: {'X-Requested-With': 'XMLHttpRequest'}
+          });
+          if (response.redirected || response.status === 401 || response.status === 403) {
+            stopped = true;
+            return;
+          }
+          if (!response.ok) return;
+          var incoming = new DOMParser().parseFromString(await response.text(), 'text/html');
+          if (!incoming.querySelector('.al-entries')) return;
+          // Recheck after the request: a user may have opened details or started editing.
+          if (document.hidden || modal.classList.contains('is-open') ||
+              (document.activeElement && document.activeElement.closest('form'))) return;
+          ['.al-summary', '.al-entries', '.al-insights'].forEach(function (selector) {
+            var current = document.querySelector(selector);
+            var next = incoming.querySelector(selector);
+            if (current && next && current.outerHTML !== next.outerHTML) current.replaceWith(next);
+          });
+        } catch (error) {
+          // Keep the current entries visible offline; the next interval retries.
+        } finally {
+          clearTimeout(timeout);
+          refreshing = false;
+        }
+      }
+      setInterval(refreshLogs, 5000);
+      document.addEventListener('visibilitychange', function () {
+        if (!document.hidden) refreshLogs();
       });
     })();
   </script>

@@ -1,6 +1,8 @@
 """Superadmin portal views."""
 from __future__ import annotations
 
+from django.views.decorators.cache import never_cache
+
 import json
 import csv
 from datetime import timedelta
@@ -500,6 +502,7 @@ def superadmin_change_password(request):
 
 
 @_superadmin_required
+@never_cache
 def superadmin_activity_logs(request):
     """Audit Logs — read-only unified activity monitor."""
     from events.audit_service import (

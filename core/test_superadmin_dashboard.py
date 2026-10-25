@@ -249,3 +249,23 @@ class SuperadminDashboardTests(TestCase):
         self.assertNotContains(response, '</script><script>alert(1)</script>')
         self.assertContains(response, '\\u003C/script\\u003E')
         self.assertContains(response, 'No recent activity.')
+
+    def test_live_audit_reads_new_records_and_preserves_filters_without_writing(self):
+        self.client.force_login(self.admin)
+        url = reverse('superadmin_activity_logs')
+        params = {'q': 'Live judge', 'role': 'Judge', 'page': '1'}
+        first = self.client.get(url, params, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(first.status_code, 200)
+        self.assertIn('no-store', first['Cache-Control'])
+        self.assertEqual(first.context['filtered_count'], 0)
+        AuditLog.objects.create(user_name='Live judge', user_role='Judge',
+            action='Submitted Final Score', module='Criteria-Based Event', description='Live judge submitted scores.')
+        AuditLog.objects.create(user_name='Other admin', user_role='Admin', action='Updated Event')
+        before = AuditLog.objects.count()
+        second = self.client.get(url, params, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(second.context['filtered_count'], 1)
+        self.assertContains(second, 'Live judge submitted scores.')
+        self.assertNotContains(second, 'Other admin')
+        self.assertEqual(AuditLog.objects.count(), before)
+        self.client.logout()
+        self.assertEqual(self.client.get(url, params).status_code, 302)
