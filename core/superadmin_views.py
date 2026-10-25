@@ -120,7 +120,7 @@ def superadmin_users(request):
     params.pop('page', None)
     sort_headers = []
     for key, label in (('name', 'Name'), ('email', 'Email'), ('role', 'Role'),
-                       ('department', 'Department'), ('status', 'Status'), ('last_login', 'Last Login')):
+                       ('status', 'Status'), ('last_login', 'Last Login')):
         header_params = params.copy()
         header_params['sort'] = key
         header_params['dir'] = 'desc' if sort == key and direction == 'asc' else 'asc'
@@ -148,6 +148,7 @@ def superadmin_users(request):
 
 
 @_superadmin_required
+@never_cache
 def superadmin_user_detail(request, user_id):
     rows = superadmin_user_rows()
     row = next((r for r in rows if r['id'] == user_id), None)
@@ -213,15 +214,21 @@ def superadmin_user_update(request, user_id):
 
 @require_POST
 @_superadmin_required
+@never_cache
 def superadmin_user_reset_password(request, user_id):
     payload = _parse_json(request)
+    password = payload.get('password')
+    if not isinstance(password, str) or not password:
+        return JsonResponse({'success': False, 'message': 'Enter a new password.'}, status=400)
+    if password != payload.get('password_confirm'):
+        return JsonResponse({'success': False, 'message': 'Passwords do not match.'}, status=400)
     try:
         password = reset_user_password(
             actor=request.user,
             user_id=user_id,
             password=payload.get('password') or None,
         )
-        return JsonResponse({'success': True, 'message': 'Password reset.', 'temporary_password': password})
+        return JsonResponse({'success': True, 'message': 'Password reset successfully.'})
     except SuperadminServiceError as exc:
         return JsonResponse({'success': False, 'message': str(exc)}, status=400)
 

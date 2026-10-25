@@ -3,8 +3,6 @@ from __future__ import annotations
 
 import csv
 import io
-import secrets
-import string
 from collections import Counter, defaultdict
 from datetime import timedelta
 
@@ -462,9 +460,16 @@ def reset_user_password(*, actor, user_id, password=None):
     user = User.objects.filter(pk=user_id).first()
     if not user:
         raise SuperadminServiceError('User not found.')
-    if not password:
-        alphabet = string.ascii_letters + string.digits
-        password = ''.join(secrets.choice(alphabet) for _ in range(10))
+    if user.is_superuser and actor.id != user.id:
+        raise SuperadminServiceError('Cannot reset another Superadmin account.')
+    if not isinstance(password, str) or not password:
+        raise SuperadminServiceError('Enter a new password.')
+    from django.contrib.auth.password_validation import validate_password
+    from django.core.exceptions import ValidationError
+    try:
+        validate_password(password, user)
+    except ValidationError as exc:
+        raise SuperadminServiceError(' '.join(exc.messages)) from exc
     user.set_password(password)
     user.save(update_fields=['password'])
     _log_user_action(actor, user, CHANGE, 'Password reset.')

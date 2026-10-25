@@ -7,7 +7,7 @@
   <title>User Management · Superadmin · EventTab</title>
   <link rel="stylesheet" href="{% static 'superadmin_dashboard.css' %}?v=20260803a">
   <link rel="stylesheet" href="{% static 'admin_v2.css' %}?v=20261019sidebar">
-  <link rel="stylesheet" href="{% static 'superadmindash/pages.css' %}?v=20261019users">
+  <link rel="stylesheet" href="{% static 'superadmindash/pages.css' %}?v=20261025accounts">
 </head>
 <body class="admin-v2-page sa-users-reference">
 <svg class="su-symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
@@ -33,7 +33,6 @@
           <p class="sa-kicker">MANAGE</p>
           <h1 class="sa-page-title" style="margin:0">User Management</h1>
         </div>
-        <button class="sa-btn" type="button" id="sa-open-create"><svg aria-hidden="true"><use href="#su-plus"/></svg>Create User</button>
       </header>
       <main class="sa-page-main">
         <div class="su-summary" aria-label="User summary">
@@ -56,14 +55,11 @@
               <option value="active" {% if selected_status == 'active' %}selected{% endif %}>Active</option>
               <option value="inactive" {% if selected_status == 'inactive' %}selected{% endif %}>Inactive</option>
             </select>
-            <select name="department" aria-label="Department">
-              <option value="all">All Departments</option>
-              {% for d in departments %}
-              <option value="{{ d }}" {% if selected_department == d %}selected{% endif %}>{{ d }}</option>
-              {% endfor %}
-            </select>
             <button class="sa-btn-sm su-filter" type="submit"><svg aria-hidden="true"><use href="#su-filter"/></svg>Filter</button><a class="sa-btn-sm sa-btn-secondary su-reset-filters" href="{% url 'superadmin_users' %}"><svg aria-hidden="true"><use href="#su-reset"/></svg>Reset</a>
           </form>
+          <div class="su-table-heading"><div><h2>User Accounts</h2><p>{{ total_count }} account{{ total_count|pluralize }}</p></div>
+        <button class="sa-btn" type="button" id="sa-open-create"><svg aria-hidden="true"><use href="#su-plus"/></svg>Create User</button>
+          </div>
           <div class="sa-table-wrap">
             <table class="sa-table">
               <thead>
@@ -77,7 +73,6 @@
                   <td><strong>{{ row.name }}</strong><br><small>{{ row.username }}</small></td>
                   <td>{{ row.email|default:"—" }}</td>
                   <td><span class="sa-pill su-role {% if row.role == 'Judge' %}su-role-judge{% elif row.role == 'Faculty In-Charge' %}su-role-faculty{% else %}su-role-admin{% endif %}">{{ row.role }}</span></td>
-                  <td>{{ row.department }}</td>
                   <td><span class="sa-pill {% if not row.is_active %}sa-pill--inactive{% else %}sa-pill--completed{% endif %}">{{ row.status }}</span></td>
                   <td>{{ row.last_login }}</td>
                   <td>
@@ -85,7 +80,7 @@
                       <button class="sa-btn-sm sa-btn-secondary sa-view" type="button" data-id="{{ row.id }}"><svg aria-hidden="true"><use href="#su-eye"/></svg>View</button>
                       <button class="sa-btn-sm sa-btn-secondary sa-edit" type="button"
                         data-id="{{ row.id }}" data-username="{{ row.username }}" data-email="{{ row.email }}"
-                        data-role="{{ row.role }}" data-department="{{ row.department }}" data-active="{{ row.is_active|yesno:'1,0' }}"><svg aria-hidden="true"><use href="#su-edit"/></svg>Edit</button>
+                        data-role="{{ row.role }}" data-active="{{ row.is_active|yesno:'1,0' }}"><svg aria-hidden="true"><use href="#su-edit"/></svg>Edit</button>
                       <button class="sa-btn-sm sa-btn-secondary sa-reset" type="button" data-id="{{ row.id }}"><svg aria-hidden="true"><use href="#su-key"/></svg>Reset PW</button>
                       {% if row.is_active %}
                       <button class="sa-btn-sm sa-btn-secondary sa-toggle" type="button" data-id="{{ row.id }}" data-active="0"><svg aria-hidden="true"><use href="#su-ban"/></svg>Deactivate</button>
@@ -99,7 +94,7 @@
                   </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="7" class="sa-empty">No users found.</td></tr>
+                <tr><td colspan="6" class="sa-empty">No users found.</td></tr>
                 {% endfor %}
               </tbody>
             </table>
@@ -116,10 +111,10 @@
 
   <div class="sa-modal-backdrop" id="sa-user-modal">
     <div class="sa-modal" role="dialog" aria-modal="true" aria-labelledby="sa-modal-title">
-      <h3 id="sa-modal-title">Create User</h3>
+      <h3 id="sa-modal-title">Create User</h3><p class="su-dialog-description">Manage account access and sign-in details.</p>
       <form id="sa-user-form" class="sa-form" style="padding:0;max-width:none">
         <input type="hidden" id="sa-user-id" value="">
-        <label>Username<input id="sa-username" required></label>
+        <label>Username<input id="sa-username" autocomplete="off" required></label>
         <label>Email<input id="sa-email" type="email"></label>
         <label>Role
           <select id="sa-role">
@@ -128,19 +123,34 @@
             <option value="Judge">Judge</option>
           </select>
         </label>
-        <label>Department
-          <select id="sa-department">
-            <option value="">—</option>
-            {% for d in departments %}<option value="{{ d }}">{{ d }}</option>{% endfor %}
-          </select>
-        </label>
-        <label id="sa-password-wrap">Password<input id="sa-password" type="text"></label>
         <label class="row"><input id="sa-active" type="checkbox" checked> Active</label>
+        <label id="sa-password-wrap">Password<span class="su-password-field"><input id="sa-password" type="password" autocomplete="new-password"><button type="button" class="su-show-password" data-target="sa-password" aria-label="Show password">Show</button></span></label>
+        <label id="sa-confirm-wrap">Confirm Password<input id="sa-password-confirm" type="password" autocomplete="new-password"></label>
+        <p class="su-form-message" id="sa-user-message" role="status" aria-live="polite"></p>
         <div class="sa-modal-actions">
           <button type="button" class="sa-btn sa-btn-secondary" id="sa-modal-cancel">Cancel</button>
           <button type="submit" class="sa-btn">Save</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <div class="sa-modal-backdrop" id="sa-reset-modal">
+    <div class="sa-modal" role="dialog" aria-modal="true" aria-labelledby="sa-reset-title">
+      <h3 id="sa-reset-title">Reset Password</h3><p class="su-dialog-description" id="sa-reset-account"></p>
+      <form id="sa-reset-form" class="sa-form">
+        <label>New Password<span class="su-password-field"><input id="sa-reset-password" type="password" autocomplete="new-password" required><button type="button" class="su-show-password" data-target="sa-reset-password" aria-label="Show password">Show</button></span></label>
+        <label>Confirm New Password<input id="sa-reset-confirm" type="password" autocomplete="new-password" required></label>
+        <p class="su-form-message" id="sa-reset-message" role="status" aria-live="polite"></p>
+        <div class="sa-modal-actions"><button type="button" class="sa-btn sa-btn-secondary" data-close="sa-reset-modal">Cancel</button><button type="submit" class="sa-btn">Reset Password</button></div>
+      </form>
+    </div>
+  </div>
+  <div class="sa-modal-backdrop" id="sa-detail-modal">
+    <div class="sa-modal" role="dialog" aria-modal="true" aria-labelledby="sa-detail-title">
+      <h3 id="sa-detail-title">Account Details</h3><dl id="sa-account-details" class="su-account-details"></dl>
+      <div class="su-password-note"><strong>Password</strong><p>Passwords are securely hashed and cannot be viewed. Use Reset Password to set a new password.</p></div>
+      <div class="sa-modal-actions"><button type="button" class="sa-btn sa-btn-secondary" data-close="sa-detail-modal">Close</button><button type="button" class="sa-btn" id="sa-detail-reset">Reset Password</button></div>
     </div>
   </div>
 
@@ -155,6 +165,6 @@
       csrf: "{{ csrf_token }}"
     };
   </script>
-  <script src="{% static 'js/superadmin_users.js' %}?v=20260803a"></script>
+  <script src="{% static 'js/superadmin_users.js' %}?v=20261025accounts"></script>
 </body>
 </html>

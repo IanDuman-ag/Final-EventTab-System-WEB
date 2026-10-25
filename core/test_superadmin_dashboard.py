@@ -269,3 +269,43 @@ class SuperadminDashboardTests(TestCase):
         self.assertEqual(AuditLog.objects.count(), before)
         self.client.logout()
         self.assertEqual(self.client.get(url, params).status_code, 302)
+
+    def test_manual_password_reset_requires_confirmation_and_keeps_secrets_out_of_logs(self):
+        import json
+        target = get_user_model().objects.create_user('reset-target', password='Old-Pass!472', is_staff=True)
+        self.client.force_login(self.admin)
+        url = reverse('superadmin_user_reset_password', args=[target.pk])
+        for payload in ({}, {'password': 'New-Manual!572'},
+                        {'password': 'New-Manual!572', 'password_confirm': 'different'},
+                        {'password': '123', 'password_confirm': '123'}):
+            self.assertEqual(self.client.post(url, data=json.dumps(payload), content_type='application/json').status_code, 400)
+            target.refresh_from_db()
+            self.assertTrue(target.check_password('Old-Pass!472'))
+        password = 'New-Manual!572'
+        response = self.client.post(url, data=json.dumps({'password': password, 'password_confirm': password}), content_type='application/json')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('no-store', response['Cache-Control'])
+        self.assertNotContains(response, password)
+        target.refresh_from_db()
+        self.assertTrue(target.check_password(password))
+        self.assertNotEqual(target.password, password)
+        self.assertFalse(AuditLog.objects.filter(description__contains=password).exists())
+        detail = self.client.get(reverse('superadmin_user_detail', args=[target.pk]))
+        self.assertNotContains(detail, password)
+        self.assertNotContains(detail, target.password)
+        self.assertIn('no-store', detail['Cache-Control'])
+        self.client.force_login(target)
+        self.assertEqual(self.client.post(url, data=json.dumps({'password': password, 'password_confirm': password}), content_type='application/json').status_code, 302)
+
+    def test_user_management_omits_department_and_keeps_create_above_table(self):
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse('superadmin_users'))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'sa-department')
+        self.assertNotContains(response, 'name="department"')
+        self.assertNotContains(response, '>Department<')
+        content = response.content.decode()
+        self.assertLess(content.index('su-table-heading'), content.index('id="sa-open-create"'))
+        self.assertLess(content.index('id="sa-open-create"'), content.index('<table'))
+        self.assertContains(response, 'id="sa-reset-password"')
+        self.assertContains(response, 'id="sa-detail-modal"')
