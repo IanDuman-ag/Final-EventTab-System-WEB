@@ -21,7 +21,29 @@ document.addEventListener('DOMContentLoaded', function () {
   if (!openBtn || !formModal || !form) return;
 
   var createUrl = openBtn.dataset.createUrl || '/admin/candidates/create/';
-  var pendingDelete = { url: '', triggerBtn: null };
+  var pendingDelete = [];
+  var selectAll = document.getElementById('select-all-candidates');
+  var bulkDelete = document.getElementById('delete-selected-candidates');
+  function updateSelection() {
+    var boxes = Array.from(document.querySelectorAll('.candidate-select'));
+    var count = boxes.filter(function (box) { return box.checked; }).length;
+    selectAll.checked = boxes.length > 0 && count === boxes.length;
+    selectAll.indeterminate = count > 0 && count < boxes.length;
+    selectAll.disabled = !boxes.length;
+    bulkDelete.disabled = !count;
+    document.getElementById('candidate-selection-count').textContent = count + ' selected';
+  }
+  selectAll.addEventListener('change', function () {
+    document.querySelectorAll('.candidate-select').forEach(function (box) { box.checked = selectAll.checked; });
+    updateSelection();
+  });
+  document.querySelectorAll('.candidate-select').forEach(function (box) { box.addEventListener('change', updateSelection); });
+  bulkDelete.addEventListener('click', function () {
+    pendingDelete = Array.from(document.querySelectorAll('.candidate-select:checked')).map(function (box) { return box.closest('tr').querySelector('.delete-candidate'); });
+    deleteNameEl.textContent = pendingDelete.length + ' selected individuals';
+    openModal(deleteModal);
+  });
+  updateSelection();
 
   function getCsrfToken() {
     var el = document.querySelector('input[name="csrfmiddlewaretoken"]');
@@ -176,8 +198,7 @@ document.addEventListener('DOMContentLoaded', function () {
   document.querySelectorAll('.delete-candidate').forEach(function (btn) {
     btn.addEventListener('click', function () {
       var row = btn.closest('tr');
-      pendingDelete.url = btn.dataset.deleteUrl || '';
-      pendingDelete.triggerBtn = btn;
+      pendingDelete = [btn];
       if (deleteNameEl) {
         deleteNameEl.textContent = row ? (row.dataset.name || 'this individual') : 'this individual';
       }
@@ -187,18 +208,32 @@ document.addEventListener('DOMContentLoaded', function () {
 
   if (confirmDeleteBtn) {
     confirmDeleteBtn.addEventListener('click', async function () {
-      if (!pendingDelete.url) return;
+      if (!pendingDelete.length || confirmDeleteBtn.disabled) return;
       confirmDeleteBtn.disabled = true;
-      var result = await postJson(pendingDelete.url, {});
-      confirmDeleteBtn.disabled = false;
-      if (result.success) {
+      bulkDelete.disabled = true;
+      var targets = pendingDelete.slice();
+      var deleted = 0;
+      var errors = [];
+      try {
+        for (var i = 0; i < targets.length; i++) {
+          var result = await postForm(targets[i].dataset.deleteUrl, new FormData());
+          if (result.success) {
+            targets[i].closest('tr').remove();
+            deleted++;
+          } else {
+            errors.push(result.message || 'Delete failed.');
+          }
+        }
+        pendingDelete = [];
         closeModal(deleteModal);
-        showToast(result.message || 'Individual deleted.');
-        var row = pendingDelete.triggerBtn && pendingDelete.triggerBtn.closest('tr');
-        if (row) row.remove();
-        pendingDelete = { url: '', triggerBtn: null };
-      } else {
-        showToast(result.message || 'Delete failed.', 'error');
+        if (errors.length) {
+          showToast(deleted + ' deleted. ' + errors.length + ' could not be deleted. ' + errors[0], 'error');
+        } else {
+          window.location.reload();
+        }
+      } finally {
+        confirmDeleteBtn.disabled = false;
+        updateSelection();
       }
     });
   }
