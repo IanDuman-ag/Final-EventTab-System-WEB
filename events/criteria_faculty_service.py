@@ -90,7 +90,33 @@ def _participants(event):
     return [{'id': row.pk, 'name': row.name, 'department': str(row.department or ''), 'entry_type': event.participation_type} for row in model.objects.filter(pk__in=event.participant_ids)]
 
 
-def _qualifiers(round_cfg, results, selection=None):
+def _qualifiers(round_cfg, results, selection=None, event=None):
+    from .divisions import division_config, participant_division
+    if event is not None and division_config(event) and not round_cfg['is_final']:
+        selected_ids, errors = [], []
+        try:
+            groups = {}
+            for row in results:
+                name = participant_division(event, row['participant_id'])
+                groups.setdefault(name, []).append(row)
+            requested = [int(value) for value in selection] if selection is not None else None
+            if requested is not None and (len(requested) != len(set(requested)) or not set(requested).issubset({row['participant_id'] for row in results})):
+                raise FacultyServiceError('Select distinct eligible qualifiers.')
+            for name, rows in groups.items():
+                cfg = dict(round_cfg)
+                if cfg.get('qualification_method') == 'top_n_per_division':
+                    cfg['qualification_method'] = 'top_ranking'
+                if cfg.get('qualification_method') not in {'advance_all', 'no_elimination', 'no_advancement', 'minimum_score'} and int(cfg.get('qualifiers') or 0) > len(rows):
+                    errors.append(f'{name}: qualifier count exceeds the {len(rows)} eligible participants.')
+                    continue
+                chosen = None if requested is None else [value for value in requested if value in {row['participant_id'] for row in rows}]
+                ids, issues = _qualifiers(cfg, rows, chosen)
+                selected_ids.extend(ids)
+                errors.extend(f'{name}: {issue}' for issue in issues)
+        except (TypeError, ValueError) as exc:
+            raise FacultyServiceError(str(exc)) from exc
+        return selected_ids, errors
+
     if round_cfg['is_final']:
         return [], []
     method = round_cfg.get('qualification_method') or 'top_ranking'
@@ -127,7 +153,8 @@ def _round_data(event, index, participants, judges, *, require_verification=True
     approval = (cfg.get('confirmed_stages') or {}).get(str(index), {})
     eligible = round_participant_ids(event, index)
     from .participant_removal_service import excluded_participant_ids
-    rank_limit = len(event.participant_ids) if excluded_participant_ids(event, index) else len(eligible)
+    from .divisions import group_participants, participant_division
+    rank_groups = group_participants(event, event.participant_ids if excluded_participant_ids(event, index) else eligible)
     errors, results, monitor = [], [], []
     categories = list(event.scoring_categories.filter(assigned_round_id=round_cfg['id'], purpose='official').prefetch_related('criteria'))
     required = {criterion.pk: criterion for category in categories for criterion in category.criteria.all()}
@@ -146,6 +173,7 @@ def _round_data(event, index, participants, judges, *, require_verification=True
                 continue
             try:
                 if score.category.judge_mode == 'ranking':
+                    rank_limit = len(rank_groups[participant_division(event, score.participant_id)])
                     if score.raw_score != score.raw_score.to_integral_value() or not 1 <= score.raw_score <= rank_limit:
                         raise ValueError('Ranking scores must be valid ordinal ranks.')
                 else:
@@ -283,7 +311,12 @@ def _round_data(event, index, participants, judges, *, require_verification=True
                         rank = position
                     prior = comparison
                     row['rank'] = rank
-    qualifiers, qualification_errors = _qualifiers(round_cfg, results) if results else ([], [])
+    from .divisions import rank_divisions
+    # Normalized round rankings already have division ranks. Legacy totals and
+    # cumulative scores need their per-division ranks rebuilt here.
+    if results and (not required or (round_cfg.get('carry_previous_scores') and index)):
+        results = rank_divisions(event, results)
+    qualifiers, qualification_errors = _qualifiers(round_cfg, results, event=event) if results else ([], [])
     errors.extend(qualification_errors)
     if approval.get('approved_at'):
         results = approval.get('results', results)
@@ -423,7 +456,7 @@ def approve_criteria_round(event, user, round_index, qualifier_ids=None):
     if not selected['can_approve'] or not round_is_scoreable(event, round_index):
         raise FacultyServiceError(' '.join(selected['blockers']) or 'This round is not available for approval.')
     rounds = criteria_rounds(event)
-    qualifiers, errors = _qualifiers(rounds[round_index], selected['results'], qualifier_ids)
+    qualifiers, errors = _qualifiers(rounds[round_index], selected['results'], qualifier_ids, event=event)
     if errors or (not rounds[round_index]['is_final'] and not qualifiers):
         raise FacultyServiceError(' '.join(errors) or 'Select eligible qualifiers before approval.')
     cfg = dict(event.result_processing_config or {})
@@ -535,4 +568,7 @@ def approved_final_rankings(event):
             or {row.get('participant_id') for row in results} != set(eligible)
             or not all(row.get('complete') and row.get('rank', 0) > 0 for row in results)):
         raise FacultyServiceError('The approved final rankings do not match the qualified participants.')
+    from .divisions import division_config, participant_division
+    if division_config(event) and any(row.get('division') != participant_division(event, row['participant_id']) for row in results):
+        raise FacultyServiceError('Approved rankings do not match the event divisions.')
     return results

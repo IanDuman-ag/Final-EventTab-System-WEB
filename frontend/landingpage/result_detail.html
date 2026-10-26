@@ -37,6 +37,7 @@
         <caption class="visually-hidden">{% if result_rounds|length > 1 %}Published round-specific competition placements{% else %}Published final competition placements{% endif %}</caption>
         <thead><tr><th scope="col">Rank</th><th scope="col">{% if result_kind == 'match' %}Team{% else %}Contestant / Group{% endif %}</th><th scope="col">Department</th><th scope="col">Placement</th>{% if result_kind == 'match' %}<th scope="col">Championship Points</th>{% endif %}</tr></thead>
         <tbody>{% for row in result_rows %}
+          {% if row.division %}{% ifchanged row.division %}<tr><th colspan="5">{{ row.division }}</th></tr>{% endifchanged %}{% endif %}
           <tr class="placement-rank-{{ row.rank|default_if_none:'unknown' }}"><td><span class="placement-medal">{{ row.rank|default_if_none:"—" }}</span></td><td><strong>{{ row.name }}</strong></td><td>{{ row.department|default:"Not available" }}</td><td>{{ row.placement|default:"Not available" }}</td>{% if result_kind == 'match' %}<td>{{ row.points|default_if_none:"Not available" }}</td>{% endif %}</tr>
         {% endfor %}</tbody>
       </table>

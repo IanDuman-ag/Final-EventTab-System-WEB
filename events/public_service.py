@@ -271,7 +271,7 @@ def criteria_results(event, round_id=None):
             return [], 'Approved final participants are unavailable.'
         rows = [{'rank': row['rank'], 'name': participants[row['participant_id']]['name'],
                  'department': participants[row['participant_id']]['department'],
-                 'points': '', 'score': '', 'placement': placement(row['rank'])}
+                 'points': '', 'score': '', 'division': row.get('division', ''), 'placement': placement(row['rank'])}
                 for row in final_results]
         return rows, 'Official final placements. Individual judge scores remain private.'
     modern = event.scoring_categories.exists()
@@ -296,7 +296,7 @@ def criteria_results(event, round_id=None):
             return [], 'This round is awaiting complete approved results.'
         rows = [{'rank': row['rank'], 'name': participants[row['participant_id']]['name'],
                  'department': participants[row['participant_id']]['department'], 'points': '', 'score': '',
-                 'placement': f"Round rank {row['rank']}" if multi else placement(row['rank'])}
+                 'division': row.get('division', ''), 'placement': f"Round rank {row['rank']}" if multi else placement(row['rank'])}
                 for row in rankings]
         return rows, ('Published round-specific rankings. Overall standings are unavailable because '
                       'the existing scoring system does not calculate a combined multiround result.'
@@ -323,7 +323,7 @@ def criteria_results(event, round_id=None):
     ):
         return [], 'Official placements are awaiting complete verified results.'
     return [{'rank': row['rank'], 'name': row['name'], 'department': row['department'],
-             'points': '', 'score': '', 'placement': placement(row['rank'])}
+             'points': '', 'score': '', 'division': row.get('division', ''), 'placement': placement(row['rank'])}
             for row in compute_criteria_rankings(event)], 'Official placements. Individual judge scores remain private.'
 
 

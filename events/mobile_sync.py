@@ -182,6 +182,25 @@ def _sync_candidates(judging_event, event, explicit_candidates=None):
             )
         return
 
+    from .divisions import division_config
+    if division_config(event):
+        # Division appearance changes must not recreate the mobile identities.
+        mapping = (event.result_processing_config or {}).get('mobile_round_mapping', {}).get('candidates', {})
+        existing = list(judging_event.candidates.all())
+        used = set()
+        next_number = max((row.number for row in existing), default=0) + 1
+        for entry in event.criteria_entries.select_related('department'):
+            stored = next((row for row in existing if row.pk == mapping.get(str(entry.pk))), None)
+            if stored is None:
+                matches = [row for row in existing if row.pk not in used and row.name == entry.display_name[:200]]
+                stored = matches[0] if len(matches) == 1 else None
+            if stored is None:
+                stored = Candidate.objects.create(event=judging_event, name=entry.display_name[:200], number=next_number,
+                    department=entry.department.name if entry.department else '')
+                next_number += 1
+            used.add(stored.pk)
+        judging_event.candidates.exclude(pk__in=used).delete()
+        return
     judging_event.candidates.all().delete()
     entries = list(event.criteria_entries.select_related('department').prefetch_related('member_links__individual')) if event.scoring_method == 'criteria' else []
     if entries:

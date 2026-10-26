@@ -21,6 +21,7 @@
       </thead>
       <tbody>
         {% for result in portal.results %}
+          {% if result.division %}{% ifchanged result.division %}<tr><th colspan="5">{{ result.division }}</th></tr>{% endifchanged %}{% endif %}
           <tr>
             <td>
               <span class="criteria-rank rank-{{ result.rank }}">{{ result.rank }}</span>

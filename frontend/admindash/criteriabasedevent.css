@@ -632,3 +632,15 @@ html.event-wizard-open body { overflow:hidden; }
 .pair-entry-card .pair-department{grid-column:1/-1}
 .pair-entry-card .pair-entry-error{color:#b42336;font-weight:700}
 @media(max-width:700px){.pair-entry-card{grid-template-columns:1fr}.pair-entry-card header,.pair-entry-card small{grid-column:1}}
+
+/* Event-local division assignments share the participant editor's flat layout. */
+#event-performance-setup { border-top: 1px solid #dbe5f1; padding-top: 20px; color: #0b2545; }
+#event-performance-setup h3 { margin: 0; font-size: 17px; font-weight: 700; color: #0b2545; }
+#enable-event-divisions { accent-color: #1261db; width: 16px; height: 16px; }
+#event-division-editor { max-width: 560px; }
+#event-division-editor > label { display: block; margin-bottom: 8px; font-size: 13px; font-weight: 600; }
+#event-performance-setup table { min-width: 660px; font-size: 13px; }
+#event-performance-setup th { font-size: 12px; color: #526984; white-space: nowrap; }
+#event-performance-setup td { padding: 12px 8px; vertical-align: middle; }
+#event-performance-setup select { min-width: 150px; max-width: 240px; }
+#event-performance-setup .btn { white-space: nowrap; }

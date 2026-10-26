@@ -44,6 +44,8 @@
   var roundAdjustmentWarning = '';
   var events = [];
   var pairEntries = [];
+  var performanceOrder = [];
+  var participantDivisions = {};
   var lastParticipationType = 'individual';
   var scoringWorkflow = {
     eventId: null, eventName: '', categories: [], selectedCategoryId: null,
@@ -204,12 +206,18 @@
 
   function hasQualifierAdvancement(round) {
     var method = (round.qualification_method || round.advancement_rule || '').toLowerCase();
-    return Number(round.qualifiers) > 0 && ['top_ranking', 'minimum_score', 'manual_selection', 'highest_total'].indexOf(method) !== -1;
+    return Number(round.qualifiers) > 0 && ['top_ranking', 'top_n_per_division', 'top_n_overall', 'minimum_score', 'manual_selection', 'highest_total'].indexOf(method) !== -1;
   }
 
   function roundParticipantCount(index, list) {
     var rows = list || stages;
     var count = participantCount();
+    if (divisionsEnabled()) {
+      var counts = {};
+      orderedParticipantBoxes().forEach(function (box) { var name = participantDivisions[box.value]; if (name) counts[name] = (counts[name] || 0) + 1; });
+      var sizes = Object.values(counts);
+      count = sizes.length ? Math.min.apply(null, sizes) : 0;
+    }
     for (var i = 0; i < index && i < rows.length; i++) {
       var round = rows[i] || {};
       var isFinal = isFinalRoundAt(round, i, rows.length);
@@ -331,7 +339,7 @@
     var isFinal = roundType === 'final' || (!hasQualifierAdvancement(row) && isLast && roundType !== 'elimination');
     if (!isLast && roundType === 'final') roundType = 'elimination';
     var method = isFinal ? null : (row.qualification_method || row.advancement_rule || 'top_ranking');
-    if (method === 'highest_total') method = 'top_ranking';
+    if (['highest_total', 'top_n_per_division', 'top_n_overall'].indexOf(method) !== -1) method = 'top_ranking';
     var handling = row.score_handling || (row.carry_previous_scores ? 'carry' : 'start_zero');
     return {
       id: row.id || uid('s'),
@@ -833,6 +841,7 @@
   }
 
   function updateParticipantCount() {
+    renderPerformanceOrder();
     if (isPairParticipation()) {
       $('#selected-participant-count').textContent = pairEntries.length + ' pair' + (pairEntries.length === 1 ? '' : 's') + ' added';
       return;
@@ -1090,12 +1099,80 @@
     });
   }
 
+  function eventDivisionNames() {
+    return $('#event-division-names').value.split(/\r?\n/).map(function (name) { return name.trim(); }).filter(Boolean);
+  }
+
+  function divisionsEnabled() {
+    return isIndividualParticipation() && $('#enable-event-divisions').checked;
+  }
+
+  function divisionSetupIssue() {
+    if (!divisionsEnabled()) return '';
+    var names = eventDivisionNames();
+    if (!names.length || names.length > 50) return 'Add between 1 and 50 division names.';
+    if (names.some(function (name) { return name.length > 100; }) || new Set(names.map(function (name) { return name.toLowerCase(); })).size !== names.length) return 'Use unique division names of at most 100 characters.';
+    if (orderedParticipantBoxes().some(function (box) { return names.indexOf(participantDivisions[box.value]) === -1; })) return 'Assign each selected participant to a division.';
+    return '';
+  }
+
+  function orderedParticipantBoxes() {
+    var panel = isIndividualParticipation() ? '#candidate-options' : '#team-options';
+    var boxes = $$(panel + ' .participant-check:checked');
+    var selected = boxes.map(function (box) { return String(box.value); });
+    performanceOrder = performanceOrder.filter(function (id) { return selected.indexOf(id) !== -1; });
+    selected.forEach(function (id) { if (performanceOrder.indexOf(id) === -1) performanceOrder.push(id); });
+    return performanceOrder.map(function (id) { return boxes.find(function (box) { return String(box.value) === id; }); });
+  }
+
+  function renderPerformanceOrder() {
+    var host = $('#event-performance-setup');
+    if (!host) return;
+    host.hidden = !isIndividualParticipation();
+    var enabled = divisionsEnabled();
+    $('#event-division-editor').hidden = !enabled;
+    $('#performance-division-heading').hidden = !enabled;
+    var names = eventDivisionNames();
+    var boxes = orderedParticipantBoxes();
+    var positions = {};
+    var grouped = enabled ? names.concat(['']).filter(function (name, index, all) { return all.indexOf(name) === index; }).flatMap(function (name) {
+      return boxes.filter(function (box) { var current = participantDivisions[box.value]; return (names.indexOf(current) !== -1 ? current : '') === name; });
+    }) : boxes;
+    $('#event-performance-rows').innerHTML = grouped.map(function (box) {
+      var id = box.value, name = enabled ? participantDivisions[id] || '' : '';
+      positions[name] = (positions[name] || 0) + 1;
+      var peers = grouped.filter(function (other) { return !enabled || (participantDivisions[other.value] || '') === name; });
+      var at = peers.indexOf(box);
+      return '<tr><td>' + positions[name] + '</td><td><strong>' + escapeHtml(box.dataset.name) + '</strong></td><td>' + escapeHtml(box.closest('label').dataset.department || '') + '</td>' +
+        (enabled ? '<td><select class="form-select" data-participant-division="' + escapeAttr(id) + '" aria-label="Division for ' + escapeAttr(box.dataset.name) + '"><option value="">Select division</option>' + names.map(function (label) { return '<option value="' + escapeAttr(label) + '"' + (name === label ? ' selected' : '') + '>' + escapeHtml(label) + '</option>'; }).join('') + '</select></td>' : '') +
+        '<td><div class="d-flex gap-2"><button type="button" class="btn btn-outline-secondary btn-sm" data-performance-id="' + escapeAttr(id) + '" data-performance-move="-1"' + (!at ? ' disabled' : '') + '>Up</button><button type="button" class="btn btn-outline-secondary btn-sm" data-performance-id="' + escapeAttr(id) + '" data-performance-move="1"' + (at === peers.length - 1 ? ' disabled' : '') + '>Down</button></div></td></tr>';
+    }).join('') || '<tr><td colspan="5">Select participants above.</td></tr>';
+  }
+
+  $('#enable-event-divisions').addEventListener('change', renderPerformanceOrder);
+  $('#event-division-names').addEventListener('change', renderPerformanceOrder);
+  $('#event-performance-rows').addEventListener('change', function (event) {
+    var input = event.target.closest('[data-participant-division]');
+    if (!input) return;
+    participantDivisions[input.dataset.participantDivision] = input.value;
+    renderPerformanceOrder();
+  });
+  $('#event-performance-rows').addEventListener('click', function (event) {
+    var button = event.target.closest('[data-performance-move]');
+    if (!button) return;
+    var id = button.dataset.performanceId;
+    var peers = performanceOrder.filter(function (other) { return !divisionsEnabled() || participantDivisions[other] === participantDivisions[id]; });
+    var next = peers[peers.indexOf(id) + Number(button.dataset.performanceMove)];
+    if (!next) return;
+    var at = performanceOrder.indexOf(id), to = performanceOrder.indexOf(next);
+    performanceOrder[at] = next; performanceOrder[to] = id;
+    renderPerformanceOrder();
+  });
+
   function collectParticipants() {
     if (isPairParticipation()) return pairEntries.map(function (_, index) { return index + 1; });
     var panel = isIndividualParticipation() ? '#candidate-options' : '#team-options';
-    return $$(panel + ' .participant-check:checked').map(function (box) {
-      return Number(box.value);
-    });
+    return orderedParticipantBoxes().map(function (box) { return Number(box.value); });
   }
 
   function collectRounds() {
@@ -1146,6 +1223,7 @@
 
   function collectResultProcessing() {
     var out = {};
+    out.event_divisions = { enabled: divisionsEnabled(), names: divisionsEnabled() ? eventDivisionNames() : [] };
     out.final_result_basis = $('#final-result-basis').value;
     out.placements_count = Number($('#placements-count').value);
     out.verification_mode = ($('#advanced-result-verification') || {}).value || 'admin_only';
@@ -1425,6 +1503,7 @@
   function judgingPublishIssues() {
     var issues = [];
     if (!form.event_name.value.trim() || !form.category.value || !form.event_classification.value || !form.venue.value.trim() || !form.start_date.value) issues.push({ step: 1, text: 'Complete all required event details.' });
+    if (divisionSetupIssue()) issues.push({ step: 2, text: divisionSetupIssue() });
     if (!collectParticipants().length) issues.push({ step: 2, text: 'Select at least one participant.' });
     if (!collectJudges().length) issues.push({ step: 3, text: 'Assign at least one judge.' });
     if (!scoringWorkflow.categories.length) issues.push({ step: 3, text: 'Add at least one judging segment.' });
@@ -1464,8 +1543,8 @@
     $('#participant-ids').value = JSON.stringify(collectParticipants());
     $('#event-entries').value = JSON.stringify(isPairParticipation()
       ? pairEntries.map(function (row) { return { department_id: row.department_id || null, member_ids: [Number(row.member_1_id), Number(row.member_2_id)] }; })
-      : $$('#' + (isIndividualParticipation() ? 'candidate-options' : 'team-options') + ' .participant-check:checked').map(function (box) {
-          return isIndividualParticipation() ? { source_individual_id: Number(box.value) } : { source_team_id: Number(box.value) };
+      : orderedParticipantBoxes().map(function (box) {
+          return isIndividualParticipation() ? { source_individual_id: Number(box.value), division: divisionsEnabled() ? (participantDivisions[box.value] || '') : '' } : { source_team_id: Number(box.value) };
         }));
     $('#rounds-config').value = JSON.stringify(collectRounds());
     $('#criteria-config').value = JSON.stringify(criteria);
@@ -1488,6 +1567,8 @@
       if (form.end_date.value < form.start_date.value) return 'End Date cannot precede Start Date.';
     }
     if (current === 2) {
+      var divisionIssue = divisionSetupIssue();
+      if (divisionIssue) return divisionIssue;
       if (collectParticipants().length < 1) {
         return participationType() === 'individual' ? 'Select at least one individual.' : (isPairParticipation() ? 'Add at least one pair.' : 'Select at least one team.');
       }
@@ -1608,6 +1689,9 @@
     pointsSnapshotLocked = true;
     mobileApprovalRequired = true;
     form.reset();
+    performanceOrder = [];
+    participantDivisions = {};
+    $('#event-division-names').value = '';
     savedImageUrl = '';
     previewEventImage('');
     $('#event-image-error').textContent = '';
@@ -1747,6 +1831,12 @@
     $$('.participant-check').forEach(function (box) {
       box.checked = ids.indexOf(box.value) !== -1;
     });
+    performanceOrder = ids.filter(Boolean);
+    participantDivisions = {};
+    (event.entries || []).forEach(function (entry) { participantDivisions[String(entry.source_individual_id)] = entry.division || ''; });
+    var divisions = (event.result_processing_config || {}).event_divisions || {};
+    $('#enable-event-divisions').checked = !!divisions.enabled;
+    $('#event-division-names').value = (divisions.names || []).join('\n');
     updateParticipantCount();
     pairEntries = (event.entries || []).filter(function (entry) { return entry.entry_type === 'pair'; }).map(function (entry) {
       return { department_id: entry.department_id || '', member_1_id: entry.members[0] && entry.members[0].id, member_2_id: entry.members[1] && entry.members[1].id };

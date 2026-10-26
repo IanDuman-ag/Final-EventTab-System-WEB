@@ -298,9 +298,9 @@ def criteria_placements(event, rules):
         if any(row['participant_id'] not in entries for row in approved_final):
             return [], 'Approved final results need event-specific participant records.'
         rows = [{'id': row['participant_id'], 'rank': row['rank'],
-                 'department_id': entries[row['participant_id']].department_id}
+                 'department_id': entries[row['participant_id']].department_id, 'division': row.get('division', '')}
                 for row in approved_final]
-        if len({row['rank'] for row in rows}) != len(rows) and rules['tie_policy'] != 'shared':
+        if len({(row.get('division', ''), row['rank']) for row in rows}) != len(rows) and rules['tie_policy'] != 'shared':
             return [], 'Tied criteria rankings require resolution under the official judging rules.'
         return rows, ''
     if is_multiround(event) or len(result_rounds(event)) > 1:
@@ -317,7 +317,7 @@ def criteria_placements(event, rules):
         from .participant_removal_service import active_participant_ids
         if not rankings or len(rankings) != len(active_participant_ids(event)) or not all(row['complete'] for row in rankings):
             return [], 'Complete approved judge scores are required.'
-        rows = [{'id': row['participant_id'], 'rank': row['rank'], 'department_id': entries[row['participant_id']].department_id}
+        rows = [{'id': row['participant_id'], 'rank': row['rank'], 'department_id': entries[row['participant_id']].department_id, 'division': row.get('division', '')}
                 for row in rankings if row['participant_id'] in entries]
     elif event.judging_event_id:
         from .models import JudgeScore
@@ -343,7 +343,7 @@ def criteria_placements(event, rules):
             rows.append({'id': row['candidate_id'], 'rank': rank, 'department_id': departments[row['candidate_id']]})
     else:
         return [], 'No supported official final rankings are available.'
-    if len({row['rank'] for row in rows}) != len(rows) and rules['tie_policy'] != 'shared':
+    if len({(row.get('division', ''), row['rank']) for row in rows}) != len(rows) and rules['tie_policy'] != 'shared':
         return [], 'Tied criteria rankings require resolution under the official judging rules.'
     return rows, ''
 

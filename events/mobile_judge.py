@@ -212,6 +212,23 @@ def detail_payload(user, event, requested_round=None):
                              'is_qualified': qualified, 'scoring_status': state,
                              'scoring_status_label': state.replace('_', ' ').title(), 'review_note': '',
                              'draft_step': 0, 'action_label': 'View Submission' if complete else 'Score'})
+    from .divisions import division_config, participant_division
+    divisions = division_config(portal) if portal else {}
+    if divisions and normalized:
+        positions = defaultdict(int)
+        by_entry = {candidate.pk: candidate for candidate in source}
+        mobile_numbers = dict(event.candidates.values_list('pk', 'number'))
+        for row in participants:
+            row['division'] = participant_division(portal, row['entry_id'])
+            positions[row['division']] += 1
+            row['appearance_order'] = positions[row['division']]
+            original = by_entry[row['entry_id']].source_individual
+            if original:
+                row['candidate_number'] = original.number
+                # Keep the existing integer API contract; the display identifier
+                # also supports registry numbers with letters or leading zeros.
+                row['number'] = int(original.number) if original.number.isdecimal() else mobile_numbers.get(row['id'], row['number'])
+        participants.sort(key=lambda row: (divisions['names'].index(row['division']), row['appearance_order']))
     total = sum(row['is_qualified'] for row in participants)
     scored = sum(row['is_qualified'] and row['scoring_status'] == 'submitted' for row in participants)
     source_status = portal.status if portal else event.status
@@ -257,6 +274,8 @@ def detail_payload(user, event, requested_round=None):
             'participant_label': {'team': 'Teams', 'pair': 'Pairs', 'group': 'Groups'}.get(portal.participation_type, 'Participants') if portal else 'Participants',
             'participation_type': portal.participation_type if portal else 'individual',
             'criteria_count': len(all_criteria), 'criteria_names': [row['name'] for row in all_criteria],
+            'divisions_enabled': bool(divisions),
+            'divisions': [{'name': name, 'participants': [row for row in participants if row.get('division') == name]} for name in divisions.get('names', [])],
             'total_points': 100, 'criteria': criteria, 'all_criteria': all_criteria, 'participants': participants,
             'stages': rounds, 'current_stage': selected, 'current_round': selected['name'], 'selected_round_id': rid,
             'can_score': not reasons,
