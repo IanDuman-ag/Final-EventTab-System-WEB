@@ -4,22 +4,29 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Criteria-Based Events · EventTab</title>
+  <title>{% if individual_workspace %}Individuals{% else %}Criteria-Based Events{% endif %} · EventTab</title>
   {% include 'admindash/_bootstrap.html' %}
-  <link rel="stylesheet" href="{% static 'admindash/criteriabasedevent.css' %}?v=20261026performance">
+  <link rel="stylesheet" href="{% static 'admindash/criteriabasedevent.css' %}?v=20261026individuals">
   <link rel="stylesheet" href="{% static 'admindash/bootstrap-admin.css' %}?v=1">
 </head>
-<body class="admin-dashboard-page admin-dashboard-v2 criteria-page match-events-page">
+<body class="admin-dashboard-page admin-dashboard-v2 criteria-page match-events-page{% if individual_workspace %} individual-workspace{% endif %}">
   <div class="dashboard-shell d-flex flex-column flex-lg-row">
-    {% include 'admindash/_sidebar.html' with active='events_criteria' %}
+    {% if individual_workspace %}{% include 'admindash/_sidebar.html' with active='candidates' %}{% else %}{% include 'admindash/_sidebar.html' with active='events_criteria' %}{% endif %}
     <div class="content-area v2-content">
       <header class="v2-topbar match-topbar">
         <div>
-          <a class="match-breadcrumb" href="{% url 'admin_criteria_events' %}">Events / <strong>Criteria-Based</strong></a>
-          <h2 class="v2-welcome">Judging operations</h2>
+          {% if individual_workspace %}<span class="match-breadcrumb">Participants / <strong>Individuals</strong></span><h2 class="v2-welcome">Individuals</h2>{% else %}<a class="match-breadcrumb" href="{% url 'admin_criteria_events' %}">Events / <strong>Criteria-Based</strong></a><h2 class="v2-welcome">Judging operations</h2>{% endif %}
         </div>
       </header>
       <main class="container-fluid v2-main match-main">
+        {% if individual_workspace %}
+        <div class="individual-workspace-tools"><label for="individual-event">Event <select id="individual-event" aria-label="Select event for participant order"></select></label><a href="{% url 'admin_candidates' %}?registry=1" class="btn btn-outline-secondary">Manage individuals</a></div>
+        <p id="individual-workspace-message" role="status" aria-live="polite"></p>
+        <div id="individual-performance-mount"></div>
+        <div class="individual-workspace-save"><button type="button" class="btn btn-primary" id="save-individual-order">Save Order</button></div>
+        {% endif %}
+        <div {% if individual_workspace %}hidden{% endif %}>
+
         {% if messages %}
         <div class="match-messages" aria-live="polite">
           {% for message in messages %}<p class="match-message match-message--{{ message.tags }}">{{ message }}</p>{% endfor %}
@@ -121,6 +128,7 @@
           </div>
           {% endif %}
         </section>
+        </div>
       </main>
     </div>
   </div>
@@ -943,6 +951,6 @@
     <option value="Production Number"></option>
     <option value="Question and Answer"></option>
   </datalist>
-  <script src="{% static 'admindash/criteriabasedevent.js' %}?v=20261026performance"></script>
+  <script src="{% static 'admindash/criteriabasedevent.js' %}?v=20261026individuals"></script>
 </body>
 </html>

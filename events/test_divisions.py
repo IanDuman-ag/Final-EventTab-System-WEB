@@ -206,3 +206,41 @@ class EventDivisionTests(TransactionTestCase):
             payload['result_processing_config'] = json.dumps(config)
             with self.assertRaisesMessage(CriteriaEventValidationError, 'exactly once'):
                 save_criteria_event(payload, admin, instance=self.event)
+
+    def test_individuals_route_opens_workspace_and_registry_remains_available(self):
+        from django.test import Client
+        admin = get_user_model().objects.create_superuser('workspace-admin', 'workspace@example.test', 'local-password')
+        client = Client(); client.force_login(admin)
+        response = client.get('/admin/candidates/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'individual-performance-mount')
+        self.assertTrue(response.context['individual_workspace'])
+        self.assertEqual(client.get('/admin/candidates/?registry=1').status_code, 200)
+        self.assertContains(client.get('/admin/candidates/?registry=1'), 'id="candidates-table"')
+
+    def test_workspace_save_preserves_scores_publication_judges_and_rounds(self):
+        from .criteria_event_service import save_criteria_participant_setup
+        self.complete()
+        admin = get_user_model().objects.create_superuser('workspace-admin', 'workspace@example.test', 'local-password')
+        before = (self.event.publication_status, self.event.status, self.event.rounds_config,
+                  list(self.event.assigned_judges.values_list('pk', flat=True)))
+        scores = list(CriteriaScoreSubmission.objects.order_by('pk').values_list('pk', 'raw_score'))
+        event = save_criteria_participant_setup(self.event, self.payload([1, 0, 3, 2]), admin)
+        self.assertEqual((event.publication_status, event.status, event.rounds_config,
+                          list(event.assigned_judges.values_list('pk', flat=True))), before)
+        self.assertEqual(list(CriteriaScoreSubmission.objects.order_by('pk').values_list('pk', 'raw_score')), scores)
+        self.assertEqual(event.participant_ids, [self.entries[i].pk for i in [1, 0, 3, 2]])
+
+    def test_workspace_save_endpoint_requires_staff_and_rejects_scored_reassignment(self):
+        from django.test import Client
+        self.complete()
+        client = Client(); client.force_login(self.judge)
+        payload = self.payload(); payload.update(event_id=self.event.pk, workflow_action='save_participant_setup')
+        self.assertEqual(client.post('/admin/events/criteria/', payload).status_code, 302)
+        admin = get_user_model().objects.create_superuser('workspace-admin', 'workspace@example.test', 'local-password')
+        client.force_login(admin)
+        rows = json.loads(payload['event_entries']); rows[0]['division'] = 'Senior'
+        payload['event_entries'] = json.dumps(rows)
+        response = client.post('/admin/events/criteria/', payload)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('cannot change after scoring', response.json()['message'])

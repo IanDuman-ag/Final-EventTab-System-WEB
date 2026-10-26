@@ -1567,6 +1567,9 @@ def admin_teams(request):
 @login_required(login_url='login')
 @user_passes_test(lambda user: user.is_staff, login_url='login')
 def admin_candidates(request):
+    if request.method == 'GET' and request.GET.get('registry') != '1':
+        request.individual_workspace = True
+        return admin_criteria_events(request)
     search_query = request.GET.get('q', '').strip()
     status_filter = request.GET.get('status', 'all').strip().lower()
     dept_filter = request.GET.get('dept', 'all').strip()
@@ -3379,6 +3382,13 @@ def admin_criteria_events(request, event_id=None):
             event = _criteria_event_queryset().filter(pk=event_pk).first()
             if event is None:
                 return workflow_error('Create the Event details in Step 1 first.', 404)
+            if workflow_action == 'save_participant_setup':
+                from events.criteria_event_service import save_criteria_participant_setup
+                try:
+                    event = save_criteria_participant_setup(event, request.POST, request.user)
+                except CriteriaEventValidationError as exc:
+                    return workflow_error(str(exc))
+                return JsonResponse({'success': True, 'event': serialize_criteria_event(event)})
             if workflow_action == 'list_categories':
                 categories = [{
                     'id': category.id,
@@ -3687,6 +3697,9 @@ def admin_criteria_events(request, event_id=None):
     paginator = Paginator(queryset, 10)
     page_obj = paginator.get_page(request.GET.get('page') or 1)
     rows = [serialize_criteria_event(event) for event in page_obj.object_list]
+    individual_workspace = bool(getattr(request, 'individual_workspace', False))
+    if individual_workspace:
+        rows = [serialize_criteria_event(event) for event in _criteria_event_queryset().filter(participation_type='individual').order_by('-updated_at')]
     User = get_user_model()
     judge_options = User.objects.filter(is_active=True).filter(models_q_for_judges()).distinct().order_by(
         'first_name', 'last_name', 'username'
@@ -3703,6 +3716,7 @@ def admin_criteria_events(request, event_id=None):
     all_events = _criteria_event_queryset()
     from events.points_settings_service import scoring_rules
     return render(request, 'admindash/criteriabasedevent.html', {
+        'individual_workspace': individual_workspace,
         'championship_scoring_defaults': scoring_rules(),
         'event_rows': rows,
         'event_rows_json': rows,

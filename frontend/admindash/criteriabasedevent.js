@@ -2524,6 +2524,11 @@
     });
   });
   form.addEventListener('submit', function (e) {
+    if (document.body.classList.contains('individual-workspace')) {
+      e.preventDefault();
+      $('#save-individual-order').click();
+      return;
+    }
     var publishing = $('#publication-status').value === 'published';
     var error = publishing ? (validateStep(1) || validateStep(2) || validateStep(3) || validateStep(4)) : validateStep(1);
     if (error) {
@@ -2865,6 +2870,53 @@
 
   // Init
   resetWizard();
+  if (document.body.classList.contains('individual-workspace')) {
+    var eventPicker = $('#individual-event');
+    var saveOrderButton = $('#save-individual-order');
+    var workspaceMessage = $('#individual-workspace-message');
+    $('#individual-performance-mount').appendChild(wizard);
+    eventPicker.innerHTML = events.map(function (event) { return '<option value="' + event.id + '">' + escapeHtml(event.name) + '</option>'; }).join('');
+    function loadIndividualWorkspace() {
+      var event = findEvent(eventPicker.value);
+      workspaceMessage.classList.remove('is-error');
+      if (!event) {
+        $('#individual-performance-mount').hidden = true;
+        wizard.removeAttribute('open');
+        saveOrderButton.disabled = true;
+        workspaceMessage.textContent = 'Create an individual criteria-based event to configure performance order. Use Manage individuals to maintain the registry.';
+        return;
+      }
+      $('#individual-performance-mount').hidden = false;
+      resetWizard();
+      fillEditor(event);
+      setStep(2);
+      wizard.setAttribute('open', '');
+      saveOrderButton.disabled = !!event.results_finalized;
+      workspaceMessage.textContent = event.results_finalized ? 'This event is finalized. Its participant setup is read-only.' : '';
+    }
+    var requestedEvent = new URLSearchParams(window.location.search).get('event');
+    if (requestedEvent && findEvent(requestedEvent)) eventPicker.value = requestedEvent;
+    eventPicker.addEventListener('change', loadIndividualWorkspace);
+    saveOrderButton.addEventListener('click', function () {
+      var issue = divisionSetupIssue();
+      if (issue) { workspaceMessage.textContent = issue; workspaceMessage.classList.add('is-error'); return; }
+      syncHiddenFields();
+      saveOrderButton.disabled = true;
+      saveOrderButton.textContent = 'Saving...';
+      workflowRequest('save_participant_setup', {event_id: eventPicker.value,
+        event_entries: $('#event-entries').value, result_processing_config: $('#result-processing-config').value
+      }).then(function (data) {
+        events = events.map(function (event) { return String(event.id) === String(data.event.id) ? data.event : event; });
+        loadIndividualWorkspace();
+        workspaceMessage.textContent = 'Participant setup and performance order saved.';
+      }).catch(function (error) {
+        workspaceMessage.textContent = error.message;
+        workspaceMessage.classList.add('is-error');
+      }).finally(function () { saveOrderButton.disabled = false; saveOrderButton.textContent = 'Save Order'; });
+    });
+    loadIndividualWorkspace();
+  }
+
   if (window.CRITERIA_EVENT_EDIT_ID) {
     var editEvent = findEvent(window.CRITERIA_EVENT_EDIT_ID);
     if (editEvent) {

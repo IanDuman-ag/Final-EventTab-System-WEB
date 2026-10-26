@@ -682,3 +682,16 @@ html.event-wizard-open body { overflow:hidden; }
 #performance-division-filter { width: auto; max-width: 190px; flex: 0 1 auto; }
 .po-arrows svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 @media(max-width:640px) { #event-performance-setup .po-tools > label { width: 100%; } }
+
+/* The Individuals route mounts the same editor directly in its content area. */
+.individual-workspace #event-wizard { position: static; inset: auto; display: block; width: 100%; max-width: none; height: auto; max-height: none; margin: 0; padding: 0; border: 0; background: transparent; box-shadow: none; overflow: visible; }
+.individual-workspace #event-wizard > form { display: block; height: auto; max-height: none; }
+.individual-workspace #event-wizard .wizard-head, .individual-workspace #wizard-steps, .individual-workspace #event-wizard .wizard-footer { display: none; }
+.individual-workspace #event-wizard .wizard-body { height: auto; max-height: none; padding: 0; overflow: visible; }
+.individual-workspace #event-performance-setup { margin: 0; }
+.individual-workspace-tools { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.individual-workspace-tools label { display: flex; align-items: center; gap: 10px; margin: 0; color: #29496e; font-size: 13px; font-weight: 600; }
+#individual-event { min-width: 230px; max-width: 500px; padding: 9px 12px; border: 1px solid #cddbec; border-radius: 6px; background: #fff; color: #17365d; }
+#individual-workspace-message { font-size: 13px; color: #315c8f; }#individual-workspace-message.is-error { color: #b42336; }
+.individual-workspace-save { display: flex; justify-content: flex-end; padding: 14px 0; }
+@media(max-width:640px) { .individual-workspace-tools { flex-wrap: wrap; }.individual-workspace-tools label { width: 100%; }#individual-event { min-width: 0; flex: 1; max-width: 100%; } }

@@ -1503,6 +1503,75 @@ def _save_pageant_event(data, user, files=None, instance=None):
     return event
 
 
+def _validated_segment_orders(event, entries, raw_orders):
+    if not isinstance(raw_orders, dict):
+        raise CriteriaEventValidationError('Segment performance orders must be an object.')
+    categories = set(event.scoring_categories.values_list('pk', flat=True))
+    sources = {entry.source_individual_id: entry.pk for entry in entries}
+    orders = {}
+    for key, values in raw_orders.items():
+        try:
+            segment_id = int(key)
+            ids = [int(value) for value in values] if isinstance(values, list) else []
+        except (TypeError, ValueError) as exc:
+            raise CriteriaEventValidationError('Segment performance order contains invalid IDs.') from exc
+        if segment_id not in categories or not isinstance(values, list) or len(ids) != len(set(ids)) or set(ids) != set(sources):
+            raise CriteriaEventValidationError('Each segment order must contain every selected individual exactly once and belong to this event.')
+        orders[str(segment_id)] = [sources[value] for value in ids]
+    return orders
+
+
+@transaction.atomic
+def save_criteria_participant_setup(event, data, user):
+    """Save only the roster and appearance settings from Individuals."""
+    from .divisions import validate_division_setup, participant_division
+    event = Event.objects.select_for_update().get(pk=event.pk)
+    if event.scoring_method != 'criteria' or event.participation_type != 'individual':
+        raise CriteriaEventValidationError('Select an individual criteria-based event.')
+    if event.results_finalized:
+        raise CriteriaEventValidationError('Finalized event participants are read-only.')
+    entries = _validated_event_entries('individual', data, strict=event.publication_status == Event.PUBLICATION_PUBLISHED)
+    incoming = _json_dict(data.get('result_processing_config'), 'Participant settings')
+    try:
+        divisions = validate_division_setup(incoming.get('event_divisions', {}), entries)
+    except ValueError as exc:
+        raise CriteriaEventValidationError(str(exc)) from exc
+    cfg = dict(event.result_processing_config or {})
+    history = (event.criteria_score_submissions.exists() or bool(cfg.get('confirmed_stages'))
+               or (event.judging_event_id and event.judging_event.candidates.filter(scores__isnull=False).exists()))
+    old_entries = list(event.criteria_entries.all())
+    if history:
+        old = {entry.source_individual_id: participant_division(event, entry.pk) for entry in old_entries}
+        proposed = {item['source'].pk: item['division'] if divisions.get('enabled') else '' for item in entries}
+        if old != proposed or bool((cfg.get('event_divisions') or {}).get('enabled')) != bool(divisions.get('enabled')):
+            raise CriteriaEventValidationError('Participants and division assignments cannot change after scoring or round approval.')
+    if divisions.get('enabled'):
+        counts = dict(Counter(item['division'] for item in entries))
+        for round_cfg in (event.rounds_config or [])[:-1]:
+            method = round_cfg.get('qualification_method') or 'top_ranking'
+            if method in {'advance_all', 'minimum_score', 'no_advancement'}:
+                continue
+            count = int(round_cfg.get('qualifiers') or 0)
+            if counts and count > min(counts.values()):
+                raise CriteriaEventValidationError('The qualifier count exceeds the eligible participants in a division. Update the event qualification settings first.')
+            counts = {name: min(size, count) for name, size in counts.items()}
+    saved, replaced = _sync_event_entries(event, entries, data)
+    if divisions.get('enabled'):
+        divisions['assignments'] = {str(entry.pk): item['division'] for entry, item in zip(saved, entries)}
+    cfg['event_divisions'] = divisions
+    cfg['segment_performance_orders'] = _validated_segment_orders(event, saved, incoming.get('segment_performance_orders', {}))
+    if replaced:
+        cfg['qualified_participant_ids'] = {'0': list(event.participant_ids)}
+    event.result_processing_config = cfg
+    event.save(update_fields=['result_processing_config', 'updated_at'])
+    if replaced or not event.judging_event_id:
+        sync_event_to_mobile(event)
+    LogEntry.objects.create(user=user, content_type=ContentType.objects.get_for_model(Event),
+        object_id=str(event.pk), object_repr=event.name, action_flag=CHANGE,
+        change_message='Updated event participants and performance order.')
+    return event
+
+
 @transaction.atomic
 def save_criteria_event(data, user, files=None, instance=None):
     User = get_user_model()
@@ -1706,22 +1775,7 @@ def save_criteria_event(data, user, files=None, instance=None):
     saved_entries, roster_replaced = _sync_event_entries(event, event_entries, data)
     participant_ids = [entry.id for entry in saved_entries]
     if 'segment_performance_orders' in incoming_processing:
-        raw_orders = incoming_processing['segment_performance_orders']
-        if not isinstance(raw_orders, dict):
-            raise CriteriaEventValidationError('Segment performance orders must be an object.')
-        categories = set(event.scoring_categories.values_list('pk', flat=True))
-        sources = {entry.source_individual_id: entry.pk for entry in saved_entries}
-        orders = {}
-        for key, values in raw_orders.items():
-            try:
-                segment_id = int(key)
-                ids = [int(value) for value in values] if isinstance(values, list) else []
-            except (TypeError, ValueError) as exc:
-                raise CriteriaEventValidationError('Segment performance order contains invalid IDs.') from exc
-            if segment_id not in categories or not isinstance(values, list) or len(ids) != len(set(ids)) or set(ids) != set(sources):
-                raise CriteriaEventValidationError('Each segment order must contain every selected individual exactly once and belong to this event.')
-            orders[str(segment_id)] = [sources[value] for value in ids]
-        event.result_processing_config['segment_performance_orders'] = orders
+        event.result_processing_config['segment_performance_orders'] = _validated_segment_orders(event, saved_entries, incoming_processing['segment_performance_orders'])
     elif instance:
         event.result_processing_config['segment_performance_orders'] = old_cfg.get('segment_performance_orders', {})
     event.save(update_fields=['result_processing_config'])

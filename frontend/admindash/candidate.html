@@ -27,7 +27,7 @@
         <header class="teams-page-header">
           <div class="teams-page-intro">
             <h1>Individuals</h1>
-            <p>Manage registered individuals for criteria-based events.</p>
+            <p>Manage registered individuals for criteria-based events.</p><a href="{% url 'admin_candidates' %}">Back to Participants &amp; Performance Order</a>
           </div>
           <button class="btn btn-primary teams-add-btn" type="button" id="open-candidate-modal" data-create-url="{% url 'admin_create_candidate' %}">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 11V5h2v6h6v2h-6v6h-2v-6H5v-2h6Z"/></svg>
@@ -41,7 +41,7 @@
 
         <section class="teams-panel" aria-label="Individuals table">
           <div class="teams-toolbar">
-            <form class="teams-filters" method="get" role="search">
+            <form class="teams-filters" method="get" role="search"><input type="hidden" name="registry" value="1">
               <label class="teams-search"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5Zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14Z"/></svg><input class="form-control" type="text" name="q" value="{{ search_query }}" placeholder="Search individuals by name or number..." aria-label="Search individuals"></label>
               <select name="dept" class="form-select teams-select" aria-label="Department"><option value="all" {% if selected_dept == 'all' %}selected{% endif %}>All Departments</option>{% for dept in active_departments %}<option value="{{ dept.id }}" {% if selected_dept == dept.id|stringformat:"s" %}selected{% endif %}>{{ dept.name }}</option>{% endfor %}</select>
               <button type="submit" class="btn btn-outline-secondary teams-filter-btn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 18h4v-2h-4v2ZM3 6v2h18V6H3Zm3 7h12v-2H6v2Z"/></svg>Filters</button>
@@ -79,9 +79,9 @@
           <footer class="teams-pagination" aria-label="Individuals pagination">
             <span>Showing {{ start_index }} to {{ end_index }} of {{ filtered_candidate_count|default:"0" }} individuals</span>
             <div class="teams-pagination-controls">
-              {% if page_obj.has_previous %}<a class="teams-page-btn" href="?q={{ search_query|urlencode }}&dept={{ selected_dept }}&page={{ page_obj.previous_page_number }}" aria-label="Previous page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12l4.58-4.59Z"/></svg></a>{% else %}<span class="teams-page-btn is-disabled" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12l4.58-4.59Z"/></svg></span>{% endif %}
-              {% for num in page_obj.paginator.page_range %}{% if num == page_obj.number %}<span class="teams-page-num is-active">{{ num }}</span>{% else %}<a class="teams-page-num" href="?q={{ search_query|urlencode }}&dept={{ selected_dept }}&page={{ num }}">{{ num }}</a>{% endif %}{% endfor %}
-              {% if page_obj.has_next %}<a class="teams-page-btn" href="?q={{ search_query|urlencode }}&dept={{ selected_dept }}&page={{ page_obj.next_page_number }}" aria-label="Next page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.59 16.59 13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41Z"/></svg></a>{% else %}<span class="teams-page-btn is-disabled" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8.59 16.59 13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41Z"/></svg></span>{% endif %}
+              {% if page_obj.has_previous %}<a class="teams-page-btn" href="?registry=1&amp;q={{ search_query|urlencode }}&dept={{ selected_dept }}&page={{ page_obj.previous_page_number }}" aria-label="Previous page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12l4.58-4.59Z"/></svg></a>{% else %}<span class="teams-page-btn is-disabled" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12l4.58-4.59Z"/></svg></span>{% endif %}
+              {% for num in page_obj.paginator.page_range %}{% if num == page_obj.number %}<span class="teams-page-num is-active">{{ num }}</span>{% else %}<a class="teams-page-num" href="?registry=1&amp;q={{ search_query|urlencode }}&dept={{ selected_dept }}&page={{ num }}">{{ num }}</a>{% endif %}{% endfor %}
+              {% if page_obj.has_next %}<a class="teams-page-btn" href="?registry=1&amp;q={{ search_query|urlencode }}&dept={{ selected_dept }}&page={{ page_obj.next_page_number }}" aria-label="Next page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.59 16.59 13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41Z"/></svg></a>{% else %}<span class="teams-page-btn is-disabled" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8.59 16.59 13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41Z"/></svg></span>{% endif %}
             </div>
           </footer>
         </section>
