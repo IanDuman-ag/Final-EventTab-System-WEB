@@ -46,6 +46,11 @@
   var pairEntries = [];
   var performanceOrder = [];
   var participantDivisions = {};
+  var segmentPerformanceOrders = {};
+  var performanceTab = "order";
+  var draggedParticipant = null;
+  var pickerPlaceholder = document.createElement("div");
+  $("#team-picker").before(pickerPlaceholder);
   var lastParticipationType = 'individual';
   var scoringWorkflow = {
     eventId: null, eventName: '', categories: [], selectedCategoryId: null,
@@ -1125,30 +1130,86 @@
     return performanceOrder.map(function (id) { return boxes.find(function (box) { return String(box.value) === id; }); });
   }
 
+  function activePerformanceOrder() {
+    var defaults = orderedParticipantBoxes().map(function (box) { return String(box.value); });
+    var key = $('#performance-segment').value;
+    if (!key || !segmentPerformanceOrders[key]) return defaults;
+    var saved = segmentPerformanceOrders[key].filter(function (id) { return defaults.indexOf(id) !== -1; });
+    defaults.forEach(function (id) { if (saved.indexOf(id) === -1) saved.push(id); });
+    segmentPerformanceOrders[key] = saved;
+    return saved;
+  }
+
+  function movePerformanceParticipant(id, next) {
+    var order = activePerformanceOrder().slice();
+    if (!next || id === next || (divisionsEnabled() && participantDivisions[id] !== participantDivisions[next])) return;
+    var at = order.indexOf(id), to = order.indexOf(next);
+    if (at < 0 || to < 0) return;
+    order[at] = next; order[to] = id;
+    var key = $('#performance-segment').value;
+    if (key) segmentPerformanceOrders[key] = order;
+    else performanceOrder = order;
+    renderPerformanceOrder();
+  }
+
   function renderPerformanceOrder() {
     var host = $('#event-performance-setup');
     if (!host) return;
     host.hidden = !isIndividualParticipation();
+    $('.wizard-panel[data-step="2"] > .wizard-section-title').hidden = isIndividualParticipation();
+    var picker = $('#team-picker');
+    if (isIndividualParticipation()) $('#performance-registry-picker').appendChild(picker);
+    else pickerPlaceholder.after(picker);
+    var listing = performanceTab === 'participants';
+    host.classList.toggle('po-list-view', listing);
+    $('#performance-participant-picker').hidden = !listing;
+    $('#performance-order-label').hidden = listing;
+    $('#performance-order-note').hidden = listing;
+    $$('[data-performance-tab]').forEach(function (button) { button.setAttribute('aria-selected', String(button.dataset.performanceTab === performanceTab)); });
     var enabled = divisionsEnabled();
     $('#event-division-editor').hidden = !enabled;
     $('#performance-division-heading').hidden = !enabled;
     var names = eventDivisionNames();
+    var filter = $('#performance-division-filter');
+    var selectedDivision = filter.value;
+    filter.hidden = !enabled;
+    filter.innerHTML = '<option value="">All divisions</option>' + names.map(function (name) { return '<option value="' + escapeAttr(name) + '">' + escapeHtml(name) + '</option>'; }).join('');
+    filter.value = names.indexOf(selectedDivision) !== -1 ? selectedDivision : '';
+    var segment = $('#performance-segment'), selectedSegment = segment.value;
+    segment.innerHTML = '<option value="">Default Order (All Segments)</option>' + scoringWorkflow.categories.map(function (category) {
+      return '<option value="' + category.id + '">' + escapeHtml(category.name) + '</option>';
+    }).join('');
+    segment.value = scoringWorkflow.categories.some(function (row) { return String(row.id) === selectedSegment; }) ? selectedSegment : '';
+    $('#performance-reset-segment').hidden = listing || !segment.value || !segmentPerformanceOrders[segment.value];
     var boxes = orderedParticipantBoxes();
-    var positions = {};
-    var grouped = enabled ? names.concat(['']).filter(function (name, index, all) { return all.indexOf(name) === index; }).flatMap(function (name) {
-      return boxes.filter(function (box) { var current = participantDivisions[box.value]; return (names.indexOf(current) !== -1 ? current : '') === name; });
-    }) : boxes;
+    var order = activePerformanceOrder();
+    var grouped = (enabled ? names.concat(['']) : ['']).flatMap(function (name) {
+      return order.map(function (id) { return boxes.find(function (box) { return String(box.value) === id; }); }).filter(function (box) {
+        var current = participantDivisions[box.value];
+        return !enabled || (names.indexOf(current) !== -1 ? current : '') === name;
+      });
+    });
+    var query = $('#performance-search').value.trim().toLowerCase(), positions = {};
     $('#event-performance-rows').innerHTML = grouped.map(function (box) {
-      var id = box.value, name = enabled ? participantDivisions[id] || '' : '';
+      var id = String(box.value), name = enabled ? participantDivisions[id] || '' : '';
       positions[name] = (positions[name] || 0) + 1;
+      var department = box.closest('label').dataset.department || '';
+      if ((filter.value && name !== filter.value) || (query && (box.dataset.name + ' ' + department + ' ' + name).toLowerCase().indexOf(query) === -1)) return '';
       var peers = grouped.filter(function (other) { return !enabled || (participantDivisions[other.value] || '') === name; });
-      var at = peers.indexOf(box);
-      return '<tr><td>' + positions[name] + '</td><td><strong>' + escapeHtml(box.dataset.name) + '</strong></td><td>' + escapeHtml(box.closest('label').dataset.department || '') + '</td>' +
-        (enabled ? '<td><select class="form-select" data-participant-division="' + escapeAttr(id) + '" aria-label="Division for ' + escapeAttr(box.dataset.name) + '"><option value="">Select division</option>' + names.map(function (label) { return '<option value="' + escapeAttr(label) + '"' + (name === label ? ' selected' : '') + '>' + escapeHtml(label) + '</option>'; }).join('') + '</select></td>' : '') +
-        '<td><div class="d-flex gap-2"><button type="button" class="btn btn-outline-secondary btn-sm" data-performance-id="' + escapeAttr(id) + '" data-performance-move="-1"' + (!at ? ' disabled' : '') + '>Up</button><button type="button" class="btn btn-outline-secondary btn-sm" data-performance-id="' + escapeAttr(id) + '" data-performance-move="1"' + (at === peers.length - 1 ? ' disabled' : '') + '>Down</button></div></td></tr>';
-    }).join('') || '<tr><td colspan="5">Select participants above.</td></tr>';
+      var at = peers.indexOf(box), tone = Math.max(0, names.indexOf(name)) % 3;
+      var division = listing ? '<select data-participant-division="' + escapeAttr(id) + '" aria-label="Division for ' + escapeAttr(box.dataset.name) + '"><option value="">Select division</option>' + names.map(function (label) { return '<option value="' + escapeAttr(label) + '"' + (name === label ? ' selected' : '') + '>' + escapeHtml(label) + '</option>'; }).join('') + '</select>' : '<span class="po-division po-tone-' + tone + '">' + escapeHtml(name || 'Unassigned') + '</span>';
+      return '<tr data-performance-row="' + escapeAttr(id) + '" draggable="' + (!listing && !query) + '"><td class="po-order-column"><span class="po-grip" aria-hidden="true">&#10287;</span><span class="po-position">' + positions[name] + '</span></td><td><div class="po-person">' + (box.dataset.image ? '<img src="' + escapeAttr(box.dataset.image) + '" alt="">' : '<span class="po-avatar" aria-hidden="true">' + escapeHtml((box.dataset.displayName || box.dataset.name).slice(0, 1)) + '</span>') + '<div><strong>' + escapeHtml(box.dataset.displayName || box.dataset.name) + '</strong><small>#' + escapeHtml(box.dataset.number || '') + '</small></div></div></td><td class="po-department">' + escapeHtml(department || 'Not assigned') + '</td>' + (enabled ? '<td>' + division + '</td>' : '') + '<td class="po-order-column"><div class="po-arrows"><button type="button" data-performance-id="' + escapeAttr(id) + '" data-performance-move="-1" aria-label="Move ' + escapeAttr(box.dataset.name) + ' up"' + (!at ? ' disabled' : '') + '><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 15 6-6 6 6"/></svg></button><button type="button" data-performance-id="' + escapeAttr(id) + '" data-performance-move="1" aria-label="Move ' + escapeAttr(box.dataset.name) + ' down"' + (at === peers.length - 1 ? ' disabled' : '') + '><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button></div></td></tr>';
+    }).join('') || '<tr><td colspan="5" class="po-empty">' + (boxes.length ? 'No participants match your search.' : 'Select individuals in Participants List to arrange their performance order.') + '</td></tr>';
   }
 
+  $$('[data-performance-tab]').forEach(function (button) { button.addEventListener('click', function () {
+    performanceTab = button.dataset.performanceTab;
+    if (performanceTab === 'order') $('#performance-segment').value = '';
+    if (performanceTab === 'segments' && !$('#performance-segment').value && scoringWorkflow.categories.length) $('#performance-segment').value = String(scoringWorkflow.categories[0].id);
+    renderPerformanceOrder();
+  }); });
+  ['performance-search', 'performance-division-filter', 'performance-segment'].forEach(function (id) { $('#' + id).addEventListener(id === 'performance-search' ? 'input' : 'change', renderPerformanceOrder); });
+  $('#performance-reset-segment').addEventListener('click', function () { delete segmentPerformanceOrders[$('#performance-segment').value]; renderPerformanceOrder(); });
   $('#enable-event-divisions').addEventListener('change', renderPerformanceOrder);
   $('#event-division-names').addEventListener('change', renderPerformanceOrder);
   $('#event-performance-rows').addEventListener('change', function (event) {
@@ -1160,14 +1221,26 @@
   $('#event-performance-rows').addEventListener('click', function (event) {
     var button = event.target.closest('[data-performance-move]');
     if (!button) return;
-    var id = button.dataset.performanceId;
-    var peers = performanceOrder.filter(function (other) { return !divisionsEnabled() || participantDivisions[other] === participantDivisions[id]; });
-    var next = peers[peers.indexOf(id) + Number(button.dataset.performanceMove)];
-    if (!next) return;
-    var at = performanceOrder.indexOf(id), to = performanceOrder.indexOf(next);
-    performanceOrder[at] = next; performanceOrder[to] = id;
-    renderPerformanceOrder();
+    var id = button.dataset.performanceId, order = activePerformanceOrder();
+    var peers = order.filter(function (other) { return !divisionsEnabled() || participantDivisions[other] === participantDivisions[id]; });
+    movePerformanceParticipant(id, peers[peers.indexOf(id) + Number(button.dataset.performanceMove)]);
   });
+  $('#event-performance-rows').addEventListener('dragstart', function (event) {
+    if (event.target.closest('button,select,input')) { event.preventDefault(); return; }
+    var row = event.target.closest('[data-performance-row]');
+    if (!row || row.getAttribute('draggable') !== 'true') return;
+    draggedParticipant = row.dataset.performanceRow;
+    event.dataTransfer.setData('text/plain', draggedParticipant);
+    event.dataTransfer.effectAllowed = 'move';
+  });
+  $('#event-performance-rows').addEventListener('dragover', function (event) { if (draggedParticipant) event.preventDefault(); });
+  $('#event-performance-rows').addEventListener('drop', function (event) {
+    event.preventDefault();
+    var row = event.target.closest('[data-performance-row]');
+    if (row) movePerformanceParticipant(draggedParticipant, row.dataset.performanceRow);
+    draggedParticipant = null;
+  });
+  $('#event-performance-rows').addEventListener('dragend', function () { draggedParticipant = null; });
 
   function collectParticipants() {
     if (isPairParticipation()) return pairEntries.map(function (_, index) { return index + 1; });
@@ -1223,6 +1296,14 @@
 
   function collectResultProcessing() {
     var out = {};
+    out.segment_performance_orders = {};
+    orderedParticipantBoxes();
+    Object.keys(segmentPerformanceOrders).forEach(function (key) {
+      var ids = performanceOrder.slice();
+      var saved = segmentPerformanceOrders[key].filter(function (id) { return ids.indexOf(id) !== -1; });
+      ids.forEach(function (id) { if (saved.indexOf(id) === -1) saved.push(id); });
+      if (isIndividualParticipation() && scoringWorkflow.categories.some(function (category) { return String(category.id) === key; })) out.segment_performance_orders[key] = saved.map(Number);
+    });
     out.event_divisions = { enabled: divisionsEnabled(), names: divisionsEnabled() ? eventDivisionNames() : [] };
     out.final_result_basis = $('#final-result-basis').value;
     out.placements_count = Number($('#placements-count').value);
@@ -1691,6 +1772,9 @@
     form.reset();
     performanceOrder = [];
     participantDivisions = {};
+    segmentPerformanceOrders = {};
+    performanceTab = 'order';
+    $('#performance-search').value = '';
     $('#event-division-names').value = '';
     savedImageUrl = '';
     previewEventImage('');
@@ -1831,6 +1915,11 @@
     $$('.participant-check').forEach(function (box) {
       box.checked = ids.indexOf(box.value) !== -1;
     });
+    var sourceByEntry = {};
+    (event.entries || []).forEach(function (entry) { sourceByEntry[entry.id] = String(entry.source_individual_id || ''); });
+    segmentPerformanceOrders = {};
+    var savedOrders = (event.result_processing_config || {}).segment_performance_orders || {};
+    Object.keys(savedOrders).forEach(function (key) { segmentPerformanceOrders[key] = savedOrders[key].map(function (id) { return sourceByEntry[id]; }).filter(Boolean); });
     performanceOrder = ids.filter(Boolean);
     participantDivisions = {};
     (event.entries || []).forEach(function (entry) { participantDivisions[String(entry.source_individual_id)] = entry.division || ''; });
@@ -2051,6 +2140,7 @@
           : null;
       }
       syncCriteriaFromScoringWorkflow();
+      renderPerformanceOrder();
     });
   }
 

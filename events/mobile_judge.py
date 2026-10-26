@@ -127,7 +127,7 @@ def detail_payload(user, event, requested_round=None):
                     'weight_percent': float(category.overall_weight_percent * definition.weight_percent / 100),
                     'order': stored.order if stored else len(all_criteria) + 1,
                     'category_order': definition.display_order, 'round_id': category.assigned_round_id,
-                    'segment_name': category.name, 'decimal_places': 2,
+                    'segment_name': category.name, 'segment_id': category.pk, 'decimal_places': 2,
                     'comment_enabled': False, 'comment_required': False,
                     'subcriteria': [{'id': None, 'normalized_subcriterion_id': child.pk, 'name': child.name,
                                      'max_score': float(child.max_score), 'display_order': child.display_order}
@@ -229,6 +229,14 @@ def detail_payload(user, event, requested_round=None):
                 # also supports registry numbers with letters or leading zeros.
                 row['number'] = int(original.number) if original.number.isdecimal() else mobile_numbers.get(row['id'], row['number'])
         participants.sort(key=lambda row: (divisions['names'].index(row['division']), row['appearance_order']))
+    segment_orders = []
+    if portal and normalized:
+        from .divisions import segment_participant_order
+        by_entry = {row['entry_id']: row for row in participants if row['is_qualified']}
+        for category in portal.scoring_categories.filter(assigned_round_id=rid):
+            ids = segment_participant_order(portal, category.pk, list(by_entry))
+            segment_orders.append({'id': category.pk, 'name': category.name,
+                'candidate_ids': [by_entry[value]['id'] for value in ids]})
     total = sum(row['is_qualified'] for row in participants)
     scored = sum(row['is_qualified'] and row['scoring_status'] == 'submitted' for row in participants)
     source_status = portal.status if portal else event.status
@@ -274,6 +282,7 @@ def detail_payload(user, event, requested_round=None):
             'participant_label': {'team': 'Teams', 'pair': 'Pairs', 'group': 'Groups'}.get(portal.participation_type, 'Participants') if portal else 'Participants',
             'participation_type': portal.participation_type if portal else 'individual',
             'criteria_count': len(all_criteria), 'criteria_names': [row['name'] for row in all_criteria],
+            'segment_performance_orders': segment_orders,
             'divisions_enabled': bool(divisions),
             'divisions': [{'name': name, 'participants': [row for row in participants if row.get('division') == name]} for name in divisions.get('names', [])],
             'total_points': 100, 'criteria': criteria, 'all_criteria': all_criteria, 'participants': participants,

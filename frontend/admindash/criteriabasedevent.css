@@ -633,14 +633,52 @@ html.event-wizard-open body { overflow:hidden; }
 .pair-entry-card .pair-entry-error{color:#b42336;font-weight:700}
 @media(max-width:700px){.pair-entry-card{grid-template-columns:1fr}.pair-entry-card header,.pair-entry-card small{grid-column:1}}
 
-/* Event-local division assignments share the participant editor's flat layout. */
-#event-performance-setup { border-top: 1px solid #dbe5f1; padding-top: 20px; color: #0b2545; }
-#event-performance-setup h3 { margin: 0; font-size: 17px; font-weight: 700; color: #0b2545; }
+
+/* Compact participant order workspace. */
+#event-performance-setup { margin-top: 8px; padding: 14px 12px 10px; border: 1px solid #dce7f6; border-radius: 9px; color: #112849; background: #fff; font-family: Arial, sans-serif; }
+.po-heading { display: flex; align-items: center; gap: 11px; padding-bottom: 15px; }
+.po-heading-icon { display: grid; place-items: center; width: 39px; height: 39px; flex-shrink: 0; border-radius: 8px; color: #0862ff; background: #edf5ff; }
+.po-heading-icon svg { width: 25px; fill: currentColor; }
+#event-performance-setup h3 { margin: 0 0 3px; font-size: 19px; font-weight: 750; letter-spacing: -.4px; color: #102345; }
+.po-heading p { margin: 0; color: #667da2; font-size: 11px; line-height: 1.5; }
+.po-tabs { display: flex; border-bottom: 1px solid #dce7f6; margin: 0 0 12px; overflow-x: auto; }
+.po-tabs button { flex: 0 0 172px; padding: 10px 12px; border: 1px solid transparent; border-radius: 7px 7px 0 0; background: #f5f8fc; color: #244267; font-size: 11px; font-weight: 600; cursor: pointer; }
+.po-tabs button[aria-selected=true] { color: #075bff; background: #fff; border-color: #4382ff #dce7f6 #075bff; border-bottom-width: 2px; }
+.po-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 10px 0; }
+.po-tools label { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 11px; white-space: nowrap; }
+#event-performance-setup select, #performance-search { min-height: 33px; padding: 7px 10px; border: 1px solid #d4e0f1; border-radius: 6px; background: #fff; color: #183a67; font: inherit; font-size: 11px; }
+#performance-segment { max-width: 270px; }
+#performance-search { margin-left: auto; width: 205px; }
+.po-note { border-radius: 6px; background: #e5f2ff; color: #315b91; font-size: 11px; padding: 9px 11px; margin-bottom: 10px; }
+.po-table-wrap { overflow-x: auto; border: 1px solid #e0e8f3; border-radius: 7px; }
+#event-performance-setup table { width: 100%; min-width: 640px; border-collapse: collapse; font-size: 12px; }
+#event-performance-setup th { padding: 9px 12px; background: #f1f5fa; color: #526c90; font-size: 10px; font-weight: 700; text-transform: uppercase; text-align: left; white-space: nowrap; }
+#event-performance-setup td { padding: 7px 12px; border-bottom: 1px solid #e4ebf4; vertical-align: middle; }
+#event-performance-setup tr:last-child td { border-bottom: 0; }
+.po-order-column { width: 90px; white-space: nowrap; }
+.po-grip { color: #6984a7; font-size: 20px; margin-right: 12px; cursor: grab; }
+.po-position { display: inline-grid; place-items: center; min-width: 30px; height: 30px; padding: 0 5px; border-radius: 6px; background: #edf5ff; color: #122e58; font-weight: 750; font-size: 15px; font-variant-numeric: tabular-nums; }
+.po-person { display: flex; align-items: center; gap: 12px; min-width: 150px; }
+.po-person img, .po-avatar { width: 35px; height: 35px; object-fit: cover; border-radius: 6px; flex-shrink: 0; }
+.po-avatar { display: grid; place-items: center; background: #edf4ff; color: #2664b7; font-weight: 700; }
+.po-person strong { display: block; font-size: 12px; color: #10284d; }
+.po-person small { display: block; margin-top: 3px; font-size: 10px; color: #6580a4; }
+.po-department { max-width: 215px; color: #657b9d; font-size: 11px; line-height: 1.4; }
+.po-division { display: inline-block; max-width: 150px; overflow-wrap: anywhere; padding: 8px 12px; border-radius: 6px; font-size: 11px; font-weight: 600; }
+.po-tone-0 { color: #1263c8; background: #e8f3ff; }.po-tone-1 { color: #b72c78; background: #ffedf6; }.po-tone-2 { color: #6556a6; background: #f0edff; }
+.po-arrows { display: flex; gap: 7px; }
+.po-arrows button { display: grid; place-items: center; width: 31px; height: 31px; border: 1px solid #d3dfef; border-radius: 6px; background: #fff; color: #153665; font-size: 19px; cursor: pointer; }
+.po-arrows button:hover:not(:disabled) { background: #edf4ff; border-color: #7da9ee; }.po-arrows button:disabled { opacity: .35; cursor: default; }
+.po-enable { display: flex; align-items: center; gap: 8px; margin: 14px 0; font-size: 12px; font-weight: 600; }
 #enable-event-divisions { accent-color: #1261db; width: 16px; height: 16px; }
-#event-division-editor { max-width: 560px; }
-#event-division-editor > label { display: block; margin-bottom: 8px; font-size: 13px; font-weight: 600; }
-#event-performance-setup table { min-width: 660px; font-size: 13px; }
-#event-performance-setup th { font-size: 12px; color: #526984; white-space: nowrap; }
-#event-performance-setup td { padding: 12px 8px; vertical-align: middle; }
-#event-performance-setup select { min-width: 150px; max-width: 240px; }
-#event-performance-setup .btn { white-space: nowrap; }
+#event-division-editor { max-width: 480px; margin-bottom: 12px; }#event-division-editor > label { display: block; margin-bottom: 6px; font-size: 12px; }
+.po-list-view .po-order-column { display: none; }.po-reset { margin: 0 0 10px; padding: 5px 0; border: 0; background: transparent; color: #1564d9; font-size: 11px; cursor: pointer; }
+.po-empty { padding: 25px 12px !important; text-align: center; color: #637b9c; }
+@media(max-width:640px) { #event-performance-setup { padding: 12px 8px; }.po-heading { align-items: flex-start; }#event-performance-setup h3 { font-size: 17px; }.po-tabs button { flex-basis: 150px; min-height: 42px; }#performance-search { width: 100%; margin-left: 0; }.po-tools label { width: 100%; }#performance-segment { flex: 1; max-width: none; }.po-arrows button { width: 40px; height: 40px; } }
+
+.po-tabs button svg { width: 14px; height: 14px; fill: currentColor; vertical-align: middle; margin-right: 5px; }
+
+#event-performance-setup .po-tools > label { width: auto; flex: 0 1 auto; }
+#performance-division-filter { width: auto; max-width: 190px; flex: 0 1 auto; }
+.po-arrows svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+@media(max-width:640px) { #event-performance-setup .po-tools > label { width: 100%; } }

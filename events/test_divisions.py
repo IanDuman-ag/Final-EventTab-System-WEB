@@ -137,8 +137,11 @@ class EventDivisionTests(TransactionTestCase):
             entry.source_individual = person; entry.save()
         data.portal.result_processing_config['event_divisions'] = {'enabled': True, 'names': ['Junior', 'Senior'],
             'assignments': {str(entry.pk): name for entry, name in zip(entries, names)}}
+        segment_id = data.portal.scoring_categories.first().pk
+        data.portal.result_processing_config['segment_performance_orders'] = {str(segment_id): [entry.pk for entry in reversed(entries)]}
         data.portal.save()
         detail = detail_payload(data.judges[-1], data.mobile)
+        self.assertEqual(detail['segment_performance_orders'][0]['candidate_ids'], [data.candidates[i].pk for i in [6, 4, 2, 0, 7, 5, 3, 1]])
         self.assertEqual([row['division'] for row in detail['participants']], ['Junior'] * 4 + ['Senior'] * 4)
         self.assertEqual([row['appearance_order'] for row in detail['participants']], [1, 2, 3, 4] * 2)
         self.assertEqual([row['number'] for row in detail['participants']], [101, 103, 105, 107, 102, 104, 106, 108])
@@ -174,3 +177,32 @@ class EventDivisionTests(TransactionTestCase):
         self.event.save()
         results, message = criteria_results(self.event)
         self.assertEqual([(row['division'], row['rank']) for row in results], [('Junior', 1), ('Senior', 1)])
+
+    @patch('events.criteria_event_service._schedule_assignment_notifications')
+    def test_segment_order_persists_without_changing_default_ids_or_scores(self, notify):
+        admin = get_user_model().objects.create_superuser('segment-admin', 'segment@example.test', 'local-password')
+        payload = self.payload()
+        config = json.loads(payload['result_processing_config'])
+        key = str(self.criteria['prelim'].category_id)
+        config['segment_performance_orders'] = {key: [self.people[i].pk for i in [1, 0, 3, 2]]}
+        payload['result_processing_config'] = json.dumps(config)
+        original_ids = list(self.event.participant_ids)
+        saved = save_criteria_event(payload, admin, instance=self.event)
+        self.assertEqual(saved.participant_ids, original_ids)
+        self.assertEqual(saved.result_processing_config['segment_performance_orders'][key], [original_ids[i] for i in [1, 0, 3, 2]])
+        from .divisions import segment_participant_order
+        self.assertEqual(segment_participant_order(saved, key, original_ids), [original_ids[i] for i in [1, 0, 3, 2]])
+        self.assertEqual(segment_participant_order(saved, key, [original_ids[0], original_ids[2]]), [original_ids[0], original_ids[2]])
+        self.assertFalse(CriteriaScoreSubmission.objects.exists())
+
+    @patch('events.criteria_event_service._schedule_assignment_notifications')
+    def test_segment_order_rejects_missing_duplicate_and_foreign_entries(self, notify):
+        admin = get_user_model().objects.create_superuser('segment-admin', 'segment@example.test', 'local-password')
+        key = str(self.criteria['prelim'].category_id)
+        ids = [person.pk for person in self.people]
+        for orders in [{key: ids[:2]}, {key: [ids[0]] * 4}, {'999999': ids}, {key: ids[:3] + [999999]}]:
+            payload = self.payload()
+            config = json.loads(payload['result_processing_config']); config['segment_performance_orders'] = orders
+            payload['result_processing_config'] = json.dumps(config)
+            with self.assertRaisesMessage(CriteriaEventValidationError, 'exactly once'):
+                save_criteria_event(payload, admin, instance=self.event)

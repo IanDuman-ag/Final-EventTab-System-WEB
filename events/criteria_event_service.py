@@ -1705,6 +1705,26 @@ def save_criteria_event(data, user, files=None, instance=None):
     event.save()
     saved_entries, roster_replaced = _sync_event_entries(event, event_entries, data)
     participant_ids = [entry.id for entry in saved_entries]
+    if 'segment_performance_orders' in incoming_processing:
+        raw_orders = incoming_processing['segment_performance_orders']
+        if not isinstance(raw_orders, dict):
+            raise CriteriaEventValidationError('Segment performance orders must be an object.')
+        categories = set(event.scoring_categories.values_list('pk', flat=True))
+        sources = {entry.source_individual_id: entry.pk for entry in saved_entries}
+        orders = {}
+        for key, values in raw_orders.items():
+            try:
+                segment_id = int(key)
+                ids = [int(value) for value in values] if isinstance(values, list) else []
+            except (TypeError, ValueError) as exc:
+                raise CriteriaEventValidationError('Segment performance order contains invalid IDs.') from exc
+            if segment_id not in categories or not isinstance(values, list) or len(ids) != len(set(ids)) or set(ids) != set(sources):
+                raise CriteriaEventValidationError('Each segment order must contain every selected individual exactly once and belong to this event.')
+            orders[str(segment_id)] = [sources[value] for value in ids]
+        event.result_processing_config['segment_performance_orders'] = orders
+    elif instance:
+        event.result_processing_config['segment_performance_orders'] = old_cfg.get('segment_performance_orders', {})
+    event.save(update_fields=['result_processing_config'])
     if divisions.get('enabled'):
         divisions['assignments'] = {str(entry.pk): item['division'] for entry, item in zip(saved_entries, event_entries)}
         event.result_processing_config['event_divisions'] = divisions

@@ -65,3 +65,15 @@ def validate_division_setup(raw, entries):
         if row.get('division') not in names:
             raise ValueError('Assign each selected participant to a configured division.')
     return {'enabled': True, 'names': names}
+
+
+def segment_participant_order(event, segment_id, participant_ids):
+    """Apply a saved segment order without changing identities or qualifications."""
+    saved = (event.result_processing_config or {}).get('segment_performance_orders', {}).get(str(segment_id), [])
+    allowed = set(participant_ids)
+    ordered = [value for value in saved if value in allowed]
+    ordered += [value for value in participant_ids if value not in ordered]
+    cfg = division_config(event)
+    if cfg:
+        ordered.sort(key=lambda value: cfg['names'].index(participant_division(event, value)))
+    return ordered
