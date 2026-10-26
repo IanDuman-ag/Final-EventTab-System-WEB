@@ -213,8 +213,10 @@ class EventDivisionTests(TransactionTestCase):
         client = Client(); client.force_login(admin)
         response = client.get('/admin/candidates/')
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'individual-performance-mount')
-        self.assertTrue(response.context['individual_workspace'])
+        self.assertContains(response, 'id="candidates-table"')
+        workspace = client.get('/admin/candidates/?performance=1')
+        self.assertContains(workspace, 'individual-performance-mount')
+        self.assertTrue(workspace.context['individual_workspace'])
         self.assertEqual(client.get('/admin/candidates/?registry=1').status_code, 200)
         self.assertContains(client.get('/admin/candidates/?registry=1'), 'id="candidates-table"')
 
@@ -244,3 +246,34 @@ class EventDivisionTests(TransactionTestCase):
         response = client.post('/admin/events/criteria/', payload)
         self.assertEqual(response.status_code, 400)
         self.assertIn('cannot change after scoring', response.json()['message'])
+
+    def test_registry_division_filters_are_event_scoped_and_counts_stay_complete(self):
+        from django.test import Client
+        admin = get_user_model().objects.create_superuser('registry-admin', 'registry@example.test', 'local-password')
+        client = Client(); client.force_login(admin)
+        response = client.get('/admin/candidates/', {'event': self.event.pk, 'division': 'Senior', 'q': 'Person 3'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([row['id'] for row in response.context['candidate_rows']], [self.people[3].pk])
+        self.assertEqual([(row['name'], row['count']) for row in response.context['division_cards']], [('Junior', 2), ('Senior', 2)])
+        self.assertEqual(response.context['total_candidate_count'], 4)
+        unscoped = client.get('/admin/candidates/', {'event': 'all'})
+        self.assertEqual(unscoped.context['division_cards'], [])
+        self.assertTrue(all(not row['division'] for row in unscoped.context['candidate_rows']))
+        self.assertContains(response, 'id="open-candidate-modal"', count=1)
+
+    def test_participant_crud_still_works_from_individuals_table(self):
+        from django.test import Client
+        from .models import Department
+        admin = get_user_model().objects.create_superuser('registry-admin', 'registry@example.test', 'local-password')
+        client = Client(); client.force_login(admin)
+        department = Department.objects.create(name='Test Program', code='TEST')
+        payload = {'number': 'NEW-99', 'name': 'New Individual', 'department_id': department.pk, 'status': 'active'}
+        response = client.post('/admin/candidates/create/', payload)
+        self.assertEqual(response.status_code, 200)
+        person_id = response.json()['id']
+        self.assertEqual(client.get(f'/admin/candidates/{person_id}/view/').json()['name'], 'New Individual')
+        payload['name'] = 'Updated Individual'
+        self.assertEqual(client.post(f'/admin/candidates/{person_id}/edit/', payload).status_code, 200)
+        self.assertEqual(RegistryCandidate.objects.get(pk=person_id).name, 'Updated Individual')
+        self.assertEqual(client.post(f'/admin/candidates/{person_id}/delete/').status_code, 200)
+        self.assertFalse(RegistryCandidate.objects.filter(pk=person_id).exists())

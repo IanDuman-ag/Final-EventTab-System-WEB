@@ -1567,7 +1567,7 @@ def admin_teams(request):
 @login_required(login_url='login')
 @user_passes_test(lambda user: user.is_staff, login_url='login')
 def admin_candidates(request):
-    if request.method == 'GET' and request.GET.get('registry') != '1':
+    if request.method == 'GET' and request.GET.get('performance') == '1':
         request.individual_workspace = True
         return admin_criteria_events(request)
     search_query = request.GET.get('q', '').strip()
@@ -1575,6 +1575,33 @@ def admin_candidates(request):
     dept_filter = request.GET.get('dept', 'all').strip()
 
     candidate_rows = get_candidate_rows()
+    # Registry identity stays global; division labels come from one event only.
+    from events.divisions import division_config
+    division_events = list(_criteria_event_queryset().filter(participation_type='individual').order_by('-updated_at'))
+    requested_event = request.GET.get('event', '')
+    selected_event = next((event for event in division_events if str(event.pk) == requested_event), None)
+    if not selected_event and division_events and requested_event != 'all':
+        selected_event = division_events[0]
+    division_settings = division_config(selected_event) if selected_event else {}
+    names = division_settings.get('names', [])
+    assignments = division_settings.get('assignments', {})
+    source_divisions = {}
+    if selected_event:
+        source_divisions = {entry.source_individual_id: assignments.get(str(entry.pk), '')
+                            for entry in selected_event.criteria_entries.all() if entry.source_individual_id}
+    tones = {name: (0 if name.casefold() in {'male', 'men'} else 1 if name.casefold() in {'female', 'women'} else index % 3) for index, name in enumerate(names)}
+    for row in candidate_rows:
+        division = source_divisions.get(row['id'], '')
+        row['division'] = division if division in names else ''
+        row['division_tone'] = tones.get(row['division'], -1)
+    division_cards = [{'name': name, 'count': sum(row['division'] == name for row in candidate_rows),
+                       'tone': tones[name]} for name in names]
+    selected_division = request.GET.get('division', 'all')
+    selected_division_name = selected_division.removeprefix('division:') if selected_division.startswith('division:') else selected_division
+    if selected_division.startswith('division:'):
+        candidate_rows = [row for row in candidate_rows if row['division'] == selected_division_name]
+    elif selected_division != 'all':
+        candidate_rows = [row for row in candidate_rows if (row['division'] or 'unassigned') == selected_division]
     if search_query:
         q = search_query.lower()
         candidate_rows = [
@@ -1602,6 +1629,12 @@ def admin_candidates(request):
     active_candidate_percent = round((active_candidate_count / total_candidate_count) * 100) if total_candidate_count else 0
 
     return render(request, 'admindash/candidate.html', {
+        'division_events': division_events,
+        'selected_event': selected_event,
+        'division_cards': division_cards,
+        'division_names': names,
+        'selected_division': selected_division,
+        'selected_division_name': selected_division_name,
         'candidate_rows': page_obj.object_list,
         'total_candidate_count': total_candidate_count,
         'active_candidate_count': active_candidate_count,

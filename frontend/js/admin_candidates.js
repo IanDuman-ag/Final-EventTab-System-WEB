@@ -32,6 +32,8 @@ document.addEventListener('DOMContentLoaded', function () {
     selectAll.disabled = !boxes.length;
     bulkDelete.disabled = !count;
     document.getElementById('candidate-selection-count').textContent = count + ' selected';
+    var bulkActions = document.getElementById('candidate-bulk-actions');
+    if (bulkActions) bulkActions.hidden = !count;
   }
   selectAll.addEventListener('change', function () {
     document.querySelectorAll('.candidate-select').forEach(function (box) { box.checked = selectAll.checked; });
@@ -44,6 +46,11 @@ document.addEventListener('DOMContentLoaded', function () {
     openModal(deleteModal);
   });
   updateSelection();
+  var eventPicker = document.getElementById('participant-event');
+  if (eventPicker) eventPicker.addEventListener('change', function () {
+    document.querySelector('#individual-filters [name=division]').value = 'all';
+    document.getElementById('individual-filters').submit();
+  });
 
   function getCsrfToken() {
     var el = document.querySelector('input[name="csrfmiddlewaretoken"]');

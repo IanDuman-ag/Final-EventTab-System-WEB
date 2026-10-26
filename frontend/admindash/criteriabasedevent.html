@@ -20,7 +20,7 @@
       </header>
       <main class="container-fluid v2-main match-main">
         {% if individual_workspace %}
-        <div class="individual-workspace-tools"><label for="individual-event">Event <select id="individual-event" aria-label="Select event for participant order"></select></label><a href="{% url 'admin_candidates' %}?registry=1" class="btn btn-outline-secondary">Manage individuals</a></div>
+        <div class="individual-workspace-tools"><label for="individual-event">Event <select id="individual-event" aria-label="Select event for participant order"></select></label><a href="{% url 'admin_candidates' %}?event={{ request.GET.event|default:'all' }}" class="btn btn-outline-secondary">Manage individuals</a></div>
         <p id="individual-workspace-message" role="status" aria-live="polite"></p>
         <div id="individual-performance-mount"></div>
         <div class="individual-workspace-save"><button type="button" class="btn btn-primary" id="save-individual-order">Save Order</button></div>
