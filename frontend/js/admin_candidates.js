@@ -49,7 +49,6 @@ document.addEventListener('DOMContentLoaded', function () {
   updateSelection();
   var eventPicker = document.getElementById('participant-event');
   if (eventPicker) eventPicker.addEventListener('change', function () {
-    document.querySelector('#individual-filters [name=division]').value = 'all';
     document.getElementById('individual-filters').submit();
   });
 

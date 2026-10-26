@@ -247,18 +247,22 @@ class EventDivisionTests(TransactionTestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn('cannot change after scoring', response.json()['message'])
 
-    def test_registry_division_filters_are_event_scoped_and_counts_stay_complete(self):
+    def test_registry_has_no_division_controls_and_ignores_stale_division_filter(self):
         from django.test import Client
         admin = get_user_model().objects.create_superuser('registry-admin', 'registry@example.test', 'local-password')
         client = Client(); client.force_login(admin)
         response = client.get('/admin/candidates/', {'event': self.event.pk, 'division': 'Senior', 'q': 'Person 3'})
         self.assertEqual(response.status_code, 200)
         self.assertEqual([row['id'] for row in response.context['candidate_rows']], [self.people[3].pk])
-        self.assertEqual([(row['name'], row['count']) for row in response.context['division_cards']], [('Junior', 2), ('Senior', 2)])
+        self.assertNotContains(response, '<th>Division</th>')
+        self.assertNotContains(response, 'name="division"')
+        self.assertNotContains(response, 'Junior Division')
+        self.assertContains(response, '<th>Gender</th>')
         self.assertEqual(response.context['total_candidate_count'], 4)
         unscoped = client.get('/admin/candidates/', {'event': 'all'})
-        self.assertEqual(unscoped.context['division_cards'], [])
-        self.assertTrue(all(not row['division'] for row in unscoped.context['candidate_rows']))
+        self.assertEqual(len(unscoped.context['candidate_rows']), 4)
+        self.event.refresh_from_db()
+        self.assertTrue(self.event.result_processing_config['event_divisions']['enabled'])
         self.assertContains(response, 'id="open-candidate-modal"', count=1)
 
     def test_participant_crud_still_works_from_individuals_table(self):
