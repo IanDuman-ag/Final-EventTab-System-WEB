@@ -277,3 +277,47 @@ class EventDivisionTests(TransactionTestCase):
         self.assertEqual(RegistryCandidate.objects.get(pk=person_id).name, 'Updated Individual')
         self.assertEqual(client.post(f'/admin/candidates/{person_id}/delete/').status_code, 200)
         self.assertFalse(RegistryCandidate.objects.filter(pk=person_id).exists())
+
+    def test_gender_create_edit_view_and_table_keep_event_divisions_unchanged(self):
+        from django.test import Client
+        admin = get_user_model().objects.create_superuser('gender-admin', 'gender@example.test', 'local-password')
+        client = Client(); client.force_login(admin)
+        before = self.event.result_processing_config
+        created = client.post('/admin/candidates/create/', {'number': 'G-99', 'name': 'New Person', 'gender': 'female'})
+        self.assertEqual(created.status_code, 200)
+        person_id = created.json()['id']
+        self.assertEqual(client.get(f'/admin/candidates/{person_id}/view/').json()['gender_label'], 'Female')
+        response = client.post(f'/admin/candidates/{person_id}/edit/', {'number': 'G-99', 'name': 'New Person', 'gender': 'male'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(RegistryCandidate.objects.get(pk=person_id).gender, 'male')
+        table = client.get('/admin/candidates/')
+        self.assertContains(table, 'data-label="Gender"')
+        self.assertEqual(next(row for row in table.context['candidate_rows'] if row['id'] == person_id)['gender_label'], 'Male')
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.result_processing_config, before)
+
+    def test_gender_rejects_invalid_values_before_creating_or_editing(self):
+        from django.test import Client
+        admin = get_user_model().objects.create_superuser('gender-admin', 'gender@example.test', 'local-password')
+        client = Client(); client.force_login(admin)
+        for gender in ['invalid', ['male']]:
+            response = client.post('/admin/candidates/create/', json.dumps({'number': 'G-99', 'name': 'New Person', 'gender': gender}), content_type='application/json')
+            self.assertEqual(response.status_code, 400)
+            self.assertFalse(RegistryCandidate.objects.filter(number='G-99').exists())
+        person = self.people[0]
+        response = client.post(f'/admin/candidates/{person.pk}/edit/', {'number': person.number, 'name': 'Bad change', 'gender': 'invalid'})
+        self.assertEqual(response.status_code, 400)
+        person.refresh_from_db()
+        self.assertNotEqual(person.name, 'Bad change')
+
+    def test_existing_gender_is_preserved_when_legacy_edit_omits_it(self):
+        from django.test import Client
+        self.assertEqual(self.people[0].gender, '')
+        self.assertEqual(self.people[0].get_gender_display(), 'Not specified')
+        person = self.people[0]; person.gender = 'other'; person.save()
+        admin = get_user_model().objects.create_superuser('gender-admin', 'gender@example.test', 'local-password')
+        client = Client(); client.force_login(admin)
+        response = client.post(f'/admin/candidates/{person.pk}/edit/', {'number': person.number, 'name': person.name})
+        self.assertEqual(response.status_code, 200)
+        person.refresh_from_db()
+        self.assertEqual(person.gender, 'other')

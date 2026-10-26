@@ -1793,6 +1793,8 @@ def get_candidate_rows():
             'id': cand.id,
             'number': cand.number,
             'name': cand.name,
+            'gender': cand.gender,
+            'gender_label': cand.get_gender_display(),
             'department_id': cand.department_id,
             'department_name': cand.department.name if cand.department else '—',
             'department_code': cand.department.code if cand.department else '',
@@ -1816,6 +1818,10 @@ def admin_create_candidate(request):
     name = (data.get('name') or '').strip()
     status = (data.get('status') or RegistryCandidate.STATUS_ACTIVE).strip().lower()
     dept_id = data.get('department_id')
+    gender = data.get('gender', '')
+    if not isinstance(gender, str) or gender.strip().lower() not in dict(RegistryCandidate.GENDER_CHOICES):
+        return JsonResponse({'success': False, 'message': 'Select a valid gender.'}, status=400)
+    gender = gender.strip().lower()
     image = request.FILES.get('image') if is_multipart else None
 
     if not number or not name:
@@ -1837,6 +1843,7 @@ def admin_create_candidate(request):
     cand = RegistryCandidate.objects.create(
         number=number,
         name=name,
+        gender=gender,
         department=department,
         image=image,
         status=status,
@@ -1852,6 +1859,8 @@ def admin_view_candidate(request, candidate_id):
         'id': cand.id,
         'number': cand.number,
         'name': cand.name,
+        'gender': cand.gender,
+        'gender_label': cand.get_gender_display(),
         'department_name': cand.department.name if cand.department else '—',
         'image_url': cand.image.url if cand.image else '',
         'status': cand.status,
@@ -1872,6 +1881,10 @@ def admin_edit_candidate(request, candidate_id):
     name = (data.get('name') or '').strip()
     status = (data.get('status') or cand.status).strip().lower()
     dept_id = data.get('department_id')
+    gender = data.get('gender', cand.gender)
+    if not isinstance(gender, str) or gender.strip().lower() not in dict(RegistryCandidate.GENDER_CHOICES):
+        return JsonResponse({'success': False, 'message': 'Select a valid gender.'}, status=400)
+    gender = gender.strip().lower()
     image = request.FILES.get('image') if is_multipart else None
     remove_image = str(data.get('remove_image') or '').strip().lower() in ('1', 'true', 'yes', 'on')
 
@@ -1893,6 +1906,7 @@ def admin_edit_candidate(request, candidate_id):
 
     cand.number = number
     cand.name = name
+    cand.gender = gender
     cand.department = department
     if remove_image and cand.image:
         cand.image.delete(save=False)

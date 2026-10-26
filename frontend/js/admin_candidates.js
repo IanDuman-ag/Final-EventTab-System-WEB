@@ -9,6 +9,7 @@ document.addEventListener('DOMContentLoaded', function () {
   var candidateId = document.getElementById('candidate-id');
   var candidateNumber = document.getElementById('candidate-number');
   var candidateName = document.getElementById('candidate-name');
+  var candidateGender = document.getElementById('candidate-gender');
   var candidateDepartment = document.getElementById('candidate-department');
   var candidateImage = document.getElementById('candidate-image');
   var candidateImagePreview = document.getElementById('candidate-image-preview');
@@ -115,6 +116,7 @@ document.addEventListener('DOMContentLoaded', function () {
     candidateNumber.value = '';
     candidateName.value = '';
     candidateDepartment.value = '';
+    candidateGender.value = '';
     if (candidateImage) candidateImage.value = '';
     if (candidateImagePreviewWrap) candidateImagePreviewWrap.classList.add('hidden');
     preservedStatus = 'active';
@@ -134,6 +136,7 @@ document.addEventListener('DOMContentLoaded', function () {
     candidateNumber.value = row.dataset.number || '';
     candidateName.value = row.dataset.name || '';
     candidateDepartment.value = row.dataset.departmentId || '';
+    candidateGender.value = row.dataset.gender || '';
     if (candidateImage) candidateImage.value = '';
     if (candidateImagePreview && candidateImagePreviewWrap) {
       if (row.dataset.imageUrl) {
@@ -182,6 +185,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var data = await response.json();
         document.getElementById('candidate-view-title').textContent = data.name || 'Individual';
         document.getElementById('candidate-view-subtitle').textContent = 'No. ' + (data.number || '—');
+        document.getElementById('view-candidate-gender').textContent = data.gender_label || 'Not specified';
         document.getElementById('view-candidate-name').textContent = data.name || '—';
         document.getElementById('view-candidate-department').textContent = data.department_name || '—';
         var viewImage = document.getElementById('view-candidate-image');
@@ -276,6 +280,7 @@ document.addEventListener('DOMContentLoaded', function () {
     formData.append('name', name);
     formData.append('department_id', departmentId);
     formData.append('status', preservedStatus);
+    formData.append('gender', candidateGender.value);
     if (candidateImage && candidateImage.files && candidateImage.files[0]) {
       formData.append('image', candidateImage.files[0]);
     }

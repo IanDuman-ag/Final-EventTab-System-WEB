@@ -516,6 +516,9 @@ class RegistryCandidate(models.Model):
         (STATUS_INACTIVE, 'Inactive'),
     ]
 
+    GENDER_CHOICES = [('', 'Not specified'), ('male', 'Male'), ('female', 'Female'), ('other', 'Other')]
+
+    gender = models.CharField(max_length=10, choices=GENDER_CHOICES, blank=True, default='')
     number = models.CharField(max_length=20, unique=True)
     name = models.CharField(max_length=200)
     department = models.ForeignKey(

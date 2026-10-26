@@ -132,3 +132,5 @@
 .participants-list-page .teams-search { max-width: none; }
 .participant-division svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
 @media(max-width:600px) { .participants-list-page .teams-select { flex: 1 1 calc(50% - 8px); min-width: 0; }.participants-list-page .teams-filter-btn { flex: 0 0 80px; }.participants-list-page .teams-add-btn { flex: 1 1 180px; width: auto; } }
+
+.participant-gender { color: #465f83; font-size: 11px; white-space: nowrap; }
