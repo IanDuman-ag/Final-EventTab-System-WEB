@@ -219,9 +219,20 @@
           <p id="event-image-error" class="wizard-error" role="alert"></p>
           <img id="event-image-preview" alt="Event image preview" hidden style="max-width:100%;width:320px;max-height:200px;object-fit:contain;border-radius:8px">
         </fieldset>
+          <fieldset><legend>Optional Settings</legend>
+            <label class="po-enable"><input type="checkbox" id="enable-event-divisions"> Enable Divisions</label>
+            <p class="field-hint">Group participants into separate competition divisions when needed.</p>
+            <div class="wizard-grid">
+              <label>Default Scoring Mode<select class="form-select" id="default-scoring-mode"><option value="scoring">Scoring (Weighted Criteria)</option><option value="ranking">Ranking (Ordinal Ranking)</option></select></label>
+              <label>Result Calculation Method<select class="form-select" id="final-result-basis"><option value="final_round_only">Final Round Only</option><option value="weighted_rounds">Weighted Rounds</option><option value="cumulative_rounds">Cumulative Round Scores</option><option value="main_round" hidden>Legacy Main Round Result</option><option value="manual_authorized" hidden>Legacy Authorized Result</option></select></label>
+            </div>
+            <p class="field-hint">Cumulative results average normalized round scores on a 0?100 scale. Ordinal ranks are normalized within each division. Only finalists receive final placements. Previous scores remain stored.</p>
+            <div id="result-round-weights" hidden></div>
+          </fieldset>
         </section>
         <section class="wizard-panel" data-step="2">
           <div class="wizard-section-title"><span>02</span><div><h3>Participants</h3><p>Select the teams or individuals who will compete in this event.</p></div></div>
+              <div id="event-division-editor" hidden><label for="event-division-names">Division names (one per line)</label><textarea id="event-division-names" class="form-control" rows="3" maxlength="5050" placeholder="Junior&#10;Senior"></textarea></div>
           <fieldset class="team-picker" id="team-picker">
             <legend>
               <span id="participant-legend-label">Participating Groups</span>
@@ -269,8 +280,7 @@
             </div>
             <div id="performance-participant-picker" hidden>
               <div id="performance-registry-picker"></div>
-              <label class="po-enable"><input type="checkbox" id="enable-event-divisions"> Enable Divisions</label>
-              <div id="event-division-editor" hidden><label for="event-division-names">Division names (one per line)</label><textarea id="event-division-names" class="form-control" rows="3" maxlength="5050" placeholder="Junior&#10;Senior"></textarea></div>
+
             </div>
             <div class="po-tools"><label id="performance-order-label">View Order For <select id="performance-segment"><option value="">Default Order (All Segments)</option></select></label><select id="performance-division-filter" aria-label="Filter by division" hidden><option value="">All divisions</option></select><input type="search" id="performance-search" placeholder="Search participants..." aria-label="Search performance order"></div>
             <div id="performance-order-note" class="po-note"><span aria-hidden="true">&#9432;</span> &nbsp; Drag rows or use the arrow buttons. Order is saved separately for each division.</div>
@@ -313,7 +323,7 @@
               </section>
               <section class="judging-card" id="judging-segments-section">
                 <header class="judging-card-head"><div><h4><span>2</span> Judging Segments &amp; Criteria</h4><p>Add judging segments for the selected round. Each segment has its own criteria and weights.</p></div></header>
-                <div class="judging-toolbar"><label>Round <select class="form-select" id="judging-round-select"></select></label><button type="button" class="btn btn-primary match-primary" id="judging-add-segment">+ Add Segment</button></div>
+                <div class="judging-toolbar"><label>Round <select class="form-select" id="judging-round-select"></select></label><button type="button" class="btn btn-primary match-primary" id="judging-add-segment">+ Add Segment</button></div><label>Scoring Mode<select class="form-select" id="round-scoring-mode"><option value="scoring">Scoring (Weighted Criteria)</option><option value="ranking">Ranking (Ordinal Ranking)</option></select></label><p class="field-hint">Ranking uses the weighted mean of judges? ordinal ranks; lowest is best. Each judged group requires distinct ranks. Existing criteria define the ranking targets.</p>
                 <div id="judging-segment-list" class="judging-segment-list"></div>
               </section>
             </div>
@@ -637,15 +647,6 @@
         <section class="wizard-panel criteria-hidden" data-legacy-step="6" hidden inert aria-hidden="true">
           <div class="wizard-section-title"><span>06</span><div><h3>Awards and Result Rules</h3><p>Configure placements, special awards, optional points, approval, and publication rules.</p></div></div>
           <div class="wizard-grid">
-            <label>Final Result Basis
-              <select class="form-select" id="final-result-basis">
-                <option value="main_round">Main Round Result</option>
-                <option value="final_round_only">Final Round Only</option>
-                <option value="cumulative_rounds">Cumulative Rounds</option>
-                <option value="weighted_rounds">Weighted Rounds</option>
-                <option value="manual_authorized">Manual Authorized Result</option>
-              </select>
-            </label>
             <label>Placements to Publish <input class="form-control" id="placements-count" type="number" min="1" max="20" step="1" value="3"></label>
           </div>
           <fieldset id="points-fieldset">

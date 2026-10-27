@@ -30,6 +30,7 @@
     $('#event-image-preview').src = imagePreviewUrl;
     $('#event-image-preview').hidden = false;
   });
+  var savedRankingAggregation = 'weighted_mean_rank';
   var activeStep = 1;
   var mode = 'standard';
   var criteria = [];
@@ -220,6 +221,7 @@
     if (divisionsEnabled()) {
       var counts = {};
       orderedParticipantBoxes().forEach(function (box) { var name = participantDivisions[box.value]; if (name) counts[name] = (counts[name] || 0) + 1; });
+      if (isPairParticipation()) pairEntries.forEach(function (row) { if (row.division) counts[row.division] = (counts[row.division] || 0) + 1; });
       var sizes = Object.values(counts);
       count = sizes.length ? Math.min.apply(null, sizes) : 0;
     }
@@ -350,7 +352,7 @@
       id: row.id || uid('s'),
       name: row.name || '',
       round_type: roundType,
-      scoring_method: row.scoring_method || 'numerical',
+      scoring_method: row.scoring_method || ($('#default-scoring-mode').value === 'ranking' ? 'ranking' : 'numerical'),
       score_handling: handling,
       weight: Number(row.weight) || 0,
       weight_locked: handling === 'carry' && !!row.weight_locked,
@@ -770,6 +772,8 @@
       });
       return '<article class="pair-entry-card" data-pair-index="' + index + '"><header><strong>Pair ' + (index + 1) + '</strong><button type="button" data-remove-pair>Remove Pair</button></header>' +
         '<label class="pair-department">Department (optional)<select data-pair-department>' + pairDepartmentOptions(row.department_id) + '</select></label>' +
+        (divisionsEnabled() ? '<label>Division<select data-pair-division><option value="">Select division</option>' + eventDivisionNames().map(function (name) { return '<option value="' + escapeAttr(name) + '"' + (row.division === name ? ' selected' : '') + '>' + escapeHtml(name) + '</option>'; }).join('') + '</select></label>' : '') +
+        '<button type="button" data-pair-move="-1">Up</button><button type="button" data-pair-move="1">Down</button>' +
         '<label>Member 1<select data-pair-member="1">' + individualOptions(row.member_1_id, used, row.department_id) + '</select></label>' +
         '<label>Member 2<select data-pair-member="2">' + individualOptions(row.member_2_id, used, row.department_id) + '</select></label>' +
         '<small' + (incompatible ? ' class="pair-entry-error" role="alert"' : '') + '>' + (incompatible ? 'Choose both members from the selected department.' : 'One competition entry; judges submit one score sheet.') + '</small></article>';
@@ -1109,7 +1113,7 @@
   }
 
   function divisionsEnabled() {
-    return isIndividualParticipation() && $('#enable-event-divisions').checked;
+    return $('#enable-event-divisions').checked;
   }
 
   function divisionSetupIssue() {
@@ -1117,7 +1121,7 @@
     var names = eventDivisionNames();
     if (!names.length || names.length > 50) return 'Add between 1 and 50 division names.';
     if (names.some(function (name) { return name.length > 100; }) || new Set(names.map(function (name) { return name.toLowerCase(); })).size !== names.length) return 'Use unique division names of at most 100 characters.';
-    if (orderedParticipantBoxes().some(function (box) { return names.indexOf(participantDivisions[box.value]) === -1; })) return 'Assign each selected participant to a division.';
+    if ((isPairParticipation() ? pairEntries.some(function (row) { return names.indexOf(row.division) === -1; }) : orderedParticipantBoxes().some(function (box) { return names.indexOf(participantDivisions[box.value]) === -1; }))) return 'Assign each selected participant to a division.';
     return '';
   }
 
@@ -1155,10 +1159,10 @@
   function renderPerformanceOrder() {
     var host = $('#event-performance-setup');
     if (!host) return;
-    host.hidden = !isIndividualParticipation();
-    $('.wizard-panel[data-step="2"] > .wizard-section-title').hidden = isIndividualParticipation();
+    host.hidden = isPairParticipation();
+    $('.wizard-panel[data-step="2"] > .wizard-section-title').hidden = !isPairParticipation();
     var picker = $('#team-picker');
-    if (isIndividualParticipation()) $('#performance-registry-picker').appendChild(picker);
+    if (!isPairParticipation()) $('#performance-registry-picker').appendChild(picker);
     else pickerPlaceholder.after(picker);
     var listing = performanceTab === 'participants';
     host.classList.toggle('po-list-view', listing);
@@ -1210,8 +1214,8 @@
   }); });
   ['performance-search', 'performance-division-filter', 'performance-segment'].forEach(function (id) { $('#' + id).addEventListener(id === 'performance-search' ? 'input' : 'change', renderPerformanceOrder); });
   $('#performance-reset-segment').addEventListener('click', function () { delete segmentPerformanceOrders[$('#performance-segment').value]; renderPerformanceOrder(); });
-  $('#enable-event-divisions').addEventListener('change', renderPerformanceOrder);
-  $('#event-division-names').addEventListener('change', renderPerformanceOrder);
+  $('#enable-event-divisions').addEventListener('change', function () { renderPerformanceOrder(); renderPairEntries(); });
+  $('#event-division-names').addEventListener('change', function () { renderPerformanceOrder(); renderPairEntries(); });
   $('#event-performance-rows').addEventListener('change', function (event) {
     var input = event.target.closest('[data-participant-division]');
     if (!input) return;
@@ -1302,10 +1306,12 @@
       var ids = performanceOrder.slice();
       var saved = segmentPerformanceOrders[key].filter(function (id) { return ids.indexOf(id) !== -1; });
       ids.forEach(function (id) { if (saved.indexOf(id) === -1) saved.push(id); });
-      if (isIndividualParticipation() && scoringWorkflow.categories.some(function (category) { return String(category.id) === key; })) out.segment_performance_orders[key] = saved.map(Number);
+      if (!isPairParticipation() && scoringWorkflow.categories.some(function (category) { return String(category.id) === key; })) out.segment_performance_orders[key] = saved.map(Number);
     });
     out.event_divisions = { enabled: divisionsEnabled(), names: divisionsEnabled() ? eventDivisionNames() : [] };
     out.final_result_basis = $('#final-result-basis').value;
+    out.default_scoring_mode = $('#default-scoring-mode').value;
+    out.ranking_aggregation = savedRankingAggregation;
     out.placements_count = Number($('#placements-count').value);
     out.verification_mode = ($('#advanced-result-verification') || {}).value || 'admin_only';
     $$('[data-rp]').forEach(function (input) {
@@ -1548,6 +1554,8 @@
   function renderJudgingSegments() {
     var roundId = selectedJudgingRound();
     var rows = scoringWorkflow.categories.filter(function (category) { return categoryRoundKey(category) === String(roundId) && (category.purpose || 'official') === 'official'; });
+    $('#round-scoring-mode').value = rows.length ? rows[0].judge_mode || 'scoring' : ((findStageByKey(roundId) || {}).scoring_method === 'ranking' ? 'ranking' : 'scoring') || $('#default-scoring-mode').value;
+    renderResultWeights();
     var host = $('#judging-segment-list');
     host.innerHTML = rows.map(function (category) {
       var total = criteriaWeightTotal(category);
@@ -1583,6 +1591,7 @@
 
   function judgingPublishIssues() {
     var issues = [];
+    if ($('#final-result-basis').value === 'weighted_rounds' && Math.abs(stages.reduce(function (sum, row) { return sum + Number(row.weight || 0); }, 0) - 100) > 0.001) issues.push({ step: 1, text: 'Round weights must total 100%.' });
     if (!form.event_name.value.trim() || !form.category.value || !form.event_classification.value || !form.venue.value.trim() || !form.start_date.value) issues.push({ step: 1, text: 'Complete all required event details.' });
     if (divisionSetupIssue()) issues.push({ step: 2, text: divisionSetupIssue() });
     if (!collectParticipants().length) issues.push({ step: 2, text: 'Select at least one participant.' });
@@ -1623,9 +1632,9 @@
     syncPointsFromDom();
     $('#participant-ids').value = JSON.stringify(collectParticipants());
     $('#event-entries').value = JSON.stringify(isPairParticipation()
-      ? pairEntries.map(function (row) { return { department_id: row.department_id || null, member_ids: [Number(row.member_1_id), Number(row.member_2_id)] }; })
+      ? pairEntries.map(function (row) { return { department_id: row.department_id || null, member_ids: [Number(row.member_1_id), Number(row.member_2_id)], division: divisionsEnabled() ? row.division || '' : '' }; })
       : orderedParticipantBoxes().map(function (box) {
-          return isIndividualParticipation() ? { source_individual_id: Number(box.value), division: divisionsEnabled() ? (participantDivisions[box.value] || '') : '' } : { source_team_id: Number(box.value) };
+          return isIndividualParticipation() ? { source_individual_id: Number(box.value), division: divisionsEnabled() ? (participantDivisions[box.value] || '') : '' } : { source_team_id: Number(box.value), division: divisionsEnabled() ? (participantDivisions[box.value] || '') : '' };
         }));
     $('#rounds-config').value = JSON.stringify(collectRounds());
     $('#criteria-config').value = JSON.stringify(criteria);
@@ -1701,8 +1710,11 @@
       ['Date & Time', form.start_date.value + (($('#event-time') || {}).value ? ' · ' + $('#event-time').value : '')],
       [isPairParticipation() ? ('Entries (' + names.length + ' Pairs)') : (isIndividualParticipation() ? ('Individuals (' + names.length + ')') : ('Teams (' + names.length + ')')), names.join('; ') || '—'],
       ['Rounds', stages.map(function (row, index) {
-        return (index + 1) + '. ' + (row.name || 'Untitled') + ' (' + (row.weight || 0) + '%)';
+        return (index + 1) + '. ' + (row.name || 'Untitled') + ' (' + (row.weight || 0) + '%) - ' + advancementLabel(row, index) + ' - ' + (scoringWorkflow.categories.some(function (category) { return categoryRoundKey(category) === roundKeyFor(row, index) && category.judge_mode === 'ranking'; }) ? 'Ranking' : 'Scoring');
       }).join(' · ') || '—'],
+      ['Result Calculation', $('#final-result-basis').selectedOptions[0].textContent],
+      ['Divisions', divisionsEnabled() ? eventDivisionNames().map(function (name) { var count = isPairParticipation() ? pairEntries.filter(function (row) { return row.division === name; }).length : orderedParticipantBoxes().filter(function (box) { return participantDivisions[box.value] === name; }).length; return name + ': ' + count; }).join('; ') : 'One overall group'],
+      ['Performance Order', 'Saved event order' + (divisionsEnabled() ? ' within each division' : '')],
       ['Judging Segments & Criteria', categories],
       ['Tabulation Officer', tabulatorLabel],
       ['Faculty In Charge', faculty.value ? faculty.options[faculty.selectedIndex].text : 'Not assigned'],
@@ -1916,19 +1928,19 @@
       box.checked = ids.indexOf(box.value) !== -1;
     });
     var sourceByEntry = {};
-    (event.entries || []).forEach(function (entry) { sourceByEntry[entry.id] = String(entry.source_individual_id || ''); });
+    (event.entries || []).forEach(function (entry) { sourceByEntry[entry.id] = String(entry.source_individual_id || entry.source_team_id || ''); });
     segmentPerformanceOrders = {};
     var savedOrders = (event.result_processing_config || {}).segment_performance_orders || {};
     Object.keys(savedOrders).forEach(function (key) { segmentPerformanceOrders[key] = savedOrders[key].map(function (id) { return sourceByEntry[id]; }).filter(Boolean); });
     performanceOrder = ids.filter(Boolean);
     participantDivisions = {};
-    (event.entries || []).forEach(function (entry) { participantDivisions[String(entry.source_individual_id)] = entry.division || ''; });
+    (event.entries || []).forEach(function (entry) { participantDivisions[String(entry.source_individual_id || entry.source_team_id)] = entry.division || ''; });
     var divisions = (event.result_processing_config || {}).event_divisions || {};
     $('#enable-event-divisions').checked = !!divisions.enabled;
     $('#event-division-names').value = (divisions.names || []).join('\n');
     updateParticipantCount();
     pairEntries = (event.entries || []).filter(function (entry) { return entry.entry_type === 'pair'; }).map(function (entry) {
-      return { department_id: entry.department_id || '', member_1_id: entry.members[0] && entry.members[0].id, member_2_id: entry.members[1] && entry.members[1].id };
+      return { division: entry.division || '', department_id: entry.department_id || '', member_1_id: entry.members[0] && entry.members[0].id, member_2_id: entry.members[1] && entry.members[1].id };
     });
     renderPairEntries();
     stages = stagesFromLegacyConfig(event);
@@ -1978,6 +1990,9 @@
     var rp = event.result_processing_config || {};
     $('#advanced-result-verification').value = rp.verification_mode || 'admin_only';
     $('#final-result-basis').value = rp.final_result_basis || 'main_round';
+    $('#default-scoring-mode').value = rp.default_scoring_mode || 'scoring';
+    savedRankingAggregation = rp.ranking_aggregation || 'weighted_mean_rank';
+    renderResultWeights();
     $('#placements-count').value = rp.placements_count || 3;
     $$('[data-rp]').forEach(function (input) {
       input.checked = !!rp[input.dataset.rp];
@@ -2303,6 +2318,39 @@
     $('#round-modal').close();
     renderJudgingSetup();
   });
+  function renderResultWeights() {
+    var host = $('#result-round-weights');
+    host.hidden = $('#final-result-basis').value !== 'weighted_rounds';
+    host.innerHTML = stages.map(function (round, index) {
+      return '<label>' + escapeHtml(round.name) + ' (%)<input class="form-control" type="number" min="0" max="100" step="0.01" data-result-weight="' + index + '" value="' + (Number(round.weight) || 0) + '"></label>';
+    }).join('') + '<p class="field-hint">Round weights must total 100%.</p>';
+  }
+  $('#final-result-basis').addEventListener('change', renderResultWeights);
+  $('#default-scoring-mode').addEventListener('change', function () {
+    var mode = this.value;
+    stages.forEach(function (round, index) {
+      if (!scoringWorkflow.categories.some(function (category) { return categoryRoundKey(category) === roundKeyFor(round, index); })) round.scoring_method = mode === 'ranking' ? 'ranking' : 'numerical';
+    });
+  });
+  $('#result-round-weights').addEventListener('input', function (event) {
+    var index = event.target.dataset.resultWeight;
+    if (index == null || !stages[index]) return;
+    stages[index].weight = Number(event.target.value);
+    stages[index].weight_locked = true;
+  });
+  $('#round-scoring-mode').addEventListener('change', function () {
+    var mode = this.value;
+    var roundId = selectedJudgingRound();
+    var round = findStageByKey(roundId);
+    if (round) round.scoring_method = mode === 'ranking' ? 'ranking' : 'numerical';
+    var rows = scoringWorkflow.categories.filter(function (category) { return categoryRoundKey(category) === String(roundId) && (category.purpose || 'official') === 'official'; });
+    this.disabled = true;
+    rows.reduce(function (pending, category) {
+      return pending.then(function () {
+        return workflowRequest('update_category', { event_id: scoringWorkflow.eventId, category_id: category.id, category_name: category.name, assigned_round_id: roundId, purpose: category.purpose || 'official', judge_mode: mode, display_order: category.display_order, overall_weight_percent: category.overall_weight_percent });
+      });
+    }, Promise.resolve()).then(loadCategories).then(renderJudgingSegments).catch(function (error) { showError(error.message); loadCategories().then(renderJudgingSegments); }).finally(function () { $('#round-scoring-mode').disabled = false; });
+  });
   $('#judging-round-select').addEventListener('change', renderJudgingSegments);
   $('#judging-add-segment').addEventListener('click', function () {
     $('#simple-segment-edit-id').value = '';
@@ -2317,7 +2365,7 @@
     var editId = $('#simple-segment-edit-id').value;
     var roundId = selectedJudgingRound();
     var existing = scoringWorkflow.categories.filter(function (row) { return String(row.id) === String(editId); })[0];
-    workflowRequest(editId ? 'update_category' : 'create_category', { event_id: scoringWorkflow.eventId, category_id: editId, category_name: name, assigned_round_id: roundId, purpose: 'official', judge_mode: 'scoring', display_order: existing ? existing.display_order : scoringWorkflow.categories.length + 1, overall_weight_percent: existing ? existing.overall_weight_percent : 0 }).then(loadCategories).then(function () { return rebalanceSegmentWeights(roundId); }).then(function () { $('#segment-modal').close(); renderJudgingSegments(); }).catch(function (error) { showError(error.message); });
+    workflowRequest(editId ? 'update_category' : 'create_category', { event_id: scoringWorkflow.eventId, category_id: editId, category_name: name, assigned_round_id: roundId, purpose: existing ? existing.purpose || 'official' : 'official', judge_mode: $('#round-scoring-mode').value, display_order: existing ? existing.display_order : scoringWorkflow.categories.length + 1, overall_weight_percent: existing ? existing.overall_weight_percent : 0 }).then(loadCategories).then(function () { return rebalanceSegmentWeights(roundId); }).then(function () { $('#segment-modal').close(); renderJudgingSegments(); }).catch(function (error) { showError(error.message); });
   });
   function renderSubcriteriaEditor(rows) {
     $('#simple-subcriteria-rows').innerHTML = (rows || []).map(function (row) {
@@ -2585,6 +2633,7 @@
     var card = event.target.closest('[data-pair-index]');
     if (!card) return;
     var index = Number(card.dataset.pairIndex);
+    if (event.target.matches('[data-pair-division]')) { pairEntries[index].division = event.target.value; return; }
     if (event.target.matches('[data-pair-department]')) {
       pairEntries[index].department_id = event.target.value;
       var invalid = ['member_1_id', 'member_2_id'].some(function (key) {
@@ -2602,6 +2651,14 @@
     renderPairEntries(index, 'data-pair-member="' + member + '"');
   });
   $('#pair-entry-list')?.addEventListener('click', function (event) {
+    var move = event.target.closest('[data-pair-move]');
+    if (move) {
+      var index = Number(move.closest('[data-pair-index]').dataset.pairIndex);
+      var target = index + Number(move.dataset.pairMove);
+      while (target >= 0 && target < pairEntries.length && divisionsEnabled() && pairEntries[target].division !== pairEntries[index].division) target += Number(move.dataset.pairMove);
+      if (target >= 0 && target < pairEntries.length) { var swap = pairEntries[target]; pairEntries[target] = pairEntries[index]; pairEntries[index] = swap; renderPairEntries(); }
+      return;
+    }
     var button = event.target.closest('[data-remove-pair]');
     if (!button) return;
     pairEntries.splice(Number(button.closest('[data-pair-index]').dataset.pairIndex), 1);

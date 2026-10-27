@@ -59,6 +59,60 @@ class EventDivisionTests(TransactionTestCase):
         CriteriaScoreSubmission.objects.filter(participant_id=self.entries[1].pk).update(raw_score=80)
         self.assertIn('Junior: A tie', ' '.join(criteria_faculty_portal(self.event, self.faculty)['errors']))
 
+    def test_award_submission_does_not_block_main_round_review(self):
+        from .models import EventScoringCategory, EventScoringCriterion
+        self.complete()
+        category = EventScoringCategory.objects.create(event=self.event, name='Performance Award', assigned_round_id='prelim', purpose='special_award', judge_mode='scoring', overall_weight_percent=0, display_order=10)
+        criterion = EventScoringCriterion.objects.create(category=category, name='Award', weight_percent=100, min_score=0, max_score=100, display_order=0)
+        CriteriaScoreSubmission.objects.create(event=self.event, assigned_round_id='prelim', category=category, criterion=criterion, judge=self.judge, participant_type='entry', participant_id=self.entries[0].pk, source='OCR', status='SUBMITTED', raw_score=95)
+        portal = criteria_faculty_portal(self.event, self.faculty)
+        self.assertTrue(portal['selected_round']['can_approve'], portal['errors'])
+        self.assertEqual([row['final_score'] for row in portal['results']], [80, 70, 99, 90])
+
+    def test_combined_results_use_approved_round_scores_by_division(self):
+        from .criteria_scoring import combine_round_results
+        self.complete()
+        approve_criteria_round(self.event, self.faculty, 0)
+        unlock_criteria_round(self.event, self.faculty, 1)
+        self.event.result_processing_config['final_result_basis'] = 'weighted_rounds'
+        self.event.rounds_config[0]['weight'] = 25
+        self.event.rounds_config[1]['weight'] = 75
+        self.event.save()
+        finalists = [{'participant_id': entry.pk, 'final_score': 60, 'rank': 1}
+                     for entry in [self.entries[0], self.entries[2]]]
+        rows = combine_round_results(self.event, finalists, 1)
+        self.assertEqual([float(row['final_score']) for row in rows], [65, 69.75])
+        self.assertEqual([row['rank'] for row in rows], [1, 1])
+        self.event.result_processing_config['final_result_basis'] = 'cumulative_rounds'
+        rows = combine_round_results(self.event, finalists, 1)
+        self.assertEqual([float(row['final_score']) for row in rows], [70, 79.5])
+        self.assertEqual(CriteriaScoreSubmission.objects.count(), 4)
+
+    def test_final_round_only_ignores_previous_scores(self):
+        from .criteria_scoring import combine_round_results
+        self.event.result_processing_config['final_result_basis'] = 'final_round_only'
+        rows = [{'participant_id': self.entries[0].pk, 'final_score': 60, 'rank': 1}]
+        self.assertEqual(combine_round_results(self.event, rows, 1), rows)
+
+    def test_combined_final_can_be_approved_and_saved(self):
+        self.complete()
+        approve_criteria_round(self.event, self.faculty, 0)
+        unlock_criteria_round(self.event, self.faculty, 1)
+        self.event.result_processing_config['final_result_basis'] = 'cumulative_rounds'
+        self.event.save()
+        for entry in [self.entries[0], self.entries[2]]:
+            fixtures.FacultyCriteriaWorkflowTests.score(self, round_id='final', entry=entry, value=60)
+        approve_criteria_round(self.event, self.faculty, 1)
+        self.event.refresh_from_db()
+        rows = self.event.result_processing_config['confirmed_stages']['1']['results']
+        self.assertEqual([row['final_score'] for row in rows], [70, 79.5])
+
+    def test_combined_results_reject_missing_approved_snapshots(self):
+        from .criteria_scoring import combine_round_results
+        self.event.result_processing_config['final_result_basis'] = 'cumulative_rounds'
+        with self.assertRaisesMessage(ValueError, 'approved score'):
+            combine_round_results(self.event, [{'participant_id': self.entries[0].pk, 'final_score': 60}], 1)
+
     def test_oversized_qualification_rejected_per_division(self):
         rounds = [{'id': 'a', 'name': 'First', 'weight': 50, 'qualifiers': 3, 'qualification_method': 'top_ranking'},
                   {'id': 'b', 'name': 'Final', 'weight': 50}]
@@ -99,6 +153,27 @@ class EventDivisionTests(TransactionTestCase):
         self.assertEqual(event.participant_ids, [ids[self.people[i].pk] for i in [1, 0, 3, 2]])
         self.assertEqual(set(event.judging_event.candidates.values_list('pk', flat=True)), mobile_ids)
         self.assertEqual([row['candidate_number'] for row in serialize_criteria_event(event)['entries']], ['11', '10', '13', '12'])
+
+    @patch('events.criteria_event_service._schedule_assignment_notifications')
+    def test_team_and_pair_divisions_save_with_stable_entry_ids(self, notify):
+        from .models import Team
+        admin = get_user_model().objects.create_superuser('group-admin', 'group@example.test', 'local-password')
+        teams = [Team.objects.create(name=f'Group {index}', code=f'G{index}') for index in range(2)]
+        for kind, rows in [
+            ('team', [{'source_team_id': team.pk, 'division': name} for team, name in zip(teams, ['Junior', 'Senior'])]),
+            ('pair', [{'member_ids': [self.people[0].pk, self.people[1].pk], 'division': 'Junior'},
+                      {'member_ids': [self.people[2].pk, self.people[3].pk], 'division': 'Senior'}]),
+        ]:
+            with self.subTest(kind=kind):
+                payload = self.payload()
+                payload['participation_type'] = kind
+                payload['event_entries'] = json.dumps(rows)
+                event = save_criteria_event(payload, admin, instance=self.event)
+                ids = list(event.participant_ids)
+                payload['event_entries'] = json.dumps(list(reversed(rows)))
+                event = save_criteria_event(payload, admin, instance=event)
+                self.assertEqual(event.participant_ids, list(reversed(ids)))
+                self.assertEqual([row['division'] for row in serialize_criteria_event(event)['entries']], ['Senior', 'Junior'])
 
     @patch('events.criteria_event_service._schedule_assignment_notifications')
     def test_scored_assignment_change_rejected_without_touching_scores(self, notify):

@@ -5,6 +5,64 @@ from decimal import Decimal, InvalidOperation
 from .models import CriteriaEventEntry, CriteriaScoreSubmission, RegistryCandidate, Team
 
 
+def combine_round_results(event, results, round_index):
+    """Combine finalist scores on a 0–100 scale; never include award segments.
+
+    Numerical rounds must use percentage scoring. Ordinal rounds are converted
+    to 100 * (group size - mean rank) / (group size - 1), or 100 for one entry.
+    Cumulative results are the arithmetic mean of these normalized round scores.
+    Only finalists receive final placements; eliminated entries retain scores.
+    """
+    from .criteria_faculty_service import criteria_rounds, round_participant_ids
+    from .divisions import group_participants, participant_division, rank_divisions
+    method = (event.result_processing_config or {}).get('final_result_basis')
+    rounds = criteria_rounds(event)
+    if method not in {'weighted_rounds', 'cumulative_rounds'} or round_index != len(rounds) - 1:
+        return results
+    snapshots = (event.result_processing_config or {}).get('confirmed_stages') or {}
+    values = defaultdict(list)
+    for index, stage in enumerate(rounds):
+        rows = results if index == round_index else snapshots.get(str(index), {}).get('results', [])
+        by_id = {row['participant_id']: row for row in rows}
+        categories = list(event.scoring_categories.filter(assigned_round_id=stage['id'], purpose='official'))
+        ranking = bool(categories) and all(category.judge_mode == 'ranking' for category in categories)
+        groups = group_participants(event, round_participant_ids(event, index))
+        weight = Decimal(str(stage.get('weight', 0))) if method == 'weighted_rounds' else Decimal(1)
+        if not weight.is_finite() or weight < 0:
+            raise ValueError('Round weights must be finite and nonnegative.')
+        for finalist in results:
+            participant_id = finalist['participant_id']
+            if participant_id not in by_id:
+                raise ValueError('Every finalist requires an approved score from each previous round.')
+            row = by_id[participant_id]
+            value = Decimal(str(row.get('round_score', row['final_score'])))
+            if ranking:
+                size = len(groups[participant_division(event, participant_id)])
+                value = Decimal(100) if size == 1 else 100 * (size - value) / (size - 1)
+            elif event.criteria_score_method != 'weighted_percentage':
+                raise ValueError('Combining rounds requires normalized weighted-percentage scoring.')
+            if not value.is_finite():
+                raise ValueError('Round scores must be finite.')
+            values[participant_id].append((value, weight))
+    total_weight = sum((weight for _, weight in next(iter(values.values()), [])), Decimal(0))
+    if total_weight <= 0 or (method == 'weighted_rounds' and total_weight != 100):
+        raise ValueError('Round weights must total 100%.')
+    combined = []
+    for original in results:
+        row = dict(original)
+        row['round_score'] = original['final_score']
+        row['final_score'] = float(sum((value * weight for value, weight in values[row['participant_id']]), Decimal(0)) / total_weight)
+        combined.append(row)
+    combined.sort(key=lambda row: -row['final_score'])
+    prior, rank = None, 0
+    for position, row in enumerate(combined, 1):
+        if row['final_score'] != prior:
+            rank = position
+        prior = row['final_score']
+        row['rank'] = rank
+    return rank_divisions(event, combined)
+
+
 def normalized_criterion_score(raw_score, maximum_score, criterion_weight):
     try:
         raw, maximum, weight = (

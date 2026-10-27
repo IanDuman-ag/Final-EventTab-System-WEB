@@ -160,7 +160,7 @@ def _round_data(event, index, participants, judges, *, require_verification=True
     required = {criterion.pk: criterion for category in categories for criterion in category.criteria.all()}
     accepted = FINALIZED
     verification = cfg.get('verification_mode') in {'tabulator_verification', 'tabulator_admin_approval'}
-    scores = list(CriteriaScoreSubmission.objects.filter(event=event, assigned_round_id=round_cfg['id'], is_active=True, judge_id__in=[j.pk for j in judges], participant_id__in=eligible).select_related('criterion', 'category'))
+    scores = list(CriteriaScoreSubmission.objects.filter(event=event, assigned_round_id=round_cfg['id'], category__purpose='official', is_active=True, judge_id__in=[j.pk for j in judges], participant_id__in=eligible).select_related('criterion', 'category'))
     if required:
         seen, invalid_cells = set(), set()
         for score in scores:
@@ -273,7 +273,8 @@ def _round_data(event, index, participants, judges, *, require_verification=True
         row['final_score'] = float(row['final_score'])
         if 'deduction' in row:
             row['deduction'] = float(row['deduction'])
-    if results and round_cfg.get('carry_previous_scores') and index:
+    explicit_basis = cfg.get('final_result_basis') in {'final_round_only', 'weighted_rounds', 'cumulative_rounds'}
+    if results and round_cfg.get('carry_previous_scores') and index and not explicit_basis:
         previous = (cfg.get('confirmed_stages') or {}).get(str(index - 1), {}).get('results', [])
         by_id = {row['participant_id']: row for row in previous}
         if not all(row['participant_id'] in by_id for row in results):
@@ -316,6 +317,12 @@ def _round_data(event, index, participants, judges, *, require_verification=True
     # cumulative scores need their per-division ranks rebuilt here.
     if results and (not required or (round_cfg.get('carry_previous_scores') and index)):
         results = rank_divisions(event, results)
+    if results and explicit_basis:
+        from .criteria_scoring import combine_round_results
+        try:
+            results = combine_round_results(event, results, index)
+        except ValueError as exc:
+            errors.append(str(exc))
     qualifiers, qualification_errors = _qualifiers(round_cfg, results, event=event) if results else ([], [])
     errors.extend(qualification_errors)
     if approval.get('approved_at'):
