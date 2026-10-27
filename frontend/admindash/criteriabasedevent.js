@@ -1592,7 +1592,7 @@
   function advancementLabel(round, index) {
     if (isFinalRoundAt(round, index, stages.length)) return 'Final round / no advancement';
     if (isAdvanceAllRound(round, false)) return 'All participants continue';
-    return 'Top ' + (Number(round.qualifiers) || 0) + ' participants advance';
+    return 'Top ' + (Number(round.qualifiers) || 0) + ' participants' + (divisionsEnabled() ? ' per division' : '') + ' advance';
   }
 
   function selectedJudgingRound() {
@@ -2382,23 +2382,33 @@
     $('#simple-round-edit-id').value = '';
     $('#simple-round-name').value = '';
     $('#simple-round-advancement').value = 'advance_all';
-    $('#simple-round-qualifiers-wrap').hidden = true;
+    updateRoundAdvancementFields();
     $('#round-modal-title').textContent = 'Add Round';
     $('#round-modal').showModal();
     requestAnimationFrame(function () { $('#simple-round-name').focus(); });
   });
-  $('#simple-round-advancement').addEventListener('change', function () { $('#simple-round-qualifiers-wrap').hidden = this.value !== 'top_ranking'; });
+  function updateRoundAdvancementFields() {
+    var perDivision = divisionsEnabled();
+    var picker = $('#simple-round-advancement');
+    picker.querySelector('option[value="top_ranking"]').textContent = perDivision ? 'Top participants per division advance' : 'Top participants advance';
+    $('#simple-round-qualifiers-wrap').hidden = picker.value !== 'top_ranking';
+    $('#simple-round-qualifiers-label').textContent = perDivision ? 'Number to Advance per Division' : 'Number to Advance';
+    $('#simple-round-qualifiers-hint').textContent = perDivision ? 'This number advances separately from each division.' : 'This number advances from the overall participant list.';
+  }
+  $('#simple-round-advancement').addEventListener('change', updateRoundAdvancementFields);
   $('#simple-round-save').addEventListener('click', function () {
     var name = $('#simple-round-name').value.trim();
     var advancement = $('#simple-round-advancement').value;
     if (!name) return showError('Round Name is required.');
+    var qualifiers = Number($('#simple-round-qualifiers').value);
+    if (advancement === 'top_ranking' && (!Number.isInteger(qualifiers) || qualifiers < 1)) return showError('Number to Advance must be a positive whole number.');
     var existingKey = $('#simple-round-edit-id').value;
     var row = existingKey ? findStageByKey(existingKey) : null;
     if (!row) { row = defaultStages(1)[0]; row.id = 'round-' + Date.now(); stages.push(row); }
     row.name = name;
     row.qualification_method = advancement === 'final' ? null : advancement;
     row.advancement_rule = row.qualification_method;
-    row.qualifiers = advancement === 'top_ranking' ? Number($('#simple-round-qualifiers').value) || 1 : null;
+    row.qualifiers = advancement === 'top_ranking' ? qualifiers : null;
     row.is_final = advancement === 'final';
     row.round_type = advancement === 'final' ? 'final' : (advancement === 'top_ranking' ? 'elimination' : 'scoring');
     stages.forEach(function (stage, index) { stage.weight = roundWeight(100 / stages.length); stage.weight_locked = false; if (index !== stages.length - 1 && stage.is_final) { stage.is_final = false; stage.round_type = 'scoring'; } });
@@ -2581,7 +2591,7 @@
       var round = findStageByKey(roundEdit.dataset.simpleRoundEdit); var idx = stages.indexOf(round); if (!round) return;
       $('#simple-round-edit-id').value = roundEdit.dataset.simpleRoundEdit; $('#simple-round-name').value = round.name;
       $('#simple-round-advancement').value = isFinalRoundAt(round, idx, stages.length) ? 'final' : (isAdvanceAllRound(round, false) ? 'advance_all' : 'top_ranking');
-      $('#simple-round-qualifiers').value = round.qualifiers || 1; $('#simple-round-qualifiers-wrap').hidden = $('#simple-round-advancement').value !== 'top_ranking'; $('#round-modal-title').textContent = 'Edit Round'; $('#round-modal').showModal(); requestAnimationFrame(function () { $('#simple-round-name').focus(); });
+      $('#simple-round-qualifiers').value = round.qualifiers || 1; updateRoundAdvancementFields(); $('#round-modal-title').textContent = 'Edit Round'; $('#round-modal').showModal(); requestAnimationFrame(function () { $('#simple-round-name').focus(); });
     } else if (roundDelete) {
       if (stages.length === 1) return showError('A simple event needs one round. Edit this round instead.');
       if (scoringWorkflow.categories.some(function (category) { return categoryRoundKey(category) === roundDelete.dataset.simpleRoundDelete; })) return showError('Delete or move this round\'s judging segments first.');

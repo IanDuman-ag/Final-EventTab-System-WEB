@@ -143,6 +143,32 @@ class EventDivisionTests(TransactionTestCase):
         CriteriaScoreSubmission.objects.filter(participant_id=self.entries[1].pk).update(raw_score=80)
         self.assertIn('Junior: A tie', ' '.join(criteria_faculty_portal(self.event, self.faculty)['errors']))
 
+    def test_top_five_advances_five_from_each_gender_division(self):
+        for index in range(4, 12):
+            self.entries.append(CriteriaEventEntry.objects.create(event=self.event, entry_type='individual',
+                display_name=f'Candidate {index}', display_order=index))
+        self.event.participant_ids = [row.pk for row in self.entries]
+        assignments = {str(row.pk): 'Male' if index < 6 else 'Female'
+                       for index, row in enumerate(self.entries)}
+        self.event.result_processing_config = {'event_divisions': {
+            'enabled': True, 'names': ['Male', 'Female'], 'assignments': assignments}}
+        self.event.rounds_config[0]['qualifiers'] = 5
+        self.event.save()
+        # All Male scores exceed Female scores, so an overall Top 5 would fail this test.
+        for index, entry in enumerate(self.entries):
+            fixtures.FacultyCriteriaWorkflowTests.score(self, entry=entry, value=100 - index)
+        before = list(CriteriaScoreSubmission.objects.order_by('pk').values_list('pk', 'raw_score'))
+        approve_criteria_round(self.event, self.faculty, 0)
+        unlock_criteria_round(self.event, self.faculty, 1)
+        self.event.refresh_from_db()
+        qualified = round_participant_ids(self.event, 1)
+        self.assertEqual(len(qualified), 10)
+        for name in ['Male', 'Female']:
+            self.assertEqual(sum(assignments[str(pk)] == name for pk in qualified), 5)
+        self.assertNotIn(self.entries[5].pk, qualified)
+        self.assertNotIn(self.entries[11].pk, qualified)
+        self.assertEqual(list(CriteriaScoreSubmission.objects.order_by('pk').values_list('pk', 'raw_score')), before)
+
     def test_award_submission_does_not_block_main_round_review(self):
         from .models import EventScoringCategory, EventScoringCriterion
         self.complete()
