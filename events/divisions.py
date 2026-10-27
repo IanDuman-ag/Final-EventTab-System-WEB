@@ -2,6 +2,17 @@
 from collections import defaultdict
 
 
+def assign_gender_divisions(raw, entries):
+    """Fill unassigned individuals only for explicitly named Male/Female divisions."""
+    if not isinstance(raw, dict) or raw.get('enabled') is not True or not isinstance(raw.get('names'), list):
+        return
+    names = {name.strip().casefold(): name.strip() for name in raw['names']
+             if isinstance(name, str) and name.strip().casefold() in {'male', 'female'}}
+    for entry in entries:
+        if entry.get('entry_type') == 'individual' and not entry.get('division'):
+            entry['division'] = names.get(getattr(entry.get('source'), 'gender', ''), '')
+
+
 def division_config(event):
     cfg = (event.result_processing_config or {}).get('event_divisions') or {}
     return cfg if cfg.get('enabled') else {}

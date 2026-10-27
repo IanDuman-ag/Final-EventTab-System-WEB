@@ -47,6 +47,7 @@
   var pairEntries = [];
   var performanceOrder = [];
   var participantDivisions = {};
+  var divisionSetupLocked = false;
   var segmentPerformanceOrders = {};
   var performanceTab = "order";
   var draggedParticipant = null;
@@ -1116,6 +1117,20 @@
     return $('#enable-event-divisions').checked;
   }
 
+  function assignGenderDivisions() {
+    if (!divisionsEnabled() || !isIndividualParticipation() || divisionSetupLocked) return;
+    var names = Object.create(null);
+    eventDivisionNames().forEach(function (name) {
+      var key = name.toLowerCase();
+      if (key === 'male' || key === 'female') names[key] = name;
+    });
+    orderedParticipantBoxes().forEach(function (box) {
+      if (!participantDivisions[box.value] && names[box.dataset.gender]) {
+        participantDivisions[box.value] = names[box.dataset.gender];
+      }
+    });
+  }
+
   function renderDivisionManager() {
     var enabled = divisionsEnabled();
     $('#event-division-editor').hidden = !enabled;
@@ -1130,7 +1145,7 @@
       });
     }
     $('#event-division-list').innerHTML = names.map(function (name, index) {
-      return '<span class="division-chip division-chip-tone-' + (index % 6) + '"><span class="division-chip-label">' + escapeHtml(name) + ' (' + (counts[name] || 0) + ')</span><button type="button" class="division-chip-edit" data-edit-event-division="' + escapeAttr(name) + '" aria-label="Edit ' + escapeAttr(name) + ' division"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m16 3 5 5-12 12-6 1 1-6L16 3Zm-1 4 2 2M4 15l5 5"/></svg></button></span>';
+      return '<span class="division-chip division-chip-tone-' + (index % 6) + '"><span class="division-chip-label">' + escapeHtml(name) + ' (' + (counts[name] || 0) + ')</span><button type="button" class="division-chip-edit" data-edit-event-division="' + escapeAttr(name) + '" aria-label="Edit ' + escapeAttr(name) + ' division"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m16 3 5 5-12 12-6 1 1-6L16 3Zm-1 4 2 2M4 15l5 5"/></svg></button><button type="button" class="division-chip-edit division-chip-remove" data-remove-event-division="' + escapeAttr(name) + '" aria-label="Remove ' + escapeAttr(name) + ' division"' + (divisionSetupLocked ? ' disabled title="Divisions cannot be removed after scoring or round approval."' : '') + '><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button></span>';
     }).join('') || '<p class="division-empty">No divisions yet.</p>';
   }
 
@@ -1150,6 +1165,21 @@
   $('#event-division-list').addEventListener('click', function (event) {
     var button = event.target.closest('[data-edit-event-division]');
     if (button) openDivisionEditor(button.dataset.editEventDivision);
+    var remove = event.target.closest('[data-remove-event-division]');
+    if (!remove || divisionSetupLocked) return;
+    var name = remove.dataset.removeEventDivision;
+    var last = eventDivisionNames().length === 1;
+    openJudgingDelete('Remove Division', 'Remove "' + name + '"? Participants will not be removed.' +
+      (last ? ' This is the last division, so divisions will be turned off for this event.' : ' Participants assigned to it will need a new division.'), function () {
+        $('#event-division-names').value = eventDivisionNames().filter(function (value) { return value !== name; }).join('\n');
+        Object.keys(participantDivisions).forEach(function (id) {
+          if (participantDivisions[id] === name) participantDivisions[id] = '';
+        });
+        pairEntries.forEach(function (row) { if (row.division === name) row.division = ''; });
+        if (!eventDivisionNames().length) $('#enable-event-divisions').checked = false;
+        renderPerformanceOrder();
+        renderPairEntries();
+      });
   });
   $('#save-event-division').addEventListener('click', function () {
     var name = $('#event-division-name').value.trim();
@@ -1216,6 +1246,7 @@
   function renderPerformanceOrder() {
     var host = $('#event-performance-setup');
     if (!host) return;
+    assignGenderDivisions();
     host.hidden = isPairParticipation();
     $('.wizard-panel[data-step="2"] > .wizard-section-title').hidden = !isPairParticipation();
     var picker = $('#team-picker');
@@ -1831,6 +1862,7 @@
     form.reset();
     performanceOrder = [];
     participantDivisions = {};
+    divisionSetupLocked = false;
     segmentPerformanceOrders = {};
     performanceTab = 'order';
     $('#performance-search').value = '';
@@ -1942,6 +1974,8 @@
   }
 
   function fillEditor(event) {
+    divisionSetupLocked = !!(event.division_setup_locked || event.results_finalized ||
+      Object.keys((event.result_processing_config || {}).confirmed_stages || {}).length);
     $('#event-image').value = '';
     $('#event-image-error').textContent = '';
     savedImageUrl = event.image_url || '';

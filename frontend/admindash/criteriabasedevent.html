@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% if individual_workspace %}Individuals{% else %}Criteria-Based Events{% endif %} · EventTab</title>
   {% include 'admindash/_bootstrap.html' %}
-  <link rel="stylesheet" href="{% static 'admindash/criteriabasedevent.css' %}?v=20261027divisionchips">
+  <link rel="stylesheet" href="{% static 'admindash/criteriabasedevent.css' %}?v=20261027genderdivisions">
   <link rel="stylesheet" href="{% static 'admindash/bootstrap-admin.css' %}?v=1">
 </head>
 <body class="admin-dashboard-page admin-dashboard-v2 criteria-page match-events-page{% if individual_workspace %} individual-workspace{% endif %}">
@@ -296,7 +296,7 @@
             <div class="team-options criteria-hidden" id="candidate-options">
               {% for cand in candidates %}
               <label data-kind="individual" data-department-id="{{ cand.department_id|default:'' }}" data-department="{% if cand.department %}{{ cand.department.name }}{% endif %}" data-course="" data-search="{{ cand.name|lower }} {{ cand.number|lower }} {% if cand.department %}{{ cand.department.name|lower }}{% endif %}">
-                <input type="checkbox" class="form-check-input participant-check" value="{{ cand.id }}" data-name="#{{ cand.number }} {{ cand.name }}" data-display-name="{{ cand.name }}" data-number="{{ cand.number }}" data-image="{% if cand.image %}{{ cand.image.url }}{% endif %}">
+                <input type="checkbox" class="form-check-input participant-check" value="{{ cand.id }}" data-name="#{{ cand.number }} {{ cand.name }}" data-display-name="{{ cand.name }}" data-number="{{ cand.number }}" data-gender="{{ cand.gender }}" data-image="{% if cand.image %}{{ cand.image.url }}{% endif %}">
                 <span><strong>#{{ cand.number }} {{ cand.name }}</strong><small>{% if cand.department %}{{ cand.department.name }}{% else %}Individual{% endif %}</small></span>
               </label>
               {% empty %}<p data-kind="individual">No active individuals available.</p>{% endfor %}
@@ -987,6 +987,6 @@
     <option value="Production Number"></option>
     <option value="Question and Answer"></option>
   </datalist>
-  <script src="{% static 'admindash/criteriabasedevent.js' %}?v=20261027divisionchips"></script>
+  <script src="{% static 'admindash/criteriabasedevent.js' %}?v=20261027genderdivisions"></script>
 </body>
 </html>

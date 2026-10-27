@@ -10,7 +10,7 @@ from .criteria_event_service import (save_criteria_event, serialize_criteria_eve
 from .criteria_faculty_service import (approve_criteria_round, unlock_criteria_round,
     criteria_faculty_portal, round_participant_ids, _qualifiers)
 from .criteria_scoring import compute_official_criteria_rankings
-from .divisions import validate_division_setup
+from .divisions import assign_gender_divisions, validate_division_setup
 from .models import CriteriaEventEntry, CriteriaScoreSubmission, RegistryCandidate
 
 
@@ -41,6 +41,90 @@ class EventDivisionTests(TransactionTestCase):
             with self.assertRaises(ValueError): validate_division_setup(raw, entries)
         self.assertEqual(validate_division_setup({}, [])['enabled'], False)
         self.assertEqual(validate_division_setup({'enabled': True, 'names': ['Open Class']}, [{'division': 'Open Class'}])['names'], ['Open Class'])
+
+    def test_gender_assignment_only_matches_named_divisions_and_unassigned_individuals(self):
+        from types import SimpleNamespace
+        rows = [
+            {'entry_type': 'individual', 'source': SimpleNamespace(gender=gender), 'division': division}
+            for gender, division in [('male', ''), ('female', ''), ('other', ''), ('', ''), ('male', 'Junior')]]
+        rows.append({'entry_type': 'team', 'source': SimpleNamespace(gender='male'), 'division': ''})
+        assign_gender_divisions({'enabled': True, 'names': ['MALE', 'Female', 'Junior']}, rows)
+        self.assertEqual([row['division'] for row in rows], ['MALE', 'Female', '', '', 'Junior', ''])
+        unassigned = [{'entry_type': 'individual', 'source': SimpleNamespace(gender='male'), 'division': ''}]
+        assign_gender_divisions({'enabled': True, 'names': ['Male Division', 'Junior']}, unassigned)
+        self.assertEqual(unassigned[0]['division'], '')
+        assign_gender_divisions({'enabled': False, 'names': ['Male']}, unassigned)
+        self.assertEqual(unassigned[0]['division'], '')
+        assign_gender_divisions({'enabled': True, 'names': ['Male']}, unassigned)
+        self.assertEqual(unassigned[0]['division'], 'Male')
+
+    def gender_payload(self):
+        for person, gender in zip(self.people, ['male', 'female', 'male', 'female']):
+            person.gender = gender
+            person.save(update_fields=['gender'])
+        payload = self.payload()
+        rows = json.loads(payload['event_entries'])
+        for row in rows:
+            row['division'] = ''
+        payload['event_entries'] = json.dumps(rows)
+        payload['result_processing_config'] = json.dumps({'event_divisions': {'enabled': True, 'names': ['Male', 'Female']}})
+        return payload
+
+    @patch('events.criteria_event_service._schedule_assignment_notifications')
+    def test_gender_assignment_persists_without_renumbering_or_replacing_entries(self, notify):
+        admin = get_user_model().objects.create_superuser('gender-division-admin', 'gd@example.test', 'local-password')
+        ids = list(self.event.participant_ids)
+        event = save_criteria_event(self.gender_payload(), admin, instance=self.event)
+        data = serialize_criteria_event(event)
+        self.assertEqual([row['division'] for row in data['entries']], ['Male', 'Female', 'Male', 'Female'])
+        self.assertEqual(event.participant_ids, ids)
+        self.assertFalse(data['division_setup_locked'])
+        self.complete()
+        self.assertTrue(serialize_criteria_event(event)['division_setup_locked'])
+
+    @patch('events.criteria_event_service._schedule_assignment_notifications')
+    def test_custom_divisions_still_require_manual_assignment(self, notify):
+        admin = get_user_model().objects.create_superuser('custom-division-admin', 'custom@example.test', 'local-password')
+        payload = self.gender_payload()
+        payload['result_processing_config'] = json.dumps({'event_divisions': {'enabled': True, 'names': ['Junior', 'Senior']}})
+        with self.assertRaisesMessage(CriteriaEventValidationError, 'Assign each selected participant'):
+            save_criteria_event(payload, admin, instance=self.event)
+
+    @patch('events.criteria_event_service._schedule_assignment_notifications')
+    def test_removing_division_after_scores_is_rejected_without_score_loss(self, notify):
+        admin = get_user_model().objects.create_superuser('remove-division-admin', 'remove@example.test', 'local-password')
+        payload = self.payload()
+        self.complete()
+        before = list(CriteriaScoreSubmission.objects.order_by('pk').values_list('pk', 'raw_score'))
+        rows = json.loads(payload['event_entries'])
+        for row in rows:
+            row['division'] = 'Senior'
+        payload['event_entries'] = json.dumps(rows)
+        payload['result_processing_config'] = json.dumps({'event_divisions': {'enabled': True, 'names': ['Senior']}})
+        with self.assertRaisesMessage(CriteriaEventValidationError, 'cannot change after scoring'):
+            save_criteria_event(payload, admin, instance=self.event)
+        self.assertEqual(list(CriteriaScoreSubmission.objects.order_by('pk').values_list('pk', 'raw_score')), before)
+
+    @patch('events.criteria_event_service._schedule_assignment_notifications')
+    def test_turning_off_divisions_preserves_unscored_participant_ids(self, notify):
+        admin = get_user_model().objects.create_superuser('no-division-admin', 'none@example.test', 'local-password')
+        payload = self.payload()
+        payload['result_processing_config'] = json.dumps({'event_divisions': {'enabled': False, 'names': []}})
+        rows = json.loads(payload['event_entries'])
+        for row in rows:
+            row['division'] = ''
+        payload['event_entries'] = json.dumps(rows)
+        ids = list(self.event.participant_ids)
+        event = save_criteria_event(payload, admin, instance=self.event)
+        self.assertEqual(event.participant_ids, ids)
+        self.assertFalse(event.result_processing_config['event_divisions']['enabled'])
+
+    @patch('events.criteria_event_service._schedule_assignment_notifications')
+    def test_individual_workspace_also_persists_gender_assignment(self, notify):
+        from .criteria_event_service import save_criteria_participant_setup
+        admin = get_user_model().objects.create_superuser('workspace-gender-admin', 'workspace-gender@example.test', 'local-password')
+        event = save_criteria_participant_setup(self.event, self.gender_payload(), admin)
+        self.assertEqual([row['division'] for row in serialize_criteria_event(event)['entries']], ['Male', 'Female', 'Male', 'Female'])
 
     def test_rank_and_advance_independently_preserving_scores(self):
         self.complete()

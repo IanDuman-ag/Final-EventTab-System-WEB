@@ -1535,7 +1535,7 @@ def _validated_segment_orders(event, entries, raw_orders):
 @transaction.atomic
 def save_criteria_participant_setup(event, data, user):
     """Save only the roster and appearance settings from Individuals."""
-    from .divisions import validate_division_setup, participant_division
+    from .divisions import assign_gender_divisions, validate_division_setup, participant_division
     event = Event.objects.select_for_update().get(pk=event.pk)
     if event.scoring_method != 'criteria' or event.participation_type != 'individual':
         raise CriteriaEventValidationError('Select an individual criteria-based event.')
@@ -1543,6 +1543,7 @@ def save_criteria_participant_setup(event, data, user):
         raise CriteriaEventValidationError('Finalized event participants are read-only.')
     entries = _validated_event_entries('individual', data, strict=event.publication_status == Event.PUBLICATION_PUBLISHED)
     incoming = _json_dict(data.get('result_processing_config'), 'Participant settings')
+    assign_gender_divisions(incoming.get('event_divisions', {}), entries)
     try:
         divisions = validate_division_setup(incoming.get('event_divisions', {}), entries)
     except ValueError as exc:
@@ -1647,7 +1648,7 @@ def save_criteria_event(data, user, files=None, instance=None):
         if strict or data.get('event_entries') or _json_list(data.get('participant_ids'), 'Participants'):
             raise
         event_entries = []
-    from .divisions import validate_division_setup, participant_division
+    from .divisions import assign_gender_divisions, validate_division_setup, participant_division
     incoming_processing = _json_dict(data.get('result_processing_config'), 'Result processing')
     previous_divisions = ((instance.result_processing_config or {}).get('event_divisions') or {}) if instance else {}
     raw_divisions = incoming_processing.get('event_divisions', previous_divisions)
@@ -1655,6 +1656,7 @@ def save_criteria_event(data, user, files=None, instance=None):
         previous_sources = {_entry_identity(entry): participant_division(instance, entry.pk) for entry in instance.criteria_entries.prefetch_related('member_links')}
         for item in event_entries:
             item['division'] = previous_sources.get(_proposed_entry_identity(item), '')
+    assign_gender_divisions(raw_divisions, event_entries)
     try:
         divisions = validate_division_setup(raw_divisions, event_entries)
     except ValueError as exc:
@@ -1997,6 +1999,10 @@ def serialize_criteria_event(event):
         'points_config': event.championship_points_config or [],
         'championship_scoring': (event.result_processing_config or {}).get('championship_scoring'),
         'results_finalized': event.results_finalized,
+        'division_setup_locked': bool(event.results_finalized
+            or (event.result_processing_config or {}).get('confirmed_stages')
+            or event.criteria_score_submissions.exists()
+            or (event.judging_event_id and event.judging_event.candidates.filter(scores__isnull=False).exists())),
         'next_actions': (
             [
                 'Assign or confirm judges',
