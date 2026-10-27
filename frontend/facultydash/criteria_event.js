@@ -10,6 +10,31 @@
     const value = new Date(time.dateTime);
     if (!Number.isNaN(value.getTime())) time.textContent = dateFormat.format(value);
   });
+  // Division tabs only filter the read-only compact results preview.
+  const qualifiedTabs = [...document.querySelectorAll('[data-qualified-tab]')];
+  const selectQualifiedTab = tab => {
+    qualifiedTabs.forEach(item => {
+      const selected = item === tab;
+      item.setAttribute('aria-selected', String(selected));
+      item.tabIndex = selected ? 0 : -1;
+      const panel = document.getElementById(item.getAttribute('aria-controls'));
+      if (panel) panel.hidden = !selected;
+    });
+  };
+  qualifiedTabs.forEach((tab, index) => {
+    tab.addEventListener('click', () => selectQualifiedTab(tab));
+    tab.addEventListener('keydown', event => {
+      let next;
+      if (event.key === 'ArrowRight') next = (index + 1) % qualifiedTabs.length;
+      else if (event.key === 'ArrowLeft') next = (index - 1 + qualifiedTabs.length) % qualifiedTabs.length;
+      else if (event.key === 'Home') next = 0;
+      else if (event.key === 'End') next = qualifiedTabs.length - 1;
+      else return;
+      event.preventDefault();
+      selectQualifiedTab(qualifiedTabs[next]);
+      qualifiedTabs[next].focus();
+    });
+  });
   let posting = false;
   let fetching = false;
   let refreshPending = false;

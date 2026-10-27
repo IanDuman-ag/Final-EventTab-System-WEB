@@ -15,7 +15,7 @@
           <th>Status</th>
           <th>Progress</th>
           <th>Submitted At</th>
-          <th>Method</th>
+          {% if not compact %}<th>Method</th>{% endif %}
         </tr>
       </thead>
       <tbody>
@@ -36,11 +36,11 @@
               </div>
             </td>
             <td>{% if judge.submitted_at %}<time datetime="{{ judge.submitted_at }}" data-local-time>{{ judge.submitted_at }}</time>{% else %}—{% endif %}</td>
-            <td>{{ judge.submission_method|default:'—' }}</td>
+            {% if not compact %}<td>{{ judge.submission_method|default:'—' }}</td>{% endif %}
           </tr>
         {% empty %}
           <tr>
-            <td colspan="6" class="criteria-empty">No judges assigned to this round.</td>
+            <td colspan="{% if compact %}5{% else %}6{% endif %}" class="criteria-empty">No judges assigned to this round.</td>
           </tr>
         {% endfor %}
       </tbody>

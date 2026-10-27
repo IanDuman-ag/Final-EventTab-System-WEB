@@ -340,6 +340,24 @@ def _round_data(event, index, participants, judges, *, require_verification=True
         'completed': 'Completed', 'locked': 'Locked', 'ready': 'Ready for Review',
         'awaiting': 'Awaiting Submissions', 'active': 'Active',
     }
+    from .divisions import division_config
+    divisions = division_config(event)
+    division_counts = [
+        {'name': name, 'count': sum(participant_division(event, value) == name for value in eligible)}
+        for name in divisions.get('names', [])
+    ]
+    method = round_cfg.get('qualification_method') or 'top_ranking'
+    target = int(round_cfg.get('qualifiers') or 0)
+    qualification_label = ''
+    if not round_cfg['is_final']:
+        if method in {'top_ranking', 'top_n_overall', 'top_n_per_division'} and target:
+            qualification_label = f'Top {target}' + (' per division' if divisions else ' overall')
+        elif method == 'manual_selection':
+            qualification_label = 'Manual selection'
+        elif method == 'minimum_score':
+            qualification_label = f"Minimum score: {round_cfg.get('minimum_score') or 0}"
+        elif method in {'advance_all', 'no_elimination', 'no_advancement'}:
+            qualification_label = 'All participants advance'
     qualifier_count = len(qualifiers) if results and (
         round_cfg.get('qualification_method') != 'manual_selection' or approval
     ) else None
@@ -362,6 +380,7 @@ def _round_data(event, index, participants, judges, *, require_verification=True
         'approved_at': approval.get('approved_at'),
         'blockers': list(dict.fromkeys(errors)),
         'qualification_rule': round_cfg.get('qualification_method') or '',
+        'qualification_label': qualification_label, 'division_counts': division_counts,
         'judges': monitor, 'results': results,
     }
 
@@ -438,6 +457,21 @@ def criteria_faculty_portal(event, user, selected_round_index=0):
         },
         'errors': selected['blockers'],
     }
+    # A compact results preview uses the same authoritative qualification flags
+    # as the full results table. Do not imply pending participants are qualified.
+    from .divisions import division_config, participant_division
+    names = division_config(event).get('names', [])
+    by_id = {row['id']: row for row in participants}
+    preview = []
+    for row in selected['results']:
+        if row.get('qualified') or selected['is_final']:
+            participant = by_id.get(row['participant_id'], {})
+            preview.append({**row, 'department': participant.get('department', ''),
+                'division': participant_division(event, row['participant_id']) if names else ''})
+    portal['qualified_groups'] = [
+        {'name': name, 'rows': [row for row in preview if row['division'] == name]}
+        for name in names
+    ] if names else [{'name': '', 'rows': preview}]
     portal['revision'] = hashlib.sha256(json.dumps(portal, sort_keys=True, default=str).encode()).hexdigest()
     return portal
 
