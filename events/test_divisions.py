@@ -340,6 +340,26 @@ class EventDivisionTests(TransactionTestCase):
         self.assertTrue(self.event.result_processing_config['event_divisions']['enabled'])
         self.assertContains(response, 'id="open-candidate-modal"', count=1)
 
+    def test_individual_numbers_sort_numerically_before_pagination(self):
+        from django.test import Client
+        for number in range(1, 10):
+            RegistryCandidate.objects.create(number=str(number), name=f'Individual {number}')
+        RegistryCandidate.objects.create(number='G-99', name='Custom number')
+        before = dict(RegistryCandidate.objects.values_list('pk', 'number'))
+        participant_ids = list(self.event.participant_ids)
+        admin = get_user_model().objects.create_superuser('number-admin', 'number@example.test', 'local-password')
+        client = Client()
+        client.force_login(admin)
+        first = client.get('/admin/candidates/', {'event': self.event.pk})
+        second = client.get('/admin/candidates/', {'event': self.event.pk, 'page': 2})
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual([row['number'] for row in first.context['candidate_rows']], [str(number) for number in range(1, 11)])
+        self.assertEqual([row['number'] for row in second.context['candidate_rows']], ['11', '12', '13', 'G-99'])
+        self.assertEqual(dict(RegistryCandidate.objects.values_list('pk', 'number')), before)
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.participant_ids, participant_ids)
+
     def test_participant_crud_still_works_from_individuals_table(self):
         from django.test import Client
         from .models import Department

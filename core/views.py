@@ -1778,6 +1778,11 @@ def get_candidate_rows():
             'status_label': 'Active' if cand.status == RegistryCandidate.STATUS_ACTIVE else 'Inactive',
             'avatar_tone': cand.id % 5,
         })
+    rows.sort(key=lambda row: (
+        not row['number'].isdecimal(),
+        int(row['number']) if row['number'].isdecimal() else row['number'].casefold(),
+        row['name'].casefold(),
+    ))
     return rows
 
 
