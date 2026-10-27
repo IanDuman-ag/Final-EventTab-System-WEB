@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% if individual_workspace %}Individuals{% else %}Criteria-Based Events{% endif %} · EventTab</title>
   {% include 'admindash/_bootstrap.html' %}
-  <link rel="stylesheet" href="{% static 'admindash/criteriabasedevent.css' %}?v=20261026individuals">
+  <link rel="stylesheet" href="{% static 'admindash/criteriabasedevent.css' %}?v=20261027optionalsettings">
   <link rel="stylesheet" href="{% static 'admindash/bootstrap-admin.css' %}?v=1">
 </head>
 <body class="admin-dashboard-page admin-dashboard-v2 criteria-page match-events-page{% if individual_workspace %} individual-workspace{% endif %}">
@@ -219,14 +219,42 @@
           <p id="event-image-error" class="wizard-error" role="alert"></p>
           <img id="event-image-preview" alt="Event image preview" hidden style="max-width:100%;width:320px;max-height:200px;object-fit:contain;border-radius:8px">
         </fieldset>
-          <fieldset><legend>Optional Settings</legend>
-            <label class="po-enable"><input type="checkbox" id="enable-event-divisions"> Enable Divisions</label>
-            <p class="field-hint">Group participants into separate competition divisions when needed.</p>
-            <div class="wizard-grid">
-              <label>Default Scoring Mode<select class="form-select" id="default-scoring-mode"><option value="scoring">Scoring (Weighted Criteria)</option><option value="ranking">Ranking (Ordinal Ranking)</option></select></label>
-              <label>Result Calculation Method<select class="form-select" id="final-result-basis"><option value="final_round_only">Final Round Only</option><option value="weighted_rounds">Weighted Rounds</option><option value="cumulative_rounds">Cumulative Round Scores</option><option value="main_round" hidden>Legacy Main Round Result</option><option value="manual_authorized" hidden>Legacy Authorized Result</option></select></label>
+          <fieldset class="criteria-optional-settings">
+            <legend>Optional Settings</legend>
+            <div class="criteria-optional-grid">
+              <section class="criteria-setting-panel criteria-setting-divisions" aria-labelledby="optional-divisions-title">
+                <div class="criteria-setting-heading">
+                  <span class="criteria-setting-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="7" r="3"/><circle cx="5" cy="9" r="2.5"/><circle cx="19" cy="9" r="2.5"/><path d="M6 20v-3a6 6 0 0 1 12 0v3H6ZM1 18v-2a4 4 0 0 1 4-4h1a8 8 0 0 0-2 6H1Zm19 0a8 8 0 0 0-2-6h1a4 4 0 0 1 4 4v2h-3Z"/></svg></span>
+                  <label id="optional-divisions-title" for="enable-event-divisions">Enable Divisions</label>
+                  <input type="checkbox" role="switch" id="enable-event-divisions" aria-describedby="optional-divisions-description">
+                </div>
+                <p class="criteria-setting-description" id="optional-divisions-description">Group participants into separate competition divisions when needed.</p>
+                <p class="criteria-setting-example"><span aria-hidden="true">i</span> Example: Male/Female, Junior/Senior, Group A/B, etc.</p>
+              </section>
+              <section class="criteria-setting-panel criteria-setting-scoring" aria-labelledby="optional-scoring-title">
+                <div class="criteria-setting-heading">
+                  <span class="criteria-setting-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 3h10v3h4v3a5 5 0 0 1-5 5h-.1a6 6 0 0 1-2.9 2v3h4v2H7v-2h4v-3a6 6 0 0 1-2.9-2H8a5 5 0 0 1-5-5V6h4V3ZM5 8v1a3 3 0 0 0 2.2 2.9A12 12 0 0 1 7 9V8H5Zm12 0v1c0 1-.1 2-.2 2.9A3 3 0 0 0 19 9V8h-2Z"/></svg></span>
+                  <label id="optional-scoring-title" for="default-scoring-mode">Default Scoring Mode</label>
+                </div>
+                <div class="criteria-setting-content">
+                  <select class="form-select" id="default-scoring-mode" aria-describedby="optional-scoring-description"><option value="scoring">Scoring (Weighted Criteria)</option><option value="ranking">Ranking (Ordinal Ranking)</option></select>
+                  <p class="criteria-setting-help" id="optional-scoring-description">Choose how judges will score participants. You can change this later in the Judging Setup.</p>
+                </div>
+              </section>
+              <section class="criteria-setting-panel criteria-setting-results" aria-labelledby="optional-results-title">
+                <div class="criteria-setting-heading">
+                  <span class="criteria-setting-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 2h14a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Zm0 3v4h14V5H5Zm1 7v3h3v-3H6Zm5 0v3h3v-3h-3Zm5 0v7h3v-7h-3ZM6 17v2h3v-2H6Zm5 0v2h3v-2h-3Z"/></svg></span>
+                  <h4 id="optional-results-title">How should the final winners be determined?</h4>
+                </div>
+                <div class="criteria-result-options" role="radiogroup" aria-labelledby="optional-results-title">
+                  <label><input type="radio" name="final_result_basis_choice" value="final_round_only" checked><span>Final Round Scores Only</span></label>
+                  <label><input type="radio" name="final_result_basis_choice" value="weighted_rounds"><span>Combine Rounds by Percentage</span></label>
+                  <label><input type="radio" name="final_result_basis_choice" value="cumulative_rounds"><span>Average Scores from All Rounds</span></label>
+                </div>
+                <p id="result-method-legacy-note" class="criteria-setting-help" hidden>This event uses its saved legacy result method. Select an option to change it.</p>
+              </section>
             </div>
-            <p class="field-hint">Cumulative results average normalized round scores on a 0?100 scale. Ordinal ranks are normalized within each division. Only finalists receive final placements. Previous scores remain stored.</p>
+            <select id="final-result-basis" hidden aria-hidden="true" tabindex="-1"><option value="final_round_only">Final Round Scores Only</option><option value="weighted_rounds">Combine Rounds by Percentage</option><option value="cumulative_rounds">Average Scores from All Rounds</option><option value="main_round" hidden>Legacy Main Round Result</option><option value="manual_authorized" hidden>Legacy Authorized Result</option></select>
             <div id="result-round-weights" hidden></div>
           </fieldset>
         </section>
@@ -950,6 +978,6 @@
     <option value="Production Number"></option>
     <option value="Question and Answer"></option>
   </datalist>
-  <script src="{% static 'admindash/criteriabasedevent.js' %}?v=20261026individuals"></script>
+  <script src="{% static 'admindash/criteriabasedevent.js' %}?v=20261027optionalsettings"></script>
 </body>
 </html>

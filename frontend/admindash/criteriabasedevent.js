@@ -2301,13 +2301,25 @@
     renderJudgingSetup();
   });
   function renderResultWeights() {
+    var basis = $('#final-result-basis').value;
+    var choices = $$('input[name="final_result_basis_choice"]');
+    choices.forEach(function (input) { input.checked = input.value === basis; });
+    var legacyNote = $('#result-method-legacy-note');
+    if (legacyNote) legacyNote.hidden = choices.some(function (input) { return input.value === basis; });
     var host = $('#result-round-weights');
-    host.hidden = $('#final-result-basis').value !== 'weighted_rounds';
+    host.hidden = basis !== 'weighted_rounds';
     host.innerHTML = stages.map(function (round, index) {
       return '<label>' + escapeHtml(round.name) + ' (%)<input class="form-control" type="number" min="0" max="100" step="0.01" data-result-weight="' + index + '" value="' + (Number(round.weight) || 0) + '"></label>';
     }).join('') + '<p class="field-hint">Round weights must total 100%.</p>';
   }
   $('#final-result-basis').addEventListener('change', renderResultWeights);
+  $$('input[name="final_result_basis_choice"]').forEach(function (input) {
+    input.addEventListener('change', function () {
+      if (!this.checked) return;
+      $('#final-result-basis').value = this.value;
+      renderResultWeights();
+    });
+  });
   $('#default-scoring-mode').addEventListener('change', function () {
     var mode = this.value;
     stages.forEach(function (round, index) {
