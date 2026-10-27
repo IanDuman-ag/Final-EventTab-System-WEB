@@ -272,19 +272,17 @@
             </div>
           </fieldset>
           <section id="event-performance-setup" class="po-panel" aria-label="Participants and performance order">
-            <header class="po-heading"><span class="po-heading-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 8v-2c0-3 3-5 7-5s7 2 7 5v2H5ZM3 7a3 3 0 0 0 0 6v-6Zm18 0v6a3 3 0 0 0 0-6Z"/></svg></span><div><h3>Participants &amp; Performance Order</h3><p>Select participants and arrange the order they will appear on stage. Use a default order or customize per segment.</p></div></header>
+            <header class="po-heading"><span class="po-heading-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 8v-2c0-3 3-5 7-5s7 2 7 5v2H5ZM3 7a3 3 0 0 0 0 6v-6Zm18 0v6a3 3 0 0 0 0-6Z"/></svg></span><div><h3>Participants &amp; Performance Order</h3><p>Select participants and arrange the order they will appear on stage.</p></div></header>
             <div class="po-tabs" role="tablist" aria-label="Participant views">
               <button type="button" role="tab" aria-selected="true" data-performance-tab="order"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h2v2H4zm5 0h11v2H9zM4 11h2v2H4zm5 0h11v2H9zM4 17h2v2H4zm5 0h11v2H9z"/></svg> Performance Order</button>
               <button type="button" role="tab" aria-selected="false" data-performance-tab="participants"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM5 20v-2c0-3 3-5 7-5s7 2 7 5v2Z"/></svg> Participants List</button>
-              <button type="button" role="tab" aria-selected="false" data-performance-tab="segments"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h2v3h8V2h2v3h3v17H3V5h3Zm-1 9v9h14v-9Zm3 2h3v2H8Zm5 0h3v2h-3ZM8 17h3v2H8Z"/></svg> Order per Segment</button>
             </div>
             <div id="performance-participant-picker" hidden>
               <div id="performance-registry-picker"></div>
 
             </div>
-            <div class="po-tools"><label id="performance-order-label">View Order For <select id="performance-segment"><option value="">Default Order (All Segments)</option></select></label><select id="performance-division-filter" aria-label="Filter by division" hidden><option value="">All divisions</option></select><input type="search" id="performance-search" placeholder="Search participants..." aria-label="Search performance order"></div>
+            <div class="po-tools"><select id="performance-division-filter" aria-label="Filter by division" hidden><option value="">All divisions</option></select><input type="search" id="performance-search" placeholder="Search participants..." aria-label="Search performance order"></div>
             <div id="performance-order-note" class="po-note"><span aria-hidden="true">&#9432;</span> &nbsp; Drag rows or use the arrow buttons. Order is saved separately for each division.</div>
-            <button type="button" id="performance-reset-segment" class="po-reset" hidden>Use default order for this segment</button>
             <div class="po-table-wrap" tabindex="0" role="region" aria-label="Participant appearance order"><table><thead><tr><th class="po-order-column">Order</th><th>Individual</th><th>Department</th><th id="performance-division-heading" hidden>Division</th><th class="po-order-column">Actions</th></tr></thead><tbody id="event-performance-rows"></tbody></table></div>
           </section>
           <fieldset hidden>

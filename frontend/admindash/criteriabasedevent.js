@@ -1135,13 +1135,7 @@
   }
 
   function activePerformanceOrder() {
-    var defaults = orderedParticipantBoxes().map(function (box) { return String(box.value); });
-    var key = $('#performance-segment').value;
-    if (!key || !segmentPerformanceOrders[key]) return defaults;
-    var saved = segmentPerformanceOrders[key].filter(function (id) { return defaults.indexOf(id) !== -1; });
-    defaults.forEach(function (id) { if (saved.indexOf(id) === -1) saved.push(id); });
-    segmentPerformanceOrders[key] = saved;
-    return saved;
+    return orderedParticipantBoxes().map(function (box) { return String(box.value); });
   }
 
   function movePerformanceParticipant(id, next) {
@@ -1150,9 +1144,7 @@
     var at = order.indexOf(id), to = order.indexOf(next);
     if (at < 0 || to < 0) return;
     order[at] = next; order[to] = id;
-    var key = $('#performance-segment').value;
-    if (key) segmentPerformanceOrders[key] = order;
-    else performanceOrder = order;
+    performanceOrder = order;
     renderPerformanceOrder();
   }
 
@@ -1167,7 +1159,6 @@
     var listing = performanceTab === 'participants';
     host.classList.toggle('po-list-view', listing);
     $('#performance-participant-picker').hidden = !listing;
-    $('#performance-order-label').hidden = listing;
     $('#performance-order-note').hidden = listing;
     $$('[data-performance-tab]').forEach(function (button) { button.setAttribute('aria-selected', String(button.dataset.performanceTab === performanceTab)); });
     var enabled = divisionsEnabled();
@@ -1179,12 +1170,6 @@
     filter.hidden = !enabled;
     filter.innerHTML = '<option value="">All divisions</option>' + names.map(function (name) { return '<option value="' + escapeAttr(name) + '">' + escapeHtml(name) + '</option>'; }).join('');
     filter.value = names.indexOf(selectedDivision) !== -1 ? selectedDivision : '';
-    var segment = $('#performance-segment'), selectedSegment = segment.value;
-    segment.innerHTML = '<option value="">Default Order (All Segments)</option>' + scoringWorkflow.categories.map(function (category) {
-      return '<option value="' + category.id + '">' + escapeHtml(category.name) + '</option>';
-    }).join('');
-    segment.value = scoringWorkflow.categories.some(function (row) { return String(row.id) === selectedSegment; }) ? selectedSegment : '';
-    $('#performance-reset-segment').hidden = listing || !segment.value || !segmentPerformanceOrders[segment.value];
     var boxes = orderedParticipantBoxes();
     var order = activePerformanceOrder();
     var grouped = (enabled ? names.concat(['']) : ['']).flatMap(function (name) {
@@ -1208,12 +1193,9 @@
 
   $$('[data-performance-tab]').forEach(function (button) { button.addEventListener('click', function () {
     performanceTab = button.dataset.performanceTab;
-    if (performanceTab === 'order') $('#performance-segment').value = '';
-    if (performanceTab === 'segments' && !$('#performance-segment').value && scoringWorkflow.categories.length) $('#performance-segment').value = String(scoringWorkflow.categories[0].id);
     renderPerformanceOrder();
   }); });
-  ['performance-search', 'performance-division-filter', 'performance-segment'].forEach(function (id) { $('#' + id).addEventListener(id === 'performance-search' ? 'input' : 'change', renderPerformanceOrder); });
-  $('#performance-reset-segment').addEventListener('click', function () { delete segmentPerformanceOrders[$('#performance-segment').value]; renderPerformanceOrder(); });
+  ['performance-search', 'performance-division-filter'].forEach(function (id) { $('#' + id).addEventListener(id === 'performance-search' ? 'input' : 'change', renderPerformanceOrder); });
   $('#enable-event-divisions').addEventListener('change', function () { renderPerformanceOrder(); renderPairEntries(); });
   $('#event-division-names').addEventListener('change', function () { renderPerformanceOrder(); renderPairEntries(); });
   $('#event-performance-rows').addEventListener('change', function (event) {
