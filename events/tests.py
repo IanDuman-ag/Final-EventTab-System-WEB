@@ -1578,6 +1578,120 @@ class EventScoringCategoryTests(TestCase):
             venue='Hall',
             scoring_method='criteria',
         )
+        self.admin = get_user_model().objects.create_superuser('segment-order-admin', 'segments@example.test', 'test-password')
+        self.client.force_login(self.admin)
+        self.rounds = [
+            {'id': 'round-temp-preliminary', 'name': 'Preliminary Round', 'weight': 50,
+             'round_type': 'scoring', 'qualification_method': 'advance_all', 'status': 'open'},
+            {'id': '2', 'name': 'Selection of Mr. & Ms. USTP Ambassador', 'weight': 50,
+             'is_final': True, 'status': 'locked'},
+        ]
+        self.event.rounds_config = self.rounds
+        self.event.save(update_fields=['rounds_config'])
+
+    def create_segment(self, name, round_id, order=1):
+        payload = {'workflow_action': 'create_category', 'event_id': self.event.pk,
+                   'category_name': name, 'assigned_round_id': round_id, 'purpose': 'official',
+                   'judge_mode': 'scoring', 'overall_weight_percent': 100}
+        if order is not None:
+            payload['display_order'] = order
+        return self.client.post(reverse('admin_criteria_events'), payload)
+
+    def test_segments_can_each_start_at_one_in_different_rounds(self):
+        from .models import EventScoringCategory
+        first = self.create_segment('Top 5 Selection', self.rounds[0]['id'])
+        second = self.create_segment('Ambassador Final Selection', self.rounds[1]['id'])
+        self.assertEqual(first.status_code, 200, first.content)
+        self.assertEqual(second.status_code, 200, second.content)
+        for response, round_config in [(first, self.rounds[0]), (second, self.rounds[1])]:
+            data = response.json()['category']
+            self.assertIsInstance(data['id'], int)
+            self.assertEqual(data['assigned_round_id'], round_config['id'])
+            self.assertEqual(data['display_order'], 1)
+            EventScoringCategory.objects.get(pk=data['id']).full_clean()
+        duplicate = self.create_segment('Duplicate Preliminary Order', self.rounds[0]['id'])
+        self.assertEqual(duplicate.status_code, 400)
+        self.assertIn('selected round', duplicate.json()['message'])
+
+    def test_database_constraint_rejects_duplicate_order_only_in_same_round(self):
+        from django.db import IntegrityError, transaction
+        from .models import EventScoringCategory
+        for name, round_id in [('First', self.rounds[0]['id']), ('Final', self.rounds[1]['id'])]:
+            EventScoringCategory.objects.create(event=self.event, name=name, assigned_round_id=round_id,
+                judge_mode='scoring', display_order=1, overall_weight_percent=100)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            EventScoringCategory.objects.create(event=self.event, name='Duplicate', assigned_round_id=self.rounds[0]['id'],
+                judge_mode='scoring', display_order=1, overall_weight_percent=100)
+        self.assertEqual(self.event.scoring_categories.count(), 2)
+
+    def test_next_segment_order_uses_selected_round_maximum_not_count(self):
+        self.assertEqual(self.create_segment('Preliminary first', self.rounds[0]['id']).status_code, 200)
+        self.assertEqual(self.create_segment('Preliminary fourth', self.rounds[0]['id'], 4).status_code, 200)
+        final = self.create_segment('Final first', self.rounds[1]['id'], None)
+        preliminary = self.create_segment('Preliminary next', self.rounds[0]['id'], None)
+        self.assertEqual(final.status_code, 200, final.content)
+        self.assertEqual(preliminary.status_code, 200, preliminary.content)
+        self.assertEqual(final.json()['category']['display_order'], 1)
+        self.assertEqual(preliminary.json()['category']['display_order'], 5)
+
+    def test_update_checks_target_round_and_excludes_current_segment(self):
+        from .models import EventScoringCategory
+        first = self.create_segment('Preliminary', self.rounds[0]['id']).json()['category']
+        second = self.create_segment('Final', self.rounds[1]['id']).json()['category']
+        payload = {'workflow_action': 'update_category', 'event_id': self.event.pk,
+                   'category_id': second['id'], 'category_name': second['name'], 'purpose': 'official',
+                   'judge_mode': 'scoring', 'overall_weight_percent': 100, 'display_order': 1,
+                   'assigned_round_id': self.rounds[1]['id']}
+        self.assertEqual(self.client.post(reverse('admin_criteria_events'), payload).status_code, 200)
+        payload['assigned_round_id'] = self.rounds[0]['id']
+        response = self.client.post(reverse('admin_criteria_events'), payload)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('selected round', response.json()['message'])
+        self.assertEqual(EventScoringCategory.objects.get(pk=second['id']).assigned_round_id, self.rounds[1]['id'])
+        self.assertTrue(EventScoringCategory.objects.filter(pk=first['id'], display_order=1).exists())
+
+    def test_save_reload_preserves_round_orders_segments_criteria_and_scores(self):
+        from unittest.mock import patch
+        from .models import CriteriaEventEntry, CriteriaScoreSubmission, EventScoringCategory, EventScoringCriterion
+        from .criteria_event_service import save_criteria_event
+        self.admin.groups.add(Group.objects.get_or_create(name='Judge')[0])
+        self.event.assigned_judges.add(self.admin)
+        team = Team.objects.create(name='Segment Test Team', code='SEG')
+        entry = CriteriaEventEntry.objects.create(event=self.event, entry_type='team', source_team=team,
+            display_name=team.name, display_order=0)
+        self.event.participant_ids = [entry.pk]
+        self.event.participation_type = 'team'
+        self.event.save()
+        for name, stage in [('Top 5 Selection', self.rounds[0]), ('Ambassador Final Selection', self.rounds[1])]:
+            response = self.create_segment(name, stage['id'])
+            self.assertEqual(response.status_code, 200, response.content)
+            category = EventScoringCategory.objects.get(pk=response.json()['category']['id'])
+            EventScoringCriterion.objects.create(category=category, name=name + ' criterion',
+                weight_percent=100, max_score=100, display_order=1)
+        first = self.event.scoring_categories.get(assigned_round_id=self.rounds[0]['id'])
+        CriteriaScoreSubmission.objects.create(event=self.event, assigned_round_id=first.assigned_round_id,
+            category=first, criterion=first.criteria.get(), judge=self.admin, participant_type='entry',
+            participant_id=entry.pk, source='MOBILE', status='SUBMITTED', raw_score=88)
+        categories_before = list(self.event.scoring_categories.order_by('pk').values())
+        criteria_before = list(EventScoringCriterion.objects.filter(category__event=self.event).order_by('pk').values())
+        scores_before = list(CriteriaScoreSubmission.objects.filter(event=self.event).values())
+        payload = {'criteria_wizard_version': '4', 'event_name': self.event.name, 'category': 'Special Event',
+            'event_classification': 'minor', 'participation_type': 'team', 'venue': 'Hall',
+            'start_date': date.today().isoformat(), 'end_date': date.today().isoformat(),
+            'publication_status': 'draft', 'event_format': 'multiple_stage', 'criteria_score_method': 'weighted_percentage',
+            'rounds_config': json.dumps(self.rounds), 'event_entries': json.dumps([{'source_team_id': team.pk}]),
+            'judge_ids': json.dumps([self.admin.pk])}
+        with patch('events.criteria_event_service._schedule_assignment_notifications'):
+            save_criteria_event(payload, self.admin, instance=self.event)
+        self.event.refresh_from_db()
+        self.assertEqual([row['stage_number'] for row in self.event.rounds_config], [1, 2])
+        self.assertEqual([row['id'] for row in self.event.rounds_config], [row['id'] for row in self.rounds])
+        self.assertEqual(list(self.event.scoring_categories.order_by('pk').values()), categories_before)
+        self.assertEqual(list(EventScoringCriterion.objects.filter(category__event=self.event).order_by('pk').values()), criteria_before)
+        self.assertEqual(list(CriteriaScoreSubmission.objects.filter(event=self.event).values()), scores_before)
+        reloaded = self.client.post(reverse('admin_criteria_events'), {'workflow_action': 'list_categories', 'event_id': self.event.pk})
+        self.assertEqual(reloaded.status_code, 200)
+        self.assertEqual([row['display_order'] for row in reloaded.json()['categories']], [1, 1])
 
     def test_category_and_criteria_are_scoped_to_event(self):
         from .models import EventScoringCategory, EventScoringCriterion

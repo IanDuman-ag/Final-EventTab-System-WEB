@@ -8,7 +8,7 @@ from django.core.paginator import Paginator
 from django.core.validators import validate_email
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
-from django.db.models import Q, Count
+from django.db.models import Q, Count, Max
 from django.shortcuts import redirect, render, get_object_or_404
 from django.utils import timezone
 from django.http import HttpResponse, HttpResponseNotAllowed, JsonResponse
@@ -3445,8 +3445,13 @@ def admin_criteria_events(request, event_id=None):
                 assigned_round_id = request.POST.get('assigned_round_id', '').strip()[:80]
                 purpose = request.POST.get('purpose', 'official').strip()
                 category_purpose = request.POST.get('category_purpose', '').strip()
+                round_categories = event.scoring_categories.filter(assigned_round_id=assigned_round_id)
                 try:
-                    order = int(request.POST.get('display_order', ''))
+                    requested_order = request.POST.get('display_order', '').strip()
+                    if requested_order:
+                        order = int(requested_order)
+                    else:
+                        order = (round_categories.aggregate(last_order=Max('display_order'))['last_order'] or 0) + 1
                     weight = Decimal(request.POST.get('overall_weight_percent', ''))
                 except (ValueError, InvalidOperation):
                     return workflow_error('Display Order and Category Weight Within Round must be numeric.')
@@ -3460,8 +3465,8 @@ def admin_criteria_events(request, event_id=None):
                     )
                 if event.scoring_categories.filter(name__iexact=name).exists():
                     return workflow_error('A category with this name already exists for the Event.')
-                if event.scoring_categories.filter(display_order=order).exists():
-                    return workflow_error('This display order is already in use for the Event.')
+                if round_categories.filter(display_order=order).exists():
+                    return workflow_error('This display order is already in use for the selected round.')
                 category = EventScoringCategory.objects.create(
                     event=event, name=name[:120], assigned_round_id=assigned_round_id,
                     purpose=purpose, category_purpose=category_purpose[:500], judge_mode=mode,
@@ -3498,8 +3503,8 @@ def admin_criteria_events(request, event_id=None):
                     )
                 if event.scoring_categories.exclude(pk=category.pk).filter(name__iexact=name).exists():
                     return workflow_error('A category with this name already exists for the Event.')
-                if event.scoring_categories.exclude(pk=category.pk).filter(display_order=order).exists():
-                    return workflow_error('This display order is already in use for the Event.')
+                if event.scoring_categories.exclude(pk=category.pk).filter(assigned_round_id=assigned_round_id, display_order=order).exists():
+                    return workflow_error('This display order is already in use for the selected round.')
                 if category.score_submissions.exists() and (
                     category.assigned_round_id != assigned_round_id
                     or category.purpose != purpose

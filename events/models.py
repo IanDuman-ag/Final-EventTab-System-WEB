@@ -319,7 +319,7 @@ class EventScoringCategory(models.Model):
         ordering = ['display_order', 'id']
         constraints = [
             models.UniqueConstraint(fields=['event', 'name'], name='unique_event_scoring_category_name'),
-            models.UniqueConstraint(fields=['event', 'display_order'], name='unique_event_scoring_category_order'),
+            models.UniqueConstraint(fields=['event', 'assigned_round_id', 'display_order'], name='unique_round_scoring_category_order'),
         ]
 
     def __str__(self):

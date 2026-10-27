@@ -1461,6 +1461,13 @@
     return stages.length ? roundKeyFor(stages[0], 0) : 'main';
   }
 
+  function nextSegmentOrder(roundId) {
+    return scoringWorkflow.categories.reduce(function (highest, category) {
+      return categoryRoundKey(category) === String(roundId)
+        ? Math.max(highest, Number(category.display_order) || 0) : highest;
+    }, 0) + 1;
+  }
+
   function officialWeightTotalForRound(roundKey) {
     return roundWeight(scoringWorkflow.categories.reduce(function (sum, row) {
       if ((row.purpose || 'official') !== 'official') return sum;
@@ -2458,7 +2465,7 @@
     var editId = $('#simple-segment-edit-id').value;
     var roundId = selectedJudgingRound();
     var existing = scoringWorkflow.categories.filter(function (row) { return String(row.id) === String(editId); })[0];
-    workflowRequest(editId ? 'update_category' : 'create_category', { event_id: scoringWorkflow.eventId, category_id: editId, category_name: name, assigned_round_id: roundId, purpose: existing ? existing.purpose || 'official' : 'official', judge_mode: $('#round-scoring-mode').value, display_order: existing ? existing.display_order : scoringWorkflow.categories.length + 1, overall_weight_percent: existing ? existing.overall_weight_percent : 0 }).then(loadCategories).then(function () { return rebalanceSegmentWeights(roundId); }).then(function () { $('#segment-modal').close(); renderJudgingSegments(); }).catch(function (error) { showError(error.message); });
+    workflowRequest(editId ? 'update_category' : 'create_category', { event_id: scoringWorkflow.eventId, category_id: editId, category_name: name, assigned_round_id: roundId, purpose: existing ? existing.purpose || 'official' : 'official', judge_mode: $('#round-scoring-mode').value, display_order: existing ? existing.display_order : nextSegmentOrder(roundId), overall_weight_percent: existing ? existing.overall_weight_percent : 0 }).then(loadCategories).then(function () { return rebalanceSegmentWeights(roundId); }).then(function () { $('#segment-modal').close(); renderJudgingSegments(); }).catch(function (error) { showError(error.message); });
   });
   function renderSubcriteriaEditor(rows) {
     $('#simple-subcriteria-rows').innerHTML = (rows || []).map(function (row) {
@@ -2897,7 +2904,7 @@
       assigned_round_id: $('#scoring-category-round').value,
       purpose: $('#scoring-category-purpose').value,
       judge_mode: $('#scoring-category-mode').value,
-      display_order: $('#scoring-category-order').value,
+      display_order: $('#scoring-category-order').value || nextSegmentOrder($('#scoring-category-round').value),
       overall_weight_percent: overallWeight,
     }).then(function () {
       return loadCategories();
