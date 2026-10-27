@@ -31,6 +31,7 @@
     $('#event-image-preview').hidden = false;
   });
   var savedRankingAggregation = 'weighted_mean_rank';
+  var savedVerificationMode = 'admin_only';
   var activeStep = 1;
   var mode = 'standard';
   var criteria = [];
@@ -328,7 +329,7 @@
         weight: isFinal ? (100 - weight * (count - 1)) : weight,
         qualification_method: isFinal ? null : 'top_ranking',
         qualifiers: isFinal ? null : Math.max(1, 10 - i * 2),
-        carry_previous_scores: i > 0,
+        carry_previous_scores: false,
         require_faculty_confirmation: !isFinal,
         is_final: isFinal,
       }, i, count));
@@ -1391,7 +1392,7 @@
     out.default_scoring_mode = $('#default-scoring-mode').value;
     out.ranking_aggregation = savedRankingAggregation;
     out.placements_count = Number($('#placements-count').value);
-    out.verification_mode = ($('#advanced-result-verification') || {}).value || 'admin_only';
+    out.verification_mode = savedVerificationMode;
     $$('[data-rp]').forEach(function (input) {
       out[input.dataset.rp] = input.checked;
     });
@@ -1804,7 +1805,7 @@
       ['Tabulation Officer', tabulatorLabel],
       ['Faculty In Charge', faculty.value ? faculty.options[faculty.selectedIndex].text : 'Not assigned'],
       ['Assigned Judges', judgeNames.join(', ') || '—'],
-      ['Advanced Settings', ($('#advanced-carry-scores').checked ? 'Carry scores · ' : 'Do not carry scores · ') + ($('#advanced-special-awards').checked ? 'Special awards enabled · ' : 'Special awards disabled · ') + $('#advanced-tie-rule').options[$('#advanced-tie-rule').selectedIndex].text + ' · Default max ' + $('#advanced-default-max').value],
+      ['Advanced Settings', ($('#advanced-special-awards').checked ? 'Special awards enabled · ' : 'Special awards disabled · ') + $('#advanced-tie-rule').options[$('#advanced-tie-rule').selectedIndex].text + ' · Default max ' + $('#advanced-default-max').value],
     ];
     $('#review-summary').innerHTML = rows.map(function (row) {
       return '<div><span>' + escapeHtml(row[0]) + '</span>' + (row[0] === 'Judging Segments & Criteria' ? '<div class="judging-review-structure">' + row[1] + '</div>' : '<strong>' + escapeHtml(row[1]) + '</strong>') + '</div>';
@@ -1865,6 +1866,7 @@
 
   function resetWizard() {
     pointsSnapshotLocked = true;
+    savedVerificationMode = 'admin_only';
     mobileApprovalRequired = true;
     form.reset();
     performanceOrder = [];
@@ -2076,7 +2078,7 @@
     });
     updateJudgeCount();
     var rp = event.result_processing_config || {};
-    $('#advanced-result-verification').value = rp.verification_mode || 'admin_only';
+    savedVerificationMode = rp.verification_mode || 'admin_only';
     $('#final-result-basis').value = rp.final_result_basis || 'main_round';
     $('#default-scoring-mode').value = rp.default_scoring_mode || 'scoring';
     savedRankingAggregation = rp.ranking_aggregation || 'weighted_mean_rank';
@@ -2097,7 +2099,6 @@
     });
     $('#advanced-special-awards').checked = !!js.enable_special_awards;
     $('#advanced-default-max').value = js.default_max_score || settings.max_score || 100;
-    $('#advanced-carry-scores').checked = stages.some(function (round, index) { return index > 0 && round.carry_previous_scores; });
     $('#advanced-tie-rule').value = stageTie === 'highest_selected_criterion' || stageTie === 'manual_decision' ? stageTie : 'highest_final_round';
     pointsSnapshotLocked = Boolean(event.championship_scoring);
     points = event.points_config && event.points_config.length
@@ -2537,7 +2538,6 @@
       var original = $('.judge-check[value="' + CSS.escape(event.target.dataset.judgeProxy) + '"]');
       if (original) { original.checked = event.target.checked; updateJudgeCount(); }
     }
-    if (event.target === $('#advanced-carry-scores')) stages.forEach(function (round, index) { round.carry_previous_scores = index > 0 && event.target.checked; round.score_handling = index > 0 && event.target.checked ? 'carry' : 'start_zero'; });
     if (event.target === $('#advanced-default-max')) $('#max-score').value = event.target.value || 100;
     if (event.target === $('#advanced-tie-rule')) $('#stage-tiebreak-method').value = event.target.value;
   });
