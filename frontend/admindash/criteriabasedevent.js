@@ -1116,6 +1116,71 @@
     return $('#enable-event-divisions').checked;
   }
 
+  function renderDivisionManager() {
+    var enabled = divisionsEnabled();
+    $('#event-division-editor').hidden = !enabled;
+    var names = eventDivisionNames();
+    var counts = Object.create(null);
+    if (isPairParticipation()) {
+      pairEntries.forEach(function (row) { counts[row.division] = (counts[row.division] || 0) + 1; });
+    } else {
+      orderedParticipantBoxes().forEach(function (box) {
+        var name = participantDivisions[box.value];
+        counts[name] = (counts[name] || 0) + 1;
+      });
+    }
+    $('#event-division-list').innerHTML = names.map(function (name, index) {
+      return '<span class="division-chip division-chip-tone-' + (index % 6) + '"><span class="division-chip-label">' + escapeHtml(name) + ' (' + (counts[name] || 0) + ')</span><button type="button" class="division-chip-edit" data-edit-event-division="' + escapeAttr(name) + '" aria-label="Edit ' + escapeAttr(name) + ' division"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m16 3 5 5-12 12-6 1 1-6L16 3Zm-1 4 2 2M4 15l5 5"/></svg></button></span>';
+    }).join('') || '<p class="division-empty">No divisions yet.</p>';
+  }
+
+  function openDivisionEditor(name) {
+    $('#event-division-edit-name').value = name || '';
+    $('#event-division-name').value = name || '';
+    $('#event-division-error').textContent = '';
+    $('#event-division-modal-title').textContent = name ? 'Edit Division' : 'Add Division';
+    $('#event-division-modal').showModal();
+    requestAnimationFrame(function () { $('#event-division-name').focus(); $('#event-division-name').select(); });
+  }
+
+  $('#add-event-division').addEventListener('click', function () { openDivisionEditor(''); });
+  $('#event-division-name').addEventListener('keydown', function (event) {
+    if (event.key === 'Enter') { event.preventDefault(); $('#save-event-division').click(); }
+  });
+  $('#event-division-list').addEventListener('click', function (event) {
+    var button = event.target.closest('[data-edit-event-division]');
+    if (button) openDivisionEditor(button.dataset.editEventDivision);
+  });
+  $('#save-event-division').addEventListener('click', function () {
+    var name = $('#event-division-name').value.trim();
+    var previous = $('#event-division-edit-name').value;
+    var names = eventDivisionNames();
+    var error = '';
+    if (!name || name.length > 100) error = 'Enter a division name between 1 and 100 characters.';
+    else if (names.some(function (value) { return value !== previous && value.toLowerCase() === name.toLowerCase(); })) error = 'A division with this name already exists.';
+    else if (!previous && names.length >= 50) error = 'You can add up to 50 divisions.';
+    else if (previous && names.indexOf(previous) === -1) error = 'This division is no longer available. Close this window and try again.';
+    if (error) { $('#event-division-error').textContent = error; return; }
+    if (previous) {
+      names[names.indexOf(previous)] = name;
+      Object.keys(participantDivisions).forEach(function (id) {
+        if (participantDivisions[id] === previous) participantDivisions[id] = name;
+      });
+      pairEntries.forEach(function (row) { if (row.division === previous) row.division = name; });
+    } else {
+      names.push(name);
+    }
+    $('#event-division-names').value = names.join('\n');
+    var filteredDivision = $('#performance-division-filter').value;
+    renderPerformanceOrder();
+    if (previous && filteredDivision === previous) {
+      $('#performance-division-filter').value = name;
+      renderPerformanceOrder();
+    }
+    renderPairEntries();
+    $('#event-division-modal').close();
+  });
+
   function divisionSetupIssue() {
     if (!divisionsEnabled()) return '';
     var names = eventDivisionNames();
@@ -1162,7 +1227,7 @@
     $('#performance-order-note').hidden = listing;
     $$('[data-performance-tab]').forEach(function (button) { button.setAttribute('aria-selected', String(button.dataset.performanceTab === performanceTab)); });
     var enabled = divisionsEnabled();
-    $('#event-division-editor').hidden = !enabled;
+    renderDivisionManager();
     $('#performance-division-heading').hidden = !enabled;
     var names = eventDivisionNames();
     var filter = $('#performance-division-filter');
@@ -2627,7 +2692,7 @@
     var card = event.target.closest('[data-pair-index]');
     if (!card) return;
     var index = Number(card.dataset.pairIndex);
-    if (event.target.matches('[data-pair-division]')) { pairEntries[index].division = event.target.value; return; }
+    if (event.target.matches('[data-pair-division]')) { pairEntries[index].division = event.target.value; renderDivisionManager(); return; }
     if (event.target.matches('[data-pair-department]')) {
       pairEntries[index].department_id = event.target.value;
       var invalid = ['member_1_id', 'member_2_id'].some(function (key) {

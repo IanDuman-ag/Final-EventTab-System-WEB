@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% if individual_workspace %}Individuals{% else %}Criteria-Based Events{% endif %} · EventTab</title>
   {% include 'admindash/_bootstrap.html' %}
-  <link rel="stylesheet" href="{% static 'admindash/criteriabasedevent.css' %}?v=20261027optionalsettings">
+  <link rel="stylesheet" href="{% static 'admindash/criteriabasedevent.css' %}?v=20261027divisionchips">
   <link rel="stylesheet" href="{% static 'admindash/bootstrap-admin.css' %}?v=1">
 </head>
 <body class="admin-dashboard-page admin-dashboard-v2 criteria-page match-events-page{% if individual_workspace %} individual-workspace{% endif %}">
@@ -260,7 +260,15 @@
         </section>
         <section class="wizard-panel" data-step="2">
           <div class="wizard-section-title"><span>02</span><div><h3>Participants</h3><p>Select the teams or individuals who will compete in this event.</p></div></div>
-              <div id="event-division-editor" hidden><label for="event-division-names">Division names (one per line)</label><textarea id="event-division-names" class="form-control" rows="3" maxlength="5050" placeholder="Junior&#10;Senior"></textarea></div>
+          <section id="event-division-editor" aria-labelledby="event-division-title" hidden>
+            <div class="event-division-header">
+              <span class="event-division-number" aria-hidden="true">2</span>
+              <div class="event-division-heading"><h3 id="event-division-title">Divisions <span>(Optional)</span></h3><p>Create divisions and assign participants. Divisions are optional and dynamic.</p></div>
+              <button type="button" id="add-event-division" class="btn btn-primary match-primary">+ Add Division</button>
+            </div>
+            <input type="hidden" id="event-division-names">
+            <div id="event-division-list" aria-live="polite"><p class="event-division-empty">No divisions yet.</p></div>
+          </section>
           <fieldset class="team-picker" id="team-picker">
             <legend>
               <span id="participant-legend-label">Participating Groups</span>
@@ -393,6 +401,7 @@
           </div>
         </section>
 
+        <dialog id="event-division-modal" class="judging-modal" aria-labelledby="event-division-modal-title"><div class="judging-modal-body"><header><h3 id="event-division-modal-title">Add Division</h3><button type="button" data-close-judging-modal aria-label="Close division editor">&times;</button></header><input type="hidden" id="event-division-edit-name"><label for="event-division-name">Division Name</label><input class="form-control" id="event-division-name" maxlength="100" autocomplete="off" aria-describedby="event-division-error"><p id="event-division-error" class="wizard-error" role="alert"></p><footer><button type="button" data-close-judging-modal class="btn btn-outline-secondary match-secondary">Cancel</button><button type="button" id="save-event-division" class="btn btn-primary match-primary">Save Division</button></footer></div></dialog>
         <dialog id="round-modal" class="judging-modal" aria-labelledby="round-modal-title"><div class="judging-modal-body"><header><h3 id="round-modal-title">Add Round</h3><button type="button" data-close-judging-modal aria-label="Close">&times;</button></header><input type="hidden" id="simple-round-edit-id"><label>Round Name<input class="form-control" id="simple-round-name" maxlength="80" placeholder="Preliminary Round"></label><label>Advancement<select class="form-select" id="simple-round-advancement"><option value="advance_all">All participants continue</option><option value="top_ranking">Top participants advance</option><option value="final">Final round / no advancement</option></select></label><label id="simple-round-qualifiers-wrap" hidden>Number to Advance<input class="form-control" id="simple-round-qualifiers" type="number" min="1" step="1" value="1"></label><footer><button type="button" data-close-judging-modal class="btn btn-outline-secondary match-secondary">Cancel</button><button type="button" id="simple-round-save" class="btn btn-primary match-primary">Save Round</button></footer></div></dialog>
         <dialog id="segment-modal" class="judging-modal" aria-labelledby="segment-modal-title"><div class="judging-modal-body"><header><h3 id="segment-modal-title">Add Segment</h3><button type="button" data-close-judging-modal aria-label="Close">&times;</button></header><input type="hidden" id="simple-segment-edit-id"><label>Segment Name<input class="form-control" id="simple-segment-name" maxlength="120" placeholder="Production Number"></label><footer><button type="button" data-close-judging-modal class="btn btn-outline-secondary match-secondary">Cancel</button><button type="button" id="simple-segment-save" class="btn btn-primary match-primary">Save Segment</button></footer></div></dialog>
         <dialog id="criterion-modal" class="judging-modal" aria-labelledby="criterion-modal-title"><div class="judging-modal-body"><header><h3 id="criterion-modal-title">Add Criterion</h3><button type="button" data-close-judging-modal aria-label="Close">&times;</button></header><input type="hidden" id="simple-criterion-edit-id"><input type="hidden" id="simple-criterion-category-id"><label>Criterion Name<input class="form-control" id="simple-criterion-name" maxlength="120" placeholder="Stage Presence"></label><label>Weight %<input class="form-control" id="simple-criterion-weight" type="number" min="0" max="100" step="0.01"></label><label>Max Score<input class="form-control" id="simple-criterion-max" type="number" min="1" step="0.01" value="100"></label><label class="judging-check"><input class="form-check-input" id="simple-criterion-detailed" type="checkbox"> Add detailed subcriteria</label><div id="simple-subcriteria-section" class="judging-subcriteria-editor" hidden><h4>Subcriteria</h4><div id="simple-subcriteria-rows"></div><button type="button" id="simple-subcriterion-add" class="btn btn-outline-secondary match-secondary">+ Add Subcriterion</button><p id="simple-subcriteria-total" aria-live="polite"></p></div><footer><button type="button" data-close-judging-modal class="btn btn-outline-secondary match-secondary">Cancel</button><button type="button" id="simple-criterion-save" class="btn btn-primary match-primary">Save Criterion</button></footer></div></dialog>
@@ -978,6 +987,6 @@
     <option value="Production Number"></option>
     <option value="Question and Answer"></option>
   </datalist>
-  <script src="{% static 'admindash/criteriabasedevent.js' %}?v=20261027optionalsettings"></script>
+  <script src="{% static 'admindash/criteriabasedevent.js' %}?v=20261027divisionchips"></script>
 </body>
 </html>

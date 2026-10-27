@@ -671,7 +671,33 @@ html.event-wizard-open body { overflow:hidden; }
 .po-arrows button:hover:not(:disabled) { background: #edf4ff; border-color: #7da9ee; }.po-arrows button:disabled { opacity: .35; cursor: default; }
 .po-enable { display: flex; align-items: center; gap: 8px; margin: 14px 0; font-size: 12px; font-weight: 600; }
 #enable-event-divisions { accent-color: #1261db; width: 16px; height: 16px; }
-#event-division-editor { max-width: 480px; margin-bottom: 12px; }#event-division-editor > label { display: block; margin-bottom: 6px; font-size: 12px; }
+/* Event-local division names and counts. */
+#event-division-editor { margin-bottom: 16px; padding: 14px 16px; border: 1px solid #bdd7ff; border-radius: 7px; background: #f5f9ff; }
+#event-division-editor[hidden] { display: none; }
+.event-division-header { display: flex; align-items: flex-start; gap: 10px; }
+.event-division-number { display: grid; place-items: center; flex: 0 0 23px; width: 23px; height: 23px; margin-top: 1px; border-radius: 50%; background: #0868ff; color: #fff; font-size: 12px; font-weight: 800; }
+.event-division-heading { flex: 1; min-width: 0; }
+.event-division-heading h3 { margin: 0; color: #14345d; font-size: 14px; line-height: 1.5; font-weight: 800; }
+.event-division-heading h3 span { font-weight: 650; }
+.event-division-heading p { margin: 3px 0 0; color: #637c9e; font-size: 10px; line-height: 1.5; }
+#event-division-editor #add-event-division { flex: 0 0 auto; min-height: 30px; padding: 5px 10px; border-radius: 5px; background: #0868ff; border-color: #0868ff; color: #fff; font-size: 10px; font-weight: 700; white-space: nowrap; }
+#event-division-editor #add-event-division:hover { background: #0056dc; border-color: #0056dc; }
+#event-division-editor #add-event-division:focus-visible, .division-chip-edit:focus-visible { outline: 3px solid #abcfff; outline-offset: 3px; }
+#event-division-list { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0 0 33px; }
+#event-division-list > p { margin: 0; color: #637c9e; font-size: 11px; line-height: 1.5; }
+.division-chip { display: inline-flex; align-items: center; gap: 9px; max-width: 100%; min-height: 32px; padding: 5px 8px 5px 10px; border: 1px solid var(--division-chip-border, #cadcf7); border-radius: 5px; background: var(--division-chip-background, #e9f2ff); color: var(--division-chip-color, #225ba8); }
+.division-chip-label { min-width: 0; overflow-wrap: anywhere; font-size: 11px; font-weight: 650; line-height: 1.4; }
+.division-chip-edit { display: inline-grid; place-items: center; flex: 0 0 22px; width: 22px; height: 22px; padding: 3px; border: 0; border-radius: 3px; background: transparent; color: inherit; cursor: pointer; }
+.division-chip-edit:hover { background: #ffffffa6; }
+.division-chip-edit svg { display: block; width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.division-chip-tone-0 { --division-chip-background: #e9f2ff; --division-chip-border: #cfdef7; --division-chip-color: #245ba4; }
+.division-chip-tone-1 { --division-chip-background: #ffedf5; --division-chip-border: #f3d2e2; --division-chip-color: #a94376; }
+.division-chip-tone-2 { --division-chip-background: #eaf6ef; --division-chip-border: #cfe7d7; --division-chip-color: #327452; }
+.division-chip-tone-3 { --division-chip-background: #fff6df; --division-chip-border: #eddfb6; --division-chip-color: #8c6b25; }
+.division-chip-tone-4 { --division-chip-background: #f0edff; --division-chip-border: #ddd5f8; --division-chip-color: #6d55a6; }
+.division-chip-tone-5 { --division-chip-background: #e9f7f8; --division-chip-border: #cde8eb; --division-chip-color: #31777d; }
+#event-division-error:empty { display: none; }
+@media(max-width:560px) { #event-division-editor { padding: 12px; }.event-division-header { flex-wrap: wrap; gap: 8px; }.event-division-heading { flex-basis: calc(100% - 31px); }#event-division-editor #add-event-division { margin-left: 31px; }#event-division-list { margin-left: 0; } }
 .po-list-view .po-order-column { display: none; }.po-reset { margin: 0 0 10px; padding: 5px 0; border: 0; background: transparent; color: #1564d9; font-size: 11px; cursor: pointer; }
 .po-empty { padding: 25px 12px !important; text-align: center; color: #637b9c; }
 @media(max-width:640px) { #event-performance-setup { padding: 12px 8px; }.po-heading { align-items: flex-start; }#event-performance-setup h3 { font-size: 17px; }.po-tabs button { flex-basis: 150px; min-height: 42px; }#performance-search { width: 100%; margin-left: 0; }.po-tools label { width: 100%; }#performance-segment { flex: 1; max-width: none; }.po-arrows button { width: 40px; height: 40px; } }
