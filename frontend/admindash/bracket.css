@@ -2937,3 +2937,43 @@
   line-height: 1.45;
   font-weight: 600;
 }
+/* Reference bracket viewer: compact scorecards, schedule headers, department logos. */
+#viewBracketModal .bracket-modal-header { background: #f8fbff; color: #12274c; border-bottom: 0; padding: 20px 24px 10px; }
+#viewBracketModal .bracket-modal-header h3 { color: #12274c; font-size: 22px; margin: 0 0 4px; }
+#viewBracketModal .bracket-modal-subtitle { color: #7185a7; font-size: 13px; }
+#viewBracketModal .bracket-close-modal { background: #fff; color: #52698d; border: 1px solid #dce4ef; }
+#viewBracketModal .bracket-details-badges, #viewBracketModal .bracket-details-sidebar, #viewBracketModal .bracket-view-legend, #viewBracketModal .bracket-view-hint, #viewBracketModal .bracket-champion-bar { display: none !important; }
+#viewBracketModal .bracket-details-layout { display: flex; flex-direction: column; }
+#viewBracketModal .bracket-details-main { flex: 1; }
+#viewBracketModal .bracket-view-toolbar { background: #f8fbff; padding: 0 24px 12px; border: 0; justify-content: flex-end; }
+#viewBracketModal .bracket-view-format { padding: 8px 14px; background: #fff; border: 1px solid #dce4ef; border-radius: 8px; color: #52698d; font-size: 13px; }
+#viewBracketModal .bracket-flow-scroll { background: #f5f9fd; padding: 14px 20px 24px; }
+#viewBracketModal .bracket-flow { padding: 0; }
+#viewBracketModal .bracket-flow-col { width: 290px; min-width: 290px; padding-right: 40px; }
+#viewBracketModal .bracket-flow-col-title { display: flex; flex-direction: column; justify-content: center; height: 48px; padding: 5px 8px; margin: 0 0 14px; background: #eaf1f8; border: 0; border-radius: 7px; color: #172e55; font-size: 13px; font-weight: 700; letter-spacing: 0; text-transform: none; }
+#viewBracketModal .bracket-flow-col-title small { color: #647c9f; font-size: 11px; font-weight: 500; margin-top: 3px; }
+#viewBracketModal .bf-match { height: 94px; border: 1px solid #e0e7f0; border-radius: 9px; box-shadow: 0 1px 5px #1a355a0d; padding: 3px; position: relative; z-index: 1; }
+#viewBracketModal .bf-match-label { display: flex; align-items: center; justify-content: space-between; height: 24px; padding: 0 10px; background: #f0f5fa; color: #546c90; font-size: 11px; letter-spacing: 0; text-transform: none; }
+#viewBracketModal .bf-slot { height: 31px; min-height: 31px; padding: 4px 10px; font-size: 13px; border-left: 3px solid #d6dfea; color: #526a8f; gap: 10px; }
+#viewBracketModal .bf-slot--winner { background: #fff; border-left-color: #1671ff; }
+#viewBracketModal .bf-slot--winner .bf-team, #viewBracketModal .bf-slot--winner .bf-score { color: #10274b; font-weight: 800; }
+#viewBracketModal .bf-score, #viewBracketModal .bf-slot--winner .bf-score { background: transparent; padding: 0; font-size: 13px; }
+#viewBracketModal .bf-divider, #viewBracketModal .bf-match-foot, #viewBracketModal .bf-series-games { display: none; }
+#viewBracketModal .bf-department-logo { width: 21px; height: 21px; object-fit: contain; flex: 0 0 21px; }
+#viewBracketModal .bf-logo-fallback { width: 17px; height: 19px; background: #a7b6cb; clip-path: polygon(50% 0, 95% 15%, 90% 65%, 50% 100%, 10% 65%, 5% 15%); flex: 0 0 17px; }
+#viewBracketModal .bf-links { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+#viewBracketModal .bf-links path { fill: none; stroke: #6f88ad; stroke-width: 1.5; stroke-linejoin: round; }
+#viewBracketModal .bf-champion-node { height: 94px; padding: 0; border: 1px solid #ffbd16; border-radius: 9px; box-shadow: none; background: #fffdf5; z-index: 1; overflow: hidden; display: block; }
+#viewBracketModal .bf-champion-label { height: 30px; padding: 7px; border-bottom: 1px solid #ffe4a0; background: #fff7dc; color: #b17b00; font-size: 11px; font-weight: 700; }
+#viewBracketModal .bf-champion-team { height: 62px; display: flex; align-items: center; gap: 12px; padding: 12px 18px; text-align: left; }
+#viewBracketModal .bf-champion-team strong { font-size: 17px; color: #142d55; flex: 1; }
+#viewBracketModal .bf-crown { color: #ffb300; font-size: 26px; }
+@media (max-width: 640px) { #viewBracketModal .bracket-modal-header { padding: 16px; } #viewBracketModal .bracket-view-toolbar { padding: 0 16px 10px; } #viewBracketModal .bracket-view-actions { gap: 5px; } }
+#viewBracketModal { z-index: 1050; }
+#viewBracketModal .bracket-modal-view--wide { width: 96vw; max-width: 1600px; min-width: 0; overflow: hidden; background: #f8fbff; }
+#viewBracketModal .bracket-details-head { min-width: 0; }
+#viewBracketModal .bracket-view-actions { justify-content: flex-end; }
+@media (max-width: 640px) { #viewBracketModal .bracket-modal-view--wide { width: calc(100vw - 16px); height: 96svh; max-height: 96svh; } }
+#viewBracketModal .bf-score { color: #647c9f; font-weight: 500; }
+#viewBracketModal .bracket-modal-container:fullscreen { width: 100vw; max-width: none; height: 100vh; max-height: none; border-radius: 0; }
+@media (prefers-reduced-motion: reduce) { #viewBracketModal, #viewBracketModal .bracket-modal-container { transition: none; } }

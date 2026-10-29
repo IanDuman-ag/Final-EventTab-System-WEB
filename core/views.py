@@ -7373,8 +7373,16 @@ def admin_view_bracket(request, event_id):
         from events.models import Event, BracketMatch, BracketTeam
         event = get_object_or_404(Event, id=event_id)
         matches_qs = BracketMatch.objects.filter(event=event).select_related(
-            'team_a', 'team_b', 'winner', 'loser',
+            'team_a__department', 'team_b__department', 'winner__department', 'loser',
         ).order_by('match_number')
+
+        def department_logo(team):
+            if team and team.department and team.department.logo:
+                try:
+                    return team.department.logo.url
+                except ValueError:
+                    pass
+            return ''
 
         matches_data = []
         for m in matches_qs:
@@ -7394,6 +7402,12 @@ def admin_view_bracket(request, event_id):
                 'team_b_id': m.team_b.id if m.team_b else None,
                 'winner': m.winner.name if m.winner else None,
                 'winner_id': m.winner.id if m.winner else None,
+                'team_a_logo': department_logo(m.team_a),
+                'team_b_logo': department_logo(m.team_b),
+                'winner_logo': department_logo(m.winner),
+                'match_date': m.match_date.isoformat() if m.match_date else '',
+                'match_time': m.match_time.strftime('%I:%M %p').lstrip('0') if m.match_time else '',
+                'next_match_loser_id': m.next_match_loser_id,
                 'score_a': m.score_a or '',
                 'score_b': m.score_b or '',
                 'status': m.status,

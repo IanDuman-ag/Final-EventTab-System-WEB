@@ -301,6 +301,27 @@ class MatchEventWorkflowTests(TestCase):
         self.assertEqual(conflicts, 2)
         self.assertEqual(_separate_department_openers(ids, {}), ids)
 
+    def test_bracket_view_exposes_department_logo_and_saved_schedule(self):
+        event = Event.objects.create(name='Bracket display', category='Sports', scoring_method='match', event_date='2026-11-10', end_date='2026-11-15')
+        department = self.team_a.department
+        department.logo = 'department_logos/display.png'
+        department.save(update_fields=['logo'])
+        a = BracketTeam.objects.create(event=event, name=self.team_a.name, department=department, seed=1)
+        b = BracketTeam.objects.create(event=event, name=self.team_b.name, department=department, seed=2)
+        BracketMatch.objects.create(event=event, match_number=1, round_name='Finals', team_a=a, team_b=b,
+                                    match_date='2026-11-10', match_time='09:30', winner=a, status='completed')
+        response = self.client.get(reverse('admin_view_bracket', args=[event.pk]))
+        self.assertEqual(response.status_code, 200)
+        match = response.json()['matches'][0]
+        self.assertTrue(match['team_a_logo'].endswith('/department_logos/display.png'))
+        self.assertEqual(match['team_a_logo'], match['winner_logo'])
+        self.assertEqual(match['match_date'], '2026-11-10')
+        self.assertEqual(match['match_time'], '9:30 AM')
+        self.assertIsNone(match['next_match_winner_id'])
+        department.logo = ''
+        department.save(update_fields=['logo'])
+        self.assertEqual(self.client.get(reverse('admin_view_bracket', args=[event.pk])).json()['matches'][0]['team_a_logo'], '')
+
     def payload(self, **overrides):
         data = {
             'event_name': 'Basketball Championship',
