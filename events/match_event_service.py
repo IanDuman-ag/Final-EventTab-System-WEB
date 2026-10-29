@@ -1013,6 +1013,38 @@ def _validated_tabulator(data, user_model, required=True):
     return tabulator
 
 
+def _separate_department_openers(ordered_ids, departments):
+    """Minimize same-department opening pairs, retaining the draw when already valid.
+
+    Byes occupy the leading slots in the canonical graph. Pair the two largest
+    remaining department groups first, including known matchups between bye recipients.
+    Ties retain the randomized input order. Missing departments are independent.
+    """
+    _, pairs = _opening_pairs(ordered_ids)
+    def group_key(team_id):
+        return ('department', departments[team_id]) if departments.get(team_id) else ('team', team_id)
+    bye_ids = [a for a, b in pairs if b is None]
+    known_pairs = [(a, b) for a, b in pairs if b is not None]
+    known_pairs += list(zip(bye_ids[::2], bye_ids[1::2]))
+    if all(group_key(a) != group_key(b) for a, b in known_pairs):
+        return list(ordered_ids)
+    groups = {}
+    for team_id in ordered_ids:
+        groups.setdefault(group_key(team_id), []).append(team_id)
+    paired = []
+    for _ in range(len(ordered_ids) // 2):
+        largest = sorted((key for key in groups if groups[key]), key=lambda key: -len(groups[key]))
+        first = largest[0]
+        second = largest[1] if len(largest) > 1 else first
+        paired.extend([groups[first].pop(0), groups[second].pop(0)])
+    remaining = [team_id for group in groups.values() for team_id in group]
+    if remaining:
+        # An odd bye count leaves one team waiting for a played opening match.
+        insert_at = len(bye_ids) - 1
+        paired[insert_at:insert_at] = remaining
+    return paired
+
+
 def build_match_blueprint(
     team_ids,
     tournament_type,
@@ -1029,6 +1061,9 @@ def build_match_blueprint(
             random.SystemRandom().shuffle(ordered_ids)
     if len(ordered_ids) < 2:
         raise MatchEventValidationError('Select at least two active teams.')
+    if draw_order is None and tournament_type in {'single_elimination', 'double_elimination'}:
+        departments = dict(Team.objects.filter(pk__in=ordered_ids).values_list('pk', 'department_id'))
+        ordered_ids = _separate_department_openers(ordered_ids, departments)
     include_third_place = tournament_type == 'single_elimination' and len(ordered_ids) >= 4
 
     matches = []

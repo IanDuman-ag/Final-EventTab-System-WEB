@@ -263,6 +263,44 @@ class MatchEventWorkflowTests(TestCase):
         self.team_c = Team.objects.create(name='Red Kites', code='RK', department=department)
         self.client.force_login(self.admin)
 
+    def test_generated_elimination_draw_separates_departments(self):
+        from events.match_event_service import build_match_blueprint, _opening_pairs
+        other = Department.objects.create(name='Other department', code='OTHER')
+        self.team_c.department = other
+        self.team_c.save(update_fields=['department'])
+        team_d = Team.objects.create(name='Other B', code='OB', department=other)
+        ids = [self.team_a.pk, self.team_b.pk, self.team_c.pk, team_d.pk]
+        departments = dict(Team.objects.filter(pk__in=ids).values_list('pk', 'department_id'))
+        for format_name in ['single_elimination', 'double_elimination']:
+            for _ in range(12):
+                blueprint = build_match_blueprint(ids, format_name)
+                self.assertCountEqual(blueprint['draw_order'], ids)
+                for a, b in _opening_pairs(blueprint['draw_order'])[1]:
+                    if b is not None:
+                        self.assertNotEqual(departments[a], departments[b])
+                saved = build_match_blueprint(ids, format_name, draw_order=blueprint['draw_order'])
+                self.assertEqual(saved, blueprint)
+
+    def test_department_draw_handles_byes_and_unavoidable_conflicts(self):
+        from events.match_event_service import _separate_department_openers, _opening_pairs
+        for count in [3, 5, 6, 7, 8, 9, 12, 16]:
+            ids = list(range(1, count + 1))
+            departments = {team: (team - 1) // 2 + 1 for team in ids}
+            ordered = _separate_department_openers(ids, departments)
+            self.assertCountEqual(ordered, ids)
+            pairs = _opening_pairs(ordered)[1]
+            byes = [a for a, b in pairs if b is None]
+            known_pairs = [(a, b) for a, b in pairs if b is not None]
+            known_pairs += list(zip(byes[::2], byes[1::2]))
+            for a, b in known_pairs:
+                self.assertNotEqual(departments[a], departments[b])
+        ids = [1, 2, 3, 4, 5, 6, 7, 8]
+        departments = {team: 1 if team <= 6 else 2 for team in ids}
+        ordered = _separate_department_openers(ids, departments)
+        conflicts = sum(departments[a] == departments[b] for a, b in _opening_pairs(ordered)[1])
+        self.assertEqual(conflicts, 2)
+        self.assertEqual(_separate_department_openers(ids, {}), ids)
+
     def payload(self, **overrides):
         data = {
             'event_name': 'Basketball Championship',
