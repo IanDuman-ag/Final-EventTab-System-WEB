@@ -2877,29 +2877,33 @@ def admin_bulk_delete_events(request):
     except (ValueError, UnicodeDecodeError):
         return JsonResponse({'success': False, 'message': 'Invalid JSON.'}, status=400)
 
-    ids = payload.get('ids') or []
-    if not isinstance(ids, list) or not ids:
-        return JsonResponse({'success': False, 'message': 'No event IDs provided.'}, status=400)
+    if not isinstance(payload, dict):
+        return JsonResponse({'success': False, 'message': 'Invalid request body.'}, status=400)
+    ids = payload.get('ids')
+    if not isinstance(ids, list) or not ids or any(type(value) is not int or value <= 0 for value in ids):
+        return JsonResponse({'success': False, 'message': 'Provide a non-empty list of valid event IDs.'}, status=400)
+    event_type = payload.get('event_type')
+    if event_type not in (None, 'match', 'criteria'):
+        return JsonResponse({'success': False, 'message': 'Invalid event type.'}, status=400)
+    queryset = _match_event_queryset() if event_type == 'match' else _criteria_event_queryset() if event_type == 'criteria' else Event.objects.all()
+    from events.criteria_event_service import can_delete_criteria_event
+    try:
+        with transaction.atomic():
+            events = list(Event.objects.select_for_update().filter(pk__in=queryset.filter(pk__in=set(ids)).values('pk')))
+            if len(events) != len(set(ids)):
+                return JsonResponse({'success': False, 'message': 'Some selected events are unavailable. Refresh the page and select again.'}, status=400)
+            for event in events:
+                if event.scoring_method == 'criteria':
+                    allowed, reason = can_delete_criteria_event(event, request.user)
+                    if not allowed:
+                        return JsonResponse({'success': False, 'message': reason}, status=403)
+            for event in events:
+                delete_mobile_for_event(event)
+                event.delete()
+    except IntegrityError:
+        return JsonResponse({'success': False, 'message': 'These events could not be deleted because they are linked to protected records.'}, status=409)
+    return JsonResponse({'success': True, 'message': f'{len(events)} event(s) deleted successfully.', 'deleted_count': len(events)})
 
-    deleted_count = 0
-    for raw_id in ids:
-        try:
-            event_id = int(raw_id)
-        except (TypeError, ValueError):
-            continue
-        try:
-            ev = Event.objects.get(id=event_id)
-            delete_mobile_for_event(ev)
-            ev.delete()
-            deleted_count += 1
-        except Event.DoesNotExist:
-            continue
-
-    return JsonResponse({
-        'success': True,
-        'message': f'{deleted_count} event(s) deleted successfully.',
-        'deleted_count': deleted_count,
-    })
 
 
 def _match_event_queryset():
@@ -3175,6 +3179,7 @@ def admin_match_events(request, event_id=None):
     season_event_names = list(season_qs.values_list('name', flat=True))
     return render(request, 'admindash/matchbasedevent.html', {
         'event_rows': rows,
+        'bulk_event_ids': [event.pk for event in events],
         'event_rows_json': rows,
         'teams': teams,
         'faculty_options': faculty_options,
@@ -3742,6 +3747,7 @@ def admin_criteria_events(request, event_id=None):
         'individual_workspace': individual_workspace,
         'championship_scoring_defaults': scoring_rules(),
         'event_rows': rows,
+        'bulk_event_ids': list(queryset.values_list('pk', flat=True)),
         'event_rows_json': rows,
         'page_obj': page_obj,
         'teams': Team.objects.filter(status=Team.STATUS_ACTIVE).select_related('department').order_by('name'),

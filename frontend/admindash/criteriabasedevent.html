@@ -78,10 +78,19 @@
             </label>
             <button type="submit" class="btn btn-outline-secondary match-secondary">Apply</button>
           </form>
+          <div class="d-flex align-items-center flex-wrap gap-2 p-3 border-bottom" id="event-bulk-actions" data-url="{% url 'admin_bulk_delete_events' %}" data-event-type="criteria">
+            {% csrf_token %}
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="events-select-all">Select All</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="events-clear-selection" hidden>Clear Selection</button>
+            <span id="events-selection-count" role="status" aria-live="polite">0 selected</span>
+            <button type="button" class="btn btn-sm btn-danger ms-auto" id="events-delete-selected" disabled>Delete Selected</button>
+            <p id="events-bulk-error" class="text-danger mb-0 w-100" role="alert" hidden></p>
+          </div>
           <div class="table-responsive match-table-wrap">
             <table class="table table-hover align-middle match-table">
               <thead>
                 <tr>
+                  <th><input type="checkbox" class="form-check-input" id="events-page-select" aria-label="Select events on this page"></th>
                   <th>Event Name</th>
                   <th>Category</th>
                   <th>Event Classification</th>
@@ -94,6 +103,7 @@
               <tbody>
                 {% for event in event_rows %}
                 <tr>
+                  <td><input type="checkbox" class="form-check-input event-select" value="{{ event.id }}" aria-label="Select {{ event.name }}"></td>
                   <td><strong>{{ event.name }}</strong><small>{{ event.venue }}</small></td>
                   <td>{{ event.category_label|default:event.category }}</td>
                   <td>{{ event.classification_label }}</td>
@@ -109,7 +119,7 @@
                   </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="7" class="match-empty"><strong>No criteria events found</strong><span>Select <strong>Create Event</strong> above to add your first draft.</span></td></tr>
+                <tr><td colspan="8" class="match-empty"><strong>No criteria events found</strong><span>Select <strong>Create Event</strong> above to add your first draft.</span></td></tr>
                 {% endfor %}
               </tbody>
             </table>
@@ -986,5 +996,13 @@
     <option value="Question and Answer"></option>
   </datalist>
   <script src="{% static 'admindash/criteriabasedevent.js' %}?v=20261027advancedoptions"></script>
+
+  <dialog id="events-bulk-confirm" class="confirm-dialog" aria-labelledby="events-bulk-title">
+    <h2 id="events-bulk-title">Delete selected events?</h2>
+    <p id="events-bulk-confirm-message"></p>
+    <div class="d-flex justify-content-end gap-2"><button type="button" class="btn btn-outline-secondary" id="events-bulk-cancel">Cancel</button><button type="button" class="btn btn-danger" id="events-bulk-confirm-delete">Delete Events</button></div>
+  </dialog>
+  {{ bulk_event_ids|json_script:"bulk-event-ids" }}
+  <script src="{% static 'js/event_bulk_delete.js' %}?v=20261029"></script>
 </body>
 </html>
