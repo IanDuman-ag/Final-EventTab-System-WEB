@@ -261,7 +261,11 @@ def _round_data(event, index, participants, judges, *, require_verification=True
         results = []
     criterion_names = {key: value for key, value in required.items()}
     judge_names = {row.pk: _name(row) for row in judges}
+    from .divisions import division_config, participant_division
     for row in results:
+        row['division'] = participant_division(event, row['participant_id']) if division_config(event) else ''
+        participant = next((item for item in participants if item['id'] == row['participant_id']), {})
+        row['department'] = participant.get('department', '')
         for detail in row['judge_scores']:
             detail['name'] = judge_names.get(detail['judge_id'], '')
             detail['total'] = float(detail['total'])
@@ -381,6 +385,7 @@ def _round_data(event, index, participants, judges, *, require_verification=True
         'blockers': list(dict.fromkeys(errors)),
         'qualification_rule': round_cfg.get('qualification_method') or '',
         'qualification_label': qualification_label, 'division_counts': division_counts,
+        'divisions': division_config(event).get('names', []),
         'judges': monitor, 'results': results,
     }
 

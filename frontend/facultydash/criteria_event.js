@@ -35,6 +35,17 @@
       qualifiedTabs[next].focus();
     });
   });
+  document.querySelectorAll('[data-results-dashboard]').forEach(dashboard => {
+    const filters = [...dashboard.querySelectorAll('[data-results-filter]')];
+    const rows = [...dashboard.querySelectorAll('[data-result-division]')];
+    filters.forEach(filter => {
+      filter.addEventListener('click', () => {
+        const division = filter.dataset.resultsFilter;
+        filters.forEach(item => item.setAttribute('aria-pressed', String(item === filter)));
+        rows.forEach(row => { row.hidden = division !== 'all' && row.dataset.resultDivision !== division; });
+      });
+    });
+  });
   let posting = false;
   let fetching = false;
   let refreshPending = false;

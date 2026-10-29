@@ -311,15 +311,17 @@
           <section {% if tab != 'results' %}hidden{% endif %} aria-label="Results and Publication">
             <div class="criteria-section-heading">
               <div>
-                <h2>Results &amp; Publication</h2>
-                <p>Review round rankings and detailed score breakdowns.</p>
+                <h2>Review Scores &amp; Results</h2>
+                <p>Review judge scores, verify rankings, and approve round results.</p>
               </div>
-              {% include 'facultydash/criteria_round_select.html' %}
+              <div class="results-heading-controls">
+                {% include 'facultydash/criteria_round_select.html' %}
+                {% if portal.selected_round.can_approve %}
+                  <button class="criteria-button result-approve" type="button" data-open-dialog="approve-{{ portal.selected_round.index }}">Approve Round Results</button>
+                {% endif %}
+              </div>
             </div>
             {% include 'facultydash/criteria_results.html' %}
-            {% if portal.selected_round.can_approve %}
-              <button class="criteria-button result-approve" type="button" data-open-dialog="approve-{{ portal.selected_round.index }}">Approve Round Results</button>
-            {% endif %}
             <article class="criteria-panel criteria-publication">
               <header>
                 <h2>Final Results Publication</h2>
