@@ -2,6 +2,7 @@
   'use strict';
   const page = document.querySelector('.criteria-page');
   if (!page) return;
+  page.classList.add('has-js');
   const dateFormat = new Intl.DateTimeFormat('en-PH', {
     timeZone: 'Asia/Manila', month: 'short', day: 'numeric', year: 'numeric',
     hour: 'numeric', minute: '2-digit',
@@ -44,6 +45,28 @@
         filters.forEach(item => item.setAttribute('aria-pressed', String(item === filter)));
         rows.forEach(row => { row.hidden = division !== 'all' && row.dataset.resultDivision !== division; });
       });
+    });
+    dashboard.querySelector('[data-export-results]')?.addEventListener('click', () => {
+      const headings = ['Rank', 'Candidate', 'Department', 'Judge Average', 'Weighted Score', 'Qualification Status', 'Division'];
+      const csvValue = value => {
+        let text = String(value ?? '').trim();
+        if (/^[\s]*[=+@\-]/.test(text)) text = `'${text}`;
+        return `"${text.replaceAll('"', '""')}"`;
+      };
+      const resultRows = [...dashboard.querySelectorAll('.results-rankings tbody tr[data-result-division]')].map(row => [
+        ...[0, 1, 2, 3, 4, 5].map(index => row.cells[index]?.innerText ?? ''),
+        row.dataset.resultDivision || '',
+      ]);
+      const csv = [headings, ...resultRows].map(row => row.map(csvValue).join(',')).join('\r\n');
+      const blob = new Blob([`\uFEFF${csv}`], {type: 'text/csv;charset=utf-8'});
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'round-results.csv';
+      document.body.append(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     });
   });
   let posting = false;

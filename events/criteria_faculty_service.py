@@ -263,9 +263,6 @@ def _round_data(event, index, participants, judges, *, require_verification=True
     judge_names = {row.pk: _name(row) for row in judges}
     from .divisions import division_config, participant_division
     for row in results:
-        row['division'] = participant_division(event, row['participant_id']) if division_config(event) else ''
-        participant = next((item for item in participants if item['id'] == row['participant_id']), {})
-        row['department'] = participant.get('department', '')
         for detail in row['judge_scores']:
             detail['name'] = judge_names.get(detail['judge_id'], '')
             detail['total'] = float(detail['total'])
@@ -334,6 +331,21 @@ def _round_data(event, index, participants, judges, *, require_verification=True
         qualifiers = approval.get('qualifier_ids', qualifiers)
         errors = []
     for row in results:
+        participant = next((item for item in participants if item['id'] == row['participant_id']), {})
+        row['division'] = participant_division(event, row['participant_id']) if division_config(event) else ''
+        row['department'] = participant.get('department', '')
+        judge_totals = {detail['judge_id']: detail for detail in row.get('judge_scores', [])}
+        row['judge_score_cells'] = [
+            {'id': judge.pk, 'name': _name(judge),
+             'total': float(judge_totals[judge.pk]['total']) if judge.pk in judge_totals else None}
+            for judge in judges
+        ]
+        judge_average = Decimal(str(row.get('round_score', row['final_score'])))
+        included_judges = len(judges)
+        if (event.judge_settings or {}).get('remove_high_low') and included_judges >= 3:
+            included_judges -= 2
+        row['judge_average'] = float(judge_average)
+        row['weighted_score'] = float(judge_average * included_judges)
         row['qualified'] = row['participant_id'] in qualifiers
         row['qualification_status'] = 'Finalist' if round_cfg['is_final'] else ('Pending Manual Selection' if round_cfg.get('qualification_method') == 'manual_selection' and not approval else ('Qualified' if row['qualified'] else 'Not Qualified'))
     submitted = sum(row['status'] == 'Submitted' for row in monitor)
@@ -386,6 +398,13 @@ def _round_data(event, index, participants, judges, *, require_verification=True
         'qualification_rule': round_cfg.get('qualification_method') or '',
         'qualification_label': qualification_label, 'division_counts': division_counts,
         'divisions': division_config(event).get('names', []),
+        'criteria_categories': [
+            {'name': category.name, 'weight': float(category.overall_weight_percent)}
+            for category in categories
+        ],
+        'criteria_weight_total': float(sum(
+            (category.overall_weight_percent for category in categories), Decimal(0)
+        )),
         'judges': monitor, 'results': results,
     }
 

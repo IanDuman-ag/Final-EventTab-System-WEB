@@ -1,6 +1,6 @@
 <form method="get" class="criteria-round-selector">
   <input type="hidden" name="tab" value="{{ tab }}">
-  <label for="round-selector-{{ tab }}">Round</label>
+  <label for="round-selector-{{ tab }}">Select Round</label>
   <select id="round-selector-{{ tab }}" name="round" data-round-select>
     {% for round in portal.rounds %}
       <option value="{{ round.index }}" {% if round.index == selected_round_index %}selected{% endif %}>Round {{ round.number }} · {{ round.name }}</option>
