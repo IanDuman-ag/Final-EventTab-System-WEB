@@ -1003,6 +1003,6 @@
     <div class="d-flex justify-content-end gap-2"><button type="button" class="btn btn-outline-secondary" id="events-bulk-cancel">Cancel</button><button type="button" class="btn btn-danger" id="events-bulk-confirm-delete">Delete Events</button></div>
   </dialog>
   {{ bulk_event_ids|json_script:"bulk-event-ids" }}
-  <script src="{% static 'js/event_bulk_delete.js' %}?v=20261029"></script>
+  <script>{% include "js/event_bulk_delete.js" %}</script>
 </body>
 </html>
