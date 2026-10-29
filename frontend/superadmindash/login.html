@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{% static 'login.css' %}?v=20261029centered">
+  <link rel="stylesheet" href="{% static 'login.css' %}?v=20261029backhome">
 </head>
 <body class="login-page">
   <main class="login-shell">
@@ -82,6 +82,7 @@
         </form>
       </div>
       <p class="login-access">Admin Access Only</p>
+      <a class="login-home-button" href="{% url 'home' %}"><span aria-hidden="true">&#8592;</span> Back to Home</a>
     </section>
   </main>
   <dialog class="login-recovery" aria-labelledby="recovery-title" aria-describedby="recovery-description">

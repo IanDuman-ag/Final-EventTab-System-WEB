@@ -61,3 +61,7 @@ button:focus-visible, .login-remember input:focus-visible { outline: 3px solid #
   .login-access { gap: 14px; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; } }
+
+.login-home-button { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; margin-top: 18px; padding: 10px 16px; border: 1px solid var(--border); border-radius: 10px; background: #ffffffa6; color: var(--navy); font-size: 12px; font-weight: 600; text-decoration: none; transition: background .15s, border-color .15s; }
+.login-home-button:hover { background: #eef4ff; border-color: #91acd1; }
+.login-home-button:focus-visible { outline: 3px solid #1a6ace; outline-offset: 4px; }
