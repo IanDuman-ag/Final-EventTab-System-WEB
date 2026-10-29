@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Admin Dashboard - EventTab</title>
   {% include 'admindash/_bootstrap.html' %}
-  <link rel="stylesheet" href="{% static 'admindash/admindashboard.css' %}?v=20261013b">
+  <link rel="stylesheet" href="{% static 'admindash/admindashboard.css' %}?v=20261029dashboard">
   <link rel="stylesheet" href="{% static 'admindash/bootstrap-admin.css' %}?v=1">
 </head>
 <body class="admin-dashboard-page admin-dashboard-home admin-dashboard-v2">
@@ -23,7 +23,7 @@
           <h2 class="v2-welcome">Welcome back, {{ request.user.first_name|default:"Admin" }}! <span aria-hidden="true">👋</span></h2>
           <p class="v2-subtitle">Here's what's happening with your events today.</p>
         </div>
-        <div class="v2-topbar-right">
+        <div class="v2-topbar-right"><div class="dashboard-search"><input id="dashboardSearch" type="search" aria-label="Search events and participants" placeholder="Search events, participants..." autocomplete="off"><div id="dashboardSearchResults" hidden></div></div>
           <span class="v2-date-pill">
             <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2Zm0 16H5V10h14v10ZM5 8V6h14v2H5Z"/></svg>
             {{ month_range_label }}
@@ -39,33 +39,38 @@
 
         <!-- Top Metric Cards -->
         <section class="v2-metrics">
-          <article class="v2-metric v2-metric--dark">
+          <article class="v2-metric">
             <div class="v2-metric-head">
-              <span class="v2-metric-icon v2-metric-icon--gold">🏆</span>
-              <span class="v2-metric-label">TOTAL EVENTS</span>
+              <span class="v2-metric-icon v2-metric-icon--gold"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 4h14v16H5zM8 2v4m8-4v4M5 9h14m-10 4h6m-6 3h4"/></svg></span>
+              <span class="v2-metric-label">Total Events</span>
             </div>
             <strong class="v2-metric-value">{{ total_events_count|default:"0" }}</strong>
-            <small class="v2-metric-foot v2-metric-foot--good">▲ 20% vs last month</small>
+            <small class="v2-metric-foot">All registered events</small>
           </article>
 
           <article class="v2-metric">
             <div class="v2-metric-head">
-              <span class="v2-metric-icon v2-metric-icon--green">👥</span>
-              <span class="v2-metric-label">TOTAL TEAMS</span>
+              <span class="v2-metric-icon v2-metric-icon--green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 20v-3a6 6 0 0 1 12 0v3m1-15a3 3 0 0 1 0 6m2 3a5 5 0 0 1 3 5"/></svg></span>
+              <span class="v2-metric-label">Total Teams</span>
             </div>
             <strong class="v2-metric-value">{{ total_teams|default:"0" }}</strong>
-            <small class="v2-metric-foot v2-metric-foot--good">▲ 15% vs last month</small>
+            <small class="v2-metric-foot">All registered teams</small>
           </article>
 
 
 
           <article class="v2-metric">
+            <div class="v2-metric-head"><span class="v2-metric-icon v2-metric-icon--orange" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="7" r="3"/><path d="M5 20v-3a7 7 0 0 1 14 0v3M4 8v5m16-5v5"/></svg></span><span class="v2-metric-label">Total Participants</span></div>
+            <strong class="v2-metric-value">{{ total_participants }}</strong>
+            <small class="v2-metric-foot">Registered individuals</small>
+          </article>
+          <article class="v2-metric">
             <div class="v2-metric-head">
-              <span class="v2-metric-icon v2-metric-icon--orange">⚡</span>
-              <span class="v2-metric-label">ONGOING EVENTS</span>
+              <span class="v2-metric-icon v2-metric-icon--orange"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m14 2-9 12h6l-1 8 9-13h-6z"/></svg></span>
+              <span class="v2-metric-label">Ongoing Events</span>
             </div>
             <strong class="v2-metric-value">{{ ongoing_count|default:"0" }}</strong>
-            <small class="v2-metric-foot">● {{ upcoming_count|default:"0" }} starting soon</small>
+            <small class="v2-metric-foot">Out of {{ total_events_count }} events</small>
           </article>
         </section>
 
@@ -73,12 +78,11 @@
         <section class="v2-charts">
           <article class="v2-card v2-chart-card">
             <header class="v2-card-head">
-              <h3>📈 Events Overview</h3>
-              <select class="form-select v2-select"><option>All Events</option></select>
+              <div><h3>Event Activity</h3><small>Event creations and participant registrations over time.</small></div><div class="dashboard-chart-controls"><select id="activitySeries" class="v2-select" aria-label="Activity series"><option value="both">Events &amp; Participants</option><option value="events">Events</option><option value="participants">Participants</option></select><select id="activityRange" class="v2-select" aria-label="Activity period"><option value="30">Last 30 days</option><option value="60">Last 60 days</option><option value="90">Last 90 days</option></select></div>
             </header>
             <div class="v2-legend">
               <span class="v2-legend-item"><span class="v2-legend-dot" style="background:#2563eb"></span>Events Created</span>
-              <span class="v2-legend-item"><span class="v2-legend-dot" style="background:#10b981"></span>Participants</span>
+              <span class="v2-legend-item"><span class="v2-legend-dot" style="background:#ffb300"></span>Participants</span>
             </div>
             <canvas id="eventsOverviewChart" height="160"></canvas>
           </article>
@@ -98,14 +102,14 @@
           <article class="v2-card v2-categories-card">
             <header class="v2-card-head">
               <h3>Top Categories</h3>
-              <select class="form-select v2-select"><option>By Participants</option></select>
+              <select id="categorySort" class="v2-select" aria-label="Category ranking"><option value="count">By Events</option><option value="participants">By Participants</option></select>
             </header>
-            <ul class="v2-cat-list">
+            <ul class="v2-cat-list" id="categoryList">
               {% for cat in top_categories %}
               <li class="v2-cat-row">
                 <div class="v2-cat-row-head">
                   <span class="v2-cat-name">{{ cat.name }}</span>
-                  <span class="v2-cat-meta">{{ cat.participants }} ({{ cat.pct }}%)</span>
+                  <span class="v2-cat-meta">{{ cat.count }}</span>
                 </div>
                 <div class="v2-cat-bar">
                   <span class="v2-cat-fill v2-cat-fill--{{ forloop.counter }}" style="width: {{ cat.pct }}%"></span>
@@ -140,7 +144,7 @@
                 <tbody>
                   {% for ev in recent_events %}
                   <tr>
-                    <td><strong>{{ ev.name }}</strong></td>
+                    <td><a href="{{ ev.url }}"><strong>{{ ev.name }}</strong></a></td>
                     <td>{{ ev.category }}</td>
                     <td><span class="v2-pill v2-pill--{{ ev.status }}">{{ ev.status_label }}</span></td>
                     <td>{{ ev.num_teams }}</td>
@@ -158,7 +162,7 @@
           <article class="v2-card v2-activity">
             <header class="v2-card-head">
               <h3>Recent Activity</h3>
-              <a class="v2-view-all" href="#">View All</a>
+
             </header>
             <ul class="v2-activity-list">
               {% for act in recent_activity %}
@@ -179,32 +183,10 @@
 
         <!-- Heatmap + Upcoming -->
         <section class="v2-bottom-row">
-          <article class="v2-card v2-heatmap-card">
-            <header class="v2-card-head">
-              <h3>Participation Heatmap <span class="v2-info-icon" title="Number of events scheduled per day">ⓘ</span></h3>
-            </header>
-            <div class="v2-heatmap">
-              <div class="v2-heatmap-weekdays">
-                <span></span><span>SUN</span><span>MON</span><span>TUE</span><span>WED</span><span>THU</span><span>FRI</span><span>SAT</span>
-              </div>
-              {% for week in heatmap_weeks %}
-              <div class="v2-heatmap-row">
-                <span class="v2-heatmap-label">{{ week.label_start }} – {{ week.label_end }}</span>
-                {% for d in week.days %}
-                <span class="v2-heatmap-cell" data-count="{{ d.count }}" title="{{ d.date }}: {{ d.count }} event(s)"></span>
-                {% endfor %}
-              </div>
-              {% endfor %}
-            </div>
-            <div class="v2-heatmap-legend">
-              <span>Less</span>
-              <span class="v2-heatmap-cell" data-count="0"></span>
-              <span class="v2-heatmap-cell" data-count="1"></span>
-              <span class="v2-heatmap-cell" data-count="2"></span>
-              <span class="v2-heatmap-cell" data-count="3"></span>
-              <span class="v2-heatmap-cell" data-count="5"></span>
-              <span>More</span>
-            </div>
+          <article class="v2-card dashboard-calendar">
+            <header class="v2-card-head"><h3>Event Calendar</h3><div class="calendar-controls"><button type="button" id="calendarPrev" aria-label="Previous month">&#8249;</button><strong id="calendarMonth" aria-live="polite"></strong><button type="button" id="calendarNext" aria-label="Next month">&#8250;</button></div><button type="button" id="calendarToday">Today</button></header>
+            <div class="calendar-weekdays"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>
+            <div id="dashboardCalendar" class="calendar-grid"></div>
           </article>
 
           <article class="v2-card v2-upcoming-card">
@@ -220,7 +202,7 @@
                   <strong class="v2-date-day">{{ ev.day }}</strong>
                 </div>
                 <div class="v2-upcoming-info">
-                  <strong>{{ ev.name }}</strong>
+                  <a href="{{ ev.url }}"><strong>{{ ev.name }}</strong></a>
                   <small>{{ ev.category }}{% if ev.num_teams %} · {{ ev.num_teams }} Teams{% endif %}</small>
                 </div>
                 <span class="v2-days-pill">{{ ev.days_left }} days left</span>
@@ -236,11 +218,14 @@
     </div>
   </div>
 
+  {{ activity_days|json_script:"dashboard-activity-data" }}
+  {{ dashboard_categories|json_script:"dashboard-category-data" }}
+  {{ dashboard_events|json_script:"dashboard-event-data" }}
+  {{ dashboard_search|json_script:"dashboard-search-data" }}
+  {{ dashboard_today|json_script:"dashboard-today" }}
   <script>
   /* ── Server data ── */
-  const CHART_LABELS = {{ chart_labels_json|safe }};
-  const CHART_EVENTS = {{ chart_events_json|safe }};
-  const CHART_PARTS  = {{ chart_participants_json|safe }};
+  const ACTIVITY = JSON.parse(document.getElementById('dashboard-activity-data').textContent);
   const STATUS_COUNTS = {{ status_counts_json|safe }};
 
   /* ── Events Overview line chart (lightweight, no external libs) ── */
@@ -250,8 +235,16 @@
     const ctx = cv.getContext('2d');
 
     function drawLineChart() {
-      const W = cv.width = cv.offsetWidth;
-      const H = cv.height = 200;
+      const days = ACTIVITY.slice(-Number(document.getElementById('activityRange').value));
+      const buckets = Array.from({length: 8}, (_, index) => days.slice(Math.floor(index * days.length / 8), Math.floor((index + 1) * days.length / 8)));
+      const CHART_LABELS = buckets.map(bucket => new Date(bucket[bucket.length - 1].date + 'T12:00:00+08:00').toLocaleDateString('en-US', {timeZone:'Asia/Manila',month:'short',day:'numeric'}));
+      const CHART_EVENTS = buckets.map(bucket => bucket.reduce((sum, day) => sum + day.events, 0));
+      const CHART_PARTS = buckets.map(bucket => bucket.reduce((sum, day) => sum + day.participants, 0));
+      const W = cv.offsetWidth, H = 200;
+      const ratio = window.devicePixelRatio || 1;
+      cv.width = W * ratio; cv.height = H * ratio;
+      cv.style.height = H + 'px';
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
       ctx.clearRect(0, 0, W, H);
 
       const padL = 40, padR = 16, padT = 14, padB = 28;
@@ -259,12 +252,12 @@
       const innerH = H - padT - padB;
 
       const series = [
-        { data: CHART_EVENTS, color: '#2563eb', fill: 'rgba(37, 99, 235, 0.08)' },
-        { data: CHART_PARTS,  color: '#10b981', fill: 'rgba(16, 185, 129, 0.08)' },
-      ];
+        { key:'events', data: CHART_EVENTS, color: '#2563eb', fill: 'rgba(37, 99, 235, 0.08)' },
+        { key:'participants', data: CHART_PARTS, color: '#ffb300', fill: 'rgba(255,179,0,0.09)' },
+      ].filter(series => document.getElementById('activitySeries').value === 'both' || series.key === document.getElementById('activitySeries').value);
 
       const allValues = [].concat(...series.map(s => s.data));
-      const maxV = Math.max(80, ...allValues, 1);
+      const maxV = Math.max(4, ...allValues, 1);
 
       /* Grid lines */
       ctx.strokeStyle = '#f1f5f9';
@@ -288,6 +281,7 @@
       ctx.fillStyle = '#94a3b8';
       const stepX = CHART_LABELS.length > 1 ? innerW / (CHART_LABELS.length - 1) : 0;
       CHART_LABELS.forEach((label, i) => {
+        if (W < 400 && i % 2 && i !== CHART_LABELS.length - 1) return;
         ctx.fillText(label, padL + stepX * i, H - 10);
       });
 
@@ -329,6 +323,7 @@
         });
       });
     }
+    ['activityRange','activitySeries'].forEach(id => document.getElementById(id).addEventListener('change', drawLineChart));
     drawLineChart();
     window.addEventListener('resize', drawLineChart);
   })();
@@ -343,7 +338,7 @@
       { key: 'ongoing',   label: 'Ongoing',   value: STATUS_COUNTS.ongoing   || 0, color: '#2563eb' },
       { key: 'upcoming',  label: 'Upcoming',  value: STATUS_COUNTS.upcoming  || 0, color: '#fbbf24' },
       { key: 'completed', label: 'Completed', value: STATUS_COUNTS.completed || 0, color: '#10b981' },
-      { key: 'cancelled', label: 'Cancelled', value: STATUS_COUNTS.cancelled || 0, color: '#ef4444' },
+      { key: 'cancelled', label: 'Inactive', value: STATUS_COUNTS.cancelled || 0, color: '#ef4444' },
     ];
     const total = segments.reduce((s, x) => s + x.value, 0);
     document.getElementById('doughnutTotal').textContent = total;
@@ -393,17 +388,53 @@
     }
   })();
 
-  /* ── Heatmap shading ── */
-  (function () {
-    document.querySelectorAll('.v2-heatmap-cell').forEach(cell => {
-      const count = parseInt(cell.dataset.count) || 0;
-      let level = 0;
-      if (count === 1) level = 1;
-      else if (count === 2) level = 2;
-      else if (count === 3 || count === 4) level = 3;
-      else if (count >= 5) level = 4;
-      cell.classList.add('v2-heat-' + level);
+  (() => {
+    const read = id => JSON.parse(document.getElementById(id).textContent);
+    const events = read('dashboard-event-data');
+    const today = read('dashboard-today');
+    let month = new Date(today + 'T12:00:00Z');
+    const iso = date => date.toISOString().slice(0, 10);
+    function renderCalendar() {
+      document.getElementById('calendarMonth').textContent = month.toLocaleDateString('en-US', {timeZone:'UTC',month:'long',year:'numeric'});
+      const grid = document.getElementById('dashboardCalendar'); grid.replaceChildren();
+      const start = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth(), 1, 12));
+      start.setUTCDate(start.getUTCDate() - start.getUTCDay());
+      for (let index = 0; index < 42; index++) {
+        const date = new Date(start); date.setUTCDate(start.getUTCDate() + index);
+        const key = iso(date), cell = document.createElement('div');
+        cell.className = 'calendar-day' + (date.getUTCMonth() !== month.getUTCMonth() ? ' calendar-day--outside' : '') + (key === today ? ' calendar-day--today' : '');
+        const number = document.createElement('span'); number.textContent = date.getUTCDate(); cell.append(number);
+        events.filter(event => event.date && event.date <= key && (event.end || event.date) >= key).forEach(event => {
+          const link = document.createElement('a'); link.href = event.url; link.textContent = event.title; link.title = event.title + (event.time ? ' - ' + event.time : ''); link.className = 'calendar-event calendar-event--' + event.status; cell.append(link);
+        }); grid.append(cell);
+      }
+    }
+    document.getElementById('calendarPrev').onclick = () => {month = new Date(Date.UTC(month.getUTCFullYear(),month.getUTCMonth()-1,1,12));renderCalendar();};
+    document.getElementById('calendarNext').onclick = () => {month = new Date(Date.UTC(month.getUTCFullYear(),month.getUTCMonth()+1,1,12));renderCalendar();};
+    document.getElementById('calendarToday').onclick = () => {month = new Date(today + 'T12:00:00Z');renderCalendar();};
+    renderCalendar();
+    const categories = read('dashboard-category-data');
+    document.getElementById('categorySort').addEventListener('change', event => {
+      const key = event.target.value, list = document.getElementById('categoryList');list.replaceChildren();
+      const total = categories.reduce((sum, item) => sum + item[key], 0);
+      categories.slice().sort((a,b) => b[key]-a[key]).slice(0,5).forEach(item => {
+        const row = document.createElement('li');row.className='v2-cat-row';
+        const head=document.createElement('div');head.className='v2-cat-row-head';
+        const name=document.createElement('span');name.className='v2-cat-name';name.textContent=item.name;
+        const count=document.createElement('strong');count.textContent=item[key];head.append(name,count);
+        const bar=document.createElement('div');bar.className='v2-cat-bar';const fill=document.createElement('span');fill.className='v2-cat-fill';fill.style.width=(total ? item[key]/total*100 : 0)+'%';bar.append(fill);row.append(head,bar);list.append(row);
+      });
+      if (!categories.length) list.textContent='No category data yet.';
     });
+    const search=document.getElementById('dashboardSearch'), results=document.getElementById('dashboardSearchResults'), items=read('dashboard-search-data');
+    search.addEventListener('input', () => {
+      const query=search.value.trim().toLowerCase();results.replaceChildren();results.hidden=!query;if(!query)return;
+      const found=items.filter(item=>item.name.toLowerCase().includes(query)).slice(0,8);
+      found.forEach(item=>{const link=document.createElement('a');link.href=item.url;link.textContent=item.name+' - '+item.kind;results.append(link);});
+      if(!found.length)results.textContent='No matching events or participants.';
+    });
+    search.addEventListener('keydown',event=>{if(event.key==='Escape')results.hidden=true;});
+    document.addEventListener('click',event=>{if(!event.target.closest('.dashboard-search'))results.hidden=true;});
   })();
   </script>
 </body>

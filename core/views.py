@@ -1132,10 +1132,14 @@ def login_view(request):
 @login_required(login_url='login')
 @user_passes_test(lambda user: user.is_staff, login_url='login')
 def admin_dashboard(request):
+    from django.urls import reverse
+    from urllib.parse import quote
+    from zoneinfo import ZoneInfo
+    manila = ZoneInfo('Asia/Manila')
     ctx = get_assignment_account_context(request)
     # Add event stats for the dashboard metrics
-    all_events = list(Event.objects.all())
-    today = timezone.localdate()
+    all_events = list(Event.objects.prefetch_related('bracket_teams', 'criteria_entries').all())
+    today = timezone.localdate(timezone=manila)
     status_counts = get_event_status_counts(all_events, today)
     ctx['ongoing_count'] = status_counts['ongoing']
     ctx['upcoming_count'] = status_counts['upcoming']
@@ -1146,8 +1150,8 @@ def admin_dashboard(request):
     ctx['completed_pct'] = int(ctx['completed_events_count'] / total * 100)
 
     # Total participants and teams across all events
-    total_participants = sum(int(ev.max_participants or 0) for ev in all_events)
-    total_teams = sum(int(ev.num_teams or 0) for ev in all_events)
+    total_participants = RegistryCandidate.objects.count()
+    total_teams = Team.objects.count()
     ctx['total_participants'] = total_participants
     ctx['total_teams'] = total_teams
 
@@ -1158,18 +1162,17 @@ def admin_dashboard(request):
         if cat not in cat_data:
             cat_data[cat] = {'count': 0, 'participants': 0}
         cat_data[cat]['count'] += 1
-        cat_data[cat]['participants'] += int(ev.max_participants or 0)
+        cat_data[cat]['participants'] += ev.criteria_entries.count() or len(ev.participant_ids or [])
     top_categories = sorted(
         [{'name': k, 'count': v['count'], 'participants': v['participants']} for k, v in cat_data.items()],
-        key=lambda x: x['participants'], reverse=True
-    )[:5]
-    total_part_for_pct = total_participants or 1
+        key=lambda x: x['count'], reverse=True
+    )
     for c in top_categories:
-        c['pct'] = int(round(c['participants'] / total_part_for_pct * 100))
-    ctx['top_categories'] = top_categories
+        c['pct'] = int(round(c['count'] / total * 100))
+    ctx['top_categories'] = top_categories[:5]
 
-    # Recent events (last 5 by date desc)
-    recent = sorted(all_events, key=lambda e: (e.event_date or today), reverse=True)[:5]
+    # Recent events by creation time
+    recent = sorted(all_events, key=lambda e: e.created_at, reverse=True)[:5]
     recent_events = []
     for ev in recent:
         sm = get_event_status_meta(ev, today)
@@ -1179,8 +1182,9 @@ def admin_dashboard(request):
             'category': ev.category,
             'status': sm['status'],
             'status_label': sm['status_label'],
-            'num_teams': ev.num_teams or 0,
-            'max_participants': ev.max_participants or 0,
+            'num_teams': ev.bracket_teams.count(),
+            'url': reverse('admin_edit_match_event' if ev.scoring_method == 'match' else 'admin_edit_criteria_event', args=[ev.pk]),
+            'max_participants': ev.criteria_entries.count() or len(ev.participant_ids or []),
             'date_label': ev.event_date.strftime('%b %d, %Y') if ev.event_date else '—',
         })
     ctx['recent_events'] = recent_events
@@ -1188,13 +1192,14 @@ def admin_dashboard(request):
     # Upcoming events list
     upcoming_list = []
     for ev in all_events:
-        if ev.event_date and ev.event_date >= today:
+        if ev.event_date and ev.event_date >= today and get_event_status_meta(ev, today)['status'] == 'upcoming':
             days_left = (ev.event_date - today).days
             upcoming_list.append({
                 'id': ev.id,
                 'name': ev.name,
                 'category': ev.category,
-                'num_teams': ev.num_teams or 0,
+                'num_teams': ev.bracket_teams.count(),
+                'url': reverse('admin_edit_match_event' if ev.scoring_method == 'match' else 'admin_edit_criteria_event', args=[ev.pk]),
                 'day': ev.event_date.day,
                 'month_short': ev.event_date.strftime('%b').upper(),
                 'days_left': days_left,
@@ -1223,21 +1228,28 @@ def admin_dashboard(request):
         })
     ctx['recent_activity'] = activity_rows
 
-    # Events overview chart (last 8 weeks: events created + total participants per week)
+    # Daily creation activity uses Manila dates, independently of scheduled dates.
     from datetime import timedelta as _td
-    chart_labels = []
-    chart_events = []
-    chart_parts = []
-    for i in range(7, -1, -1):
-        week_end = today - _td(days=i * 7)
-        week_start = week_end - _td(days=6)
-        evs_in_week = [e for e in all_events if e.event_date and week_start <= e.event_date <= week_end]
-        chart_labels.append(week_end.strftime('%b %d'))
-        chart_events.append(len(evs_in_week))
-        chart_parts.append(sum(int(e.max_participants or 0) for e in evs_in_week))
-    ctx['chart_labels_json'] = json.dumps(chart_labels)
-    ctx['chart_events_json'] = json.dumps(chart_events)
-    ctx['chart_participants_json'] = json.dumps(chart_parts)
+    from collections import Counter
+    event_dates = Counter(timezone.localdate(ev.created_at, timezone=manila) for ev in all_events)
+    candidate_dates = Counter(timezone.localdate(value, timezone=manila) for value in RegistryCandidate.objects.values_list('created_at', flat=True))
+    activity_days = []
+    for offset in range(89, -1, -1):
+        day = today - _td(days=offset)
+        activity_days.append({
+            'date': day.isoformat(),
+            'events': event_dates[day],
+            'participants': candidate_dates[day],
+        })
+    ctx['activity_days'] = activity_days
+    ctx['dashboard_today'] = today.isoformat()
+    ctx['dashboard_categories'] = top_categories
+    search_items = [{'name': ev.name, 'kind': 'Event', 'url': reverse(
+        'admin_edit_match_event' if ev.scoring_method == 'match' else 'admin_edit_criteria_event', args=[ev.pk])} for ev in all_events]
+    search_items += [{'name': candidate.name, 'kind': 'Participant',
+                     'url': reverse('admin_candidates') + '?q=' + quote(candidate.name)}
+                    for candidate in RegistryCandidate.objects.only('name')]
+    ctx['dashboard_search'] = search_items
 
     # Status doughnut data
     ctx['status_counts_json'] = json.dumps({
@@ -1246,23 +1258,6 @@ def admin_dashboard(request):
         'completed': status_counts['completed'],
         'cancelled': status_counts['inactive'],
     })
-
-    # Participation heatmap (5 weeks × 7 days, count of events per day)
-    heatmap_weeks = []
-    for w in range(4, -1, -1):
-        week_end = today - _td(days=w * 7)
-        week_start = week_end - _td(days=6)
-        days = []
-        for d in range(7):
-            day_date = week_start + _td(days=d)
-            count = sum(1 for e in all_events if e.event_date == day_date)
-            days.append({'date': day_date.strftime('%Y-%m-%d'), 'count': count})
-        heatmap_weeks.append({
-            'label_start': week_start.strftime('%b %d'),
-            'label_end': week_end.strftime('%b %d'),
-            'days': days,
-        })
-    ctx['heatmap_weeks'] = heatmap_weeks
 
     # Today's date label for the topbar pill
     ctx['today_range_label'] = today.strftime('%b %d, %Y')
@@ -1274,6 +1269,8 @@ def admin_dashboard(request):
         status_meta = get_event_status_meta(ev, today)
         events_json.append({
             'id': ev.id,
+            'url': reverse('admin_edit_match_event' if ev.scoring_method == 'match' else 'admin_edit_criteria_event', args=[ev.pk]),
+            'end': ev.end_date.isoformat() if ev.end_date else '',
             'title': ev.name,
             'date': ev.event_date.strftime('%Y-%m-%d') if ev.event_date else '',
             'time': ev.event_time.strftime('%H:%M') if ev.event_time else '',
@@ -1283,7 +1280,7 @@ def admin_dashboard(request):
             'status_label': status_meta['status_label'],
             'availability_status': status_meta['availability_status'],
         })
-    ctx['events_json'] = json.dumps(events_json)
+    ctx['dashboard_events'] = events_json
     return render(request, 'admindash/admindashboard.html', ctx)
 
 
