@@ -1,14 +1,19 @@
 """Anonymous GET pages backed by the existing EventTab records and workflows."""
+import base64
 import logging
-from functools import wraps
+from functools import lru_cache, wraps
+from itertools import groupby
+from pathlib import Path
 from urllib.parse import urlencode
 
 from django.core.paginator import Paginator
+from django.conf import settings
 from django.db import DatabaseError
-from django.db.models import Case, CharField, Exists, F, OuterRef, Q, Value, When
+from django.db.models import Case, CharField, Exists, F, IntegerField, OuterRef, Q, Value, When
 from django.db.models.functions import Coalesce, Concat
 from django.http import Http404
 from django.shortcuts import get_object_or_404, render
+from django.templatetags.static import static
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_date
@@ -16,11 +21,12 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_safe
 
 from events.faculty_service import leaderboard_rows
-from events.models import BracketMatch, Department, Event
+from events.models import BracketMatch, Department, Event, SystemSettings
+from events.schedule_navigation import active_schedule_days, calendar_date, expand_schedule_rows
 from events.public_service import (
     PUBLIC_TIMEZONE, TERMINAL_MATCH_STATUSES, criteria_condition, criteria_results,
     event_kind, fixture_queryset, image_url, is_multiround,
-    public_events, public_fixtures, public_participants, published_events,
+    public_events, public_fixtures, public_participants, public_result_bracket, published_events,
     publication_datetime, result_is_published, result_rounds, serialize_event, standings_eligible,
 )
 
@@ -80,7 +86,10 @@ def apply_filters(qs, filters, include_schedule=False):
     if filters['type'] != 'all':
         qs = qs.filter(public_kind=filters['type'])
     if filters['category']:
-        qs = qs.filter(category=filters['category'])
+        if filters['category'] in {'major', 'minor'}:
+            qs = qs.filter(event_classification=filters['category'])
+        else:
+            qs = qs.filter(category=filters['category'])
     if not include_schedule:
         if filters['date']:
             qs = qs.filter(event_date=parse_date(filters['date']))
@@ -119,7 +128,9 @@ def schedule_queryset(filters, future_only=False):
     )
     today = timezone.localdate(timezone=PUBLIC_TIMEZONE)
     event_rows = events.annotate(has_fixtures=Exists(dated_matches)).filter(has_fixtures=False).annotate(
+        fixture_id=Value(0, output_field=IntegerField()),
         public_event_id=F('pk'), event_name=F('name'), event_category=F('category'),
+        public_classification=F('event_classification'),
         event_kind=F('public_kind'), round=Value('', output_field=CharField()),
         date=F('event_date'), time=F('event_time'), public_venue=F('venue'),
         participants=Value('', output_field=CharField()),
@@ -132,7 +143,9 @@ def schedule_queryset(filters, future_only=False):
     match_rows = BracketMatch.objects.filter(
         event__in=events, is_automatic_advance=False, match_date__isnull=False,
     ).annotate(
+        fixture_id=F('pk'),
         public_event_id=F('event_id'), event_name=F('event__name'), event_category=F('event__category'),
+        public_classification=F('event__event_classification'),
         event_kind=Case(When(criteria_condition('event__'), then=Value('criteria')),
                         default=Value('match'), output_field=CharField()),
         round=F('round_name'), date=F('match_date'), time=F('match_time'),
@@ -145,8 +158,8 @@ def schedule_queryset(filters, future_only=False):
             default=Value('upcoming'), output_field=CharField(),
         ),
     )
-    fields = ('public_event_id', 'event_name', 'event_category', 'event_kind', 'round',
-              'date', 'time', 'public_venue', 'participants', 'public_status')
+    fields = ('fixture_id', 'public_event_id', 'event_name', 'event_category', 'event_kind', 'round',
+              'date', 'time', 'public_venue', 'participants', 'public_status', 'public_classification')
     rows = []
     for qs in (event_rows, match_rows):
         if future_only:
@@ -164,10 +177,13 @@ def schedule_queryset(filters, future_only=False):
 def serialize_schedule(row):
     return {
         'event_id': row['public_event_id'], 'event_name': row['event_name'],
+        'classification': row['public_classification'],
+        'classification_label': dict(Event.CLASSIFICATION_CHOICES).get(row['public_classification'], ''),
         'detail_url': reverse('public_event_detail', args=[row['public_event_id']]),
         'type': row['event_kind'], 'type_label': 'Match-Based' if row['event_kind'] == 'match' else 'Criteria-Based',
         'category': row['event_category'], 'round': row['round'],
         'date': row['date'], 'time': row['time'], 'venue': row['public_venue'],
+        'end_time': row.get('end_time'),
         'participants': row['participants'], 'status': row['public_status'],
         'status_label': row['public_status'].title(),
     }
@@ -179,14 +195,23 @@ def home(request):
         'type': request.GET.get('featured_type', 'all'),
         'q': request.GET.get('featured_q', '').strip()[:200],
         'sort': request.GET.get('featured_sort', 'date'),
+        'classification': request.GET.get('featured_classification', ''),
     }
-    if featured_filters['type'] not in {'match', 'criteria'}:
+    if featured_filters['type'] not in {'match', 'criteria', 'cultural', 'arts'}:
         featured_filters['type'] = 'all'
     if featured_filters['sort'] not in {'date', 'name'}:
         featured_filters['sort'] = 'date'
+    if featured_filters['classification'] not in {'major', 'minor'}:
+        featured_filters['classification'] = ''
     competitions = public_events().exclude(status=Event.STATUS_COMPLETED)
-    if featured_filters['type'] != 'all':
+    if featured_filters['classification']:
+        competitions = competitions.filter(event_classification=featured_filters['classification'])
+    if featured_filters['type'] in {'match', 'criteria'}:
         competitions = competitions.filter(public_kind=featured_filters['type'])
+    elif featured_filters['type'] == 'cultural':
+        competitions = competitions.filter(Q(category__icontains='cultur') | Q(category__icontains='literary'))
+    elif featured_filters['type'] == 'arts':
+        competitions = competitions.filter(Q(category__iexact='art') | Q(category__icontains='arts'))
     if featured_filters['q']:
         competitions = competitions.filter(
             Q(name__icontains=featured_filters['q']) | Q(category__icontains=featured_filters['q'])
@@ -198,17 +223,23 @@ def home(request):
     for event in featured_page:
         card = serialize_event(event)
         card['banner_key'] = featured_banner_key(event)
+        card['artwork_path'] = game_artwork_path(event)
+        card['artwork_url'] = game_artwork_url(card['artwork_path'])
         featured_events.append(card)
     featured_params = {
         'featured_type': featured_filters['type'], 'featured_q': featured_filters['q'],
         'featured_sort': featured_filters['sort'],
+        'featured_classification': featured_filters['classification'],
     }
     upcoming = dict(filters_for(request), status='upcoming')
+    upcoming_rows = list(schedule_queryset(upcoming, future_only=True)[:5])
+    matchups = schedule_matchups(upcoming_rows)
     return {
         'page_title': 'EventTab — One event. One community.',
         'featured_events': featured_events, 'featured_filters': featured_filters,
         'featured_page_obj': featured_page, 'featured_query_string': urlencode(featured_params),
-        'upcoming_schedules': [serialize_schedule(row) for row in schedule_queryset(upcoming, future_only=True)[:5]],
+        'upcoming_schedules': [{**serialize_schedule(row), 'matchup': matchups.get(row['fixture_id'])}
+                               for row in upcoming_rows],
     }
 
 
@@ -225,21 +256,142 @@ def featured_banner_key(event):
     return ''
 
 
+def game_artwork_path(event):
+    """Use matching SVG illustrations for every Events directory card."""
+    banner = featured_banner_key(event)
+    if banner:
+        return f'landingpage/assets/competitions/{banner}.svg'
+    name = ' '.join((event.name, event.sport_type, event.special_event_type)).lower()
+    for keywords, key in (
+        (('ambassador', 'mr.', 'ms.'), 'pageant'),
+        (('band', 'showchoir', 'yell'), 'band'),
+        (('poetry', 'speech', 'talumpati', 'debate'), 'speech'),
+        (('painting', 'charcoal', 'poster', 'banner', 'designing'), 'art'),
+        (('film',), 'film'),
+        (('photo',), 'photography'),
+        (('quiz',), 'quiz'),
+        (('radio',), 'radio'),
+        (('play', 'drama', 'theater', 'theatre'), 'theater'),
+        (('disciplined', 'character', 'unit'), 'unit'),
+        (('race', 'fiesta'), 'race'),
+        (('table tennis', 'ping pong', 'pickleball'), 'paddle'),
+        (('dart',), 'darts'),
+        (('chess',), 'chess'),
+    ):
+        if any(keyword in name for keyword in keywords):
+            return f'landingpage/assets/competitions/{key}.svg'
+    return 'landingpage/assets/competitions/competition.svg'
+
+
+@lru_cache(maxsize=32)
+def game_artwork_url(path):
+    """Embed trusted bundled illustrations; existing photos retain static URLs."""
+    if path.endswith('.svg'):
+        artwork = (Path(settings.BASE_DIR) / 'frontend' / path).read_bytes()
+        return 'data:image/svg+xml;base64,' + base64.b64encode(artwork).decode('ascii')
+    return static(path)
+
+
 @public_page('games')
 def games(request):
     page, context = paginate(request, apply_filters(
         public_events(), filters_for(request),
     ).order_by('event_date', 'name', 'pk'))
     context.update(filter_options(), page_title='Games & Events — EventTab',
-                   events=[serialize_event(event) for event in page])
+                   events=[{**serialize_event(event), 'banner_key': featured_banner_key(event),
+                            'artwork_path': game_artwork_path(event),
+                            'artwork_url': game_artwork_url(game_artwork_path(event))} for event in page])
     return context
+
+
+def schedule_matchups(rows):
+    """Load both public opponents in one query for this page only."""
+    fixtures = BracketMatch.objects.filter(
+        pk__in=[row['fixture_id'] for row in rows if row['event_kind'] == 'match' and row['fixture_id']],
+    ).select_related(
+        'team_a__department', 'team_b__department',
+        'team_a__source_team__department', 'team_b__source_team__department',
+    )
+
+    def side(team):
+        source = team.source_team if team else None
+        department = (team.department or (source.department if source else None)) if team else None
+        name = team.name if team else 'TBD'
+        logo = (source.image if source else None) or (department.logo if department else None)
+        return {'name': name, 'department': department.name if department else '',
+                'initials': ''.join(word[0] for word in name.split()[:2]).upper(),
+                'logo_url': image_url(logo)}
+
+    return {match.pk: [side(match.team_a), side(match.team_b)] for match in fixtures}
 
 
 @public_page('schedules')
 def schedules(request):
-    page, context = paginate(request, schedule_queryset(filters_for(request)))
+    filters = filters_for(request)
+    # Date/venue/status are applied after projecting criteria sessions and spans.
+    projection_filters = dict(filters, date='', venue='', status='all')
+    unfiltered = dict(projection_filters, q='', type='all', category='')
+    source_rows = list(schedule_queryset(unfiltered))
+    events = {event.pk: event for event in public_events().filter(
+        pk__in={row['public_event_id'] for row in source_rows if not row['fixture_id']})}
+    rows = expand_schedule_rows(source_rows, events)
+    day_mapping = active_schedule_days(rows)
+    dates = list(day_mapping)
+    matching_events = set(apply_filters(public_events(), projection_filters).values_list('pk', flat=True))
+    filters['team'] = request.GET.get('team', '').strip()[:200]
+    matching_fixtures = None
+    if filters['team']:
+        team = filters['team']
+        teams = (Q(team_a_id=int(team)) | Q(team_b_id=int(team))) if team.isascii() and team.isdecimal() and len(team) <= 9 else (
+            Q(team_a__name__icontains=team) | Q(team_b__name__icontains=team))
+        matching_fixtures = set(BracketMatch.objects.filter(event__in=public_events()).filter(teams).values_list('pk', flat=True))
+    venues = sorted({row['public_venue'] for row in rows if row['public_venue']})
+    configuration = SystemSettings.objects.filter(pk=1).first()
+    official_start = configuration.intramurals_start_date if configuration else None
+    day_value = request.GET.get('day', '')[:10]
+    selected_date = calendar_date(day_value) if day_value != 'all' else None
+    if not day_value and filters['date']:
+        selected_date = calendar_date(filters['date'])
+    elif not day_value and official_start:
+        today = timezone.localdate(timezone=PUBLIC_TIMEZONE)
+        selected_date = today if today in day_mapping else next(iter(day_mapping), None)
+    navigation = []
+    for date in dates:
+        params = request.GET.copy()
+        params.pop('page', None)
+        params['day'] = date.isoformat()
+        if filters['date']:
+            params['date'] = date.isoformat()
+        navigation.append({'date': date, **day_mapping[date],
+            'selected': date == selected_date, 'url': '?' + params.urlencode()})
+    all_params = request.GET.copy()
+    all_params.pop('page', None)
+    all_params.pop('date', None)
+    all_params['day'] = 'all'
+    filtered = [row for row in rows if row['public_event_id'] in matching_events
+                and (matching_fixtures is None or row['fixture_id'] in matching_fixtures)
+                and (not selected_date or row['date'] == selected_date)
+                and (not filters['date'] or row['date'] == calendar_date(filters['date']))
+                and (not filters['venue'] or row['public_venue'] == filters['venue'])
+                and (filters['status'] == 'all' or row['public_status'] == filters['status'])]
+    filtered.sort(key=lambda row: (row['date'], row['time'] is None, row['time'] or '',
+                                  row['event_name'], row['round'], row['public_event_id']))
+    page, context = paginate(request, filtered)
+    rows = list(page)
+    matchups = schedule_matchups(rows)
+    serialized = [{**serialize_schedule(row), 'matchup': matchups.get(row['fixture_id'])} for row in rows]
+    selected_day = selected_date.isoformat() if selected_date else 'all'
+    # Keep the selected day through pagination and every filter submission.
+    page_params = request.GET.copy()
+    page_params.pop('page', None)
+    page_params['day'] = selected_day
     context.update(filter_options(), page_title='Event Schedules — EventTab',
-                   schedules=[serialize_schedule(row) for row in page])
+        schedules=serialized, filters=filters, venues=venues, day_tabs=navigation,
+        selected_day=selected_day, selected_schedule_date=selected_date,
+        all_days_url='?' + all_params.urlencode(), official_start_date=next(iter(day_mapping), None),
+        query_string=page_params.urlencode(),
+        schedule_groups=[{'date': date, 'number': day_mapping[date]['number'],
+                          'items': list(items)} for date, items in groupby(serialized, key=lambda row: row['date'])])
     return context
 
 
@@ -252,7 +404,8 @@ def event_detail(request, pk):
     else:
         rounds = [{'name': row['name'], 'status_label': ''} for row in result_rounds(event)]
     fixtures_page, pagination = paginate(request, fixture_queryset(event))
-    return dict(pagination, page_title=f'{event.name} — EventTab', event=serialize_event(event),
+    return dict(pagination, page_title=f'{event.name} — EventTab',
+                event={**serialize_event(event), 'banner_key': featured_banner_key(event)},
                 participants=public_participants(event), rounds=rounds,
                 fixtures=public_fixtures(event, fixtures_page))
 
@@ -265,9 +418,10 @@ def results(request):
     cards = []
     for event in page:
         card = serialize_event(event)
-        if event_kind(event) == 'criteria' and not is_multiround(event) and len(result_rounds(event)) <= 1:
+        if event_kind(event) == 'criteria' and standings_eligible(event):
             card['official_placements'], _ = criteria_results(event)
         card['official_placements'].sort(key=lambda row: row['rank'] or 999999)
+        card['banner_key'] = featured_banner_key(event)
         cards.append(card)
     context.update(filter_options(), page_title='Official Results — EventTab', events=cards)
     return context
@@ -282,6 +436,8 @@ def result_detail(request, pk):
     rows, rounds, selected = [], [], ''
     notice = 'Final scores from officially published matches.'
     fixtures = []
+    bracket_lanes = []
+    champion = None
     if kind == 'criteria':
         rounds = result_rounds(event)
         selected = request.GET.get('round_id', rounds[-1]['id'])
@@ -303,27 +459,113 @@ def result_detail(request, pk):
                      'placement': {1: 'Champion', 2: 'Runner-up', 3: 'Third place'}.get(placements.get(str(team.pk)), 'Champion' if team.is_champion else '')}
                     for team in event.bracket_teams.select_related('department').order_by('-points', 'seed', 'pk')]
             rows.sort(key=lambda row: row['rank'] or 999999)
+            champion = next((row for row in rows if row['placement'] == 'Champion'), None)
+        # The bracket must remain whole, including automatic-advance slots.
+        bracket_lanes = public_result_bracket(event, event.bracket_matches.filter(
+            status__in=TERMINAL_MATCH_STATUSES, updated_at__lte=publication_datetime(event),
+        ).select_related('team_a', 'team_b', 'winner').order_by('match_number', 'pk'))
     page, pagination = paginate(request, fixtures if kind == 'match' else rows)
     return dict(pagination, page_title=f'Published results: {event.name} — EventTab',
-                event=serialize_event(event), result_kind=kind,
+                event={**serialize_event(event), 'banner_key': featured_banner_key(event)}, result_kind=kind,
                 result_rows=rows if kind == 'match' else list(page),
                 fixtures=public_fixtures(event, page) if kind == 'match' else [], result_notice=notice,
-                result_rounds=rounds, selected_round=selected,
+                result_rounds=rounds, selected_round=selected, bracket_lanes=bracket_lanes,
+                bracket_champion=champion,
                 published_date=serialize_event(event)['published_date'])
 
 
 @public_page('leaderboard')
 def leaderboard(request):
     filters = filters_for(request)
-    candidates = apply_filters(published_events(), filters).select_related('judging_event')
-    eligible_ids = [event.pk for event in candidates if standings_eligible(event)]
+    available = list(public_events().select_related('judging_event').prefetch_related('bracket_teams', 'criteria_entries'))
+    years = sorted({event.academic_year or str(event.event_date.year) for event in available
+                    if event.academic_year or event.event_date}, reverse=True)
+    published_years = sorted({year or str(date.year) for year, date in published_events().values_list('academic_year', 'event_date')
+                              if year or date}, reverse=True)
+    default_year = published_years[0] if published_years else (years[0] if years else '')
+    selected_year = request.GET.get('year', default_year)
+    selected_year = selected_year if selected_year in years else ''
+    scoped = [event for event in available if (
+        filters['type'] == 'all' or event_kind(event) == filters['type']) and (
+        not selected_year or (event.academic_year or (str(event.event_date.year) if event.event_date else '')) == selected_year)]
+    categories = sorted({event.category for event in scoped if event.category})
+    if filters['category'] not in categories:
+        filters['category'] = ''
+    candidates = [event for event in scoped if not filters['category'] or event.category == filters['category']]
+    event_options = [{'id': str(event.pk), 'name': event.name}
+                     for event in sorted(candidates, key=lambda event: (event.name.casefold(), event.pk))]
+    selected_event_id = request.GET.get('event_id', '')
+    if selected_event_id not in {option['id'] for option in event_options}:
+        selected_event_id = ''
+    eligible = [event for event in candidates if (not selected_event_id or str(event.pk) == selected_event_id)
+                and standings_eligible(event)]
+    eligible_ids = [event.pk for event in eligible]
     rows = leaderboard_rows(event_ids=eligible_ids)
+    statistics = _standings_statistics(eligible)
     logos = {department.name: image_url(department.logo) for department in Department.objects.filter(
         name__in=[row['department'] for row in rows],
     )}
     result_params = {name: filters[name] for name in ('type', 'category') if filters[name] and filters[name] != 'all'}
     result_url = reverse('public_results') + ('?' + urlencode(result_params) if result_params else '')
+    if selected_event_id and eligible:
+        result_url = reverse('public_result_detail', args=[eligible[0].pk])
+    leader_points = rows[0]['points'] if rows else 0
+    lead_margin = leader_points - rows[1]['points'] if len(rows) > 1 else None
+    tied_leaders = sum(row['points'] == leader_points for row in rows) > 1
     for row in rows:
-        row.update(logo_url=logos.get(row['department'], ''), result_url=result_url)
+        row.update(logo_url=logos.get(row['department'], ''), result_url=result_url,
+                   progress_percent=max(0, min(100, round(100 * row['points'] / leader_points))) if leader_points > 0 else 0,
+                   points_gap=leader_points - row['points'], lead_margin=lead_margin,
+                   is_tied_leader=tied_leaders and row['points'] == leader_points,
+                   **statistics.get(row['department'], {}))
+    podium = rows[:3]
+    if filters['q']:
+        rows = [row for row in rows if filters['q'].casefold() in row['department'].casefold()]
     page, pagination = paginate(request, rows)
-    return dict(pagination, **filter_options(), page_title='Team Standings — EventTab', standings=list(page))
+    return dict(pagination, page_title='Leaderboards — EventTab', standings=list(page), filters=filters,
+                categories=categories, event_options=event_options, selected_event_id=selected_event_id,
+                podium=podium, school_years=years, selected_year=selected_year,
+                awaiting_championship_points=bool(eligible) and not rows,
+                leader_points=leader_points, points_ticks=[leader_points * step / 4 for step in range(5)])
+
+
+def _standings_statistics(events):
+    """Read medal counts from published placement snapshots, never infer them from points."""
+    from events.points_settings_service import official_department_awards
+    from events.criteria_faculty_service import approved_final_rankings
+    from events.faculty_service import FacultyServiceError
+    statistics = {}
+    departments = {department.pk: department.name for department in Department.objects.all()}
+    for event, department_id, _ in official_department_awards([event.pk for event in events]):
+        name = departments.get(department_id)
+        if name:
+            entry = statistics.setdefault(name, {'gold': 0, 'silver': 0, 'bronze': 0, 'event_ids': set(), 'medals_known': True})
+            entry['event_ids'].add(event.pk)
+    for event in events:
+        cfg = event.result_processing_config or {}
+        placements = []
+        if event_kind(event) == 'criteria':
+            try:
+                approved = approved_final_rankings(event) or []
+            except FacultyServiceError:
+                approved = []
+            entries = {entry.pk: entry.department_id for entry in event.criteria_entries.all()}
+            placements = [(entries.get(row['participant_id']), row['rank']) for row in approved]
+        else:
+            ranks = cfg.get('calculated_placements') or {}
+            placements = [(team.department_id, ranks.get(str(team.pk), 1 if team.is_champion else None))
+                          for team in event.bracket_teams.all()]
+        known = set()
+        for department_id, rank in placements:
+            name = departments.get(department_id)
+            if name not in statistics or not rank:
+                continue
+            known.add(name)
+            if rank in (1, 2, 3):
+                statistics[name][{1: 'gold', 2: 'silver', 3: 'bronze'}[rank]] += 1
+        for name, entry in statistics.items():
+            if event.pk in entry['event_ids'] and name not in known:
+                entry['medals_known'] = False
+    for entry in statistics.values():
+        entry['events_joined'] = len(entry.pop('event_ids'))
+    return statistics

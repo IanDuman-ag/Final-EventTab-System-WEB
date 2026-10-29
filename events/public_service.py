@@ -121,10 +121,15 @@ def serialize_event(event):
     published_at = publication_datetime(event)
     return {
         'id': event.pk, 'name': event.name, 'category': event.category,
+        'classification': event.event_classification,
+        'classification_label': dict(Event.CLASSIFICATION_CHOICES).get(event.event_classification, ''),
         'type': kind, 'type_label': 'Match-Based' if kind == 'match' else 'Criteria-Based',
         'status': status, 'status_label': status.title(),
         'date': event.event_date, 'time': event.event_time, 'venue': event.venue,
-        'division': event.division, 'image_url': image_url(event.image),
+        'division': event.division, 'image_url': (
+            '' if event.image and event.image.name.startswith((
+                'event_covers/', 'cloudinary/event_covers/', 'cloudinary/assets/event_covers/'))
+            else image_url(event.image)),
         'detail_url': reverse('public_event_detail', args=[event.pk]),
         'result_url': reverse('public_result_detail', args=[event.pk]) if published else '',
         'has_results': published, 'description': event.mechanics,
@@ -146,8 +151,10 @@ def public_participants(event):
             'department': team.department.name if team.department else '',
             'logo_url': image_url(team.source_team.image) if team.source_team else '',
         } for team in event.bracket_teams.select_related('department', 'source_team')]
+    from .participant_removal_service import active_participant_ids, active_mobile_candidate_ids
+    ids = active_participant_ids(event)
     entries = list(CriteriaEventEntry.objects.filter(
-        event=event, pk__in=event.participant_ids or [],
+        event=event, pk__in=ids,
     ).select_related('department', 'source_individual', 'source_team'))
     if entries:
         return [{
@@ -164,11 +171,11 @@ def public_participants(event):
             'department': person.department.name if person.department else '',
             'logo_url': image_url(person.image),
         } for person in model.objects.filter(
-            pk__in=event.participant_ids, status=model.STATUS_ACTIVE,
+            pk__in=ids, status=model.STATUS_ACTIVE,
         ).select_related('department')]
     if event.judging_event_id:
         return [{'id': person.pk, 'name': person.name, 'department': person.department,
-                 'logo_url': image_url(person.photo)} for person in event.judging_event.candidates.all()]
+                 'logo_url': image_url(person.photo)} for person in event.judging_event.candidates.filter(pk__in=active_mobile_candidate_ids(event))]
     return []
 
 
@@ -197,6 +204,29 @@ def public_fixtures(event, matches=None):
             'is_official': official,
         })
     return rows
+
+
+def public_result_bracket(event, matches):
+    """Read the published bracket's authored rounds and advancement links only."""
+    matches = list(matches)
+    published = [(match, fixture) for match, fixture in zip(matches, public_fixtures(event, matches))
+                 if fixture['is_official']]
+    visible_ids = {match.pk for match, _ in published}
+    lanes = {}
+    for match, fixture in published:
+        name = match.round_name or 'Matches'
+        lane = 'losers' if 'loser' in name.lower() else 'finals' if 'grand' in name.lower() else 'winners'
+        rounds = lanes.setdefault(lane, {})
+        column = rounds.setdefault(name, {'name': name, 'matches': []})
+        column['matches'].append({
+            **fixture, 'number': match.match_number,
+            'automatic_advance': match.is_automatic_advance,
+            'next_winner': match.next_match_winner_id if match.next_match_winner_id in visible_ids else '',
+            'next_loser': match.next_match_loser_id if match.next_match_loser_id in visible_ids else '',
+        })
+    return [{'key': key, 'rounds': list(lanes[key].values()),
+             'slots': max(len(column['matches']) for column in lanes[key].values())}
+            for key in ('winners', 'losers', 'finals') if key in lanes]
 
 
 def result_rounds(event):
@@ -241,7 +271,7 @@ def criteria_results(event, round_id=None):
             return [], 'Approved final participants are unavailable.'
         rows = [{'rank': row['rank'], 'name': participants[row['participant_id']]['name'],
                  'department': participants[row['participant_id']]['department'],
-                 'points': '', 'score': '', 'placement': placement(row['rank'])}
+                 'points': '', 'score': '', 'division': row.get('division', ''), 'placement': placement(row['rank'])}
                 for row in final_results]
         return rows, 'Official final placements. Individual judge scores remain private.'
     modern = event.scoring_categories.exists()
@@ -266,7 +296,7 @@ def criteria_results(event, round_id=None):
             return [], 'This round is awaiting complete approved results.'
         rows = [{'rank': row['rank'], 'name': participants[row['participant_id']]['name'],
                  'department': participants[row['participant_id']]['department'], 'points': '', 'score': '',
-                 'placement': f"Round rank {row['rank']}" if multi else placement(row['rank'])}
+                 'division': row.get('division', ''), 'placement': f"Round rank {row['rank']}" if multi else placement(row['rank'])}
                 for row in rankings]
         return rows, ('Published round-specific rankings. Overall standings are unavailable because '
                       'the existing scoring system does not calculate a combined multiround result.'
@@ -279,7 +309,8 @@ def criteria_results(event, round_id=None):
         candidate__event=event.judging_event, submitted_at__gt=publication_datetime(event),
     ).exists():
         return [], 'Updated competition results are awaiting authorized republication.'
-    candidate_ids = list(event.judging_event.candidates.values_list('pk', flat=True))
+    from .participant_removal_service import active_mobile_candidate_ids
+    candidate_ids = active_mobile_candidate_ids(event)
     criterion_ids = list(event.judging_event.criteria.values_list('pk', flat=True))
     judge_ids = list(event.assigned_judges.filter(is_active=True).values_list('pk', flat=True))
     locked = set(JudgeScore.objects.filter(
@@ -292,7 +323,7 @@ def criteria_results(event, round_id=None):
     ):
         return [], 'Official placements are awaiting complete verified results.'
     return [{'rank': row['rank'], 'name': row['name'], 'department': row['department'],
-             'points': '', 'score': '', 'placement': placement(row['rank'])}
+             'points': '', 'score': '', 'division': row.get('division', ''), 'placement': placement(row['rank'])}
             for row in compute_criteria_rankings(event)], 'Official placements. Individual judge scores remain private.'
 
 
@@ -305,7 +336,13 @@ def standings_eligible(event):
         return False
     if event_kind(event) == 'criteria':
         if is_multiround(event) or len(result_rounds(event)) > 1:
-            return False
+            from .criteria_faculty_service import approved_final_rankings
+            from .faculty_service import FacultyServiceError
+            try:
+                if approved_final_rankings(event) is None:
+                    return False
+            except FacultyServiceError:
+                return False
         return bool(criteria_results(event)[0])
     matches = event.bracket_matches.filter(is_automatic_advance=False)
     return (matches.exists() and not matches.exclude(status__in=TERMINAL_MATCH_STATUSES).exists()

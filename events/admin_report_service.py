@@ -276,17 +276,18 @@ def build_report_preview(report_type: str, filters: dict | None = None) -> dict:
             ])
 
     elif report_type in ('individual_participants', 'contestants'):
+        from .participant_removal_service import active_participant_ids, active_mobile_candidate_ids
         headers = ['Contestant / Participant', 'Department', 'Event']
         for ev in events:
-            entries = list(ev.criteria_entries.select_related('department').all()) if ev.scoring_method == 'criteria' else []
+            ids = active_participant_ids(ev)
+            entries = list(ev.criteria_entries.select_related('department').filter(pk__in=ids)) if ev.scoring_method == 'criteria' else []
             for entry in entries:
                 rows.append([entry.display_name, entry.department.name if entry.department else 'â€”', ev.name])
-            ids = ev.participant_ids or []
             if ids and not entries:
                 for c in RegistryCandidate.objects.filter(id__in=ids):
                     rows.append([f'#{c.number} {c.name}', getattr(c, 'department', '') or '—', ev.name])
-            elif ev.judging_event_id:
-                for c in ev.judging_event.candidates.all()[:100]:
+            elif not ev.participant_ids and ev.judging_event_id:
+                for c in ev.judging_event.candidates.filter(pk__in=active_mobile_candidate_ids(ev))[:100]:
                     rows.append([c.name, getattr(c, 'department', '') or '—', ev.name])
 
     elif report_type == 'departments_participation':
@@ -402,10 +403,11 @@ def build_report_preview(report_type: str, filters: dict | None = None) -> dict:
 
 
 def _count_participants(events):
+    from .participant_removal_service import active_participant_ids
     total = 0
     for ev in events:
         if ev.participant_ids:
-            total += len(ev.participant_ids)
+            total += len(active_participant_ids(ev))
         else:
             total += ev.bracket_teams.count() or int(ev.max_participants or 0) or int(ev.num_teams or 0)
     return total

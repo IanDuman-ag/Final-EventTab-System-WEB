@@ -8,10 +8,10 @@ from django.core.paginator import Paginator
 from django.core.validators import validate_email
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
-from django.db.models import Q, Count
+from django.db.models import Q, Count, Max
 from django.shortcuts import redirect, render, get_object_or_404
 from django.utils import timezone
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse, HttpResponseNotAllowed, JsonResponse
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.contrib.contenttypes.models import ContentType
@@ -918,9 +918,9 @@ def admin_edit_department(request, dept_id):
         dept.code = code
         dept.unit_number = request.POST.get('unit_number', '').strip()
         dept.delegation_color = request.POST.get('color', dept.delegation_color)
-        dept.head = request.POST.get('head', '').strip()
+        dept.head = request.POST.get('head', dept.head).strip()
         dept.status = request.POST.get('status', dept.status)
-        dept.remarks = request.POST.get('remarks', '').strip()
+        dept.remarks = request.POST.get('remarks', dept.remarks).strip()
 
         if 'logo' in request.FILES:
             dept.logo = request.FILES['logo']
@@ -1460,23 +1460,17 @@ def admin_departments(request):
         department_rows = [
             row for row in department_rows
             if query_lower in row['name'].lower()
-            or query_lower in row['dean'].lower()
-            or query_lower in row['description'].lower()
+            or query_lower in row['code'].lower()
         ]
-    with_dean_count = sum(1 for row in all_rows if row['dean'] != 'Not Assigned')
     active_department_count = sum(1 for row in all_rows if row.get('status', 'active') == 'active')
     total_students = sum(row['students'] for row in all_rows)
-    # Collect unique dean names for filter dropdown
-    unique_deans = sorted({row['dean'] for row in all_rows if row['dean'] != 'Not Assigned'})
     return render(request, 'admindash/department.html', {
         'department_rows': department_rows,
         'total_department_count': len(all_rows),
         'active_department_count': active_department_count,
         'visible_department_count': len(department_rows),
         'search_query': search_query,
-        'with_dean_count': with_dean_count,
         'total_students_count': total_students,
-        'unique_deans': unique_deans,
         'new_department_count': 0,
     })
 
@@ -1567,11 +1561,20 @@ def admin_teams(request):
 @login_required(login_url='login')
 @user_passes_test(lambda user: user.is_staff, login_url='login')
 def admin_candidates(request):
+    if request.method == 'GET' and request.GET.get('performance') == '1':
+        request.individual_workspace = True
+        return admin_criteria_events(request)
     search_query = request.GET.get('q', '').strip()
     status_filter = request.GET.get('status', 'all').strip().lower()
     dept_filter = request.GET.get('dept', 'all').strip()
 
     candidate_rows = get_candidate_rows()
+    # Keep event context for the performance-order link.
+    division_events = list(_criteria_event_queryset().filter(participation_type='individual').order_by('-updated_at'))
+    requested_event = request.GET.get('event', '')
+    selected_event = next((event for event in division_events if str(event.pk) == requested_event), None)
+    if not selected_event and division_events and requested_event != 'all':
+        selected_event = division_events[0]
     if search_query:
         q = search_query.lower()
         candidate_rows = [
@@ -1599,6 +1602,8 @@ def admin_candidates(request):
     active_candidate_percent = round((active_candidate_count / total_candidate_count) * 100) if total_candidate_count else 0
 
     return render(request, 'admindash/candidate.html', {
+        'division_events': division_events,
+        'selected_event': selected_event,
         'candidate_rows': page_obj.object_list,
         'total_candidate_count': total_candidate_count,
         'active_candidate_count': active_candidate_count,
@@ -1757,6 +1762,8 @@ def get_candidate_rows():
             'id': cand.id,
             'number': cand.number,
             'name': cand.name,
+            'gender': cand.gender,
+            'gender_label': cand.get_gender_display(),
             'department_id': cand.department_id,
             'department_name': cand.department.name if cand.department else '—',
             'department_code': cand.department.code if cand.department else '',
@@ -1765,6 +1772,11 @@ def get_candidate_rows():
             'status_label': 'Active' if cand.status == RegistryCandidate.STATUS_ACTIVE else 'Inactive',
             'avatar_tone': cand.id % 5,
         })
+    rows.sort(key=lambda row: (
+        not row['number'].isdecimal(),
+        int(row['number']) if row['number'].isdecimal() else row['number'].casefold(),
+        row['name'].casefold(),
+    ))
     return rows
 
 
@@ -1780,6 +1792,10 @@ def admin_create_candidate(request):
     name = (data.get('name') or '').strip()
     status = (data.get('status') or RegistryCandidate.STATUS_ACTIVE).strip().lower()
     dept_id = data.get('department_id')
+    gender = data.get('gender', '')
+    if not isinstance(gender, str) or gender.strip().lower() not in dict(RegistryCandidate.GENDER_CHOICES):
+        return JsonResponse({'success': False, 'message': 'Select a valid gender.'}, status=400)
+    gender = gender.strip().lower()
     image = request.FILES.get('image') if is_multipart else None
 
     if not number or not name:
@@ -1801,6 +1817,7 @@ def admin_create_candidate(request):
     cand = RegistryCandidate.objects.create(
         number=number,
         name=name,
+        gender=gender,
         department=department,
         image=image,
         status=status,
@@ -1816,6 +1833,8 @@ def admin_view_candidate(request, candidate_id):
         'id': cand.id,
         'number': cand.number,
         'name': cand.name,
+        'gender': cand.gender,
+        'gender_label': cand.get_gender_display(),
         'department_name': cand.department.name if cand.department else '—',
         'image_url': cand.image.url if cand.image else '',
         'status': cand.status,
@@ -1836,6 +1855,10 @@ def admin_edit_candidate(request, candidate_id):
     name = (data.get('name') or '').strip()
     status = (data.get('status') or cand.status).strip().lower()
     dept_id = data.get('department_id')
+    gender = data.get('gender', cand.gender)
+    if not isinstance(gender, str) or gender.strip().lower() not in dict(RegistryCandidate.GENDER_CHOICES):
+        return JsonResponse({'success': False, 'message': 'Select a valid gender.'}, status=400)
+    gender = gender.strip().lower()
     image = request.FILES.get('image') if is_multipart else None
     remove_image = str(data.get('remove_image') or '').strip().lower() in ('1', 'true', 'yes', 'on')
 
@@ -1857,6 +1880,7 @@ def admin_edit_candidate(request, candidate_id):
 
     cand.number = number
     cand.name = name
+    cand.gender = gender
     cand.department = department
     if remove_image and cand.image:
         cand.image.delete(save=False)
@@ -3102,6 +3126,8 @@ def admin_match_events(request, event_id=None):
         try:
             event = save_match_event(request.POST, request.user, instance=instance, files=request.FILES)
         except MatchEventValidationError as exc:
+            if request.headers.get('Accept') == 'application/json':
+                return JsonResponse({'success': False, 'message': str(exc)}, status=400)
             messages.error(request, str(exc))
             target = f"{request.path}?edit={event_id}" if event_id else request.path
             return redirect(target)
@@ -3110,6 +3136,8 @@ def admin_match_events(request, event_id=None):
             f'Event "{event.name}" {"created" if instance is None else "updated"} as '
             f'{event.get_publication_status_display()}.',
         )
+        if request.headers.get('Accept') == 'application/json':
+            return JsonResponse({'success': True, 'id': event.pk})
         return redirect('admin_match_events')
 
     search_query = request.GET.get('q', '').strip()
@@ -3375,6 +3403,13 @@ def admin_criteria_events(request, event_id=None):
             event = _criteria_event_queryset().filter(pk=event_pk).first()
             if event is None:
                 return workflow_error('Create the Event details in Step 1 first.', 404)
+            if workflow_action == 'save_participant_setup':
+                from events.criteria_event_service import save_criteria_participant_setup
+                try:
+                    event = save_criteria_participant_setup(event, request.POST, request.user)
+                except CriteriaEventValidationError as exc:
+                    return workflow_error(str(exc))
+                return JsonResponse({'success': True, 'event': serialize_criteria_event(event)})
             if workflow_action == 'list_categories':
                 categories = [{
                     'id': category.id,
@@ -3404,8 +3439,13 @@ def admin_criteria_events(request, event_id=None):
                 assigned_round_id = request.POST.get('assigned_round_id', '').strip()[:80]
                 purpose = request.POST.get('purpose', 'official').strip()
                 category_purpose = request.POST.get('category_purpose', '').strip()
+                round_categories = event.scoring_categories.filter(assigned_round_id=assigned_round_id)
                 try:
-                    order = int(request.POST.get('display_order', ''))
+                    requested_order = request.POST.get('display_order', '').strip()
+                    if requested_order:
+                        order = int(requested_order)
+                    else:
+                        order = (round_categories.aggregate(last_order=Max('display_order'))['last_order'] or 0) + 1
                     weight = Decimal(request.POST.get('overall_weight_percent', ''))
                 except (ValueError, InvalidOperation):
                     return workflow_error('Display Order and Category Weight Within Round must be numeric.')
@@ -3419,8 +3459,8 @@ def admin_criteria_events(request, event_id=None):
                     )
                 if event.scoring_categories.filter(name__iexact=name).exists():
                     return workflow_error('A category with this name already exists for the Event.')
-                if event.scoring_categories.filter(display_order=order).exists():
-                    return workflow_error('This display order is already in use for the Event.')
+                if round_categories.filter(display_order=order).exists():
+                    return workflow_error('This display order is already in use for the selected round.')
                 category = EventScoringCategory.objects.create(
                     event=event, name=name[:120], assigned_round_id=assigned_round_id,
                     purpose=purpose, category_purpose=category_purpose[:500], judge_mode=mode,
@@ -3457,8 +3497,8 @@ def admin_criteria_events(request, event_id=None):
                     )
                 if event.scoring_categories.exclude(pk=category.pk).filter(name__iexact=name).exists():
                     return workflow_error('A category with this name already exists for the Event.')
-                if event.scoring_categories.exclude(pk=category.pk).filter(display_order=order).exists():
-                    return workflow_error('This display order is already in use for the Event.')
+                if event.scoring_categories.exclude(pk=category.pk).filter(assigned_round_id=assigned_round_id, display_order=order).exists():
+                    return workflow_error('This display order is already in use for the selected round.')
                 if category.score_submissions.exists() and (
                     category.assigned_round_id != assigned_round_id
                     or category.purpose != purpose
@@ -3683,6 +3723,9 @@ def admin_criteria_events(request, event_id=None):
     paginator = Paginator(queryset, 10)
     page_obj = paginator.get_page(request.GET.get('page') or 1)
     rows = [serialize_criteria_event(event) for event in page_obj.object_list]
+    individual_workspace = bool(getattr(request, 'individual_workspace', False))
+    if individual_workspace:
+        rows = [serialize_criteria_event(event) for event in _criteria_event_queryset().filter(participation_type='individual').order_by('-updated_at')]
     User = get_user_model()
     judge_options = User.objects.filter(is_active=True).filter(models_q_for_judges()).distinct().order_by(
         'first_name', 'last_name', 'username'
@@ -3699,6 +3742,7 @@ def admin_criteria_events(request, event_id=None):
     all_events = _criteria_event_queryset()
     from events.points_settings_service import scoring_rules
     return render(request, 'admindash/criteriabasedevent.html', {
+        'individual_workspace': individual_workspace,
         'championship_scoring_defaults': scoring_rules(),
         'event_rows': rows,
         'event_rows_json': rows,
@@ -6743,48 +6787,68 @@ def superadmin_admins(request):
 @login_required
 @user_passes_test(lambda user: user.is_superuser, login_url='login')
 def superadmin_reports(request):
-    from django.contrib.admin.models import LogEntry, DELETION, CHANGE
-    activity_log_count = LogEntry.objects.count()
-    if activity_log_count >= 1000:
-        activity_log_count_label = f'{activity_log_count // 1000}k+'
-    else:
-        activity_log_count_label = str(activity_log_count)
+    from events.models import AdminReportHistory
+    from django.http import FileResponse
 
-    department_names = list(
-        Department.objects.filter(status='active').order_by('name').values_list('name', flat=True)
-    )
-    
-    # Dynamic Event Loading — only real events from the database
-    events = list(Event.objects.all().order_by('-event_date').values_list('name', flat=True))
+    histories = AdminReportHistory.objects.select_related('generated_by').order_by('-created_at')
+    if request.GET.get('download', '').isdigit():
+        report = get_object_or_404(histories, pk=int(request.GET['download']))
+        if not report.file:
+            messages.error(request, 'This report has no saved file. Generate it again to download.')
+            return redirect('superadmin_reports')
+        try:
+            return FileResponse(report.file.open('rb'), as_attachment=True,
+                                filename=f"EventTab_report_{report.pk}.{report.export_format}")
+        except (OSError, ValueError):
+            messages.error(request, 'The saved file is unavailable. Generate the report again.')
+            return redirect('superadmin_reports')
 
-    total_events_count = Event.objects.count() or 1
-    critical_logs_count = LogEntry.objects.filter(action_flag=DELETION).count()
-    reports_generated_count = LogEntry.objects.filter(change_message__icontains='generated').count()
-    latest_report_log = LogEntry.objects.filter(change_message__icontains='generated').order_by('-action_time').first()
-    last_export_label = latest_report_log.action_time.strftime('%b %d, %Y') if latest_report_log else 'Never'
-
-    recent_report_rows = []
-    recent_logs = LogEntry.objects.filter(change_message__icontains='generated').select_related('user').order_by('-action_time')[:5]
-    for log in recent_logs:
-        export_format = 'Excel' if 'EXCEL' in log.change_message.upper() else 'PDF'
-        recent_report_rows.append({
-            'name': log.object_repr or 'System Report',
-            'created_by': log.user.username if log.user else 'System',
-            'created_at': log.action_time.strftime('%b %d, %Y %I:%M %p'),
-            'format': export_format,
-            'status': 'Ready',
-        })
-
+    logs = LogEntry.objects.filter(change_message__icontains='generated').select_related('user').order_by('-action_time')
+    saved_log_ids = list(histories.values_list('filters__superadmin_log_id', flat=True))
+    legacy = logs.exclude(pk__in=[value for value in saved_log_ids if isinstance(value, int)])
+    rows = [dict(id=report.pk, name=report.preview.get('title') or report.name,
+                 created_by=report.generated_by.username if report.generated_by_id else 'System',
+                 timestamp=report.created_at, format='Excel' if report.export_format in ('excel', 'xlsx') else report.export_format.upper(),
+                 status='Ready' if report.file else 'Unavailable', has_file=bool(report.file)) for report in histories]
+    for log in legacy:
+        rows.append(dict(name=log.object_repr or 'System Report', created_by=log.user.username if log.user else 'System',
+                         timestamp=log.action_time, format='Excel' if 'EXCEL' in log.change_message.upper() else 'CSV' if 'CSV' in log.change_message.upper() else 'PDF',
+                         status='Recorded', has_file=False))
+    rows.sort(key=lambda row: row['timestamp'], reverse=True)
+    if request.GET.get('export') == 'all':
+        response = HttpResponse(content_type='text/csv; charset=utf-8')
+        response['Content-Disposition'] = 'attachment; filename="report-history.csv"'
+        writer = csv.writer(response)
+        writer.writerow(['Report', 'Created By', 'Created At', 'Format', 'Status'])
+        for row in rows:
+            values = [row['name'], row['created_by'], timezone.localtime(row['timestamp']).isoformat(), row['format'], row['status']]
+            writer.writerow(["'" + value if value.lstrip().startswith(('=', '+', '-', '@')) else value for value in values])
+        return response
+    paginator = Paginator(rows, 20 if request.GET.get('history') == 'all' else 3)
+    page = paginator.get_page(request.GET.get('page'))
+    for row in page.object_list:
+        row['created_at'] = timezone.localtime(row['timestamp']).strftime('%b %d, %Y %I:%M %p')
+    today = timezone.localdate()
+    month_start = today.replace(day=1)
+    previous_start = (month_start - timedelta(days=1)).replace(day=1)
+    def monthly_change(queryset, field):
+        lookup = field if field == 'event_date' else field + '__date'
+        current = queryset.filter(**{f'{lookup}__gte': month_start}).count()
+        previous = queryset.filter(**{f'{lookup}__gte': previous_start, f'{lookup}__lt': month_start}).count()
+        return f'{(current - previous) / previous:+.0%}' if previous else ('New' if current else '—')
+    critical = LogEntry.objects.filter(action_flag=DELETION)
+    latest = rows[0]['timestamp'] if rows else None
     return render(request, 'reports.html', {
-        'activity_log_count': activity_log_count,
-        'activity_log_count_label': activity_log_count_label,
-        'events': events,
-        'department_names': department_names,
-        'total_events_count': total_events_count,
-        'critical_logs_count': critical_logs_count,
-        'reports_generated_count': reports_generated_count,
-        'last_export_label': last_export_label,
-        'recent_report_rows': recent_report_rows,
+        'events': list(Event.objects.order_by('-event_date').values_list('name', flat=True)),
+        'department_names': list(Department.objects.filter(status='active').order_by('name').values_list('name', flat=True)),
+        'total_events_count': Event.objects.count(), 'reports_generated_count': len(rows),
+        'critical_logs_count': critical.count(),
+        'event_change': monthly_change(Event.objects.all(), 'event_date'),
+        'report_change': monthly_change(logs, 'action_time'),
+        'critical_change': monthly_change(critical, 'action_time'),
+        'last_export_label': timezone.localtime(latest).strftime('%b %d, %Y') if latest else 'Never',
+        'last_export_at': latest, 'recent_report_rows': page.object_list, 'report_page': page,
+        'show_all_history': request.GET.get('history') == 'all',
     })
 
 
@@ -6793,122 +6857,81 @@ def superadmin_reports(request):
 def generate_superadmin_report(request):
     if request.method != 'POST':
         return HttpResponseNotAllowed(['POST'])
-
-    from django.contrib.admin.models import LogEntry, CHANGE
-    from django.contrib.contenttypes.models import ContentType
-    from django.contrib import messages
-    from datetime import datetime
-
-    event_name = request.POST.get('event', '').strip()
-    report_type = request.POST.get('report_type', 'summary').strip()
-    department = request.POST.get('department', 'all').strip()
-    export_format = request.POST.get('format', 'pdf').strip().lower()
-
-    start_date_str = request.POST.get('start_date', '').strip()
-    end_date_str = request.POST.get('end_date', '').strip()
-
-    start_date = None
-    end_date = None
-    if start_date_str:
-        try:
-            start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
-        except ValueError:
-            pass
-    if end_date_str:
-        try:
-            end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
-        except ValueError:
-            pass
-
-    included_metrics = request.POST.getlist('metrics')
-
-    system_wide_types = {
-        'championship', 'department_rankings', 'user_activity',
-        'judge_performance', 'faculty_activity',
-    }
-
-    if report_type in system_wide_types:
-        from events.superadmin_service import championship_standings, export_leaderboard_csv, recent_activities
-        from openpyxl import Workbook
-        import io as _io
-
-        LogEntry.objects.create(
-            user=request.user,
-            content_type_id=ContentType.objects.get_for_model(Event).id,
-            object_id='0',
-            object_repr=f'{report_type.replace("_", " ").title()} Report'[:200],
-            action_flag=CHANGE,
-            change_message=f'Generated {export_format.upper()} report.',
-        )
-
-        if report_type in ('championship', 'department_rankings'):
-            rows = championship_standings()
-            if export_format == 'excel':
-                wb = Workbook()
-                ws = wb.active
-                ws.title = 'Standings'
-                ws.append(['Rank', 'Department', 'Total', 'Major', 'Minor'])
-                for r in rows:
-                    ws.append([r['rank'], r['department'], r['total_points'], r['major_points'], r['minor_points']])
-                buf = _io.BytesIO()
-                wb.save(buf)
-                response = HttpResponse(
-                    buf.getvalue(),
-                    content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                )
-                response['Content-Disposition'] = f'attachment; filename="{report_type}_{datetime.now().strftime("%Y%m%d")}.xlsx"'
-                return response
-            content = export_leaderboard_csv(rows)
-            response = HttpResponse(content, content_type='text/csv')
-            response['Content-Disposition'] = f'attachment; filename="{report_type}_{datetime.now().strftime("%Y%m%d")}.csv"'
-            return response
-
-        # Activity-style reports as CSV
-        activities = recent_activities(200)
-        buf = _io.StringIO()
-        import csv as _csv
-        writer = _csv.writer(buf)
-        writer.writerow(['Time', 'User', 'Role', 'Title', 'Message', 'Module'])
-        for a in activities:
-            writer.writerow([a.get('time'), a.get('user'), a.get('role'), a.get('title'), a.get('message'), a.get('module')])
-        response = HttpResponse(buf.getvalue(), content_type='text/csv')
-        response['Content-Disposition'] = f'attachment; filename="{report_type}_{datetime.now().strftime("%Y%m%d")}.csv"'
-        return response
-
-    if not event_name or event_name == 'No events available':
-        messages.error(request, 'Please select a valid event before generating a report.')
-        return redirect('superadmin_reports')
-
-    event_obj = Event.objects.filter(name=event_name).first()
-    event_content_type = ContentType.objects.get_for_model(Event)
-
-    # Log dynamic django administrative action to record export in history - autoreload
-    LogEntry.objects.create(
-        user=request.user,
-        content_type_id=event_content_type.id,
-        object_id=str(event_obj.id) if event_obj else '1',
-        object_repr=f"{event_name} {report_type.title()} Report"[:200],
-        action_flag=CHANGE,
-        change_message=f"Generated {export_format.upper()} report."
+    from events.admin_report_service import (
+        build_report_preview, export_report_csv, export_report_excel, export_report_pdf, filter_events, save_report_history,
     )
+    from core.reports_generator import generate_excel_report, generate_pdf_report
+    from events.audit_service import record_audit
 
-    if export_format == 'excel':
-        from core.reports_generator import generate_excel_report
-        excel_stream = generate_excel_report(event_name, department, start_date, end_date, included_metrics)
-        filename = f"{event_name.replace(' ', '_')}_{report_type}_Report_{datetime.now().strftime('%Y%m%d')}.xlsx"
-        response = HttpResponse(
-            excel_stream.read(),
-            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        )
-        response['Content-Disposition'] = f'attachment; filename="{filename}"'
-        return response
-    else:
-        from core.reports_generator import generate_pdf_report
-        pdf_stream = generate_pdf_report(event_name, department, start_date, end_date, included_metrics)
-        filename = f"{event_name.replace(' ', '_')}_{report_type}_Report_{datetime.now().strftime('%Y%m%d')}.pdf"
-        response = HttpResponse(pdf_stream.read(), content_type='application/pdf')
-        response['Content-Disposition'] = f'attachment; filename="{filename}"'
-        return response
+    report_types = {'summary': 'event_summary', 'detailed': 'match_results', 'criteria': 'criteria_results',
+                    'championship': 'championship_rankings', 'department_rankings': 'department_rankings',
+                    'user_activity': 'user_activity', 'judge_performance': 'judges',
+                    'faculty_activity': 'faculty_in_charge', 'audit': 'audit_log'}
+    report_type = request.POST.get('report_type', 'summary')
+    export_format = request.POST.get('format', 'pdf')
+    event_name = request.POST.get('event', '').strip()
+    event = Event.objects.filter(name=event_name).first() if event_name else None
+    if report_type not in report_types or export_format not in ('pdf', 'excel', 'csv'):
+        return JsonResponse({'success': False, 'message': 'Choose a valid report type and format.'}, status=400)
+    if event_name and event is None:
+        return JsonResponse({'success': False, 'message': 'The selected event is no longer available.'}, status=400)
+    dates = []
+    for key in ('start_date', 'end_date'):
+        value = request.POST.get(key, '')
+        try:
+            dates.append(datetime.strptime(value, '%Y-%m-%d').date() if value else None)
+        except ValueError:
+            return JsonResponse({'success': False, 'message': 'Enter valid report dates.'}, status=400)
+    if all(dates) and dates[0] > dates[1]:
+        return JsonResponse({'success': False, 'message': 'End date must be on or after start date.'}, status=400)
+    filters = {'event_id': str(event.pk) if event else '', 'department': request.POST.get('department', 'all'),
+               'date_from': request.POST.get('start_date', ''), 'date_to': request.POST.get('end_date', '')}
+    metrics = request.POST.getlist('metrics')
+    try:
+        preview = build_report_preview(report_types[report_type], filters)
+        event_column = next((index for index, label in enumerate(preview['headers']) if label in ('Event', 'Event Name')), None)
+        if event_column is not None and any(metric in metrics for metric in ('event_summary', 'publication_status')):
+            event_map = {item.name: item for item in filter_events(filters)}
+            if 'event_summary' in metrics:
+                preview['headers'].extend(['Event Category', 'Event Venue', 'Event Status'])
+            if 'publication_status' in metrics:
+                preview['headers'].append('Publication Status')
+            for row in preview['rows']:
+                source = event_map.get(row[event_column])
+                if 'event_summary' in metrics:
+                    row.extend([source.category, source.venue, source.get_status_display()] if source else ['—'] * 3)
+                if 'publication_status' in metrics:
+                    row.append(source.get_publication_status_display() if source else '—')
+        if request.POST.get('action') == 'preview':
+            return JsonResponse({'success': True, 'preview': preview})
+        if event and report_type in ('summary', 'detailed', 'criteria') and export_format in ('pdf', 'excel'):
+            generate = generate_excel_report if export_format == 'excel' else generate_pdf_report
+            event_info = {'generated_by': request.user.username}
+            if 'publication_status' in metrics:
+                event_info['remarks'] = f'Publication status: {event.get_publication_status_display()}'
+            content = generate(event.name, filters['department'], dates[0], dates[1], metrics, event_info=event_info).getvalue()
+        elif export_format == 'pdf':
+            content = export_report_pdf(preview)
+        elif export_format == 'excel':
+            content = export_report_excel(preview)
+        else:
+            content = export_report_csv(preview).encode('utf-8')
+        log = LogEntry.objects.create(user=request.user, content_type=ContentType.objects.get_for_model(Event),
+                                      object_id=str(event.pk) if event else '0', object_repr=preview['title'][:200],
+                                      action_flag=CHANGE, change_message=f'Generated {export_format.upper()} report.')
+        preview['filters']['superadmin_log_id'] = log.pk
+        save_report_history(user=request.user, preview=preview, export_format='xlsx' if export_format == 'excel' else export_format,
+                            file_content=content)
+        record_audit(user=request.user, action='Generated Reports', module='Reports', request=request,
+                     description=f"Generated {preview['title']} ({export_format.upper()}).")
+    except Exception:
+        logging.getLogger(__name__).exception('Superadmin report generation failed')
+        return JsonResponse({'success': False, 'message': 'Report generation failed. Please try again.'}, status=500)
+    extension = 'xlsx' if export_format == 'excel' else export_format
+    content_types = {'pdf': 'application/pdf', 'excel': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'csv': 'text/csv; charset=utf-8'}
+    response = HttpResponse(content, content_type=content_types[export_format])
+    response['Content-Disposition'] = f'attachment; filename="EventTab_{report_type}_{timezone.localdate():%Y%m%d}.{extension}"'
+    return response
 
 
 @login_required
@@ -7350,8 +7373,16 @@ def admin_view_bracket(request, event_id):
         from events.models import Event, BracketMatch, BracketTeam
         event = get_object_or_404(Event, id=event_id)
         matches_qs = BracketMatch.objects.filter(event=event).select_related(
-            'team_a', 'team_b', 'winner', 'loser',
+            'team_a__department', 'team_b__department', 'winner__department', 'loser',
         ).order_by('match_number')
+
+        def department_logo(team):
+            if team and team.department and team.department.logo:
+                try:
+                    return team.department.logo.url
+                except ValueError:
+                    pass
+            return ''
 
         matches_data = []
         for m in matches_qs:
@@ -7371,6 +7402,12 @@ def admin_view_bracket(request, event_id):
                 'team_b_id': m.team_b.id if m.team_b else None,
                 'winner': m.winner.name if m.winner else None,
                 'winner_id': m.winner.id if m.winner else None,
+                'team_a_logo': department_logo(m.team_a),
+                'team_b_logo': department_logo(m.team_b),
+                'winner_logo': department_logo(m.winner),
+                'match_date': m.match_date.isoformat() if m.match_date else '',
+                'match_time': m.match_time.strftime('%I:%M %p').lstrip('0') if m.match_time else '',
+                'next_match_loser_id': m.next_match_loser_id,
                 'score_a': m.score_a or '',
                 'score_b': m.score_b or '',
                 'status': m.status,

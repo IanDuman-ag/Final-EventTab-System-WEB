@@ -156,3 +156,52 @@ def reset_password(request):
 @permission_classes([IsAuthenticated])
 def me(request):
     return Response(_user_payload(request.user))
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def access_code_login(request):
+    from core.views import get_assignment_role
+    from events.models import AssignmentAccountProfile
+
+    raw_code = request.data.get('access_code')
+    if not isinstance(raw_code, str):
+        return Response(
+            {'detail': 'Access code is required.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    code = ''.join(raw_code.split()).replace('-', '').upper()
+    if not code or len(code) > 32:
+        return Response(
+            {'detail': 'Invalid access code.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    profiles = list(
+        AssignmentAccountProfile.objects
+        .select_related('user')
+        .filter(access_code__iexact=code)[:2]
+    )
+
+    # Reject missing or ambiguous codes.
+    if len(profiles) != 1:
+        return Response(
+            {'detail': 'Invalid access code.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    user = profiles[0].user
+    role = get_assignment_role(user) if user.is_active else None
+    if role not in ('Judge', 'Scorer'):
+        return Response(
+            {'detail': 'Invalid access code or disabled account.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    token, _ = Token.objects.get_or_create(user=user)
+    return Response({
+        'token': token.key,
+        'user': _user_payload(user),
+        'role': role.lower(),
+    })

@@ -5,91 +5,120 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>System Settings · Superadmin · EventTab</title>
-  <link rel="stylesheet" href="{% static 'superadmin_dashboard.css' %}?v=20260803a">
-  <link rel="stylesheet" href="{% static 'admin_v2.css' %}?v=20260524a">
-  <link rel="stylesheet" href="{% static 'superadmindash/pages.css' %}?v=20260803a">
+  <link rel="stylesheet" href="{% static 'superadmin_dashboard.css' %}?v=20261025recovery">
+  <link rel="stylesheet" href="{% static 'admin_v2.css' %}?v=20261019sidebar">
+  <link rel="stylesheet" href="{% static 'superadmindash/pages.css' %}?v=20261025recovery">
 </head>
-<body class="admin-v2-page">
+<body class="admin-v2-page sa-settings-page">
   <div class="dashboard-shell">
     {% include 'superadmindash/_sidebar.html' with active='settings' %}
-    <div class="dashboard-area">
-      <header class="topbar">
+    <div class="dashboard-area v2sa-content">
+      <header class="topbar v2sa-topbar">
         <div class="topbar-context">
           <p class="sa-kicker">SYSTEM</p>
           <h1 class="sa-page-title" style="margin:0">System Settings</h1>
         </div>
       </header>
       <main class="sa-page-main">
-        <nav class="sa-tabs">
-          <a class="{% if section == 'general' %}is-active{% endif %}" href="?section=general">General</a>
-          <a class="{% if section == 'users' %}is-active{% endif %}" href="?section=users">User Settings</a>
-          <a class="{% if section == 'notifications' %}is-active{% endif %}" href="?section=notifications">Notifications</a>
-          <a class="{% if section == 'backup' %}is-active{% endif %}" href="?section=backup">Backup &amp; Restore</a>
-        </nav>
-
         {% if messages %}
         <ul class="sa-notes" style="background:#fff;border:1px solid #dbe5f0;margin-bottom:14px;">
           {% for message in messages %}<li><span>{{ message }}</span></li>{% endfor %}
         </ul>
         {% endif %}
 
-        {% if section == 'general' %}
-        <section class="sa-card">
-          <header><h2>General</h2></header>
-          <form class="sa-form" method="post" enctype="multipart/form-data" action="{% url 'superadmin_settings_save' %}">
-            {% csrf_token %}
-            <input type="hidden" name="section" value="general">
-            <label>School Name<input name="school_name" value="{{ settings.school_name }}"></label>
-            <label>Academic Year<input name="academic_year" value="{{ settings.academic_year }}"></label>
-            <label>Current Intramurals Name<input name="intramurals_name" value="{{ settings.intramurals_name }}"></label>
-            <label>School Logo<input type="file" name="school_logo" accept="image/*"></label>
-            {% if settings.school_logo %}<p class="sa-note">Current: {{ settings.school_logo.url }}</p>{% endif %}
-            <button class="sa-btn" type="submit">Save General</button>
-          </form>
-        </section>
-        {% elif section == 'users' %}
-        <section class="sa-card">
-          <header><h2>User Settings</h2></header>
-          <form class="sa-form" method="post" action="{% url 'superadmin_settings_save' %}">
-            {% csrf_token %}
-            <input type="hidden" name="section" value="users">
-            <label>Password Min Length<input type="number" min="6" name="password_min_length" value="{{ settings.password_min_length }}"></label>
-            <label class="row"><input type="checkbox" name="password_require_uppercase" {% if settings.password_require_uppercase %}checked{% endif %}> Require uppercase</label>
-            <label class="row"><input type="checkbox" name="password_require_number" {% if settings.password_require_number %}checked{% endif %}> Require number</label>
-            <label class="row"><input type="checkbox" name="password_require_symbol" {% if settings.password_require_symbol %}checked{% endif %}> Require symbol</label>
-            <label>Session Timeout (minutes)<input type="number" min="5" name="session_timeout_minutes" value="{{ settings.session_timeout_minutes }}"></label>
-            <label>Max Login Attempts<input type="number" min="1" name="max_login_attempts" value="{{ settings.max_login_attempts }}"></label>
-            <label>Account Lockout (minutes)<input type="number" min="1" name="lockout_duration_minutes" value="{{ settings.lockout_duration_minutes }}"></label>
-            <button class="sa-btn" type="submit">Save User Settings</button>
-          </form>
-        </section>
-        {% elif section == 'notifications' %}
-        <section class="sa-card">
-          <header><h2>Notification Settings</h2></header>
-          <form class="sa-form" method="post" action="{% url 'superadmin_settings_save' %}">
-            {% csrf_token %}
-            <input type="hidden" name="section" value="notifications">
-            <label class="row"><input type="checkbox" name="email_notifications" {% if settings.email_notifications %}checked{% endif %}> Email Notifications</label>
-            <label class="row"><input type="checkbox" name="mobile_notifications" {% if settings.mobile_notifications %}checked{% endif %}> Mobile Notifications</label>
-            <label class="row"><input type="checkbox" name="system_notifications" {% if settings.system_notifications %}checked{% endif %}> System Notifications</label>
-            <button class="sa-btn" type="submit">Save Notifications</button>
-          </form>
-        </section>
-        {% else %}
-        <section class="sa-card">
-          <header><h2>Backup &amp; Restore</h2></header>
-          <div class="sa-form">
-            <p class="sa-note">Database backup/restore is intentionally limited. Restore is disabled unless <code>SUPERADMIN_ALLOW_RESTORE=True</code> is set in the environment.</p>
-            {% if allow_restore %}
-            <p class="sa-note">Restore is enabled on this server. Use management commands / ops runbook for dumpdata/loaddata.</p>
-            {% else %}
-            <p class="sa-note">Restore is currently <strong>disabled</strong> for safety.</p>
-            {% endif %}
+        <section class="sa-card ss-recovery" aria-labelledby="ss-recovery-title">
+          <header class="ss-panel-heading">
+            <span class="ss-panel-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 4 16 4 16 0V5M4 12c0 4 16 4 16 0"/></svg></span>
+            <div><h2 id="ss-recovery-title">Backup &amp; Restore</h2><p>Database protection and recovery status.</p></div>
+          </header>
+          <div class="ss-setting-row">
+            <div><h3>Database Export</h3><p>Download a PostgreSQL backup of EventTab records, accounts and configuration. Uploaded images and files are not included.</p></div>
+            <form method="post" action="{% url 'superadmin_database_export' %}" class="ss-export-form">
+              {% csrf_token %}<button type="submit" class="sa-btn" id="ss-export-button">Export Database</button>
+              <span id="ss-export-status" role="status" aria-live="polite"></span>
+            </form>
           </div>
+          <div class="ss-setting-row">
+            <div><h3>Database Restore</h3><p>{% if allow_restore %}Restore an EventTab backup to recover database records. The application pauses during recovery; a safety backup is created first.{% else %}Recovery requires the server recovery worker. Contact your system administrator to enable it.{% endif %}</p></div>
+            <span class="ss-status {% if allow_restore %}ss-status-enabled{% endif %}">{% if allow_restore %}Enabled{% else %}Disabled{% endif %}</span>
+          </div>
+          {% if allow_restore %}
+          <form class="ss-restore-form" id="ss-restore-form" method="post" enctype="multipart/form-data" action="{% url 'superadmin_database_restore' %}">
+            {% csrf_token %}
+            <p class="ss-restore-note">Restoring replaces current records and account passwords with the backup contents. Use only a trusted EventTab backup. Uploaded images and files are not restored.</p>
+            <div class="ss-restore-fields">
+              <label>Backup file (.dump)<input type="file" name="backup" accept=".dump" required><small>Maximum size: 20 MB</small></label>
+              <label>Your Super Admin password<input type="password" name="current_password" autocomplete="current-password" required></label>
+              <label>Type RESTORE to confirm<input name="confirmation" autocomplete="off" pattern="RESTORE" required></label>
+            </div>
+            <div class="ss-restore-actions"><button class="sa-btn" type="submit" id="ss-restore-button">Restore Database</button><span id="ss-restore-status" role="status" aria-live="polite"></span></div>
+          </form>
+          {% endif %}
         </section>
-        {% endif %}
       </main>
     </div>
   </div>
+<script>
+(function () {
+  var restoreForm = document.getElementById('ss-restore-form');
+  if (restoreForm) restoreForm.addEventListener('submit', async function (event) {
+    event.preventDefault();
+    var button = document.getElementById('ss-restore-button');
+    var status = document.getElementById('ss-restore-status');
+    var file = restoreForm.elements.backup.files[0];
+    if (!file || file.size > 20 * 1024 * 1024) { status.textContent = 'Choose a .dump backup up to 20 MB.'; return; }
+    button.disabled = true; status.textContent = 'Uploading and validating backup?';
+    try {
+      var response = await fetch(restoreForm.action, {method:'POST', credentials:'same-origin', cache:'no-store', body:new FormData(restoreForm)});
+      if (response.redirected) throw new Error('Your session has expired. Sign in again.');
+      if (response.status === 413) throw new Error('The server upload limit was exceeded. Contact your system administrator.');
+      if (!(response.headers.get('Content-Type') || '').includes('application/json')) throw new Error('Recovery could not be started. Check your session and try again.');
+      var result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.message || 'Recovery could not be started.');
+      restoreForm.reset(); status.textContent = result.message;
+      var jobUrl = "{% url 'superadmin_settings' %}recovery/" + result.job_id + '/';
+      async function checkRecovery() {
+        try {
+          var progress = await fetch(jobUrl, {credentials:'same-origin', cache:'no-store'});
+          if (progress.redirected) { status.textContent = 'The server is available again. Sign in using an account from the backup to check recovery.'; return; }
+          if (!progress.ok) throw new Error('Service paused');
+          var data = await progress.json(); status.textContent = data.message;
+          if (['completed','failed','needs_attention'].includes(data.state)) { button.disabled = data.state !== 'failed'; return; }
+        } catch (error) { status.textContent = 'Recovery is in progress. The application may be temporarily unavailable. Please wait.'; }
+        setTimeout(checkRecovery, 5000);
+      }
+      setTimeout(checkRecovery, 5000);
+    } catch (error) { status.textContent = error.message || 'Recovery could not be started.'; button.disabled = false; }
+    finally { restoreForm.elements.current_password.value = ''; }
+  });
+  var form = document.querySelector('.ss-export-form');
+  form.addEventListener('submit', async function (event) {
+    event.preventDefault();
+    var button = document.getElementById('ss-export-button');
+    var status = document.getElementById('ss-export-status');
+    button.disabled = true; status.textContent = 'Preparing database export?';
+    try {
+      var response = await fetch(form.action, {method:'POST', credentials:'same-origin', cache:'no-store', headers:{'X-Requested-With':'XMLHttpRequest'}, body:new FormData(form)});
+      if (response.redirected || !response.ok || !(response.headers.get('Content-Disposition') || '').includes('attachment')) {
+        var problem = 'Export could not be completed. Please try again or sign in again.';
+        if ((response.headers.get('Content-Type') || '').includes('application/json')) {
+          var details = await response.json(); problem = details.message || problem;
+        }
+        status.textContent = problem;
+        return;
+      }
+      var blob = await response.blob();
+      var url = URL.createObjectURL(blob);
+      var link = document.createElement('a'); link.href = url;
+      var filename = (response.headers.get('Content-Disposition') || '').match(/filename="([^"]+)"/);
+      link.download = filename ? filename[1] : 'eventtab-database.dump';
+      document.body.appendChild(link); link.click(); link.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+      status.textContent = 'Database export downloaded.';
+    } catch (error) { status.textContent = 'Export could not be downloaded. Check your connection and try again.'; }
+    finally { button.disabled = false; }
+  });
+})();
+</script>
 </body>
 </html>

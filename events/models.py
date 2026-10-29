@@ -1,8 +1,56 @@
 from django.db import models, transaction
 from django.db.models import Q
 from django.contrib.auth import get_user_model
+import uuid
+
+from .ocr_storage import PrivateScoreSheetStorage
 
 User = get_user_model()
+
+
+class EventCoverAsset(models.Model):
+    """One reusable cover per curated event type; never stores credentials."""
+    key = models.CharField(max_length=40, unique=True)
+    image = models.ImageField(upload_to='event_covers/', blank=True)
+    status = models.CharField(max_length=12, default='pending', choices=[
+        (value, value.title()) for value in ('pending', 'generating', 'ready', 'failed')])
+    source = models.CharField(max_length=12, blank=True)
+    attempts = models.PositiveSmallIntegerField(default=0)
+    error = models.CharField(max_length=200, blank=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class EventCoverBudget(models.Model):
+    day = models.DateField(unique=True)
+    attempts = models.PositiveIntegerField(default=0)
+
+
+class OCRScoreSheet(models.Model):
+    """Untrusted extraction drafts; official scores remain CriteriaScoreSubmission."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    event = models.ForeignKey('Event', on_delete=models.PROTECT, related_name='ocr_sheets')
+    judge = models.ForeignKey(User, on_delete=models.PROTECT, related_name='ocr_sheets')
+    uploaded_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name='uploaded_ocr_sheets')
+    round_id = models.CharField(max_length=80)
+    original = models.FileField(storage=PrivateScoreSheetStorage(), upload_to='%Y/%m/', blank=True)
+    content_type = models.CharField(max_length=40, blank=True)
+    page_count = models.PositiveSmallIntegerField(default=1)
+    snapshot = models.JSONField(default=dict)
+    extracted = models.JSONField(default=dict)
+    corrected = models.JSONField(default=dict)
+    corrections = models.JSONField(default=list)
+    ocr_status = models.CharField(max_length=12, default='pending', choices=[(v, v.title()) for v in ('pending', 'processing', 'completed', 'failed', 'manual')])
+    verification_status = models.CharField(max_length=12, default='pending', choices=[(v, v.title()) for v in ('pending', 'for_review', 'verified', 'confirmed')])
+    error = models.CharField(max_length=250, blank=True)
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    uploaded_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [models.Index(fields=['event', 'round_id', 'judge'], name='ocr_event_round_judge')]
 
 
 class Event(models.Model):
@@ -271,7 +319,7 @@ class EventScoringCategory(models.Model):
         ordering = ['display_order', 'id']
         constraints = [
             models.UniqueConstraint(fields=['event', 'name'], name='unique_event_scoring_category_name'),
-            models.UniqueConstraint(fields=['event', 'display_order'], name='unique_event_scoring_category_order'),
+            models.UniqueConstraint(fields=['event', 'assigned_round_id', 'display_order'], name='unique_round_scoring_category_order'),
         ]
 
     def __str__(self):
@@ -468,6 +516,9 @@ class RegistryCandidate(models.Model):
         (STATUS_INACTIVE, 'Inactive'),
     ]
 
+    GENDER_CHOICES = [('', 'Not specified'), ('male', 'Male'), ('female', 'Female'), ('other', 'Other')]
+
+    gender = models.CharField(max_length=10, choices=GENDER_CHOICES, blank=True, default='')
     number = models.CharField(max_length=20, unique=True)
     name = models.CharField(max_length=200)
     department = models.ForeignKey(
@@ -910,7 +961,7 @@ class JudgeActivityLog(models.Model):
         return f'{self.judge.username} — {self.get_action_display()} — {self.timestamp:%Y-%m-%d %H:%M}'
 
     @classmethod
-    def log(cls, judge, action, details='', event=None, candidate=None, ip_address=None):
+    def log(cls, judge, action, details='', event=None, candidate=None, ip_address=None, request=None, metadata=None):
         row = cls.objects.create(
             judge=judge,
             action=action,
@@ -940,12 +991,15 @@ class JudgeActivityLog(models.Model):
             with transaction.atomic():
                 record_audit(
                     user=judge,
-                    action=action_map.get(action, action),
+                    action=('Started Scoring Contestant' if action == cls.ACTION_VIEW_SCORES
+                            and details.startswith('Started scoring contestant') else action_map.get(action, action)),
                     description=details or action_map.get(action, action),
                     module='Criteria-Based Event' if action not in (cls.ACTION_LOGIN, cls.ACTION_LOGOUT) else 'Authentication',
                     event_name=event_name,
                     contestant=contestant,
                     ip_address=ip_address,
+                    request=request,
+                    metadata=dict(metadata or {}, judge_activity_id=row.pk),
                 )
         except Exception:
             pass
@@ -974,6 +1028,8 @@ class SystemSettings(models.Model):
     report_subtitle = models.CharField(max_length=200, blank=True, default='')
     academic_year = models.CharField(max_length=40, blank=True, default='')
     intramurals_name = models.CharField(max_length=200, blank=True, default='')
+    intramurals_start_date = models.DateField(null=True, blank=True)
+    non_competition_dates = models.JSONField(default=list, blank=True)
     password_min_length = models.PositiveSmallIntegerField(default=8)
     password_require_uppercase = models.BooleanField(default=False)
     password_require_number = models.BooleanField(default=False)

@@ -1,14 +1,19 @@
 """Superadmin portal views."""
 from __future__ import annotations
 
+from django.views.decorators.cache import never_cache
+from django.views.decorators.debug import sensitive_post_parameters
+
 import json
+import csv
+from datetime import timedelta
 
 from django.contrib import messages
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import PasswordChangeForm
 from django.core.paginator import Paginator
-from django.http import HttpResponse, JsonResponse
+from django.http import FileResponse, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -24,6 +29,7 @@ from events.superadmin_service import (
     chart_user_activity,
     create_portal_user,
     dashboard_cards,
+    dashboard_distributions,
     delete_portal_user,
     event_progress,
     export_leaderboard_csv,
@@ -63,6 +69,8 @@ def _display_name(user):
 @_superadmin_required
 def superadmin_dashboard(request):
     cards = dashboard_cards()
+    distributions = dashboard_distributions()
+    cards['published_results'] = next(row['value'] for row in distributions['publication'] if row['label'] == 'Published')
     activities = recent_activities(10)
     return render(request, 'superadmindash/dashboard.html', {
         'active': 'dashboard',
@@ -72,6 +80,9 @@ def superadmin_dashboard(request):
         'chart_month': chart_events_by_month(),
         'chart_points': chart_department_points(),
         'chart_activity': chart_user_activity(),
+        'chart_status': distributions['status'],
+        'chart_roles': distributions['roles'],
+        'chart_publication': distributions['publication'],
         'activities': activities,
         'notification_count': len(activities),
         # legacy keys for any leftover template refs
@@ -99,6 +110,23 @@ def superadmin_users(request):
     paginator = Paginator(rows, 10)
     page_obj = paginator.get_page(request.GET.get('page'))
     departments = list(Department.objects.filter(status='active').order_by('name').values_list('name', flat=True))
+    all_rows = superadmin_user_rows()
+    summary = {
+        'total': len(all_rows),
+        'admins': sum(row['role'] in ('Admin', 'Super Admin') for row in all_rows),
+        'judges': sum(row['role'] == 'Judge' for row in all_rows),
+        'active': sum(row['is_active'] for row in all_rows),
+    }
+    params = request.GET.copy()
+    params.pop('page', None)
+    sort_headers = []
+    for key, label in (('name', 'Name'), ('email', 'Email'), ('role', 'Role'),
+                       ('status', 'Status'), ('last_login', 'Last Login')):
+        header_params = params.copy()
+        header_params['sort'] = key
+        header_params['dir'] = 'desc' if sort == key and direction == 'asc' else 'asc'
+        sort_headers.append({'label': label, 'key': key, 'url': '?' + header_params.urlencode(),
+                             'aria_sort': ('descending' if direction == 'desc' else 'ascending') if sort == key else 'none'})
     return render(request, 'superadmindash/users.html', {
         'active': 'users',
         'user_display': _display_name(request.user),
@@ -113,10 +141,15 @@ def superadmin_users(request):
         'search_query': q,
         'sort': sort,
         'direction': direction,
+        'summary': summary,
+        'sort_headers': sort_headers,
+        'pagination_query': params.urlencode(),
+        'page_numbers': paginator.get_elided_page_range(page_obj.number, on_each_side=1, on_ends=1),
     })
 
 
 @_superadmin_required
+@never_cache
 def superadmin_user_detail(request, user_id):
     rows = superadmin_user_rows()
     row = next((r for r in rows if r['id'] == user_id), None)
@@ -182,15 +215,21 @@ def superadmin_user_update(request, user_id):
 
 @require_POST
 @_superadmin_required
+@never_cache
 def superadmin_user_reset_password(request, user_id):
     payload = _parse_json(request)
+    password = payload.get('password')
+    if not isinstance(password, str) or not password:
+        return JsonResponse({'success': False, 'message': 'Enter a new password.'}, status=400)
+    if password != payload.get('password_confirm'):
+        return JsonResponse({'success': False, 'message': 'Passwords do not match.'}, status=400)
     try:
         password = reset_user_password(
             actor=request.user,
             user_id=user_id,
             password=payload.get('password') or None,
         )
-        return JsonResponse({'success': True, 'message': 'Password reset.', 'temporary_password': password})
+        return JsonResponse({'success': True, 'message': 'Password reset successfully.'})
     except SuperadminServiceError as exc:
         return JsonResponse({'success': False, 'message': str(exc)}, status=400)
 
@@ -222,13 +261,43 @@ def superadmin_event_monitoring(request):
     q = (request.GET.get('q') or '').strip().lower()
     type_filter = (request.GET.get('type') or 'all').lower()
     status_filter = (request.GET.get('status') or 'all').lower()
+    classification = request.GET.get('classification', 'all')
+    period = request.GET.get('period', 'all')
+    today = timezone.localdate()
+    month_start = today.replace(day=1)
+    previous_start = (month_start - timedelta(days=1)).replace(day=1)
 
     events = (
         Event.objects.select_related('faculty_account')
         .prefetch_related('bracket_matches', 'assigned_judges')
         .order_by('-event_date', 'name')
     )
-    rows = [serialize_monitoring_row(ev) for ev in events]
+    rows = []
+    for event in events:
+        row = serialize_monitoring_row(event)
+        progress = event_progress(event)
+        judge_pct = round(100 * progress['judges_submitted'] / progress['judges_total']) if progress['judges_total'] else 0
+        row.update(date=event.event_date, classification_key=event.event_classification,
+                   progress=100 if row['status_key'] == 'completed' else min(100, max(0, progress['results_pct'], judge_pct)))
+        rows.append(row)
+    predicates = (
+        ('total', 'Total Events', 'calendar', lambda row: True),
+        ('ongoing', 'Ongoing Events', 'play', lambda row: row['status_key'] == 'ongoing'),
+        ('completed', 'Completed Events', 'check', lambda row: row['status_key'] == 'completed'),
+        ('criteria', 'Criteria-Based Events', 'list', lambda row: 'criteria' in row['event_type'].lower()),
+    )
+    summary = []
+    for key, label, icon, predicate in predicates:
+        current = sum(predicate(row) for row in rows if row['date'] and month_start <= row['date'] <= today)
+        previous = sum(predicate(row) for row in rows if row['date'] and previous_start <= row['date'] < month_start)
+        summary.append({'key': key, 'label': label, 'icon': icon,
+                        'count': sum(predicate(row) for row in rows), 'delta': current - previous})
+    if classification in dict(Event.CLASSIFICATION_CHOICES):
+        rows = [row for row in rows if row['classification_key'] == classification]
+    if period == 'month':
+        rows = [row for row in rows if row['date'] and row['date'].year == today.year and row['date'].month == today.month]
+    elif period == 'year':
+        rows = [row for row in rows if row['date'] and row['date'].year == today.year]
     if type_filter == 'match':
         rows = [r for r in rows if 'match' in r['event_type'].lower()]
     elif type_filter == 'criteria':
@@ -243,6 +312,20 @@ def superadmin_event_monitoring(request):
             or q in r['faculty'].lower()
             or q in r['admin'].lower()
         ]
+    if request.GET.get('export') == 'csv':
+        response = HttpResponse(content_type='text/csv; charset=utf-8')
+        response['Content-Disposition'] = 'attachment; filename="event-monitoring.csv"'
+        writer = csv.writer(response)
+        writer.writerow(['Event Name', 'Event Type', 'Category', 'Classification', 'Assigned Admin', 'Assigned Faculty', 'Status', 'Event Date', 'Progress (%)'])
+        for row in rows:
+            cells = [row[key] for key in ('name', 'event_type', 'category', 'classification', 'admin', 'faculty', 'status', 'event_date', 'progress')]
+            writer.writerow(["'" + value if isinstance(value, str) and value.lstrip().startswith(('=', '+', '-', '@', '\t', '\r', '\n')) else value for value in cells])
+        return response
+    params = request.GET.copy()
+    params.pop('page', None)
+    params.pop('export', None)
+    export_params = params.copy()
+    export_params['export'] = 'csv'
     paginator = Paginator(rows, 12)
     page_obj = paginator.get_page(request.GET.get('page'))
     return render(request, 'superadmindash/event_monitoring.html', {
@@ -253,11 +336,18 @@ def superadmin_event_monitoring(request):
         'search_query': request.GET.get('q', ''),
         'selected_type': type_filter,
         'selected_status': status_filter,
+        'selected_classification': classification,
+        'selected_period': period,
+        'classifications': Event.CLASSIFICATION_CHOICES,
+        'summary': summary,
+        'pagination_query': params.urlencode(),
+        'export_query': export_params.urlencode(),
         'total_count': len(rows),
     })
 
 
 @_superadmin_required
+@never_cache
 def superadmin_event_detail(request, event_id):
     event = get_object_or_404(
         Event.objects.select_related('faculty_account', 'chief_judge')
@@ -273,6 +363,13 @@ def superadmin_event_detail(request, event_id):
         judges = judge_monitoring(event).get('rows', [])
     except Exception:
         pass
+    from events.monitoring_activity import participant_judging_activity
+    activity_error = False
+    try:
+        participant_activity = participant_judging_activity(event)
+    except Exception:
+        participant_activity = []
+        activity_error = True
     return render(request, 'superadmindash/event_monitor_detail.html', {
         'active': 'events',
         'user_display': _display_name(request.user),
@@ -283,6 +380,8 @@ def superadmin_event_detail(request, event_id):
         'progress': progress,
         'schedule': schedule,
         'judges': judges,
+        'participant_activity': participant_activity,
+        'activity_error': activity_error,
         'row': serialize_monitoring_row(event),
     })
 
@@ -327,15 +426,77 @@ def superadmin_leaderboard_export(request):
 
 @_superadmin_required
 def superadmin_settings(request):
-    from django.conf import settings as dj_settings
     settings_obj = get_system_settings()
+    from events.database_recovery import worker_ready
     return render(request, 'superadmindash/settings.html', {
         'active': 'settings',
         'user_display': _display_name(request.user),
         'settings': settings_obj,
         'section': request.GET.get('section', 'general'),
-        'allow_restore': bool(getattr(dj_settings, 'SUPERADMIN_ALLOW_RESTORE', False)),
+        'allow_restore': worker_ready(),
     })
+
+
+@require_POST
+@_superadmin_required
+@never_cache
+def superadmin_database_export(request):
+    from events.database_backup import DatabaseExportError, export_database
+    from events.audit_service import record_audit
+    archive = None
+    try:
+        archive = export_database()
+        record_audit(user=request.user, action='Exported Database', module='System Settings',
+            description='Generated a PostgreSQL database backup for download.', request=request)
+        stamp = timezone.localtime().strftime('%Y%m%d-%H%M%S')
+        response = FileResponse(archive, as_attachment=True, filename=f'eventtab-database-{stamp}.dump',
+                                content_type='application/octet-stream')
+        response['X-Content-Type-Options'] = 'nosniff'
+        return response
+    except DatabaseExportError as exc:
+        if archive is not None:
+            archive.close()
+        error_message = str(exc)
+    except Exception:
+        if archive is not None:
+            archive.close()
+        error_message = 'The export could not be recorded or completed. Please try again.'
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return JsonResponse({'success': False, 'message': error_message}, status=503)
+    messages.error(request, error_message)
+    return redirect('superadmin_settings')
+
+
+@require_POST
+@_superadmin_required
+@never_cache
+@sensitive_post_parameters('current_password')
+def superadmin_database_restore(request):
+    from events.database_recovery import DatabaseRecoveryError, queue_recovery
+    if not request.user.check_password(request.POST.get('current_password', '')):
+        return JsonResponse({'success': False, 'message': 'Your Super Admin password is incorrect.'}, status=400)
+    if request.POST.get('confirmation') != 'RESTORE':
+        return JsonResponse({'success': False, 'message': 'Type RESTORE to confirm database recovery.'}, status=400)
+    upload = request.FILES.get('backup')
+    if upload is None:
+        return JsonResponse({'success': False, 'message': 'Choose an EventTab .dump backup.'}, status=400)
+    try:
+        job = queue_recovery(upload, request.user, request=request)
+        return JsonResponse({'success': True, 'job_id': job['id'], 'message': 'Recovery queued. The application will pause while the database is restored.'}, status=202)
+    except DatabaseRecoveryError as exc:
+        return JsonResponse({'success': False, 'message': str(exc)}, status=400)
+    except Exception:
+        return JsonResponse({'success': False, 'message': 'Recovery could not be queued. Please try again.'}, status=503)
+
+
+@_superadmin_required
+@never_cache
+def superadmin_recovery_status(request, job_id):
+    from events.database_recovery import read_json, root
+    job = read_json(root() / (job_id.hex + '.json'))
+    if not job:
+        return JsonResponse({'success': False, 'message': 'Recovery job not found.'}, status=404)
+    return JsonResponse({'success': True, 'state': job['state'], 'message': job.get('message', 'Recovery is queued.')})
 
 
 @require_POST
@@ -421,6 +582,7 @@ def superadmin_change_password(request):
 
 
 @_superadmin_required
+@never_cache
 def superadmin_activity_logs(request):
     """Audit Logs — read-only unified activity monitor."""
     from events.audit_service import (
@@ -442,6 +604,8 @@ def superadmin_activity_logs(request):
     selected_action = request.GET.get('action', 'all')
     date_from = request.GET.get('date_from', '')
     date_to = request.GET.get('date_to', '')
+    selected_result = request.GET.get('result', 'all')
+    insight_period = request.GET.get('insights', '7')
     export_format = (request.GET.get('export') or '').lower()
     detail_id = request.GET.get('detail', '')
 
@@ -462,6 +626,8 @@ def superadmin_activity_logs(request):
         date_from=date_from,
         date_to=date_to,
     )
+    if selected_result in ('success', 'failed'):
+        rows = [row for row in rows if row['status_key'] == selected_result]
 
     if export_format in ('csv', 'excel', 'xlsx', 'pdf'):
         record_audit(
@@ -491,12 +657,48 @@ def superadmin_activity_logs(request):
         return response
 
     opts = filter_options(rows if len(rows) < 1500 else None)
-    paginator = Paginator(rows, 25)
+    paginator = Paginator(rows, 8)
     page_obj = paginator.get_page(request.GET.get('page'))
     today = timezone.localdate()
     today_count = sum(1 for r in rows if timezone.localtime(r['created_at']).date() == today)
     failed_count = sum(1 for r in rows if r.get('status_key') == 'failed')
     latest = rows[0]['datetime_display'] if rows else 'N/A'
+
+    def change(current, previous):
+        if not previous:
+            return '—' if not current else 'New'
+        return f'{(current - previous) / previous:+.0%}'
+
+    dates = [(row, timezone.localtime(row['created_at']).date()) for row in rows]
+    yesterday = today - timedelta(days=1)
+    recent = sum(today - timedelta(days=6) <= date <= today for _, date in dates)
+    previous = sum(today - timedelta(days=13) <= date < today - timedelta(days=6) for _, date in dates)
+    yesterday_count = sum(date == yesterday for _, date in dates)
+    failed_today = sum(date == today and row['status_key'] == 'failed' for row, date in dates)
+    failed_yesterday = sum(date == yesterday and row['status_key'] == 'failed' for row, date in dates)
+    if insight_period not in ('7', '30', 'all'):
+        insight_period = '7'
+    insight_rows = [
+        row for row, date in dates
+        if insight_period == 'all' or today - timedelta(days=int(insight_period) - 1) <= date <= today
+    ]
+    insight_failed = sum(row['status_key'] == 'failed' for row in insight_rows)
+    insight_success = len(insight_rows) - insight_failed
+    modules = {}
+    for row in insight_rows:
+        modules[row['module']] = modules.get(row['module'], 0) + 1
+    top_modules = sorted(modules.items(), key=lambda item: (-item[1], item[0]))[:5]
+    params = request.GET.copy()
+    params.pop('page', None)
+    params.pop('export', None)
+    params.pop('detail', None)
+    quick_filters = []
+    for label, key, value in [('Success', 'result', 'success'), ('Failed', 'result', 'failed'),
+                               ('Login', 'action', 'Logged In'), ('Logout', 'action', 'Logged Out')]:
+        quick_params = params.copy()
+        active = quick_params.get(key) == value
+        quick_params[key] = 'all' if active else value
+        quick_filters.append({'label': label, 'key': label.lower(), 'active': active, 'query': quick_params.urlencode()})
 
     return render(request, 'superadmindash/activitylogs.html', {
         'active': 'audit_logs',
@@ -507,6 +709,23 @@ def superadmin_activity_logs(request):
         'today_count': today_count,
         'failed_count': failed_count,
         'latest_activity': latest,
+        'weekly_change': change(recent, previous),
+        'today_change': change(today_count, yesterday_count),
+        'failed_change': change(failed_today, failed_yesterday),
+        'selected_result': selected_result,
+        'insight_period': insight_period,
+        'insight_count': len(insight_rows),
+        'insight_success': insight_success,
+        'insight_failed': insight_failed,
+        'success_percent': round(100 * insight_success / len(insight_rows)) if insight_rows else 0,
+        'failed_percent': round(100 * insight_failed / len(insight_rows)) if insight_rows else 0,
+        'top_modules': [
+            {'name': name, 'count': count, 'percent': round(100 * count / top_modules[0][1])}
+            for name, count in top_modules
+        ],
+        'quick_filters': quick_filters,
+        'filter_query': params.urlencode(),
+        'insight_fields': [(key, value) for key, value in params.items() if key != 'insights'],
         'search_query': q,
         'selected_user': selected_user,
         'selected_role': selected_role,

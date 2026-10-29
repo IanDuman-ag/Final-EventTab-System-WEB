@@ -66,3 +66,71 @@
   font-size: 12px;
   font-weight: 600;
 }
+
+/* Individuals registry: compact participant dashboard. */
+.participants-list-page .teams-main { max-width: 1440px; padding: 20px 24px 28px; margin: 0 auto; }
+.participants-list-page .topbar { display: none; }
+.participants-breadcrumb { display: flex; gap: 12px; align-items: center; color: #4b6589; font-size: 12px; margin-bottom: 18px; }
+.participants-breadcrumb span { color: #8ca0bb; font-size: 20px; }
+.participants-heading { display: flex; align-items: center; gap: 13px; margin-bottom: 18px; }
+.participants-heading-icon { width: 46px; height: 46px; display: grid; place-items: center; border: 1px solid #e3ebf5; border-radius: 9px; background: #fff; color: #1266ff; box-shadow: 0 2px 6px #16396509; }
+.participants-heading-icon svg { width: 24px; fill: currentColor; }
+.participants-heading h1 { margin: 0 0 4px; color: #102447; font: 750 25px/1.2 Arial,sans-serif; letter-spacing: -.5px; }
+.participants-heading p { margin: 0; font-size: 13px; color: #587297; }
+.participants-event-context { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 15px; font-size: 12px; }
+.participants-event-context label { display: flex; align-items: center; gap: 9px; margin: 0; color: #526b8d; }
+#participant-event { max-width: 370px; min-width: 200px; border: 1px solid #d6e1f0; border-radius: 5px; background: #fff; color: #23446c; padding: 7px 9px; font-size: 12px; }
+.participants-event-context a { text-decoration: none; color: #1a65db; white-space: nowrap; }
+.participants-stats { display: grid; grid-template-columns: repeat(auto-fit,minmax(190px,1fr)); gap: 10px; margin-bottom: 12px; }
+.participants-stat { display: flex; align-items: center; gap: 15px; min-height: 102px; padding: 18px; background: #fff; border: 1px solid #e0e8f3; border-radius: 9px; box-shadow: 0 2px 7px #173c6505; }
+.participants-stat-icon { width: 55px; height: 55px; display: grid; place-items: center; flex-shrink: 0; border-radius: 10px; background: #eaf3ff; color: #0767ff; }
+.participants-stat-icon svg { width: 30px; height: 30px; fill: currentColor; }
+.participants-stat.division-tone-1 .participants-stat-icon { color: #f10b7f; background: #ffebf5; }
+.participants-stat.division-tone-2 .participants-stat-icon { color: #7054b1; background: #f0edff; }
+.participants-stat > div { display: grid; gap: 3px; }
+.participants-stat > div > span { font-size: 12px; color: #49658b; }
+.participants-stat strong { font-size: 26px; line-height: 1.2; color: #10294f; font-weight: 750; font-variant-numeric: tabular-nums; }
+.participants-stat small { font-size: 11px; color: #7990ad; }
+.participants-list-page .teams-panel { border: 1px solid #dde7f3; border-radius: 9px; box-shadow: none; overflow: hidden; }
+.participants-list-page .teams-toolbar { padding: 13px 14px; border-bottom: 1px solid #e6edf7; }
+.participants-list-page .teams-filters { display: flex; align-items: center; flex-wrap: nowrap; gap: 8px; width: 100%; }
+.participants-list-page .teams-search { flex: 1 1 260px; min-width: 180px; }
+.participants-list-page .teams-search input { width: 100%; height: 36px; font-size: 11px; padding-left: 34px; }
+.participants-list-page .teams-search svg { width: 15px; height: 15px; }
+.participants-list-page .teams-select { flex: 0 1 150px; min-width: 115px; width: auto; height: 36px; font-size: 11px; padding: 6px 28px 6px 10px; }
+.participants-list-page .teams-filter-btn, .participants-list-page .teams-add-btn { height: 36px; min-height: 36px; padding: 7px 12px; font-size: 11px; border-radius: 6px; white-space: nowrap; box-shadow: none; }
+.participants-list-page .teams-add-btn { display: inline-flex; align-items: center; gap: 5px; background: #0963ff; border-color: #0963ff; }
+.participants-list-page .teams-table { min-width: 740px; margin-bottom: 0; table-layout: auto; }
+.participants-list-page .teams-table thead th { background: #f5f8fd; padding: 12px 10px; font-size: 10px; color: #536d91; white-space: nowrap; }
+.participants-list-page .teams-table td { padding: 10px; font-size: 12px; border-color: #e8eef6; background: #fff; }
+.participants-list-page .teams-table td:nth-child(1), .participants-list-page .teams-table th:nth-child(1) { width: 30px; padding-left: 16px; }
+.participants-list-page .teams-table td:nth-child(2) { width: 48px; }
+.participants-list-page .teams-table td:nth-child(3) { width: 58px; }
+.participants-list-page .teams-table td[data-label="Department"] { max-width: 220px; color: #465f83; line-height: 1.5; white-space: normal; }
+.participants-list-page .teams-code-pill { min-width: 29px; height: 29px; padding: 4px 7px; border-radius: 6px; background: #f0f5fc; color: #23446e; font-size: 12px; font-weight: 650; }
+.participants-list-page .candidate-thumb { width: 38px; height: 38px; border-radius: 7px; }
+.participants-list-page .candidate-thumb--empty { font-size: 8px; white-space: normal; text-align: center; }
+.participants-list-page .teams-name-cell strong { font-size: 12px; color: #183152; }
+.participants-list-page .teams-name-cell small { font-size: 10px; color: #7890af; margin-top: 3px; }
+.participant-division { display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; border-radius: 6px; font-size: 10px; font-weight: 600; color: #6a7c96; background: #f2f5f9; white-space: nowrap; }
+.participant-division > span { font-size: 16px; line-height: 1; }
+.participant-division.division-tone-0 { color: #0767e5; background: #e5f3ff; }.participant-division.division-tone-1 { color: #e60077; background: #ffe7f2; }.participant-division.division-tone-2 { color: #7054b1; background: #f0edff; }
+.participants-list-page .teams-row-actions { gap: 5px; flex-wrap: nowrap; }
+.participants-list-page .teams-action-btn { width: 29px; height: 29px; min-width: 29px; border-radius: 6px; background: #fff; border: 1px solid #dce7f7; color: #1265ff; }
+.participants-list-page .teams-action-btn svg { width: 14px; height: 14px; }.participants-list-page .teams-action-btn--danger { border-color: #ffdae1; color: #ff324c; }
+.participants-list-page input[type=checkbox] { accent-color: #1265ff; width: 13px; height: 13px; cursor: pointer; }
+.participants-bulk { display: flex; align-items: center; gap: 12px; padding: 8px 15px; background: #f4f8ff; font-size: 12px; }.participants-bulk[hidden] { display: none; }
+.participants-list-page .teams-pagination { padding: 12px 14px; font-size: 11px; color: #6d85a4; background: #fff; }
+@media(max-width:900px) { .participants-list-page .teams-filters { flex-wrap: wrap; }.participants-list-page .teams-search { flex-basis: 100%; }.participants-list-page .teams-select { flex: 1; }.participants-list-page .teams-main { padding: 16px; } }
+@media(max-width:600px) { .participants-stats { grid-template-columns: 1fr; }.participants-stat { min-height: 82px; padding: 13px 16px; }.participants-event-context { align-items: flex-start; flex-wrap: wrap; }#participant-event { max-width: 100%; min-width: 0; flex: 1; }.participants-event-context label { width: 100%; }.participants-list-page .teams-select { min-width: 120px; }.participants-list-page .teams-table { display: table; }.participants-list-page .teams-table thead { display: table-header-group; }.participants-list-page .teams-table tr { display: table-row; }.participants-list-page .teams-table td { display: table-cell; }.participants-list-page .teams-table td::before { display: none; } }
+
+.participants-heading .participants-event-context { margin: 0 0 0 auto; flex-direction: column; align-items: flex-end; gap: 6px; }
+.participants-heading #participant-event { min-width: 120px; max-width: 220px; }
+@media(max-width:900px) { .participants-heading { flex-wrap: wrap; }.participants-heading .participants-event-context { width: 100%; flex-direction: row; align-items: center; margin-left: 0; } }
+
+.participants-list-page .teams-main { font-family: Arial, sans-serif; }
+.participants-list-page .teams-search { max-width: none; }
+.participant-division svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+@media(max-width:600px) { .participants-list-page .teams-select { flex: 1 1 calc(50% - 8px); min-width: 0; }.participants-list-page .teams-filter-btn { flex: 0 0 80px; }.participants-list-page .teams-add-btn { flex: 1 1 180px; width: auto; } }
+
+.participant-gender { color: #465f83; font-size: 11px; white-space: nowrap; }

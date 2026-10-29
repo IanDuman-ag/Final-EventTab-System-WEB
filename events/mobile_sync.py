@@ -5,7 +5,7 @@ import re
 from datetime import time as dt_time
 
 from django.contrib.auth import get_user_model
-from django.db import models, transaction
+from django.db import connection, models, transaction
 
 from .models import (
     BracketTeam,
@@ -182,6 +182,25 @@ def _sync_candidates(judging_event, event, explicit_candidates=None):
             )
         return
 
+    from .divisions import division_config
+    if division_config(event):
+        # Division appearance changes must not recreate the mobile identities.
+        mapping = (event.result_processing_config or {}).get('mobile_round_mapping', {}).get('candidates', {})
+        existing = list(judging_event.candidates.all())
+        used = set()
+        next_number = max((row.number for row in existing), default=0) + 1
+        for entry in event.criteria_entries.select_related('department'):
+            stored = next((row for row in existing if row.pk == mapping.get(str(entry.pk))), None)
+            if stored is None:
+                matches = [row for row in existing if row.pk not in used and row.name == entry.display_name[:200]]
+                stored = matches[0] if len(matches) == 1 else None
+            if stored is None:
+                stored = Candidate.objects.create(event=judging_event, name=entry.display_name[:200], number=next_number,
+                    department=entry.department.name if entry.department else '')
+                next_number += 1
+            used.add(stored.pk)
+        judging_event.candidates.exclude(pk__in=used).delete()
+        return
     judging_event.candidates.all().delete()
     entries = list(event.criteria_entries.select_related('department').prefetch_related('member_links__individual')) if event.scoring_method == 'criteria' else []
     if entries:
@@ -216,15 +235,32 @@ def _sync_candidates(judging_event, event, explicit_candidates=None):
 
 
 def _assign_judges(judging_event, event):
-    if map_judging_status(event) != 'active':
-        judging_event.assigned_judges.clear()
-        return
-    portal_assignees = list(event.assigned_judges.all())
-    if portal_assignees:
-        judging_event.assigned_judges.set(portal_assignees)
-        return
-    judges = get_active_judge_users()
-    judging_event.assigned_judges.set(judges)
+    # Assignment is independent of whether scoring has opened. Never grant
+    # every judge access when the admin has selected no assignees.
+    judging_event.assigned_judges.set(event.assigned_judges.all())
+
+
+def _create_judging_event(**values):
+    """Support shared databases with the mobile-only required image_url column."""
+    table = JudgingEvent._meta.db_table
+    with connection.cursor() as cursor:
+        columns = {column.name for column in connection.introspection.get_table_description(cursor, table)}
+        if 'image_url' not in columns or any(field.column == 'image_url' for field in JudgingEvent._meta.local_fields):
+            return JudgingEvent.objects.create(**values)
+        # Some mobile installations added this NOT NULL column without a DB
+        # default. Supply its empty value explicitly; do not alter their schema.
+        instance = JudgingEvent(**values)
+        fields = [field for field in instance._meta.local_concrete_fields if not field.primary_key]
+        names = [field.column for field in fields] + ['image_url']
+        params = [field.get_db_prep_save(field.pre_save(instance, True), connection) for field in fields] + ['']
+        quote = connection.ops.quote_name
+        cursor.execute(
+            f"INSERT INTO {quote(table)} ({', '.join(quote(name) for name in names)}) "
+            f"VALUES ({', '.join(['%s'] * len(params))}) RETURNING {quote(instance._meta.pk.column)}",
+            params,
+        )
+        event_id = cursor.fetchone()[0]
+    return JudgingEvent.objects.get(pk=event_id)
 
 
 @transaction.atomic
@@ -244,7 +280,7 @@ def sync_event_to_mobile(event, explicit_candidates=None):
 
     judging_event = getattr(event, 'judging_event', None)
     if judging_event is None:
-        judging_event = JudgingEvent.objects.create(
+        judging_event = _create_judging_event(
             title=event.name,
             category=category,
             date=event.event_date,
@@ -284,7 +320,7 @@ def delete_mobile_for_event(event):
 
 @transaction.atomic
 def sync_judge_to_mobile_events(user):
-    """Assign a judge to all active mobile events when account is created/activated."""
+    """Refresh only portal-authorized assignments when a judge is activated."""
     if not user.is_active:
         return
     from core.views import get_assignment_role
@@ -292,8 +328,13 @@ def sync_judge_to_mobile_events(user):
     if get_assignment_role(user) != 'Judge':
         return
 
-    active_events = JudgingEvent.objects.filter(status='active')
-    for judging_event in active_events:
+    # Account creation must not subscribe a judge to unrelated events.
+    # Include upcoming assignments so Home and Events agree before scoring opens.
+    assigned = JudgingEvent.objects.filter(
+        portal_event__assigned_judges=user,
+        portal_event__scoring_method='criteria',
+    ).exclude(portal_event__status=Event.STATUS_INACTIVE).distinct()
+    for judging_event in assigned:
         judging_event.assigned_judges.add(user)
 
 

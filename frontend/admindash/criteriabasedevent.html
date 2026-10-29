@@ -4,22 +4,29 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Criteria-Based Events · EventTab</title>
+  <title>{% if individual_workspace %}Individuals{% else %}Criteria-Based Events{% endif %} · EventTab</title>
   {% include 'admindash/_bootstrap.html' %}
-  <link rel="stylesheet" href="{% static 'admindash/criteriabasedevent.css' %}?v=20260927a">
+  <link rel="stylesheet" href="{% static 'admindash/criteriabasedevent.css' %}?v=20261027genderdivisions">
   <link rel="stylesheet" href="{% static 'admindash/bootstrap-admin.css' %}?v=1">
 </head>
-<body class="admin-dashboard-page admin-dashboard-v2 criteria-page match-events-page">
+<body class="admin-dashboard-page admin-dashboard-v2 criteria-page match-events-page{% if individual_workspace %} individual-workspace{% endif %}">
   <div class="dashboard-shell d-flex flex-column flex-lg-row">
-    {% include 'admindash/_sidebar.html' with active='events_criteria' %}
+    {% if individual_workspace %}{% include 'admindash/_sidebar.html' with active='candidates' %}{% else %}{% include 'admindash/_sidebar.html' with active='events_criteria' %}{% endif %}
     <div class="content-area v2-content">
       <header class="v2-topbar match-topbar">
         <div>
-          <a class="match-breadcrumb" href="{% url 'admin_criteria_events' %}">Events / <strong>Criteria-Based</strong></a>
-          <h2 class="v2-welcome">Judging operations</h2>
+          {% if individual_workspace %}<span class="match-breadcrumb">Participants / <strong>Individuals</strong></span><h2 class="v2-welcome">Individuals</h2>{% else %}<a class="match-breadcrumb" href="{% url 'admin_criteria_events' %}">Events / <strong>Criteria-Based</strong></a><h2 class="v2-welcome">Judging operations</h2>{% endif %}
         </div>
       </header>
       <main class="container-fluid v2-main match-main">
+        {% if individual_workspace %}
+        <div class="individual-workspace-tools"><label for="individual-event">Event <select id="individual-event" aria-label="Select event for participant order"></select></label><a href="{% url 'admin_candidates' %}?event={{ request.GET.event|default:'all' }}" class="btn btn-outline-secondary">Manage individuals</a></div>
+        <p id="individual-workspace-message" role="status" aria-live="polite"></p>
+        <div id="individual-performance-mount"></div>
+        <div class="individual-workspace-save"><button type="button" class="btn btn-primary" id="save-individual-order">Save Order</button></div>
+        {% endif %}
+        <div {% if individual_workspace %}hidden{% endif %}>
+
         {% if messages %}
         <div class="match-messages" aria-live="polite">
           {% for message in messages %}<p class="match-message match-message--{{ message.tags }}">{{ message }}</p>{% endfor %}
@@ -121,6 +128,7 @@
           </div>
           {% endif %}
         </section>
+        </div>
       </main>
     </div>
   </div>
@@ -206,14 +214,61 @@
         <fieldset>
           <legend>Event Image</legend>
           <label class="btn btn-outline-secondary match-secondary" for="event-image">Upload Event Image</label>
-          <input class="form-control mt-2" type="file" id="event-image" name="event_image" accept="image/jpeg,image/png,image/webp" aria-describedby="event-image-help event-image-error">
-          <p id="event-image-help" class="points-editor-hint">JPEG, PNG, or WebP, up to 5 MB. Leave empty to keep the current image.</p>
+          <input class="form-control mt-2" type="file" id="event-image" name="event_image" accept="image/*,.heic,.heif,.hif,.tif,.tiff" aria-describedby="event-image-help event-image-error">
+          <p id="event-image-help" class="points-editor-hint">Images up to 5 MB. HEIC, HEIF, BMP, and TIFF are converted to PNG. Leave empty to keep the current image.</p>
           <p id="event-image-error" class="wizard-error" role="alert"></p>
           <img id="event-image-preview" alt="Event image preview" hidden style="max-width:100%;width:320px;max-height:200px;object-fit:contain;border-radius:8px">
         </fieldset>
+          <fieldset class="criteria-optional-settings">
+            <legend>Optional Settings</legend>
+            <div class="criteria-optional-grid">
+              <section class="criteria-setting-panel criteria-setting-divisions" aria-labelledby="optional-divisions-title">
+                <div class="criteria-setting-heading">
+                  <span class="criteria-setting-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="7" r="3"/><circle cx="5" cy="9" r="2.5"/><circle cx="19" cy="9" r="2.5"/><path d="M6 20v-3a6 6 0 0 1 12 0v3H6ZM1 18v-2a4 4 0 0 1 4-4h1a8 8 0 0 0-2 6H1Zm19 0a8 8 0 0 0-2-6h1a4 4 0 0 1 4 4v2h-3Z"/></svg></span>
+                  <label id="optional-divisions-title" for="enable-event-divisions">Enable Divisions</label>
+                  <input type="checkbox" role="switch" id="enable-event-divisions" aria-describedby="optional-divisions-description">
+                </div>
+                <p class="criteria-setting-description" id="optional-divisions-description">Group participants into separate competition divisions when needed.</p>
+                <p class="criteria-setting-example"><span aria-hidden="true">i</span> Example: Male/Female, Junior/Senior, Group A/B, etc.</p>
+              </section>
+              <section class="criteria-setting-panel criteria-setting-scoring" aria-labelledby="optional-scoring-title">
+                <div class="criteria-setting-heading">
+                  <span class="criteria-setting-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 3h10v3h4v3a5 5 0 0 1-5 5h-.1a6 6 0 0 1-2.9 2v3h4v2H7v-2h4v-3a6 6 0 0 1-2.9-2H8a5 5 0 0 1-5-5V6h4V3ZM5 8v1a3 3 0 0 0 2.2 2.9A12 12 0 0 1 7 9V8H5Zm12 0v1c0 1-.1 2-.2 2.9A3 3 0 0 0 19 9V8h-2Z"/></svg></span>
+                  <label id="optional-scoring-title" for="default-scoring-mode">Default Scoring Mode</label>
+                </div>
+                <div class="criteria-setting-content">
+                  <select class="form-select" id="default-scoring-mode" aria-describedby="optional-scoring-description"><option value="scoring">Scoring (Weighted Criteria)</option><option value="ranking">Ranking (Ordinal Ranking)</option></select>
+                  <p class="criteria-setting-help" id="optional-scoring-description">Choose how judges will score participants. You can change this later in the Judging Setup.</p>
+                </div>
+              </section>
+              <section class="criteria-setting-panel criteria-setting-results" aria-labelledby="optional-results-title">
+                <div class="criteria-setting-heading">
+                  <span class="criteria-setting-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 2h14a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Zm0 3v4h14V5H5Zm1 7v3h3v-3H6Zm5 0v3h3v-3h-3Zm5 0v7h3v-7h-3ZM6 17v2h3v-2H6Zm5 0v2h3v-2h-3Z"/></svg></span>
+                  <h4 id="optional-results-title">How should the final winners be determined?</h4>
+                </div>
+                <div class="criteria-result-options" role="radiogroup" aria-labelledby="optional-results-title">
+                  <label><input type="radio" name="final_result_basis_choice" value="final_round_only" checked><span>Final Round Scores Only</span></label>
+                  <label><input type="radio" name="final_result_basis_choice" value="weighted_rounds"><span>Combine Rounds by Percentage</span></label>
+                  <label><input type="radio" name="final_result_basis_choice" value="cumulative_rounds"><span>Average Scores from All Rounds</span></label>
+                </div>
+                <p id="result-method-legacy-note" class="criteria-setting-help" hidden>This event uses its saved legacy result method. Select an option to change it.</p>
+              </section>
+            </div>
+            <select id="final-result-basis" hidden aria-hidden="true" tabindex="-1"><option value="final_round_only">Final Round Scores Only</option><option value="weighted_rounds">Combine Rounds by Percentage</option><option value="cumulative_rounds">Average Scores from All Rounds</option><option value="main_round" hidden>Legacy Main Round Result</option><option value="manual_authorized" hidden>Legacy Authorized Result</option></select>
+            <div id="result-round-weights" hidden></div>
+          </fieldset>
         </section>
         <section class="wizard-panel" data-step="2">
           <div class="wizard-section-title"><span>02</span><div><h3>Participants</h3><p>Select the teams or individuals who will compete in this event.</p></div></div>
+          <section id="event-division-editor" aria-labelledby="event-division-title" hidden>
+            <div class="event-division-header">
+              <span class="event-division-number" aria-hidden="true">2</span>
+              <div class="event-division-heading"><h3 id="event-division-title">Divisions <span>(Optional)</span></h3><p>Create divisions and assign participants. Divisions are optional and dynamic.</p></div>
+              <button type="button" id="add-event-division" class="btn btn-primary match-primary">+ Add Division</button>
+            </div>
+            <input type="hidden" id="event-division-names">
+            <div id="event-division-list" aria-live="polite"><p class="event-division-empty">No divisions yet.</p></div>
+          </section>
           <fieldset class="team-picker" id="team-picker">
             <legend>
               <span id="participant-legend-label">Participating Groups</span>
@@ -241,7 +296,7 @@
             <div class="team-options criteria-hidden" id="candidate-options">
               {% for cand in candidates %}
               <label data-kind="individual" data-department-id="{{ cand.department_id|default:'' }}" data-department="{% if cand.department %}{{ cand.department.name }}{% endif %}" data-course="" data-search="{{ cand.name|lower }} {{ cand.number|lower }} {% if cand.department %}{{ cand.department.name|lower }}{% endif %}">
-                <input type="checkbox" class="form-check-input participant-check" value="{{ cand.id }}" data-name="#{{ cand.number }} {{ cand.name }}">
+                <input type="checkbox" class="form-check-input participant-check" value="{{ cand.id }}" data-name="#{{ cand.number }} {{ cand.name }}" data-display-name="{{ cand.name }}" data-number="{{ cand.number }}" data-gender="{{ cand.gender }}" data-image="{% if cand.image %}{{ cand.image.url }}{% endif %}">
                 <span><strong>#{{ cand.number }} {{ cand.name }}</strong><small>{% if cand.department %}{{ cand.department.name }}{% else %}Individual{% endif %}</small></span>
               </label>
               {% empty %}<p data-kind="individual">No active individuals available.</p>{% endfor %}
@@ -252,6 +307,20 @@
               <button type="button" class="btn btn-outline-secondary match-secondary" id="add-pair-entry">+ Add Pair</button>
             </div>
           </fieldset>
+          <section id="event-performance-setup" class="po-panel" aria-label="Participants and performance order">
+            <header class="po-heading"><span class="po-heading-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 8v-2c0-3 3-5 7-5s7 2 7 5v2H5ZM3 7a3 3 0 0 0 0 6v-6Zm18 0v6a3 3 0 0 0 0-6Z"/></svg></span><div><h3>Participants &amp; Performance Order</h3><p>Select participants and arrange the order they will appear on stage.</p></div></header>
+            <div class="po-tabs" role="tablist" aria-label="Participant views">
+              <button type="button" role="tab" aria-selected="true" data-performance-tab="order"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h2v2H4zm5 0h11v2H9zM4 11h2v2H4zm5 0h11v2H9zM4 17h2v2H4zm5 0h11v2H9z"/></svg> Performance Order</button>
+              <button type="button" role="tab" aria-selected="false" data-performance-tab="participants"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM5 20v-2c0-3 3-5 7-5s7 2 7 5v2Z"/></svg> Participants List</button>
+            </div>
+            <div id="performance-participant-picker" hidden>
+              <div id="performance-registry-picker"></div>
+
+            </div>
+            <div class="po-tools"><select id="performance-division-filter" aria-label="Filter by division" hidden><option value="">All divisions</option></select><input type="search" id="performance-search" placeholder="Search participants..." aria-label="Search performance order"></div>
+            <div id="performance-order-note" class="po-note"><span aria-hidden="true">&#9432;</span> &nbsp; Drag rows or use the arrow buttons. Order is saved separately for each division.</div>
+            <div class="po-table-wrap" tabindex="0" role="region" aria-label="Participant appearance order"><table><thead><tr><th class="po-order-column">Order</th><th>Individual</th><th>Department</th><th id="performance-division-heading" hidden>Division</th><th class="po-order-column">Actions</th></tr></thead><tbody id="event-performance-rows"></tbody></table></div>
+          </section>
           <fieldset hidden>
             <legend>Event Format</legend>
             <div class="format-cards format-cards-two">
@@ -288,7 +357,7 @@
               </section>
               <section class="judging-card" id="judging-segments-section">
                 <header class="judging-card-head"><div><h4><span>2</span> Judging Segments &amp; Criteria</h4><p>Add judging segments for the selected round. Each segment has its own criteria and weights.</p></div></header>
-                <div class="judging-toolbar"><label>Round <select class="form-select" id="judging-round-select"></select></label><button type="button" class="btn btn-primary match-primary" id="judging-add-segment">+ Add Segment</button></div>
+                <div class="judging-toolbar"><label>Round <select class="form-select" id="judging-round-select"></select></label><button type="button" class="btn btn-primary match-primary" id="judging-add-segment">+ Add Segment</button></div><label>Scoring Mode<select class="form-select" id="round-scoring-mode"><option value="scoring">Scoring (Weighted Criteria)</option><option value="ranking">Ranking (Ordinal Ranking)</option></select></label><p class="field-hint">Ranking uses the weighted mean of judges? ordinal ranks; lowest is best. Each judged group requires distinct ranks. Existing criteria define the ranking targets.</p>
                 <div id="judging-segment-list" class="judging-segment-list"></div>
               </section>
             </div>
@@ -321,8 +390,6 @@
               <details class="judging-card judging-advanced" id="judging-advanced">
                 <summary><strong><span>6</span> Advanced Options</strong><small>Additional settings for judging and tabulation.</small></summary>
                 <div class="judging-advanced-body">
-                  <label>Result Verification<select class="form-select" id="advanced-result-verification"><option value="admin_only">Admin only</option><option value="tabulator_verification">Tabulation Officer verification</option><option value="tabulator_admin_approval">Tabulation Officer verification + Admin approval</option></select></label>
-                  <label class="judging-check"><input class="form-check-input" type="checkbox" id="advanced-carry-scores"> Carry previous round scores to next round</label>
                   <label class="judging-check"><input class="form-check-input" type="checkbox" id="advanced-special-awards"> Enable Special Awards</label>
                   <label>Tie-breaking Rule<select class="form-select" id="advanced-tie-rule"><option value="highest_final_round">Highest final round score</option><option value="highest_selected_criterion">Highest selected criterion</option><option value="manual_decision">Manual decision</option></select></label>
                   <label>Default Max Score per Criterion<input class="form-control" type="number" id="advanced-default-max" min="1" step="1" value="100"></label>
@@ -332,7 +399,8 @@
           </div>
         </section>
 
-        <dialog id="round-modal" class="judging-modal" aria-labelledby="round-modal-title"><div class="judging-modal-body"><header><h3 id="round-modal-title">Add Round</h3><button type="button" data-close-judging-modal aria-label="Close">&times;</button></header><input type="hidden" id="simple-round-edit-id"><label>Round Name<input class="form-control" id="simple-round-name" maxlength="80" placeholder="Preliminary Round"></label><label>Advancement<select class="form-select" id="simple-round-advancement"><option value="advance_all">All participants continue</option><option value="top_ranking">Top participants advance</option><option value="final">Final round / no advancement</option></select></label><label id="simple-round-qualifiers-wrap" hidden>Number to Advance<input class="form-control" id="simple-round-qualifiers" type="number" min="1" step="1" value="1"></label><footer><button type="button" data-close-judging-modal class="btn btn-outline-secondary match-secondary">Cancel</button><button type="button" id="simple-round-save" class="btn btn-primary match-primary">Save Round</button></footer></div></dialog>
+        <dialog id="event-division-modal" class="judging-modal" aria-labelledby="event-division-modal-title"><div class="judging-modal-body"><header><h3 id="event-division-modal-title">Add Division</h3><button type="button" data-close-judging-modal aria-label="Close division editor">&times;</button></header><input type="hidden" id="event-division-edit-name"><label for="event-division-name">Division Name</label><input class="form-control" id="event-division-name" maxlength="100" autocomplete="off" aria-describedby="event-division-error"><p id="event-division-error" class="wizard-error" role="alert"></p><footer><button type="button" data-close-judging-modal class="btn btn-outline-secondary match-secondary">Cancel</button><button type="button" id="save-event-division" class="btn btn-primary match-primary">Save Division</button></footer></div></dialog>
+        <dialog id="round-modal" class="judging-modal" aria-labelledby="round-modal-title"><div class="judging-modal-body"><header><h3 id="round-modal-title">Add Round</h3><button type="button" data-close-judging-modal aria-label="Close">&times;</button></header><input type="hidden" id="simple-round-edit-id"><label>Round Name<input class="form-control" id="simple-round-name" maxlength="80" placeholder="Preliminary Round"></label><label>Advancement<select class="form-select" id="simple-round-advancement"><option value="advance_all">All participants continue</option><option value="top_ranking">Top participants advance</option><option value="final">Final round / no advancement</option></select></label><label id="simple-round-qualifiers-wrap" hidden><span id="simple-round-qualifiers-label">Number to Advance</span><input class="form-control" id="simple-round-qualifiers" type="number" min="1" step="1" value="1" aria-describedby="simple-round-qualifiers-hint"><small id="simple-round-qualifiers-hint" class="field-hint"></small></label><footer><button type="button" data-close-judging-modal class="btn btn-outline-secondary match-secondary">Cancel</button><button type="button" id="simple-round-save" class="btn btn-primary match-primary">Save Round</button></footer></div></dialog>
         <dialog id="segment-modal" class="judging-modal" aria-labelledby="segment-modal-title"><div class="judging-modal-body"><header><h3 id="segment-modal-title">Add Segment</h3><button type="button" data-close-judging-modal aria-label="Close">&times;</button></header><input type="hidden" id="simple-segment-edit-id"><label>Segment Name<input class="form-control" id="simple-segment-name" maxlength="120" placeholder="Production Number"></label><footer><button type="button" data-close-judging-modal class="btn btn-outline-secondary match-secondary">Cancel</button><button type="button" id="simple-segment-save" class="btn btn-primary match-primary">Save Segment</button></footer></div></dialog>
         <dialog id="criterion-modal" class="judging-modal" aria-labelledby="criterion-modal-title"><div class="judging-modal-body"><header><h3 id="criterion-modal-title">Add Criterion</h3><button type="button" data-close-judging-modal aria-label="Close">&times;</button></header><input type="hidden" id="simple-criterion-edit-id"><input type="hidden" id="simple-criterion-category-id"><label>Criterion Name<input class="form-control" id="simple-criterion-name" maxlength="120" placeholder="Stage Presence"></label><label>Weight %<input class="form-control" id="simple-criterion-weight" type="number" min="0" max="100" step="0.01"></label><label>Max Score<input class="form-control" id="simple-criterion-max" type="number" min="1" step="0.01" value="100"></label><label class="judging-check"><input class="form-check-input" id="simple-criterion-detailed" type="checkbox"> Add detailed subcriteria</label><div id="simple-subcriteria-section" class="judging-subcriteria-editor" hidden><h4>Subcriteria</h4><div id="simple-subcriteria-rows"></div><button type="button" id="simple-subcriterion-add" class="btn btn-outline-secondary match-secondary">+ Add Subcriterion</button><p id="simple-subcriteria-total" aria-live="polite"></p></div><footer><button type="button" data-close-judging-modal class="btn btn-outline-secondary match-secondary">Cancel</button><button type="button" id="simple-criterion-save" class="btn btn-primary match-primary">Save Criterion</button></footer></div></dialog>
         <dialog id="judging-delete-modal" class="judging-modal judging-delete-modal" aria-labelledby="judging-delete-title" aria-describedby="judging-delete-message"><div class="judging-modal-body"><header><h3 id="judging-delete-title">Delete item?</h3><button type="button" data-close-judging-modal aria-label="Close">&times;</button></header><p id="judging-delete-message">This action cannot be undone.</p><footer><button type="button" data-close-judging-modal class="btn btn-outline-secondary match-secondary">Cancel</button><button type="button" id="judging-delete-confirm" class="judging-danger-action">Delete</button></footer></div></dialog>
@@ -612,15 +680,6 @@
         <section class="wizard-panel criteria-hidden" data-legacy-step="6" hidden inert aria-hidden="true">
           <div class="wizard-section-title"><span>06</span><div><h3>Awards and Result Rules</h3><p>Configure placements, special awards, optional points, approval, and publication rules.</p></div></div>
           <div class="wizard-grid">
-            <label>Final Result Basis
-              <select class="form-select" id="final-result-basis">
-                <option value="main_round">Main Round Result</option>
-                <option value="final_round_only">Final Round Only</option>
-                <option value="cumulative_rounds">Cumulative Rounds</option>
-                <option value="weighted_rounds">Weighted Rounds</option>
-                <option value="manual_authorized">Manual Authorized Result</option>
-              </select>
-            </label>
             <label>Placements to Publish <input class="form-control" id="placements-count" type="number" min="1" max="20" step="1" value="3"></label>
           </div>
           <fieldset id="points-fieldset">
@@ -694,7 +753,7 @@
             <div class="team-options" id="pageant-existing-candidates">
               {% for cand in candidates %}
               <label data-search="{{ cand.name|lower }} {{ cand.number|lower }}">
-                <input type="checkbox" class="form-check-input participant-check" value="{{ cand.id }}" data-name="#{{ cand.number }} {{ cand.name }}">
+                <input type="checkbox" class="form-check-input participant-check" value="{{ cand.id }}" data-name="#{{ cand.number }} {{ cand.name }}" data-display-name="{{ cand.name }}" data-number="{{ cand.number }}" data-image="{% if cand.image %}{{ cand.image.url }}{% endif %}">
                 <span><strong>#{{ cand.number }} {{ cand.name }}</strong><small>{% if cand.department %}{{ cand.department.name }}{% else %}Candidate{% endif %}</small></span>
               </label>
               {% empty %}<p>No active candidates in the registry yet.</p>{% endfor %}
@@ -926,6 +985,6 @@
     <option value="Production Number"></option>
     <option value="Question and Answer"></option>
   </datalist>
-  <script src="{% static 'admindash/criteriabasedevent.js' %}?v=20261013c"></script>
+  <script src="{% static 'admindash/criteriabasedevent.js' %}?v=20261027advancedoptions"></script>
 </body>
 </html>

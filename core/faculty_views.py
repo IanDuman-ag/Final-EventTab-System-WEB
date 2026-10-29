@@ -99,6 +99,20 @@ def faculty_dashboard(request):
 @_faculty_required
 def faculty_my_events(request):
     qs = faculty_event_qs(request.user)
+    assigned_events = list(qs)
+    assigned_rows = {event.pk: _publication_row(event, request.user) for event in assigned_events}
+    summary = {
+        'total': len(assigned_events),
+        'published': sum(event.results_finalized for event in assigned_events),
+        'ready': sum(row['publication_ready'] for row in assigned_rows.values()),
+        'criteria': sum(row['event_type'] == 'Criteria-Based' for row in assigned_rows.values()),
+        'match': sum(row['event_type'] == 'Match-Based' for row in assigned_rows.values()),
+    }
+    categories = sorted({event.category for event in assigned_events if event.category})
+    event_type = request.GET.get('type', 'all')
+    event_type = event_type if event_type in {'criteria', 'match'} else 'all'
+    category = request.GET.get('category', '')
+    category = category if category in categories else ''
     q = (request.GET.get('q') or '').strip()
     status = (request.GET.get('status') or 'all').strip()
     sort = (request.GET.get('sort') or '-updated_at').strip()
@@ -109,17 +123,23 @@ def faculty_my_events(request):
         qs = qs.filter(
             Q(name__icontains=q) | Q(category__icontains=q) | Q(venue__icontains=q) | Q(division__icontains=q)
         )
+    if event_type != 'all':
+        label = 'Criteria-Based' if event_type == 'criteria' else 'Match-Based'
+        qs = qs.filter(pk__in=[pk for pk, row in assigned_rows.items() if row['event_type'] == label])
+    if category:
+        qs = qs.filter(category=category)
     if status == 'published':
         qs = qs.filter(Q(publication_status='published') | Q(results_finalized=True))
     elif status == 'draft':
         qs = qs.filter(publication_status='draft', results_finalized=False)
     elif status == 'ready':
-        from events.publication_service import match_publication_review
-        ready_ids = [event.pk for event in qs if event_type_label(event) == 'Match-Based' and match_publication_review(event)['can_publish']]
+        ready_ids = [pk for pk, row in assigned_rows.items() if row['publication_ready']]
         qs = qs.filter(pk__in=ready_ids)
     qs = qs.order_by(sort)
     page = Paginator(qs, 10).get_page(request.GET.get('page') or 1)
-    rows = [_publication_row(e, request.user) for e in page.object_list]
+    rows = [assigned_rows[e.pk] for e in page.object_list]
+    pagination_query = request.GET.copy()
+    pagination_query.pop('page', None)
     return render(request, 'facultydash/my_events.html', {
         'active': 'my_events',
         'page_obj': page,
@@ -127,6 +147,11 @@ def faculty_my_events(request):
         'search_query': q,
         'status_filter': status,
         'sort': sort,
+        'event_summary': summary,
+        'categories': categories,
+        'type_filter': event_type,
+        'category_filter': category,
+        'pagination_query': pagination_query.urlencode(),
         'user_display': request.user.get_full_name() or request.user.username,
     })
 
@@ -135,11 +160,23 @@ def _publication_row(event, user):
     from events.publication_service import can_publish_event, match_publication_review
     if event_type_label(event) != 'Match-Based':
         row = serialize_event_row(event)
+        from events.criteria_faculty_service import criteria_faculty_portal
+        publication_portal = criteria_faculty_portal(event, user)
+        publication = publication_portal['publication']
+        ready = publication['can_publish']
+        queued = not event.results_finalized and (ready or bool(
+            (event.result_processing_config or {}).get('ready_for_publication')))
         row.update(
-            tournament_format='', in_publication_queue=False, publication_ready=False,
-            show_publication_button=False, show_unpublish_button=False,
-            status='Published Results' if event.results_finalized else event.get_publication_status_display(),
-            status_key='published' if event.results_finalized or event.publication_status == 'published' else 'draft',
+            tournament_format='', in_publication_queue=queued, publication_ready=ready,
+            show_publication_button=False,
+            show_unpublish_button=can_publish_event(user, event) and event.results_finalized and bool(
+                (event.result_processing_config or {}).get('published_at')),
+            status='Published Results' if event.results_finalized else 'Ready for Publication' if ready else 'Pending Approval' if queued else 'Pending Review',
+            status_key='published' if event.results_finalized else 'ready' if ready else 'pending',
+            publication_errors=publication['publish_errors'],
+            judges_submitted=publication_portal['summary']['submitted_judges'],
+            judges_total=publication_portal['summary']['total_judges'],
+            judging_progress_percent=publication_portal['current_round']['progress_percent'],
             action='Open Event', action_url=reverse('faculty_event_manage', args=[event.pk]),
         )
         return row
@@ -168,13 +205,17 @@ def faculty_publication_review(request, event_id):
     publisher = (request.user.is_staff and not request.user.groups.filter(
         name__iregex=r'^(Faculty|Faculty In-Charge|Tabulator|Judge|Judges|Scorer|Viewers)$').exists())
     event = get_object_or_404(Event, pk=event_id) if publisher else _get_event(request, event_id)
-    if event is None or event_type_label(event) != 'Match-Based':
+    if event is None or event_type_label(event) not in {'Match-Based', 'Criteria-Based'}:
         return HttpResponse('Event access required.', status=403)
+    if event_type_label(event) == 'Criteria-Based' and (
+        request.method != 'POST' or request.POST.get('action') != 'unpublish'
+    ):
+        return HttpResponse('Use the criteria event results page to review and publish results.', status=403)
     if request.method == 'POST':
         try:
             with transaction.atomic():
                 event = Event.objects.select_for_update().get(pk=event.pk)
-                review = match_publication_review(event)
+                review = match_publication_review(event) if event_type_label(event) == 'Match-Based' else None
                 action = request.POST.get('action')
                 if action == 'insert_playoff':
                     from events.publication_service import insert_missing_third_place
@@ -251,7 +292,7 @@ def faculty_event_manage(request, event_id):
         if request.method not in {'GET', 'HEAD', 'POST'}:
             return HttpResponse('Method not allowed.', status=405)
         selected_tab = request.POST.get('tab') if request.method == 'POST' else request.GET.get('tab')
-        selected_tab = selected_tab if selected_tab in {'overview', 'rounds', 'judges', 'participants', 'results'} else 'rounds'
+        selected_tab = selected_tab if selected_tab in {'overview', 'rounds', 'judges', 'participants', 'removal_history', 'results'} else 'rounds'
         current_index = (event.result_processing_config or {}).get('active_stage_index', 0)
         raw_index = request.POST.get('selected_round_index', current_index) if request.method == 'POST' else request.GET.get('round', current_index)
         try:
@@ -264,14 +305,25 @@ def faculty_event_manage(request, event_id):
                 return HttpResponse('Assigned Faculty-in-Charge access required.', status=403)
             action = request.POST.get('action', '')
             try:
-                if action in {'approve_round', 'unlock_round'}:
+                if action in {'remove_participant', 'restore_participant'}:
+                    from events.participant_removal_service import remove_criteria_participant, restore_criteria_participant
+                    if request.POST.get('confirm') != 'yes':
+                        raise FacultyServiceError('Explicit confirmation is required.')
+                    if action == 'remove_participant':
+                        remove_criteria_participant(event, request.user, request.POST.get('participant_id'),
+                                                    request.POST.get('reason'), request.POST.get('explanation', ''))
+                        messages.success(request, 'Participant removed. Previous scores are preserved.')
+                    else:
+                        restore_criteria_participant(event, request.user, request.POST.get('removal_id'))
+                        messages.success(request, 'Participant restored, subject to round qualification rules.')
+                elif action in {'approve_round', 'unlock_round'}:
                     try:
                         round_index = int(request.POST.get('round_index', ''))
                     except (TypeError, ValueError) as exc:
                         raise FacultyServiceError('Select a valid round.') from exc
                     if action == 'approve_round':
                         approve_criteria_round(event, request.user, round_index, request.POST.getlist('qualifier_ids'))
-                        messages.success(request, 'Round results approved. Unlock the next round when you are ready.')
+                        messages.success(request, 'Final round approved. Review and publish the official results.' if round_index == len(criteria_rounds(event)) - 1 else 'Round results approved. Unlock the next round when you are ready.')
                     else:
                         unlock_criteria_round(event, request.user, round_index)
                         selected_index = round_index
@@ -279,6 +331,18 @@ def faculty_event_manage(request, event_id):
                 elif action == 'submit_publication':
                     submit_criteria_publication(event, request.user)
                     messages.success(request, 'Final results submitted for authorized publication.')
+                elif action == 'publish':
+                    if request.POST.get('confirm') != 'yes':
+                        raise FacultyServiceError('Explicit publication confirmation is required.')
+                    with transaction.atomic():
+                        event = Event.objects.select_for_update().get(pk=event.pk)
+                        publication = criteria_faculty_portal(event, request.user)['publication']
+                        if not publication['can_publish']:
+                            raise FacultyServiceError(' '.join(publication['publish_errors']) or 'Results are unavailable for publication.')
+                        if not publication['submitted_at']:
+                            submit_criteria_publication(event, request.user)
+                        publish_results(event, request.user)
+                    messages.success(request, 'Official results published. Public results and championship standings are updated.')
                 else:
                     raise FacultyServiceError('Unknown event action.')
             except (FacultyServiceError, ValueError, TypeError) as exc:
@@ -606,7 +670,11 @@ def _judge_completion(event):
         requirements = set(event.scoring_categories.filter(purpose='official').values_list(
             'assigned_round_id', 'criteria__id'))
         requirements = {(rid, cid) for rid, cid in requirements if cid is not None}
-        expected_keys = {(rid, cid, pid) for rid, cid in requirements for pid in event.participant_ids}
+        from events.criteria_faculty_service import criteria_rounds
+        from events.participant_removal_service import active_participant_ids
+        round_indices = {row['id']: index for index, row in enumerate(criteria_rounds(event))}
+        expected_keys = {(rid, cid, pid) for rid, cid in requirements
+                         for pid in active_participant_ids(event, round_indices.get(rid))}
         submissions = event.criteria_score_submissions.filter(
             is_active=True, participant_id__in=event.participant_ids,
             status__in=['SUBMITTED', 'NEEDS_REVIEW', 'VERIFIED', 'APPROVED'],
@@ -621,13 +689,15 @@ def _judge_completion(event):
         } for judge in judges]
         return {'rows': rows, 'submitted': sum(row['complete'] for row in rows),
                 'total': len(judges), 'expected_per_judge': len(expected_keys)}
-    candidates = judging.candidates.count() if judging else 0
+    from events.participant_removal_service import active_mobile_candidate_ids
+    candidate_ids = active_mobile_candidate_ids(event) if judging else []
+    candidates = len(candidate_ids)
     criteria = judging.criteria.count() if judging else 0
     expected = candidates * criteria
     rows = []
     for judge in judges:
         locked = JudgeScore.objects.filter(
-            candidate__event=judging, judge=judge, is_locked=True,
+            candidate__event=judging, candidate_id__in=candidate_ids, judge=judge, is_locked=True,
         ).count() if judging else 0
         rows.append({
             'name': judge.get_full_name() or judge.username,
@@ -720,8 +790,9 @@ def _category_filter_options(event) -> list[str]:
     if names:
         return names
     if event.judging_event_id:
+        from events.participant_removal_service import active_mobile_candidate_ids
         depts = (
-            Candidate.objects.filter(event_id=event.judging_event_id)
+            Candidate.objects.filter(event_id=event.judging_event_id, pk__in=active_mobile_candidate_ids(event))
             .exclude(department='')
             .values_list('department', flat=True)
             .distinct()
@@ -733,8 +804,9 @@ def _category_filter_options(event) -> list[str]:
 def _enough_locked_scores(event) -> bool:
     if not event.judging_event_id:
         return False
+    from events.participant_removal_service import active_mobile_candidate_ids
     locked = JudgeScore.objects.filter(
-        candidate__event_id=event.judging_event_id, is_locked=True
+        candidate__event_id=event.judging_event_id, candidate_id__in=active_mobile_candidate_ids(event), is_locked=True
     ).exists()
     return locked
 
@@ -1291,7 +1363,8 @@ def _tabulator_results_payload(user, event_id=None, category='', tab='overall', 
         participant_count = event.bracket_teams.count()
         scored_count = len([r for r in match_standings if r.get('wins') or r.get('points')])
     elif event.judging_event_id:
-        participant_count = Candidate.objects.filter(event_id=event.judging_event_id).count()
+        from events.participant_removal_service import active_mobile_candidate_ids
+        participant_count = len(active_mobile_candidate_ids(event))
         scored_count = len([r for r in results if r.get('has_score')])
 
     monitoring = judge_monitoring(event) if mode == 'scoring' else {
@@ -1404,7 +1477,8 @@ def _tabulator_results_payload(user, event_id=None, category='', tab='overall', 
         payload.update(results=rows, participants=rows, winner=None,
                        status_message=page['scope_notice'] or page['status_message'],
                        criteria_round_name=page['round_name'], is_finalized=page['is_published'])
-        payload['stats'].update(participant_count=len(set(event.participant_ids)),
+        from events.participant_removal_service import active_participant_ids
+        payload['stats'].update(participant_count=len(set(active_participant_ids(event))),
                                 scored_count=sum(row['complete'] for row in rows))
     return payload
 
@@ -1447,11 +1521,13 @@ def tabulator_dashboard(request):
     if event and payload['event_kind'] == 'criteria':
         judging = event.judging_event
         if judging:
+            from events.participant_removal_service import active_mobile_candidate_ids
+            candidate_ids = active_mobile_candidate_ids(event)
             judge_ids = event.assigned_judges.values_list('pk', flat=True)
             criterion_ids = judging.criteria.values_list('pk', flat=True)
-            expected = judging.candidates.count() * judging.criteria.count() * event.assigned_judges.count()
+            expected = len(candidate_ids) * judging.criteria.count() * event.assigned_judges.count()
             submitted = JudgeScore.objects.filter(
-                candidate__event=judging, criterion_id__in=criterion_ids,
+                candidate__event=judging, candidate_id__in=candidate_ids, criterion_id__in=criterion_ids,
                 judge_id__in=judge_ids, is_locked=True,
             ).count()
             ctx['dashboard_stats'] = {

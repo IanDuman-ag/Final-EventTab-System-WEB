@@ -65,6 +65,10 @@ ACTIONS = [
     'Resubmitted Score',
     'Changed System Settings',
     'Exported Audit Logs',
+    'Exported Database',
+    'Requested Database Restore',
+    'Restored Database',
+    'Failed Database Restore',
 ]
 
 
@@ -312,7 +316,9 @@ _JUDGE_ACTION_MAP = {
 def _normalize_from_judge(log: JudgeActivityLog) -> dict:
     module, action = _JUDGE_ACTION_MAP.get(log.action, ('Criteria-Based Event', log.get_action_display()))
     details = (log.details or '').lower()
-    if 'draft' in details and 'save' in details:
+    if log.action == JudgeActivityLog.ACTION_VIEW_SCORES and details.startswith('started scoring contestant'):
+        action = 'Started Scoring Contestant'
+    elif 'draft' in details and 'save' in details:
         action = 'Saved Draft Score'
     elif 'resubmit' in details or 'return' in details or 'correction' in details:
         action = 'Resubmitted Score'
@@ -363,11 +369,15 @@ def build_audit_rows(
         rows.append(_normalize_from_audit(log))
 
     # Legacy sources (avoid duplicates by time+user+action when AuditLog already covers)
-    seen = {(r['user_name'], r['action'], r['created_at'].replace(microsecond=0)) for r in rows}
+    def identity(row):
+        return (row['user_name'], row['action'], row['created_at'].replace(microsecond=0),
+                row['event_name'], row['contestant'], row['description'])
+
+    seen = {identity(row) for row in rows}
 
     for entry in LogEntry.objects.select_related('user', 'content_type').order_by('-action_time')[:limit]:
         row = _normalize_from_logentry(entry)
-        key = (row['user_name'], row['action'], row['created_at'].replace(microsecond=0))
+        key = identity(row)
         if key in seen:
             continue
         seen.add(key)
@@ -375,7 +385,7 @@ def build_audit_rows(
 
     for jlog in JudgeActivityLog.objects.select_related('judge', 'event', 'candidate').order_by('-timestamp')[:limit]:
         row = _normalize_from_judge(jlog)
-        key = (row['user_name'], row['action'], row['created_at'].replace(microsecond=0))
+        key = identity(row)
         if key in seen:
             continue
         seen.add(key)

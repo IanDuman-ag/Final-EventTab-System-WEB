@@ -24,8 +24,8 @@
     message.textContent = '';
     previewEventImage(savedImageUrl);
     if (!file) return;
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) {
-      message.textContent = 'Choose a JPEG, PNG, or WebP image up to 5 MB.';
+    if (file.size > 5 * 1024 * 1024) {
+      message.textContent = 'Choose an image up to 5 MB.';
       input.value = '';
       return;
     }
@@ -43,6 +43,18 @@
   let pendingBracketAction = null;
   let eventNameManual = false;
   let editingEventId = null;
+  let submitting = false;
+  let restoringDraft = false;
+  let draftWrites = Promise.resolve();
+  const draftPrefix = `eventtab-match-draft:${form.dataset.draftOwner}:${window.MATCH_EVENT_ACADEMIC_YEAR}:`;
+  const draftDatabase = new Promise((resolve, reject) => {
+    const request = indexedDB.open('eventtab-match-wizard', 1);
+    request.onupgradeneeded = () => request.result.createObjectStore('drafts');
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  // Handle storage restrictions even before the wizard is opened.
+  draftDatabase.catch(() => {});
   const scoringDefaults = JSON.parse($('#championship-scoring-defaults').textContent);
   let savedWinPoints = null;
   let savedScoringRules = null;
@@ -60,6 +72,8 @@
     'Table Tennis': 'best_of_games',
     Chess: 'win_draw_loss',
     'Sepak Takraw': 'best_of_sets',
+    Pickleball: 'manual_winner',
+    Dart: 'manual_winner',
     Esports: 'maps_rounds_custom',
     Custom: 'manual_winner'
   };
@@ -913,6 +927,7 @@
     } finally {
       button.disabled = false;
       button.textContent = 'Generate Bracket';
+      saveBrowserDraft();
     }
   }
 
@@ -1002,6 +1017,7 @@
     }</tbody></table>`;
     $('#schedule-conflicts').hidden = true;
     error.textContent = '';
+    saveBrowserDraft();
   }
 
   function valueText(name) {
@@ -1161,11 +1177,116 @@
     });
     wizard.classList.toggle('at-review', step === 5);
     $('#wizard-back').style.visibility = step === 1 ? 'hidden' : 'visible';
+    $('#publish-action').hidden = step !== 5;
     error.textContent = '';
     if (step === 2) syncThirdPlaceVisibility();
     if (step === 3) syncPlayingAreas();
     if (step === 5) buildReview();
     $('.wizard-body').scrollTop = 0;
+    saveBrowserDraft();
+  }
+
+  function draftKey() {
+    return draftPrefix + (editingEventId === null ? 'new' : editingEventId);
+  }
+
+  async function draftStorage(mode, key, value) {
+    const database = await draftDatabase;
+    return new Promise((resolve, reject) => {
+      const transaction = database.transaction('drafts', mode);
+      const store = transaction.objectStore('drafts');
+      const request = mode === 'readonly' ? store.get(key)
+        : value === null ? store.delete(key) : store.put(value, key);
+      transaction.oncomplete = () => resolve(request.result);
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error);
+    });
+  }
+
+  function saveBrowserDraft() {
+    if (!wizard.open || restoringDraft || submitting) return draftWrites;
+    syncHiddenFields();
+    if (step === 5) $('#publish-action').disabled = collectPublishGaps().length > 0;
+    const fields = Array.from(form.elements).filter(field => field.name
+      && !['csrfmiddlewaretoken', 'publication_status'].includes(field.name)
+      && !['file', 'submit', 'button'].includes(field.type)).map(field => ({
+        name: field.name, value: field.value, checked: field.checked,
+      }));
+    const snapshot = {
+      version: 1, step, fields, teamIds: selectedTeams().map(team => team.id),
+      matchPreview, drawOrder, pointsRows, actualMatchCount, automaticAdvanceCount,
+      legacyFormatPending, eventNameManual, savedImageUrl,
+      image: $('#event-image').files[0] || null,
+      schedule: JSON.parse($('#schedule-rows').value),
+      hasSchedule: Boolean($('#schedule-preview tbody')),
+    };
+    const key = draftKey();
+    // Serialize writes so an older snapshot cannot overwrite a newer one.
+    draftWrites = draftWrites.catch(() => {}).then(() => draftStorage('readwrite', key, snapshot));
+    draftWrites.then(() => {
+      $('#draft-status').textContent = 'Draft saved on this browser';
+    }, () => {
+      $('#draft-status').textContent = 'Auto-save unavailable. Use Save as Draft.';
+    });
+    return draftWrites;
+  }
+
+  async function restoreBrowserDraft() {
+    let snapshot;
+    try { snapshot = await draftStorage('readonly', draftKey()); }
+    catch (_) { return false; }
+    if (!snapshot || snapshot.version !== 1) return false;
+    restoringDraft = true;
+    try {
+      snapshot.fields.forEach(saved => {
+        Array.from(form.elements).filter(field => field.name === saved.name
+          && !['file', 'submit', 'button'].includes(field.type)).forEach(field => {
+          if (['radio', 'checkbox'].includes(field.type)) {
+            if (field.value === saved.value) field.checked = saved.checked;
+          } else field.value = saved.value;
+        });
+      });
+      $$('.team-check').forEach(input => { input.checked = snapshot.teamIds.includes(Number(input.value)); });
+      matchPreview = snapshot.matchPreview;
+      drawOrder = snapshot.drawOrder;
+      pointsRows = snapshot.pointsRows;
+      actualMatchCount = snapshot.actualMatchCount;
+      automaticAdvanceCount = snapshot.automaticAdvanceCount;
+      legacyFormatPending = snapshot.legacyFormatPending;
+      eventNameManual = snapshot.eventNameManual;
+      savedImageUrl = snapshot.savedImageUrl;
+      if (snapshot.image) {
+        const transfer = new DataTransfer();
+        transfer.items.add(snapshot.image);
+        $('#event-image').files = transfer.files;
+        imagePreviewUrl = URL.createObjectURL(snapshot.image);
+        $('#event-image-preview').src = imagePreviewUrl;
+        $('#event-image-preview').hidden = false;
+      } else previewEventImage(savedImageUrl);
+      renderPointsEditor();
+      renderBracket();
+      if (snapshot.hasSchedule) {
+        $('#schedule-preview').innerHTML = `<table><thead><tr><th>Game</th><th>Matchup</th><th>Date</th><th>Time</th><th>Venue</th></tr></thead><tbody>${snapshot.schedule.map(row => {
+          const match = matchPreview.find(item => item.key === row.match_key);
+          const editable = form.elements.schedule_mode.value === 'manual';
+          return `<tr data-match-key="${escapeHtml(row.match_key)}" data-date="${escapeHtml(row.date)}" data-time="${escapeHtml(row.time)}" data-venue="${escapeHtml(row.venue)}" data-area="${escapeHtml(row.playing_area)}">
+            <td>Game ${escapeHtml(match?.number || '')}</td><td>${escapeHtml(match ? matchDisplayLabel(match) : '')}</td>
+            <td>${editable ? `<input data-date type="date" value="${escapeHtml(row.date)}">` : escapeHtml(row.date)}</td>
+            <td>${editable ? `<input data-time type="time" value="${escapeHtml(row.time)}">` : escapeHtml(row.time)}</td>
+            <td>${editable ? `<input data-venue value="${escapeHtml(row.venue)}">` : escapeHtml(row.venue)}</td></tr>`;
+        }).join('')}</tbody></table>`;
+      }
+      $('#auto-settings').hidden = form.elements.schedule_mode.value === 'manual';
+      $('#legacy-format-notice').hidden = !legacyFormatPending;
+      $('#generate-bracket').disabled = legacyFormatPending;
+      updateSelectedTeamCount();
+      updatePointsState();
+      syncSportCustom();
+      updateEventNameHint(buildEventName(sportLabel(), form.elements.division.value));
+      showStep(snapshot.step);
+      $('#draft-status').textContent = 'Resumed draft saved on this browser';
+      return true;
+    } finally { restoringDraft = false; }
   }
 
   function resetWizard() {
@@ -1196,6 +1317,7 @@
     $('#bracket-preview').innerHTML = '<p>Select teams, then generate a preview.</p>';
     $('#schedule-preview').innerHTML = '<p>Generate the bracket first, then create its schedule.</p>';
     $('#publish-action').disabled = false;
+    $('#draft-status').textContent = '';
     updateSelectedTeamCount();
     updatePointsState();
     syncThirdPlaceVisibility();
@@ -1206,13 +1328,16 @@
     showStep(1);
   }
 
-  function openCreate() {
+  async function openCreate() {
+    await draftWrites.catch(() => {});
     resetWizard();
+    await restoreBrowserDraft();
     wizard.showModal();
     form.elements.sport_type.focus();
   }
 
-  function fillEditor(event) {
+  async function fillEditor(event) {
+    await draftWrites.catch(() => {});
     resetWizard();
     editingEventId = event.id;
     savedImageUrl = event.image_url || '';
@@ -1313,6 +1438,7 @@
     updateSelectedTeamCount();
     updatePointsState();
     syncPairingUi();
+    await restoreBrowserDraft();
     wizard.showModal();
   }
 
@@ -1340,7 +1466,11 @@
   }
 
   $('#open-wizard').addEventListener('click', openCreate);
-  $('#close-wizard').addEventListener('click', () => wizard.close());
+  async function closeWizard() {
+    await saveBrowserDraft().catch(() => {});
+    wizard.close();
+  }
+  $('#close-wizard').addEventListener('click', closeWizard);
   $('#wizard-back').addEventListener('click', () => showStep(step - 1));
   $('#wizard-next').addEventListener('click', () => { if (validateStep()) showStep(step + 1); });
   $('#generate-bracket').addEventListener('click', generateBracket);
@@ -1363,6 +1493,12 @@
   $('#team-search').addEventListener('input', event => {
     const query = event.target.value.toLowerCase();
     $$('.team-options label').forEach(label => { label.hidden = !label.dataset.teamSearch.includes(query); });
+  });
+  $('#select-all-teams').addEventListener('click', () => {
+    $$('.team-check').forEach(input => { if (!input.disabled) input.checked = true; });
+    updateSelectedTeamCount();
+    invalidateBlueprint('Team selection changed. Generate a new authoritative preview.');
+    saveBrowserDraft();
   });
   $$('.team-check').forEach(input => input.addEventListener('change', () => {
     updateSelectedTeamCount();
@@ -1419,10 +1555,13 @@
       }
     }
   }));
-  form.addEventListener('submit', event => {
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (submitting) return;
     const publishing = $('#publication-status').value === 'published';
     syncHiddenFields();
     if (publishing) {
+      if (step !== 5) return;
       const gaps = collectPublishGaps();
       if (gaps.length) {
         event.preventDefault();
@@ -1432,8 +1571,45 @@
     }
     // Draft may be incomplete; publish requires review-step validations.
     if (publishing && !validateStep()) {
-      event.preventDefault();
+      return;
     }
+    const pendingDraft = saveBrowserDraft();
+    submitting = true;
+    await pendingDraft.catch(() => {});
+    const key = draftKey();
+    const payload = new FormData(form);
+    $$('.final-action').forEach(button => { button.disabled = true; });
+    try {
+      const response = await fetch(form.action, {
+        method: 'POST', credentials: 'same-origin', headers: { Accept: 'application/json' }, body: payload,
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.message || 'Unable to save the event.');
+      try {
+        if (!publishing) {
+          const snapshot = await draftStorage('readonly', key);
+          if (snapshot) await draftStorage('readwrite', draftPrefix + result.id, snapshot);
+        }
+        if (publishing || key !== draftPrefix + result.id) await draftStorage('readwrite', key, null);
+      } catch (_) { /* The server save succeeded even if browser storage is unavailable. */ }
+      window.location.assign('/admin/events/match/');
+    } catch (exception) {
+      submitting = false;
+      $$('.final-action').forEach(button => { button.disabled = false; });
+      error.textContent = exception instanceof SyntaxError
+        ? 'Unable to save. Check your connection or sign in again. Your browser draft is retained.'
+        : exception.message;
+    }
+  });
+  // Capture after field-specific handlers have updated derived names and brackets.
+  form.addEventListener('input', () => saveBrowserDraft());
+  form.addEventListener('change', () => saveBrowserDraft());
+  form.addEventListener('click', event => {
+    if (event.target.closest('#points-editor, #bracket-confirm-ok, #change-legacy-format')) saveBrowserDraft();
+  });
+  window.addEventListener('pagehide', () => saveBrowserDraft());
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') saveBrowserDraft();
   });
   $$('[data-edit]').forEach(button => button.addEventListener('click', () => fillEditor(byId[button.dataset.edit])));
   $$('[data-view]').forEach(button => button.addEventListener('click', () => showSummary(byId[button.dataset.view])));
@@ -1444,7 +1620,7 @@
     $('#delete-event').showModal();
   }));
   $('[data-cancel-delete]').addEventListener('click', () => $('#delete-event').close());
-  wizard.addEventListener('cancel', event => { event.preventDefault(); wizard.close(); });
+  wizard.addEventListener('cancel', event => { event.preventDefault(); closeWizard(); });
   if (window.MATCH_EVENT_EDIT_ID && byId[window.MATCH_EVENT_EDIT_ID]) fillEditor(byId[window.MATCH_EVENT_EDIT_ID]);
   showStep(1);
 }());

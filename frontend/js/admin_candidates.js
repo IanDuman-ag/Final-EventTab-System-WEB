@@ -9,6 +9,7 @@ document.addEventListener('DOMContentLoaded', function () {
   var candidateId = document.getElementById('candidate-id');
   var candidateNumber = document.getElementById('candidate-number');
   var candidateName = document.getElementById('candidate-name');
+  var candidateGender = document.getElementById('candidate-gender');
   var candidateDepartment = document.getElementById('candidate-department');
   var candidateImage = document.getElementById('candidate-image');
   var candidateImagePreview = document.getElementById('candidate-image-preview');
@@ -21,7 +22,35 @@ document.addEventListener('DOMContentLoaded', function () {
   if (!openBtn || !formModal || !form) return;
 
   var createUrl = openBtn.dataset.createUrl || '/admin/candidates/create/';
-  var pendingDelete = { url: '', triggerBtn: null };
+  var pendingDelete = [];
+  var selectAll = document.getElementById('select-all-candidates');
+  var bulkDelete = document.getElementById('delete-selected-candidates');
+  function updateSelection() {
+    var boxes = Array.from(document.querySelectorAll('.candidate-select'));
+    var count = boxes.filter(function (box) { return box.checked; }).length;
+    selectAll.checked = boxes.length > 0 && count === boxes.length;
+    selectAll.indeterminate = count > 0 && count < boxes.length;
+    selectAll.disabled = !boxes.length;
+    bulkDelete.disabled = !count;
+    document.getElementById('candidate-selection-count').textContent = count + ' selected';
+    var bulkActions = document.getElementById('candidate-bulk-actions');
+    if (bulkActions) bulkActions.hidden = !count;
+  }
+  selectAll.addEventListener('change', function () {
+    document.querySelectorAll('.candidate-select').forEach(function (box) { box.checked = selectAll.checked; });
+    updateSelection();
+  });
+  document.querySelectorAll('.candidate-select').forEach(function (box) { box.addEventListener('change', updateSelection); });
+  bulkDelete.addEventListener('click', function () {
+    pendingDelete = Array.from(document.querySelectorAll('.candidate-select:checked')).map(function (box) { return box.closest('tr').querySelector('.delete-candidate'); });
+    deleteNameEl.textContent = pendingDelete.length + ' selected individuals';
+    openModal(deleteModal);
+  });
+  updateSelection();
+  var eventPicker = document.getElementById('participant-event');
+  if (eventPicker) eventPicker.addEventListener('change', function () {
+    document.getElementById('individual-filters').submit();
+  });
 
   function getCsrfToken() {
     var el = document.querySelector('input[name="csrfmiddlewaretoken"]');
@@ -86,6 +115,7 @@ document.addEventListener('DOMContentLoaded', function () {
     candidateNumber.value = '';
     candidateName.value = '';
     candidateDepartment.value = '';
+    candidateGender.value = '';
     if (candidateImage) candidateImage.value = '';
     if (candidateImagePreviewWrap) candidateImagePreviewWrap.classList.add('hidden');
     preservedStatus = 'active';
@@ -105,6 +135,7 @@ document.addEventListener('DOMContentLoaded', function () {
     candidateNumber.value = row.dataset.number || '';
     candidateName.value = row.dataset.name || '';
     candidateDepartment.value = row.dataset.departmentId || '';
+    candidateGender.value = row.dataset.gender || '';
     if (candidateImage) candidateImage.value = '';
     if (candidateImagePreview && candidateImagePreviewWrap) {
       if (row.dataset.imageUrl) {
@@ -153,6 +184,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var data = await response.json();
         document.getElementById('candidate-view-title').textContent = data.name || 'Individual';
         document.getElementById('candidate-view-subtitle').textContent = 'No. ' + (data.number || '—');
+        document.getElementById('view-candidate-gender').textContent = data.gender_label || 'Not specified';
         document.getElementById('view-candidate-name').textContent = data.name || '—';
         document.getElementById('view-candidate-department').textContent = data.department_name || '—';
         var viewImage = document.getElementById('view-candidate-image');
@@ -176,8 +208,7 @@ document.addEventListener('DOMContentLoaded', function () {
   document.querySelectorAll('.delete-candidate').forEach(function (btn) {
     btn.addEventListener('click', function () {
       var row = btn.closest('tr');
-      pendingDelete.url = btn.dataset.deleteUrl || '';
-      pendingDelete.triggerBtn = btn;
+      pendingDelete = [btn];
       if (deleteNameEl) {
         deleteNameEl.textContent = row ? (row.dataset.name || 'this individual') : 'this individual';
       }
@@ -187,18 +218,32 @@ document.addEventListener('DOMContentLoaded', function () {
 
   if (confirmDeleteBtn) {
     confirmDeleteBtn.addEventListener('click', async function () {
-      if (!pendingDelete.url) return;
+      if (!pendingDelete.length || confirmDeleteBtn.disabled) return;
       confirmDeleteBtn.disabled = true;
-      var result = await postJson(pendingDelete.url, {});
-      confirmDeleteBtn.disabled = false;
-      if (result.success) {
+      bulkDelete.disabled = true;
+      var targets = pendingDelete.slice();
+      var deleted = 0;
+      var errors = [];
+      try {
+        for (var i = 0; i < targets.length; i++) {
+          var result = await postForm(targets[i].dataset.deleteUrl, new FormData());
+          if (result.success) {
+            targets[i].closest('tr').remove();
+            deleted++;
+          } else {
+            errors.push(result.message || 'Delete failed.');
+          }
+        }
+        pendingDelete = [];
         closeModal(deleteModal);
-        showToast(result.message || 'Individual deleted.');
-        var row = pendingDelete.triggerBtn && pendingDelete.triggerBtn.closest('tr');
-        if (row) row.remove();
-        pendingDelete = { url: '', triggerBtn: null };
-      } else {
-        showToast(result.message || 'Delete failed.', 'error');
+        if (errors.length) {
+          showToast(deleted + ' deleted. ' + errors.length + ' could not be deleted. ' + errors[0], 'error');
+        } else {
+          window.location.reload();
+        }
+      } finally {
+        confirmDeleteBtn.disabled = false;
+        updateSelection();
       }
     });
   }
@@ -234,6 +279,7 @@ document.addEventListener('DOMContentLoaded', function () {
     formData.append('name', name);
     formData.append('department_id', departmentId);
     formData.append('status', preservedStatus);
+    formData.append('gender', candidateGender.value);
     if (candidateImage && candidateImage.files && candidateImage.files[0]) {
       formData.append('image', candidateImage.files[0]);
     }

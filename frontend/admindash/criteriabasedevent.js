@@ -21,8 +21,8 @@
     $('#event-image-error').textContent = '';
     previewEventImage(savedImageUrl);
     if (!file) return;
-    if (['image/jpeg', 'image/png', 'image/webp'].indexOf(file.type) === -1 || file.size > 5 * 1024 * 1024) {
-      $('#event-image-error').textContent = 'Choose a JPEG, PNG, or WebP image up to 5 MB.';
+    if (file.size > 5 * 1024 * 1024) {
+      $('#event-image-error').textContent = 'Choose an image up to 5 MB.';
       this.value = '';
       return;
     }
@@ -30,6 +30,8 @@
     $('#event-image-preview').src = imagePreviewUrl;
     $('#event-image-preview').hidden = false;
   });
+  var savedRankingAggregation = 'weighted_mean_rank';
+  var savedVerificationMode = 'admin_only';
   var activeStep = 1;
   var mode = 'standard';
   var criteria = [];
@@ -44,6 +46,14 @@
   var roundAdjustmentWarning = '';
   var events = [];
   var pairEntries = [];
+  var performanceOrder = [];
+  var participantDivisions = {};
+  var divisionSetupLocked = false;
+  var segmentPerformanceOrders = {};
+  var performanceTab = "order";
+  var draggedParticipant = null;
+  var pickerPlaceholder = document.createElement("div");
+  $("#team-picker").before(pickerPlaceholder);
   var lastParticipationType = 'individual';
   var scoringWorkflow = {
     eventId: null, eventName: '', categories: [], selectedCategoryId: null,
@@ -204,12 +214,19 @@
 
   function hasQualifierAdvancement(round) {
     var method = (round.qualification_method || round.advancement_rule || '').toLowerCase();
-    return Number(round.qualifiers) > 0 && ['top_ranking', 'minimum_score', 'manual_selection', 'highest_total'].indexOf(method) !== -1;
+    return Number(round.qualifiers) > 0 && ['top_ranking', 'top_n_per_division', 'top_n_overall', 'minimum_score', 'manual_selection', 'highest_total'].indexOf(method) !== -1;
   }
 
   function roundParticipantCount(index, list) {
     var rows = list || stages;
     var count = participantCount();
+    if (divisionsEnabled()) {
+      var counts = {};
+      orderedParticipantBoxes().forEach(function (box) { var name = participantDivisions[box.value]; if (name) counts[name] = (counts[name] || 0) + 1; });
+      if (isPairParticipation()) pairEntries.forEach(function (row) { if (row.division) counts[row.division] = (counts[row.division] || 0) + 1; });
+      var sizes = Object.values(counts);
+      count = sizes.length ? Math.min.apply(null, sizes) : 0;
+    }
     for (var i = 0; i < index && i < rows.length; i++) {
       var round = rows[i] || {};
       var isFinal = isFinalRoundAt(round, i, rows.length);
@@ -312,7 +329,7 @@
         weight: isFinal ? (100 - weight * (count - 1)) : weight,
         qualification_method: isFinal ? null : 'top_ranking',
         qualifiers: isFinal ? null : Math.max(1, 10 - i * 2),
-        carry_previous_scores: i > 0,
+        carry_previous_scores: false,
         require_faculty_confirmation: !isFinal,
         is_final: isFinal,
       }, i, count));
@@ -331,13 +348,13 @@
     var isFinal = roundType === 'final' || (!hasQualifierAdvancement(row) && isLast && roundType !== 'elimination');
     if (!isLast && roundType === 'final') roundType = 'elimination';
     var method = isFinal ? null : (row.qualification_method || row.advancement_rule || 'top_ranking');
-    if (method === 'highest_total') method = 'top_ranking';
+    if (['highest_total', 'top_n_per_division', 'top_n_overall'].indexOf(method) !== -1) method = 'top_ranking';
     var handling = row.score_handling || (row.carry_previous_scores ? 'carry' : 'start_zero');
     return {
       id: row.id || uid('s'),
       name: row.name || '',
       round_type: roundType,
-      scoring_method: row.scoring_method || 'numerical',
+      scoring_method: row.scoring_method || ($('#default-scoring-mode').value === 'ranking' ? 'ranking' : 'numerical'),
       score_handling: handling,
       weight: Number(row.weight) || 0,
       weight_locked: handling === 'carry' && !!row.weight_locked,
@@ -757,6 +774,8 @@
       });
       return '<article class="pair-entry-card" data-pair-index="' + index + '"><header><strong>Pair ' + (index + 1) + '</strong><button type="button" data-remove-pair>Remove Pair</button></header>' +
         '<label class="pair-department">Department (optional)<select data-pair-department>' + pairDepartmentOptions(row.department_id) + '</select></label>' +
+        (divisionsEnabled() ? '<label>Division<select data-pair-division><option value="">Select division</option>' + eventDivisionNames().map(function (name) { return '<option value="' + escapeAttr(name) + '"' + (row.division === name ? ' selected' : '') + '>' + escapeHtml(name) + '</option>'; }).join('') + '</select></label>' : '') +
+        '<button type="button" data-pair-move="-1">Up</button><button type="button" data-pair-move="1">Down</button>' +
         '<label>Member 1<select data-pair-member="1">' + individualOptions(row.member_1_id, used, row.department_id) + '</select></label>' +
         '<label>Member 2<select data-pair-member="2">' + individualOptions(row.member_2_id, used, row.department_id) + '</select></label>' +
         '<small' + (incompatible ? ' class="pair-entry-error" role="alert"' : '') + '>' + (incompatible ? 'Choose both members from the selected department.' : 'One competition entry; judges submit one score sheet.') + '</small></article>';
@@ -833,6 +852,7 @@
   }
 
   function updateParticipantCount() {
+    renderPerformanceOrder();
     if (isPairParticipation()) {
       $('#selected-participant-count').textContent = pairEntries.length + ' pair' + (pairEntries.length === 1 ? '' : 's') + ' added';
       return;
@@ -1090,12 +1110,225 @@
     });
   }
 
+  function eventDivisionNames() {
+    return $('#event-division-names').value.split(/\r?\n/).map(function (name) { return name.trim(); }).filter(Boolean);
+  }
+
+  function divisionsEnabled() {
+    return $('#enable-event-divisions').checked;
+  }
+
+  function assignGenderDivisions() {
+    if (!divisionsEnabled() || !isIndividualParticipation() || divisionSetupLocked) return;
+    var names = Object.create(null);
+    eventDivisionNames().forEach(function (name) {
+      var key = name.toLowerCase();
+      if (key === 'male' || key === 'female') names[key] = name;
+    });
+    orderedParticipantBoxes().forEach(function (box) {
+      if (!participantDivisions[box.value] && names[box.dataset.gender]) {
+        participantDivisions[box.value] = names[box.dataset.gender];
+      }
+    });
+  }
+
+  function renderDivisionManager() {
+    var enabled = divisionsEnabled();
+    $('#event-division-editor').hidden = !enabled;
+    var names = eventDivisionNames();
+    var counts = Object.create(null);
+    if (isPairParticipation()) {
+      pairEntries.forEach(function (row) { counts[row.division] = (counts[row.division] || 0) + 1; });
+    } else {
+      orderedParticipantBoxes().forEach(function (box) {
+        var name = participantDivisions[box.value];
+        counts[name] = (counts[name] || 0) + 1;
+      });
+    }
+    $('#event-division-list').innerHTML = names.map(function (name, index) {
+      return '<span class="division-chip division-chip-tone-' + (index % 6) + '"><span class="division-chip-label">' + escapeHtml(name) + ' (' + (counts[name] || 0) + ')</span><button type="button" class="division-chip-edit" data-edit-event-division="' + escapeAttr(name) + '" aria-label="Edit ' + escapeAttr(name) + ' division"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m16 3 5 5-12 12-6 1 1-6L16 3Zm-1 4 2 2M4 15l5 5"/></svg></button><button type="button" class="division-chip-edit division-chip-remove" data-remove-event-division="' + escapeAttr(name) + '" aria-label="Remove ' + escapeAttr(name) + ' division"' + (divisionSetupLocked ? ' disabled title="Divisions cannot be removed after scoring or round approval."' : '') + '><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button></span>';
+    }).join('') || '<p class="division-empty">No divisions yet.</p>';
+  }
+
+  function openDivisionEditor(name) {
+    $('#event-division-edit-name').value = name || '';
+    $('#event-division-name').value = name || '';
+    $('#event-division-error').textContent = '';
+    $('#event-division-modal-title').textContent = name ? 'Edit Division' : 'Add Division';
+    $('#event-division-modal').showModal();
+    requestAnimationFrame(function () { $('#event-division-name').focus(); $('#event-division-name').select(); });
+  }
+
+  $('#add-event-division').addEventListener('click', function () { openDivisionEditor(''); });
+  $('#event-division-name').addEventListener('keydown', function (event) {
+    if (event.key === 'Enter') { event.preventDefault(); $('#save-event-division').click(); }
+  });
+  $('#event-division-list').addEventListener('click', function (event) {
+    var button = event.target.closest('[data-edit-event-division]');
+    if (button) openDivisionEditor(button.dataset.editEventDivision);
+    var remove = event.target.closest('[data-remove-event-division]');
+    if (!remove || divisionSetupLocked) return;
+    var name = remove.dataset.removeEventDivision;
+    var last = eventDivisionNames().length === 1;
+    openJudgingDelete('Remove Division', 'Remove "' + name + '"? Participants will not be removed.' +
+      (last ? ' This is the last division, so divisions will be turned off for this event.' : ' Participants assigned to it will need a new division.'), function () {
+        $('#event-division-names').value = eventDivisionNames().filter(function (value) { return value !== name; }).join('\n');
+        Object.keys(participantDivisions).forEach(function (id) {
+          if (participantDivisions[id] === name) participantDivisions[id] = '';
+        });
+        pairEntries.forEach(function (row) { if (row.division === name) row.division = ''; });
+        if (!eventDivisionNames().length) $('#enable-event-divisions').checked = false;
+        renderPerformanceOrder();
+        renderPairEntries();
+      });
+  });
+  $('#save-event-division').addEventListener('click', function () {
+    var name = $('#event-division-name').value.trim();
+    var previous = $('#event-division-edit-name').value;
+    var names = eventDivisionNames();
+    var error = '';
+    if (!name || name.length > 100) error = 'Enter a division name between 1 and 100 characters.';
+    else if (names.some(function (value) { return value !== previous && value.toLowerCase() === name.toLowerCase(); })) error = 'A division with this name already exists.';
+    else if (!previous && names.length >= 50) error = 'You can add up to 50 divisions.';
+    else if (previous && names.indexOf(previous) === -1) error = 'This division is no longer available. Close this window and try again.';
+    if (error) { $('#event-division-error').textContent = error; return; }
+    if (previous) {
+      names[names.indexOf(previous)] = name;
+      Object.keys(participantDivisions).forEach(function (id) {
+        if (participantDivisions[id] === previous) participantDivisions[id] = name;
+      });
+      pairEntries.forEach(function (row) { if (row.division === previous) row.division = name; });
+    } else {
+      names.push(name);
+    }
+    $('#event-division-names').value = names.join('\n');
+    var filteredDivision = $('#performance-division-filter').value;
+    renderPerformanceOrder();
+    if (previous && filteredDivision === previous) {
+      $('#performance-division-filter').value = name;
+      renderPerformanceOrder();
+    }
+    renderPairEntries();
+    $('#event-division-modal').close();
+  });
+
+  function divisionSetupIssue() {
+    if (!divisionsEnabled()) return '';
+    var names = eventDivisionNames();
+    if (!names.length || names.length > 50) return 'Add between 1 and 50 division names.';
+    if (names.some(function (name) { return name.length > 100; }) || new Set(names.map(function (name) { return name.toLowerCase(); })).size !== names.length) return 'Use unique division names of at most 100 characters.';
+    if ((isPairParticipation() ? pairEntries.some(function (row) { return names.indexOf(row.division) === -1; }) : orderedParticipantBoxes().some(function (box) { return names.indexOf(participantDivisions[box.value]) === -1; }))) return 'Assign each selected participant to a division.';
+    return '';
+  }
+
+  function orderedParticipantBoxes() {
+    var panel = isIndividualParticipation() ? '#candidate-options' : '#team-options';
+    var boxes = $$(panel + ' .participant-check:checked');
+    var selected = boxes.map(function (box) { return String(box.value); });
+    performanceOrder = performanceOrder.filter(function (id) { return selected.indexOf(id) !== -1; });
+    selected.forEach(function (id) { if (performanceOrder.indexOf(id) === -1) performanceOrder.push(id); });
+    return performanceOrder.map(function (id) { return boxes.find(function (box) { return String(box.value) === id; }); });
+  }
+
+  function activePerformanceOrder() {
+    return orderedParticipantBoxes().map(function (box) { return String(box.value); });
+  }
+
+  function movePerformanceParticipant(id, next) {
+    var order = activePerformanceOrder().slice();
+    if (!next || id === next || (divisionsEnabled() && participantDivisions[id] !== participantDivisions[next])) return;
+    var at = order.indexOf(id), to = order.indexOf(next);
+    if (at < 0 || to < 0) return;
+    order[at] = next; order[to] = id;
+    performanceOrder = order;
+    renderPerformanceOrder();
+  }
+
+  function renderPerformanceOrder() {
+    var host = $('#event-performance-setup');
+    if (!host) return;
+    assignGenderDivisions();
+    host.hidden = isPairParticipation();
+    $('.wizard-panel[data-step="2"] > .wizard-section-title').hidden = !isPairParticipation();
+    var picker = $('#team-picker');
+    if (!isPairParticipation()) $('#performance-registry-picker').appendChild(picker);
+    else pickerPlaceholder.after(picker);
+    var listing = performanceTab === 'participants';
+    host.classList.toggle('po-list-view', listing);
+    $('#performance-participant-picker').hidden = !listing;
+    $('#performance-order-note').hidden = listing;
+    $$('[data-performance-tab]').forEach(function (button) { button.setAttribute('aria-selected', String(button.dataset.performanceTab === performanceTab)); });
+    var enabled = divisionsEnabled();
+    renderDivisionManager();
+    $('#performance-division-heading').hidden = !enabled;
+    var names = eventDivisionNames();
+    var filter = $('#performance-division-filter');
+    var selectedDivision = filter.value;
+    filter.hidden = !enabled;
+    filter.innerHTML = '<option value="">All divisions</option>' + names.map(function (name) { return '<option value="' + escapeAttr(name) + '">' + escapeHtml(name) + '</option>'; }).join('');
+    filter.value = names.indexOf(selectedDivision) !== -1 ? selectedDivision : '';
+    var boxes = orderedParticipantBoxes();
+    var order = activePerformanceOrder();
+    var grouped = (enabled ? names.concat(['']) : ['']).flatMap(function (name) {
+      return order.map(function (id) { return boxes.find(function (box) { return String(box.value) === id; }); }).filter(function (box) {
+        var current = participantDivisions[box.value];
+        return !enabled || (names.indexOf(current) !== -1 ? current : '') === name;
+      });
+    });
+    var query = $('#performance-search').value.trim().toLowerCase(), positions = {};
+    $('#event-performance-rows').innerHTML = grouped.map(function (box) {
+      var id = String(box.value), name = enabled ? participantDivisions[id] || '' : '';
+      positions[name] = (positions[name] || 0) + 1;
+      var department = box.closest('label').dataset.department || '';
+      if ((filter.value && name !== filter.value) || (query && (box.dataset.name + ' ' + department + ' ' + name).toLowerCase().indexOf(query) === -1)) return '';
+      var peers = grouped.filter(function (other) { return !enabled || (participantDivisions[other.value] || '') === name; });
+      var at = peers.indexOf(box), tone = Math.max(0, names.indexOf(name)) % 3;
+      var division = listing ? '<select data-participant-division="' + escapeAttr(id) + '" aria-label="Division for ' + escapeAttr(box.dataset.name) + '"><option value="">Select division</option>' + names.map(function (label) { return '<option value="' + escapeAttr(label) + '"' + (name === label ? ' selected' : '') + '>' + escapeHtml(label) + '</option>'; }).join('') + '</select>' : '<span class="po-division po-tone-' + tone + '">' + escapeHtml(name || 'Unassigned') + '</span>';
+      return '<tr data-performance-row="' + escapeAttr(id) + '" draggable="' + (!listing && !query) + '"><td class="po-order-column"><span class="po-grip" aria-hidden="true">&#10287;</span><span class="po-position">' + positions[name] + '</span></td><td><div class="po-person">' + (box.dataset.image ? '<img src="' + escapeAttr(box.dataset.image) + '" alt="">' : '<span class="po-avatar" aria-hidden="true">' + escapeHtml((box.dataset.displayName || box.dataset.name).slice(0, 1)) + '</span>') + '<div><strong>' + escapeHtml(box.dataset.displayName || box.dataset.name) + '</strong><small>#' + escapeHtml(box.dataset.number || '') + '</small></div></div></td><td class="po-department">' + escapeHtml(department || 'Not assigned') + '</td>' + (enabled ? '<td>' + division + '</td>' : '') + '<td class="po-order-column"><div class="po-arrows"><button type="button" data-performance-id="' + escapeAttr(id) + '" data-performance-move="-1" aria-label="Move ' + escapeAttr(box.dataset.name) + ' up"' + (!at ? ' disabled' : '') + '><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 15 6-6 6 6"/></svg></button><button type="button" data-performance-id="' + escapeAttr(id) + '" data-performance-move="1" aria-label="Move ' + escapeAttr(box.dataset.name) + ' down"' + (at === peers.length - 1 ? ' disabled' : '') + '><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button></div></td></tr>';
+    }).join('') || '<tr><td colspan="5" class="po-empty">' + (boxes.length ? 'No participants match your search.' : 'Select individuals in Participants List to arrange their performance order.') + '</td></tr>';
+  }
+
+  $$('[data-performance-tab]').forEach(function (button) { button.addEventListener('click', function () {
+    performanceTab = button.dataset.performanceTab;
+    renderPerformanceOrder();
+  }); });
+  ['performance-search', 'performance-division-filter'].forEach(function (id) { $('#' + id).addEventListener(id === 'performance-search' ? 'input' : 'change', renderPerformanceOrder); });
+  $('#enable-event-divisions').addEventListener('change', function () { renderPerformanceOrder(); renderPairEntries(); });
+  $('#event-division-names').addEventListener('change', function () { renderPerformanceOrder(); renderPairEntries(); });
+  $('#event-performance-rows').addEventListener('change', function (event) {
+    var input = event.target.closest('[data-participant-division]');
+    if (!input) return;
+    participantDivisions[input.dataset.participantDivision] = input.value;
+    renderPerformanceOrder();
+  });
+  $('#event-performance-rows').addEventListener('click', function (event) {
+    var button = event.target.closest('[data-performance-move]');
+    if (!button) return;
+    var id = button.dataset.performanceId, order = activePerformanceOrder();
+    var peers = order.filter(function (other) { return !divisionsEnabled() || participantDivisions[other] === participantDivisions[id]; });
+    movePerformanceParticipant(id, peers[peers.indexOf(id) + Number(button.dataset.performanceMove)]);
+  });
+  $('#event-performance-rows').addEventListener('dragstart', function (event) {
+    if (event.target.closest('button,select,input')) { event.preventDefault(); return; }
+    var row = event.target.closest('[data-performance-row]');
+    if (!row || row.getAttribute('draggable') !== 'true') return;
+    draggedParticipant = row.dataset.performanceRow;
+    event.dataTransfer.setData('text/plain', draggedParticipant);
+    event.dataTransfer.effectAllowed = 'move';
+  });
+  $('#event-performance-rows').addEventListener('dragover', function (event) { if (draggedParticipant) event.preventDefault(); });
+  $('#event-performance-rows').addEventListener('drop', function (event) {
+    event.preventDefault();
+    var row = event.target.closest('[data-performance-row]');
+    if (row) movePerformanceParticipant(draggedParticipant, row.dataset.performanceRow);
+    draggedParticipant = null;
+  });
+  $('#event-performance-rows').addEventListener('dragend', function () { draggedParticipant = null; });
+
   function collectParticipants() {
     if (isPairParticipation()) return pairEntries.map(function (_, index) { return index + 1; });
     var panel = isIndividualParticipation() ? '#candidate-options' : '#team-options';
-    return $$(panel + ' .participant-check:checked').map(function (box) {
-      return Number(box.value);
-    });
+    return orderedParticipantBoxes().map(function (box) { return Number(box.value); });
   }
 
   function collectRounds() {
@@ -1146,9 +1379,20 @@
 
   function collectResultProcessing() {
     var out = {};
+    out.segment_performance_orders = {};
+    orderedParticipantBoxes();
+    Object.keys(segmentPerformanceOrders).forEach(function (key) {
+      var ids = performanceOrder.slice();
+      var saved = segmentPerformanceOrders[key].filter(function (id) { return ids.indexOf(id) !== -1; });
+      ids.forEach(function (id) { if (saved.indexOf(id) === -1) saved.push(id); });
+      if (!isPairParticipation() && scoringWorkflow.categories.some(function (category) { return String(category.id) === key; })) out.segment_performance_orders[key] = saved.map(Number);
+    });
+    out.event_divisions = { enabled: divisionsEnabled(), names: divisionsEnabled() ? eventDivisionNames() : [] };
     out.final_result_basis = $('#final-result-basis').value;
+    out.default_scoring_mode = $('#default-scoring-mode').value;
+    out.ranking_aggregation = savedRankingAggregation;
     out.placements_count = Number($('#placements-count').value);
-    out.verification_mode = ($('#advanced-result-verification') || {}).value || 'admin_only';
+    out.verification_mode = savedVerificationMode;
     $$('[data-rp]').forEach(function (input) {
       out[input.dataset.rp] = input.checked;
     });
@@ -1216,6 +1460,13 @@
   function categoryRoundKey(category) {
     if (category && category.assigned_round_id) return String(category.assigned_round_id);
     return stages.length ? roundKeyFor(stages[0], 0) : 'main';
+  }
+
+  function nextSegmentOrder(roundId) {
+    return scoringWorkflow.categories.reduce(function (highest, category) {
+      return categoryRoundKey(category) === String(roundId)
+        ? Math.max(highest, Number(category.display_order) || 0) : highest;
+    }, 0) + 1;
   }
 
   function officialWeightTotalForRound(roundKey) {
@@ -1342,7 +1593,7 @@
   function advancementLabel(round, index) {
     if (isFinalRoundAt(round, index, stages.length)) return 'Final round / no advancement';
     if (isAdvanceAllRound(round, false)) return 'All participants continue';
-    return 'Top ' + (Number(round.qualifiers) || 0) + ' participants advance';
+    return 'Top ' + (Number(round.qualifiers) || 0) + ' participants' + (divisionsEnabled() ? ' per division' : '') + ' advance';
   }
 
   function selectedJudgingRound() {
@@ -1389,6 +1640,8 @@
   function renderJudgingSegments() {
     var roundId = selectedJudgingRound();
     var rows = scoringWorkflow.categories.filter(function (category) { return categoryRoundKey(category) === String(roundId) && (category.purpose || 'official') === 'official'; });
+    $('#round-scoring-mode').value = rows.length ? rows[0].judge_mode || 'scoring' : ((findStageByKey(roundId) || {}).scoring_method === 'ranking' ? 'ranking' : 'scoring') || $('#default-scoring-mode').value;
+    renderResultWeights();
     var host = $('#judging-segment-list');
     host.innerHTML = rows.map(function (category) {
       var total = criteriaWeightTotal(category);
@@ -1424,7 +1677,9 @@
 
   function judgingPublishIssues() {
     var issues = [];
+    if ($('#final-result-basis').value === 'weighted_rounds' && Math.abs(stages.reduce(function (sum, row) { return sum + Number(row.weight || 0); }, 0) - 100) > 0.001) issues.push({ step: 1, text: 'Round weights must total 100%.' });
     if (!form.event_name.value.trim() || !form.category.value || !form.event_classification.value || !form.venue.value.trim() || !form.start_date.value) issues.push({ step: 1, text: 'Complete all required event details.' });
+    if (divisionSetupIssue()) issues.push({ step: 2, text: divisionSetupIssue() });
     if (!collectParticipants().length) issues.push({ step: 2, text: 'Select at least one participant.' });
     if (!collectJudges().length) issues.push({ step: 3, text: 'Assign at least one judge.' });
     if (!scoringWorkflow.categories.length) issues.push({ step: 3, text: 'Add at least one judging segment.' });
@@ -1463,9 +1718,9 @@
     syncPointsFromDom();
     $('#participant-ids').value = JSON.stringify(collectParticipants());
     $('#event-entries').value = JSON.stringify(isPairParticipation()
-      ? pairEntries.map(function (row) { return { department_id: row.department_id || null, member_ids: [Number(row.member_1_id), Number(row.member_2_id)] }; })
-      : $$('#' + (isIndividualParticipation() ? 'candidate-options' : 'team-options') + ' .participant-check:checked').map(function (box) {
-          return isIndividualParticipation() ? { source_individual_id: Number(box.value) } : { source_team_id: Number(box.value) };
+      ? pairEntries.map(function (row) { return { department_id: row.department_id || null, member_ids: [Number(row.member_1_id), Number(row.member_2_id)], division: divisionsEnabled() ? row.division || '' : '' }; })
+      : orderedParticipantBoxes().map(function (box) {
+          return isIndividualParticipation() ? { source_individual_id: Number(box.value), division: divisionsEnabled() ? (participantDivisions[box.value] || '') : '' } : { source_team_id: Number(box.value), division: divisionsEnabled() ? (participantDivisions[box.value] || '') : '' };
         }));
     $('#rounds-config').value = JSON.stringify(collectRounds());
     $('#criteria-config').value = JSON.stringify(criteria);
@@ -1488,6 +1743,8 @@
       if (form.end_date.value < form.start_date.value) return 'End Date cannot precede Start Date.';
     }
     if (current === 2) {
+      var divisionIssue = divisionSetupIssue();
+      if (divisionIssue) return divisionIssue;
       if (collectParticipants().length < 1) {
         return participationType() === 'individual' ? 'Select at least one individual.' : (isPairParticipation() ? 'Add at least one pair.' : 'Select at least one team.');
       }
@@ -1539,13 +1796,16 @@
       ['Date & Time', form.start_date.value + (($('#event-time') || {}).value ? ' · ' + $('#event-time').value : '')],
       [isPairParticipation() ? ('Entries (' + names.length + ' Pairs)') : (isIndividualParticipation() ? ('Individuals (' + names.length + ')') : ('Teams (' + names.length + ')')), names.join('; ') || '—'],
       ['Rounds', stages.map(function (row, index) {
-        return (index + 1) + '. ' + (row.name || 'Untitled') + ' (' + (row.weight || 0) + '%)';
+        return (index + 1) + '. ' + (row.name || 'Untitled') + ' (' + (row.weight || 0) + '%) - ' + advancementLabel(row, index) + ' - ' + (scoringWorkflow.categories.some(function (category) { return categoryRoundKey(category) === roundKeyFor(row, index) && category.judge_mode === 'ranking'; }) ? 'Ranking' : 'Scoring');
       }).join(' · ') || '—'],
+      ['Result Calculation', $('#final-result-basis').selectedOptions[0].textContent],
+      ['Divisions', divisionsEnabled() ? eventDivisionNames().map(function (name) { var count = isPairParticipation() ? pairEntries.filter(function (row) { return row.division === name; }).length : orderedParticipantBoxes().filter(function (box) { return participantDivisions[box.value] === name; }).length; return name + ': ' + count; }).join('; ') : 'One overall group'],
+      ['Performance Order', 'Saved event order' + (divisionsEnabled() ? ' within each division' : '')],
       ['Judging Segments & Criteria', categories],
       ['Tabulation Officer', tabulatorLabel],
       ['Faculty In Charge', faculty.value ? faculty.options[faculty.selectedIndex].text : 'Not assigned'],
       ['Assigned Judges', judgeNames.join(', ') || '—'],
-      ['Advanced Settings', ($('#advanced-carry-scores').checked ? 'Carry scores · ' : 'Do not carry scores · ') + ($('#advanced-special-awards').checked ? 'Special awards enabled · ' : 'Special awards disabled · ') + $('#advanced-tie-rule').options[$('#advanced-tie-rule').selectedIndex].text + ' · Default max ' + $('#advanced-default-max').value],
+      ['Advanced Settings', ($('#advanced-special-awards').checked ? 'Special awards enabled · ' : 'Special awards disabled · ') + $('#advanced-tie-rule').options[$('#advanced-tie-rule').selectedIndex].text + ' · Default max ' + $('#advanced-default-max').value],
     ];
     $('#review-summary').innerHTML = rows.map(function (row) {
       return '<div><span>' + escapeHtml(row[0]) + '</span>' + (row[0] === 'Judging Segments & Criteria' ? '<div class="judging-review-structure">' + row[1] + '</div>' : '<strong>' + escapeHtml(row[1]) + '</strong>') + '</div>';
@@ -1606,8 +1866,16 @@
 
   function resetWizard() {
     pointsSnapshotLocked = true;
+    savedVerificationMode = 'admin_only';
     mobileApprovalRequired = true;
     form.reset();
+    performanceOrder = [];
+    participantDivisions = {};
+    divisionSetupLocked = false;
+    segmentPerformanceOrders = {};
+    performanceTab = 'order';
+    $('#performance-search').value = '';
+    $('#event-division-names').value = '';
     savedImageUrl = '';
     previewEventImage('');
     $('#event-image-error').textContent = '';
@@ -1715,6 +1983,8 @@
   }
 
   function fillEditor(event) {
+    divisionSetupLocked = !!(event.division_setup_locked || event.results_finalized ||
+      Object.keys((event.result_processing_config || {}).confirmed_stages || {}).length);
     $('#event-image').value = '';
     $('#event-image-error').textContent = '';
     savedImageUrl = event.image_url || '';
@@ -1747,9 +2017,20 @@
     $$('.participant-check').forEach(function (box) {
       box.checked = ids.indexOf(box.value) !== -1;
     });
+    var sourceByEntry = {};
+    (event.entries || []).forEach(function (entry) { sourceByEntry[entry.id] = String(entry.source_individual_id || entry.source_team_id || ''); });
+    segmentPerformanceOrders = {};
+    var savedOrders = (event.result_processing_config || {}).segment_performance_orders || {};
+    Object.keys(savedOrders).forEach(function (key) { segmentPerformanceOrders[key] = savedOrders[key].map(function (id) { return sourceByEntry[id]; }).filter(Boolean); });
+    performanceOrder = ids.filter(Boolean);
+    participantDivisions = {};
+    (event.entries || []).forEach(function (entry) { participantDivisions[String(entry.source_individual_id || entry.source_team_id)] = entry.division || ''; });
+    var divisions = (event.result_processing_config || {}).event_divisions || {};
+    $('#enable-event-divisions').checked = !!divisions.enabled;
+    $('#event-division-names').value = (divisions.names || []).join('\n');
     updateParticipantCount();
     pairEntries = (event.entries || []).filter(function (entry) { return entry.entry_type === 'pair'; }).map(function (entry) {
-      return { department_id: entry.department_id || '', member_1_id: entry.members[0] && entry.members[0].id, member_2_id: entry.members[1] && entry.members[1].id };
+      return { division: entry.division || '', department_id: entry.department_id || '', member_1_id: entry.members[0] && entry.members[0].id, member_2_id: entry.members[1] && entry.members[1].id };
     });
     renderPairEntries();
     stages = stagesFromLegacyConfig(event);
@@ -1797,8 +2078,11 @@
     });
     updateJudgeCount();
     var rp = event.result_processing_config || {};
-    $('#advanced-result-verification').value = rp.verification_mode || 'admin_only';
+    savedVerificationMode = rp.verification_mode || 'admin_only';
     $('#final-result-basis').value = rp.final_result_basis || 'main_round';
+    $('#default-scoring-mode').value = rp.default_scoring_mode || 'scoring';
+    savedRankingAggregation = rp.ranking_aggregation || 'weighted_mean_rank';
+    renderResultWeights();
     $('#placements-count').value = rp.placements_count || 3;
     $$('[data-rp]').forEach(function (input) {
       input.checked = !!rp[input.dataset.rp];
@@ -1815,7 +2099,6 @@
     });
     $('#advanced-special-awards').checked = !!js.enable_special_awards;
     $('#advanced-default-max').value = js.default_max_score || settings.max_score || 100;
-    $('#advanced-carry-scores').checked = stages.some(function (round, index) { return index > 0 && round.carry_previous_scores; });
     $('#advanced-tie-rule').value = stageTie === 'highest_selected_criterion' || stageTie === 'manual_decision' ? stageTie : 'highest_final_round';
     pointsSnapshotLocked = Boolean(event.championship_scoring);
     points = event.points_config && event.points_config.length
@@ -1961,6 +2244,7 @@
           : null;
       }
       syncCriteriaFromScoringWorkflow();
+      renderPerformanceOrder();
     });
   }
 
@@ -2099,29 +2383,84 @@
     $('#simple-round-edit-id').value = '';
     $('#simple-round-name').value = '';
     $('#simple-round-advancement').value = 'advance_all';
-    $('#simple-round-qualifiers-wrap').hidden = true;
+    updateRoundAdvancementFields();
     $('#round-modal-title').textContent = 'Add Round';
     $('#round-modal').showModal();
     requestAnimationFrame(function () { $('#simple-round-name').focus(); });
   });
-  $('#simple-round-advancement').addEventListener('change', function () { $('#simple-round-qualifiers-wrap').hidden = this.value !== 'top_ranking'; });
+  function updateRoundAdvancementFields() {
+    var perDivision = divisionsEnabled();
+    var picker = $('#simple-round-advancement');
+    picker.querySelector('option[value="top_ranking"]').textContent = perDivision ? 'Top participants per division advance' : 'Top participants advance';
+    $('#simple-round-qualifiers-wrap').hidden = picker.value !== 'top_ranking';
+    $('#simple-round-qualifiers-label').textContent = perDivision ? 'Number to Advance per Division' : 'Number to Advance';
+    $('#simple-round-qualifiers-hint').textContent = perDivision ? 'This number advances separately from each division.' : 'This number advances from the overall participant list.';
+  }
+  $('#simple-round-advancement').addEventListener('change', updateRoundAdvancementFields);
   $('#simple-round-save').addEventListener('click', function () {
     var name = $('#simple-round-name').value.trim();
     var advancement = $('#simple-round-advancement').value;
     if (!name) return showError('Round Name is required.');
+    var qualifiers = Number($('#simple-round-qualifiers').value);
+    if (advancement === 'top_ranking' && (!Number.isInteger(qualifiers) || qualifiers < 1)) return showError('Number to Advance must be a positive whole number.');
     var existingKey = $('#simple-round-edit-id').value;
     var row = existingKey ? findStageByKey(existingKey) : null;
     if (!row) { row = defaultStages(1)[0]; row.id = 'round-' + Date.now(); stages.push(row); }
     row.name = name;
     row.qualification_method = advancement === 'final' ? null : advancement;
     row.advancement_rule = row.qualification_method;
-    row.qualifiers = advancement === 'top_ranking' ? Number($('#simple-round-qualifiers').value) || 1 : null;
+    row.qualifiers = advancement === 'top_ranking' ? qualifiers : null;
     row.is_final = advancement === 'final';
     row.round_type = advancement === 'final' ? 'final' : (advancement === 'top_ranking' ? 'elimination' : 'scoring');
     stages.forEach(function (stage, index) { stage.weight = roundWeight(100 / stages.length); stage.weight_locked = false; if (index !== stages.length - 1 && stage.is_final) { stage.is_final = false; stage.round_type = 'scoring'; } });
     syncEventFormatFromRounds();
     $('#round-modal').close();
     renderJudgingSetup();
+  });
+  function renderResultWeights() {
+    var basis = $('#final-result-basis').value;
+    var choices = $$('input[name="final_result_basis_choice"]');
+    choices.forEach(function (input) { input.checked = input.value === basis; });
+    var legacyNote = $('#result-method-legacy-note');
+    if (legacyNote) legacyNote.hidden = choices.some(function (input) { return input.value === basis; });
+    var host = $('#result-round-weights');
+    host.hidden = basis !== 'weighted_rounds';
+    host.innerHTML = stages.map(function (round, index) {
+      return '<label>' + escapeHtml(round.name) + ' (%)<input class="form-control" type="number" min="0" max="100" step="0.01" data-result-weight="' + index + '" value="' + (Number(round.weight) || 0) + '"></label>';
+    }).join('') + '<p class="field-hint">Round weights must total 100%.</p>';
+  }
+  $('#final-result-basis').addEventListener('change', renderResultWeights);
+  $$('input[name="final_result_basis_choice"]').forEach(function (input) {
+    input.addEventListener('change', function () {
+      if (!this.checked) return;
+      $('#final-result-basis').value = this.value;
+      renderResultWeights();
+    });
+  });
+  $('#default-scoring-mode').addEventListener('change', function () {
+    var mode = this.value;
+    stages.forEach(function (round, index) {
+      if (!scoringWorkflow.categories.some(function (category) { return categoryRoundKey(category) === roundKeyFor(round, index); })) round.scoring_method = mode === 'ranking' ? 'ranking' : 'numerical';
+    });
+  });
+  $('#result-round-weights').addEventListener('input', function (event) {
+    var index = event.target.dataset.resultWeight;
+    if (index == null || !stages[index]) return;
+    stages[index].weight = Number(event.target.value);
+    stages[index].weight_locked = true;
+  });
+  $('#round-scoring-mode').addEventListener('change', function () {
+    var mode = this.value;
+    var roundId = selectedJudgingRound();
+    var round = findStageByKey(roundId);
+    if (round) round.scoring_method = mode === 'ranking' ? 'ranking' : 'numerical';
+    var rows = scoringWorkflow.categories.filter(function (category) { return categoryRoundKey(category) === String(roundId) && (category.purpose || 'official') === 'official'; });
+    this.disabled = true;
+    rows.reduce(function (pending, category) {
+      return pending.then(function () {
+        return workflowRequest('update_category', { event_id: scoringWorkflow.eventId, category_id: category.id, category_name: category.name, assigned_round_id: roundId, purpose: category.purpose || 'official', judge_mode: mode, display_order: category.display_order, overall_weight_percent: category.overall_weight_percent });
+      });
+    }, Promise.resolve()).then(loadCategories).then(renderJudgingSegments).catch(function (error) { showError(error.message); loadCategories().then(renderJudgingSegments); }).finally(function () { $('#round-scoring-mode').disabled = false; });
   });
   $('#judging-round-select').addEventListener('change', renderJudgingSegments);
   $('#judging-add-segment').addEventListener('click', function () {
@@ -2137,7 +2476,7 @@
     var editId = $('#simple-segment-edit-id').value;
     var roundId = selectedJudgingRound();
     var existing = scoringWorkflow.categories.filter(function (row) { return String(row.id) === String(editId); })[0];
-    workflowRequest(editId ? 'update_category' : 'create_category', { event_id: scoringWorkflow.eventId, category_id: editId, category_name: name, assigned_round_id: roundId, purpose: 'official', judge_mode: 'scoring', display_order: existing ? existing.display_order : scoringWorkflow.categories.length + 1, overall_weight_percent: existing ? existing.overall_weight_percent : 0 }).then(loadCategories).then(function () { return rebalanceSegmentWeights(roundId); }).then(function () { $('#segment-modal').close(); renderJudgingSegments(); }).catch(function (error) { showError(error.message); });
+    workflowRequest(editId ? 'update_category' : 'create_category', { event_id: scoringWorkflow.eventId, category_id: editId, category_name: name, assigned_round_id: roundId, purpose: existing ? existing.purpose || 'official' : 'official', judge_mode: $('#round-scoring-mode').value, display_order: existing ? existing.display_order : nextSegmentOrder(roundId), overall_weight_percent: existing ? existing.overall_weight_percent : 0 }).then(loadCategories).then(function () { return rebalanceSegmentWeights(roundId); }).then(function () { $('#segment-modal').close(); renderJudgingSegments(); }).catch(function (error) { showError(error.message); });
   });
   function renderSubcriteriaEditor(rows) {
     $('#simple-subcriteria-rows').innerHTML = (rows || []).map(function (row) {
@@ -2199,7 +2538,6 @@
       var original = $('.judge-check[value="' + CSS.escape(event.target.dataset.judgeProxy) + '"]');
       if (original) { original.checked = event.target.checked; updateJudgeCount(); }
     }
-    if (event.target === $('#advanced-carry-scores')) stages.forEach(function (round, index) { round.carry_previous_scores = index > 0 && event.target.checked; round.score_handling = index > 0 && event.target.checked ? 'carry' : 'start_zero'; });
     if (event.target === $('#advanced-default-max')) $('#max-score').value = event.target.value || 100;
     if (event.target === $('#advanced-tie-rule')) $('#stage-tiebreak-method').value = event.target.value;
   });
@@ -2253,7 +2591,7 @@
       var round = findStageByKey(roundEdit.dataset.simpleRoundEdit); var idx = stages.indexOf(round); if (!round) return;
       $('#simple-round-edit-id').value = roundEdit.dataset.simpleRoundEdit; $('#simple-round-name').value = round.name;
       $('#simple-round-advancement').value = isFinalRoundAt(round, idx, stages.length) ? 'final' : (isAdvanceAllRound(round, false) ? 'advance_all' : 'top_ranking');
-      $('#simple-round-qualifiers').value = round.qualifiers || 1; $('#simple-round-qualifiers-wrap').hidden = $('#simple-round-advancement').value !== 'top_ranking'; $('#round-modal-title').textContent = 'Edit Round'; $('#round-modal').showModal(); requestAnimationFrame(function () { $('#simple-round-name').focus(); });
+      $('#simple-round-qualifiers').value = round.qualifiers || 1; updateRoundAdvancementFields(); $('#round-modal-title').textContent = 'Edit Round'; $('#round-modal').showModal(); requestAnimationFrame(function () { $('#simple-round-name').focus(); });
     } else if (roundDelete) {
       if (stages.length === 1) return showError('A simple event needs one round. Edit this round instead.');
       if (scoringWorkflow.categories.some(function (category) { return categoryRoundKey(category) === roundDelete.dataset.simpleRoundDelete; })) return showError('Delete or move this round\'s judging segments first.');
@@ -2344,6 +2682,11 @@
     });
   });
   form.addEventListener('submit', function (e) {
+    if (document.body.classList.contains('individual-workspace')) {
+      e.preventDefault();
+      $('#save-individual-order').click();
+      return;
+    }
     var publishing = $('#publication-status').value === 'published';
     var error = publishing ? (validateStep(1) || validateStep(2) || validateStep(3) || validateStep(4)) : validateStep(1);
     if (error) {
@@ -2400,6 +2743,7 @@
     var card = event.target.closest('[data-pair-index]');
     if (!card) return;
     var index = Number(card.dataset.pairIndex);
+    if (event.target.matches('[data-pair-division]')) { pairEntries[index].division = event.target.value; renderDivisionManager(); return; }
     if (event.target.matches('[data-pair-department]')) {
       pairEntries[index].department_id = event.target.value;
       var invalid = ['member_1_id', 'member_2_id'].some(function (key) {
@@ -2417,6 +2761,14 @@
     renderPairEntries(index, 'data-pair-member="' + member + '"');
   });
   $('#pair-entry-list')?.addEventListener('click', function (event) {
+    var move = event.target.closest('[data-pair-move]');
+    if (move) {
+      var index = Number(move.closest('[data-pair-index]').dataset.pairIndex);
+      var target = index + Number(move.dataset.pairMove);
+      while (target >= 0 && target < pairEntries.length && divisionsEnabled() && pairEntries[target].division !== pairEntries[index].division) target += Number(move.dataset.pairMove);
+      if (target >= 0 && target < pairEntries.length) { var swap = pairEntries[target]; pairEntries[target] = pairEntries[index]; pairEntries[index] = swap; renderPairEntries(); }
+      return;
+    }
     var button = event.target.closest('[data-remove-pair]');
     if (!button) return;
     pairEntries.splice(Number(button.closest('[data-pair-index]').dataset.pairIndex), 1);
@@ -2562,7 +2914,7 @@
       assigned_round_id: $('#scoring-category-round').value,
       purpose: $('#scoring-category-purpose').value,
       judge_mode: $('#scoring-category-mode').value,
-      display_order: $('#scoring-category-order').value,
+      display_order: $('#scoring-category-order').value || nextSegmentOrder($('#scoring-category-round').value),
       overall_weight_percent: overallWeight,
     }).then(function () {
       return loadCategories();
@@ -2685,6 +3037,53 @@
 
   // Init
   resetWizard();
+  if (document.body.classList.contains('individual-workspace')) {
+    var eventPicker = $('#individual-event');
+    var saveOrderButton = $('#save-individual-order');
+    var workspaceMessage = $('#individual-workspace-message');
+    $('#individual-performance-mount').appendChild(wizard);
+    eventPicker.innerHTML = events.map(function (event) { return '<option value="' + event.id + '">' + escapeHtml(event.name) + '</option>'; }).join('');
+    function loadIndividualWorkspace() {
+      var event = findEvent(eventPicker.value);
+      workspaceMessage.classList.remove('is-error');
+      if (!event) {
+        $('#individual-performance-mount').hidden = true;
+        wizard.removeAttribute('open');
+        saveOrderButton.disabled = true;
+        workspaceMessage.textContent = 'Create an individual criteria-based event to configure performance order. Use Manage individuals to maintain the registry.';
+        return;
+      }
+      $('#individual-performance-mount').hidden = false;
+      resetWizard();
+      fillEditor(event);
+      setStep(2);
+      wizard.setAttribute('open', '');
+      saveOrderButton.disabled = !!event.results_finalized;
+      workspaceMessage.textContent = event.results_finalized ? 'This event is finalized. Its participant setup is read-only.' : '';
+    }
+    var requestedEvent = new URLSearchParams(window.location.search).get('event');
+    if (requestedEvent && findEvent(requestedEvent)) eventPicker.value = requestedEvent;
+    eventPicker.addEventListener('change', loadIndividualWorkspace);
+    saveOrderButton.addEventListener('click', function () {
+      var issue = divisionSetupIssue();
+      if (issue) { workspaceMessage.textContent = issue; workspaceMessage.classList.add('is-error'); return; }
+      syncHiddenFields();
+      saveOrderButton.disabled = true;
+      saveOrderButton.textContent = 'Saving...';
+      workflowRequest('save_participant_setup', {event_id: eventPicker.value,
+        event_entries: $('#event-entries').value, result_processing_config: $('#result-processing-config').value
+      }).then(function (data) {
+        events = events.map(function (event) { return String(event.id) === String(data.event.id) ? data.event : event; });
+        loadIndividualWorkspace();
+        workspaceMessage.textContent = 'Participant setup and performance order saved.';
+      }).catch(function (error) {
+        workspaceMessage.textContent = error.message;
+        workspaceMessage.classList.add('is-error');
+      }).finally(function () { saveOrderButton.disabled = false; saveOrderButton.textContent = 'Save Order'; });
+    });
+    loadIndividualWorkspace();
+  }
+
   if (window.CRITERIA_EVENT_EDIT_ID) {
     var editEvent = findEvent(window.CRITERIA_EVENT_EDIT_ID);
     if (editEvent) {

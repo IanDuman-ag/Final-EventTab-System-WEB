@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Match-Based Events · EventTab</title>
   {% include 'admindash/_bootstrap.html' %}
-  <link rel="stylesheet" href="{% static 'admindash/matchbasedevent.css' %}?v=20261009a">
+  <link rel="stylesheet" href="{% static 'admindash/matchbasedevent.css' %}?v=20261023draft">
   <link rel="stylesheet" href="{% static 'admindash/bootstrap-admin.css' %}?v=1">
 </head>
 <body class="admin-dashboard-page admin-dashboard-v2 match-events-page">
@@ -86,7 +86,7 @@
   </div>
 
   <dialog id="event-wizard" class="wizard" aria-labelledby="wizard-title">
-    <form method="post" id="wizard-form" action="{% url 'admin_match_events' %}" enctype="multipart/form-data" novalidate>
+    <form method="post" id="wizard-form" action="{% url 'admin_match_events' %}" enctype="multipart/form-data" data-draft-owner="{{ request.user.pk }}" novalidate>
       {% csrf_token %}
       <input type="hidden" name="team_ids" id="team-ids" value="[]">
       <input type="hidden" name="draw_order" id="draw-order" value="[]">
@@ -117,6 +117,8 @@
                 <option>Table Tennis</option>
                 <option>Chess</option>
                 <option>Sepak Takraw</option>
+                <option>Pickleball</option>
+                <option>Dart</option>
                 <option>Esports</option>
                 <option>Custom</option>
               </select>
@@ -140,6 +142,7 @@
           <div class="wizard-section-title"><span>02</span><div><h3>Participation &amp; tournament format</h3><p>Choose competitors and generate the tournament structure.</p></div></div>
           <fieldset class="team-picker"><legend>Participating Teams / Participants <span id="selected-team-count" class="selected-count">0 selected</span></legend>
             <input class="form-control" type="search" id="team-search" placeholder="Search active teams">
+            <button type="button" class="btn btn-outline-secondary match-secondary" id="select-all-teams">Select All</button>
             <div class="team-options">
               {% for team in teams %}
               <label data-team-search="{{ team.name|lower }} {{ team.code|lower }}"><input type="checkbox" class="form-check-input team-check" value="{{ team.id }}" data-name="{{ team.name }}"><span><strong>{{ team.name }}</strong><small>{{ team.code }}{% if team.department %} · {{ team.department.name }}{% endif %}</small></span></label>
@@ -240,8 +243,8 @@
           <fieldset>
             <legend>Event Image</legend>
             <label class="btn btn-outline-secondary match-secondary" for="event-image">Upload Event Image</label>
-            <input class="form-control mt-2" type="file" id="event-image" name="event_image" accept="image/jpeg,image/png,image/webp" aria-describedby="event-image-help event-image-error">
-            <p id="event-image-help" class="points-editor-hint">JPEG, PNG, or WebP, up to 5 MB. Leave empty to keep the current image.</p>
+            <input class="form-control mt-2" type="file" id="event-image" name="event_image" accept="image/*,.heic,.heif,.hif,.tif,.tiff" aria-describedby="event-image-help event-image-error">
+            <p id="event-image-help" class="points-editor-hint">Images up to 5 MB. HEIC, HEIF, BMP, and TIFF are converted to PNG. Leave empty to keep the current image.</p>
             <p id="event-image-error" class="wizard-error" role="alert"></p>
             <img id="event-image-preview" alt="Event image preview" hidden style="max-width:100%;width:320px;max-height:200px;object-fit:contain;border-radius:8px">
           </fieldset>
@@ -262,7 +265,7 @@
         </section>
 
         <section class="wizard-panel" data-step="5">
-          <div class="wizard-section-title"><span>05</span><div><h3>Review and publish</h3><p>Confirm the operational plan. Publish only when validations pass.</p></div></div>
+          <div class="wizard-section-title"><span>05</span><div><h3>Review and publish</h3><p>Confirm the event setup below, then publish when all requirements are complete.</p></div></div>
           <div id="review-requirements" class="review-requirements" aria-live="polite"></div>
           <div id="review-summary" class="review-summary"></div>
         </section>
@@ -270,9 +273,10 @@
       <footer class="wizard-footer">
         <button type="button" class="btn btn-outline-secondary match-secondary" id="wizard-back">Back</button>
         <span class="wizard-error" id="wizard-error" role="alert"></span>
+        <small id="draft-status" role="status" aria-live="polite"></small>
         <button type="button" class="btn btn-primary match-primary" id="wizard-next">Next</button>
         <button type="submit" id="save-draft-action" class="btn btn-outline-secondary match-secondary final-action" data-status="draft">Save as Draft</button>
-        <button type="submit" id="publish-action" class="btn btn-primary match-primary final-action" data-status="published">Publish Event</button>
+        <button type="submit" id="publish-action" class="btn btn-primary match-primary final-action" data-status="published" hidden>Publish Event</button>
       </footer>
     </form>
   </dialog>
@@ -320,6 +324,6 @@
     window.MATCH_EVENT_ACADEMIC_YEAR = "{{ academic_year|escapejs }}";
     window.MATCH_EVENT_SEASON_NAMES = {{ season_event_names_json|safe }};
   </script>
-  <script src="{% static 'admindash/matchbasedevent.js' %}?v=20261010d"></script>
+  <script src="{% static 'admindash/matchbasedevent.js' %}?v=20261023reviewpublish"></script>
 </body>
 </html>

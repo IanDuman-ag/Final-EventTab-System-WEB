@@ -99,10 +99,11 @@ class VocalDuetResetTests(TestCase):
         self.assertTrue(context['compatible'])
         self.assertTrue(response.json()['can_score'], response.json())
         self.assertEqual(len(context['candidates']), 2)
-        self.assertEqual(AuditLog.objects.count(), 1)
+        self.assertEqual(AuditLog.objects.exclude(action='Opened Assigned Event').count(), 1)
+        self.assertEqual(AuditLog.objects.filter(action='Opened Assigned Event').count(), 1)
         preimage = json.loads(self.snapshot.read_text())
         self.assertEqual(len(preimage['tables']['events_judgescore']), 16)
-        self.assertNotIn('raw_score', json.dumps(AuditLog.objects.get().metadata))
+        self.assertNotIn('raw_score', json.dumps(list(AuditLog.objects.values_list('metadata', flat=True))))
 
     def test_repaired_subcriteria_support_submission_receipt_and_exact_retry(self):
         self.apply()

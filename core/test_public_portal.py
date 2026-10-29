@@ -17,6 +17,316 @@ from events.public_service import PUBLIC_TIMEZONE, result_is_published
 
 
 class PublicPortalTests(TestCase):
+
+    def test_legacy_published_criteria_contributes_partial_department_tally(self):
+        event = self.create_event('Published Singing', scoring_method='criteria',
+            event_classification='major', apply_championship_points=True,
+            championship_points_config=[{'points': 100}, {'points': 75}])
+        entries = [CriteriaEventEntry.objects.create(event=event, entry_type='individual',
+            display_name=name, department=self.department, display_order=index)
+            for index, name in enumerate(['Singer A', 'Singer B'], 1)]
+        event.participant_ids = [entry.pk for entry in entries]
+        event.save()
+        stamp = timezone.now().isoformat()
+        self.publish(event, faculty_submitted_at=stamp, confirmed_stages={'0': {
+            'approved_at': stamp, 'results': [
+                {'participant_id': entry.pk, 'rank': index, 'complete': True, 'final_score': 90 - index}
+                for index, entry in enumerate(entries, 1)]}})
+        self.assertEqual(leaderboard_rows(), [
+            {'department': 'Engineering', 'points': 175, 'rank': 1}])
+        for params in ({}, {'type': 'criteria'}, {'event_id': str(event.pk)}):
+            response = self.client.get(reverse('public_leaderboard'), params)
+            self.assertEqual(response.context['standings'][0]['points'], 175)
+        # Reads do not change publication data or accumulate awards.
+        event.refresh_from_db()
+        self.assertNotIn('published_championship_awards', event.result_processing_config)
+        self.assertEqual(leaderboard_rows()[0]['points'], 175)
+        event.apply_championship_points = False
+        event.save()
+        self.assertEqual(leaderboard_rows(), [])
+        event.apply_championship_points = True
+        event.results_finalized = False
+        event.save()
+        self.assertEqual(leaderboard_rows(), [])
+
+    def test_approved_multiround_final_is_previewed_and_counts_published_awards(self):
+        event = self.create_event('Approved Pageant', scoring_method='criteria',
+            event_format='multiple_stage', rounds_config=[
+                {'id': 'first', 'name': 'Preliminary'}, {'id': 'final', 'name': 'Final'}])
+        entry = CriteriaEventEntry.objects.create(event=event, entry_type='individual',
+            display_name='Approved Finalist', department=self.department, display_order=1)
+        event.participant_ids = [entry.pk]
+        event.save()
+        stamp = timezone.now().isoformat()
+        self.publish(event, faculty_submitted_at=stamp,
+            championship_scoring={'approval_required': False}, published_championship_awards={str(self.department.pk): 100},
+            qualified_participant_ids={'1': [entry.pk]},
+            confirmed_stages={'1': {'approved_at': stamp, 'results': [
+                {'participant_id': entry.pk, 'rank': 1, 'complete': True, 'final_score': 'PRIVATE_SCORE'}]}})
+        response = self.client.get(reverse('public_results'))
+        card = next(row for row in response.context['events'] if row['id'] == event.pk)
+        self.assertEqual(card['official_placements'][0]['name'], 'Approved Finalist')
+        self.assertNotContains(response, 'PRIVATE_SCORE')
+        response = self.client.get(reverse('public_leaderboard'))
+        self.assertEqual(response.context['standings'][0]['points'], 100)
+        self.assertEqual(response.context['standings'][0]['gold'], 1)
+        # Published placements alone cannot invent department championship points.
+        event.result_processing_config.pop('published_championship_awards')
+        event.save(update_fields=['result_processing_config'])
+        response = self.client.get(reverse('public_leaderboard'))
+        self.assertEqual(response.context['standings'], [])
+        self.assertContains(response, 'Awaiting published championship points.')
+        # Publication does not make an unapproved final eligible.
+        event.result_processing_config['confirmed_stages'] = {}
+        event.save(update_fields=['result_processing_config'])
+        self.assertEqual(self.client.get(reverse('public_leaderboard')).context['standings'], [])
+
+
+
+    def test_schedule_shows_real_opponents_and_department_logo(self):
+        self.department.logo = 'department_logos/engineering.png'
+        self.department.save(update_fields=['logo'])
+        response = self.client.get(reverse('public_schedules'))
+        matchup = response.context['schedules'][0]['matchup']
+        self.assertEqual([side['name'] for side in matchup], ['Falcons', 'Eagles'])
+        self.assertEqual(matchup[0]['department'], 'Engineering')
+        self.assertTrue(matchup[0]['logo_url'].endswith('department_logos/engineering.png'))
+        self.assertContains(response, 'matchup-vs')
+        self.assertNotContains(response, 'PRIVATE MEMBER INFORMATION')
+        self.assertNotContains(response, 'PRIVATE STAFF NOTES')
+        self.match.status = BracketMatch.STATUS_PENDING
+        self.match.match_date = self.today + timedelta(days=1)
+        self.match.save(update_fields=['status', 'match_date'])
+        home = self.client.get(reverse('home'))
+        home_matchup = home.context['upcoming_schedules'][0]['matchup']
+        self.assertEqual(home_matchup, matchup)
+        self.assertContains(home, 'schedule-row--match')
+        self.assertContains(home, 'matchup-vs')
+        self.assertContains(home, f'src="{home_matchup[0]["logo_url"]}"')
+        self.assertNotContains(home, 'PRIVATE MEMBER INFORMATION')
+        self.assertNotContains(home, 'PRIVATE STAFF NOTES')
+
+    def test_schedule_handles_unknown_opponent_without_inventing_a_team(self):
+        self.match.team_b = None
+        self.match.save(update_fields=['team_b'])
+        response = self.client.get(reverse('public_schedules'))
+        self.assertEqual(response.context['schedules'][0]['matchup'][1]['name'], 'TBD')
+        self.assertEqual(response.context['schedules'][0]['matchup'][1]['logo_url'], '')
+        self.match.status = BracketMatch.STATUS_PENDING
+        self.match.match_date = self.today + timedelta(days=1)
+        self.match.save(update_fields=['status', 'match_date'])
+        home = self.client.get(reverse('home'))
+        self.assertEqual(home.context['upcoming_schedules'][0]['matchup'][1]['name'], 'TBD')
+        self.assertContains(home, 'matchup-vs')
+
+
+    def test_home_classification_filter_combines_with_type_and_search(self):
+        major = self.create_event('Major Vocal Duet', scoring_method='criteria', event_classification='major')
+        self.create_event('Minor Vocal Duet', scoring_method='criteria', event_classification='minor')
+        response = self.client.get(reverse('home'), {
+            'featured_type': 'criteria', 'featured_q': 'Vocal',
+            'featured_classification': 'major', 'featured_sort': 'name',
+        })
+        self.assertEqual([row['id'] for row in response.context['featured_events']], [major.pk])
+        self.assertIn('featured_classification=major', response.context['featured_query_string'])
+        self.assertContains(response, 'home-leaderboard-title')
+        self.assertContains(response, 'home-schedule-layout')
+        self.assertContains(response, 'id="home-reference-styles"')
+        self.assertEqual(self.client.get(reverse('home'), {
+            'featured_classification': 'invalid',
+        }).context['featured_filters']['classification'], '')
+
+    def test_managed_photo_covers_do_not_override_restored_svg_artwork(self):
+        self.event.name = 'Photo Contest'
+        self.event.sport_type = ''
+        self.event.special_event_type = ''
+        for prefix in ('event_covers/', 'cloudinary/event_covers/', 'cloudinary/assets/event_covers/'):
+            with self.subTest(prefix=prefix):
+                self.event.image = prefix + 'photography_123'
+                self.event.save()
+                response = self.client.get(reverse('public_games'))
+                self.assertEqual(response.context['events'][0]['image_url'], '')
+                self.assertContains(response, 'data:image/svg+xml;base64,')
+                self.assertNotContains(response, 'photography_123')
+
+    def test_games_category_filter_uses_major_and_minor_classification(self):
+        self.event.event_classification = 'major'
+        self.event.save(update_fields=['event_classification'])
+        minor = self.create_event('Minor Quiz Bee', event_classification='minor')
+        for classification, expected in [('major', self.event.pk), ('minor', minor.pk)]:
+            response = self.client.get(reverse('public_games'), {'category': classification})
+            self.assertEqual([row['id'] for row in response.context['events']], [expected])
+            self.assertContains(response, f'value="{classification}" selected')
+        self.assertContains(response, '>Major</option>')
+        self.assertContains(response, '>Minor</option>')
+
+    def test_games_artwork_matches_event_and_preserves_uploaded_image(self):
+        from pathlib import Path
+        from django.conf import settings
+        from core.public_views import game_artwork_path
+        for name, asset in [('Spoken Poetry', 'speech.svg'), ('Charcoal Painting', 'art.svg'),
+                            ('Film on Stage', 'film.svg'), ('Photo Contest', 'photography.svg'),
+                            ('Live Band Competition', 'band.svg'), ('Quiz Bee', 'quiz.svg'),
+                            ('Radio Drama', 'radio.svg'), ('Short & Sweet Play', 'theater.svg'),
+                            ('Most Disciplined Unit', 'unit.svg'), ('Amazing Race', 'race.svg'),
+                            ('Mr. & Ms. USTP Ambassador 2026', 'pageant.svg'),
+                            ('Singing', 'singing.svg'), ('Vocal Solo', 'singing.svg'),
+                            ('Vocal Duet', 'duet.svg'), ('Cheerdance Competition', 'dance.svg'),
+                            ('Modern Dance Contemporary', 'dance.svg'),
+                            ("Men's Basketball", 'basketball.svg'),
+                            ("Women's Badminton", 'badminton.svg')]:
+            with self.subTest(name=name):
+                self.event.name = name
+                self.event.sport_type = ''
+                self.event.special_event_type = ''
+                path = game_artwork_path(self.event)
+                self.assertTrue(path.endswith('/' + asset))
+                self.assertTrue((Path(settings.BASE_DIR) / 'frontend' / path).is_file())
+        self.event.name = 'Photo Contest'
+        self.event.image = 'events/uploaded-photo.jpg'
+        self.event.save()
+        response = self.client.get(reverse('public_games'))
+        self.assertContains(response, f'src="{self.event.image.url}"')
+        self.assertContains(response, 'data-banner-fallback="data:image/svg+xml;base64,')
+
+    def test_classification_tags_use_saved_values_on_public_pages(self):
+        for value, label in [('major', 'Major Event'), ('minor', 'Minor Event'), ('', '')]:
+            self.event.event_classification = value
+            self.event.save(update_fields=['event_classification'])
+            for route, args in [('home', []), ('public_games', []), ('public_schedules', []),
+                                ('public_event_detail', [self.event.pk])]:
+                with self.subTest(classification=value, route=route):
+                    response = self.client.get(reverse(route, args=args))
+                    marker = 'aria-label="Event classification"'
+                    if label:
+                        self.assertContains(response, marker + '>' + label + '</span>')
+                    else:
+                        self.assertNotContains(response, marker)
+        self.event.event_classification = 'major'
+        self.event.save(update_fields=['event_classification'])
+        self.publish()
+        for route, args in [('public_results', []), ('public_result_detail', [self.event.pk])]:
+            self.assertContains(self.client.get(reverse(route, args=args)),
+                                'aria-label="Event classification">Major Event</span>')
+
+    def test_schedule_union_preserves_event_and_match_classifications(self):
+        self.event.event_classification = 'major'
+        self.event.save(update_fields=['event_classification'])
+        self.create_event('Minor Singing', scoring_method='criteria', event_classification='minor')
+        response = self.client.get(reverse('public_schedules'))
+        classifications = {row['event_name']: row['classification_label'] for row in response.context['schedules']}
+        self.assertEqual(classifications['Basketball'], 'Major Event')
+        self.assertEqual(classifications['Minor Singing'], 'Minor Event')
+
+    def test_leaderboard_tabs_scope_categories_and_actual_event_names(self):
+        singing = self.create_event('Singing', category='Arts', scoring_method='criteria')
+        badminton = self.create_event('Badminton', category='Indoor', scoring_method='match')
+        self.create_event('Private scoring event', category='Private', publication_status='draft')
+        url = reverse('public_leaderboard')
+        match = self.client.get(url, {'type': 'match'})
+        self.assertEqual(match.context['categories'], ['Indoor', 'Sports'])
+        self.assertEqual({option['id'] for option in match.context['event_options']}, {str(self.event.pk), str(badminton.pk)})
+        self.assertContains(match, 'id="standings-event"')
+        self.assertNotContains(match, 'All event types')
+        criteria = self.client.get(url, {'type': 'criteria', 'category': 'Sports', 'event_id': self.event.pk})
+        self.assertEqual(criteria.context['categories'], ['Arts'])
+        self.assertEqual(criteria.context['filters']['category'], '')
+        self.assertEqual(criteria.context['selected_event_id'], '')
+        self.assertEqual(criteria.context['event_options'], [{'id': str(singing.pk), 'name': 'Singing'}])
+        overall = self.client.get(url)
+        self.assertEqual(overall.context['categories'], ['Arts', 'Indoor', 'Sports'])
+        self.assertEqual(len(overall.context['event_options']), 3)
+        self.assertNotContains(overall, 'Private scoring event')
+
+    def test_leaderboard_category_and_event_filters_limit_official_points(self):
+        self.publish()
+        badminton = self.create_event('Badminton', category='Indoor')
+        winner = BracketTeam.objects.create(event=badminton, name='Shuttlers', department=self.department, points=75)
+        opponent = BracketTeam.objects.create(event=badminton, name='Opponents')
+        BracketMatch.objects.create(event=badminton, match_number=1, round_name='Final',
+            team_a=winner, team_b=opponent, winner=winner, status='completed')
+        self.publish(badminton)
+        pending = self.create_event('Awaiting confirmation', category='Sports')
+        BracketTeam.objects.create(event=pending, name='Pending', department=self.department, points=999)
+        url = reverse('public_leaderboard')
+        self.assertEqual(self.client.get(url).context['standings'][0]['points'], 100)
+        response = self.client.get(url, {'type': 'match', 'category': 'Indoor'})
+        self.assertEqual(response.context['event_options'], [{'id': str(badminton.pk), 'name': 'Badminton'}])
+        self.assertEqual(response.context['standings'][0]['points'], 75)
+        response = self.client.get(url, {'event_id': self.event.pk})
+        self.assertEqual(response.context['selected_event_id'], str(self.event.pk))
+        self.assertEqual(response.context['standings'][0]['points'], 25)
+        self.assertEqual(response.context['standings'][0]['result_url'], reverse('public_result_detail', args=[self.event.pk]))
+        response = self.client.get(url, {'event_id': pending.pk})
+        self.assertEqual(response.context['selected_event_id'], str(pending.pk))
+        self.assertEqual(response.context['standings'], [])
+        self.assertNotContains(response, '999')
+
+    def test_leaderboard_reference_layout_and_department_search(self):
+        self.publish(calculated_placements={str(self.team_a.pk): 1})
+        response = self.client.get(reverse('public_leaderboard'), {'q': 'engineer'})
+        self.assertEqual(response.context['standings'][0]['department'], 'Engineering')
+        self.assertEqual(response.context['standings'][0]['gold'], 1)
+        self.assertEqual(response.context['standings'][0]['events_joined'], 1)
+        self.assertContains(response, 'standings-podium')
+        self.assertContains(response, 'class="championship-table"')
+        self.assertContains(response, 'scope="row"')
+        self.assertContains(response, 'Championship<br><span>Leaderboard</span>')
+        self.assertNotContains(response, 'class="standing-gap')
+        self.assertContains(response, '>Match Based</button>')
+        self.assertNotContains(response, '>Sports</button>')
+        empty = self.client.get(reverse('public_leaderboard'), {'q': 'missing department'})
+        self.assertEqual(empty.context['standings'], [])
+        self.assertEqual(len(empty.context['podium']), 1)
+
+    def test_leaderboard_progress_uses_unsearched_official_leader(self):
+        rows = [{'department': name, 'points': points, 'rank': rank}
+                for rank, (name, points) in enumerate([('Technology', 340), ('Information', 280), ('Food Processing', 220)], 1)]
+        with patch('core.public_views.leaderboard_rows', return_value=rows):
+            response = self.client.get(reverse('public_leaderboard'))
+        self.assertEqual(response.context['leader_points'], 340)
+        self.assertEqual(response.context['points_ticks'], [0, 85, 170, 255, 340])
+        self.assertEqual([row['progress_percent'] for row in response.context['standings']], [100, 82, 65])
+        self.assertEqual([row['points_gap'] for row in response.context['standings']], [0, 60, 120])
+        self.assertEqual(response.context['standings'][0]['lead_margin'], 60)
+        with patch('core.public_views.leaderboard_rows', return_value=rows):
+            searched = self.client.get(reverse('public_leaderboard'), {'q': 'Information'})
+        self.assertEqual(searched.context['leader_points'], 340)
+        self.assertEqual(searched.context['standings'][0]['progress_percent'], 82)
+        self.assertEqual(searched.context['standings'][0]['rank'], 2)
+
+    def test_leaderboard_progress_handles_zero_ties_and_single_department(self):
+        for values in ([0, 0], [100, 100], [100]):
+            rows = [{'department': f'Department {rank}', 'points': points, 'rank': rank}
+                    for rank, points in enumerate(values, 1)]
+            with self.subTest(values=values), patch('core.public_views.leaderboard_rows', return_value=rows):
+                response = self.client.get(reverse('public_leaderboard'))
+            standings = response.context['standings']
+            self.assertEqual(standings[0]['progress_percent'], 100 if values[0] else 0)
+            self.assertEqual(standings[0]['is_tied_leader'], len(values) > 1)
+            self.assertEqual(standings[0]['lead_margin'], 0 if len(values) > 1 else None)
+        with patch('core.public_views.leaderboard_rows', return_value=[]):
+            response = self.client.get(reverse('public_leaderboard'))
+        self.assertEqual(response.context['leader_points'], 0)
+        self.assertEqual(response.context['standings'], [])
+
+    def test_leaderboard_school_year_limits_published_points(self):
+        self.event.academic_year = '2026'
+        self.event.save()
+        self.publish()
+        older = self.create_event('Old event', academic_year='2025')
+        winner = BracketTeam.objects.create(event=older, name='Old Falcons', department=self.department, points=100)
+        opponent = BracketTeam.objects.create(event=older, name='Old Eagles')
+        BracketMatch.objects.create(event=older, match_number=1, round_name='Final',
+            team_a=winner, team_b=opponent, winner=winner, status='completed')
+        self.publish(older)
+        self.create_event('Future event', academic_year='2027')
+        url = reverse('public_leaderboard')
+        self.assertEqual(self.client.get(url).context['standings'][0]['points'], 25)
+        self.assertIn('2027', self.client.get(url).context['school_years'])
+        self.assertEqual(self.client.get(url, {'year': '2025'}).context['standings'][0]['points'], 100)
+        self.assertEqual(self.client.get(url, {'year': ''}).context['standings'][0]['points'], 125)
+
     def setUp(self):
         self.today = timezone.localdate(timezone=PUBLIC_TIMEZONE)
         self.department = Department.objects.create(name='Engineering', code='ENG')
@@ -147,6 +457,7 @@ class PublicPortalTests(TestCase):
         self.assertEqual((fixture['score_a'], fixture['score_b'], fixture['winner']), ('', '', ''))
         result = self.client.get(reverse('public_result_detail', args=[self.event.pk]))
         self.assertEqual(result.context['fixtures'], [])
+        self.assertEqual(result.context['bracket_lanes'], [])
         self.assertNotContains(result, 'Eagles')
         self.assertNotContains(result, '>99<')
         self.assertIn('republication', result.context['result_notice'])
@@ -157,6 +468,50 @@ class PublicPortalTests(TestCase):
         self.assertTrue(fixture['is_official'])
         self.assertEqual((fixture['score_a'], fixture['winner']), ('99', 'Eagles'))
         self.assertEqual(self.client.get(reverse('public_leaderboard')).context['standings'][0]['points'], 25)
+
+    def test_public_result_bracket_preserves_links_and_all_published_matches(self):
+        semifinal = BracketMatch.objects.create(
+            event=self.event, match_number=2, round_name='Winners Semifinals',
+            team_a=self.team_a, team_b=self.team_b, winner=self.team_a,
+            status='completed', score_a='21', score_b='12', next_match_winner=self.match,
+        )
+        losers = BracketMatch.objects.create(
+            event=self.event, match_number=3, round_name='Losers Final',
+            team_a=self.team_a, team_b=self.team_b, winner=self.team_b,
+            status='completed', score_a='10', score_b='21',
+        )
+        semifinal.next_match_loser = losers
+        semifinal.save()
+        for number in range(4, 17):
+            BracketMatch.objects.create(
+                event=self.event, match_number=number, round_name='Pool Play',
+                team_a=self.team_a, team_b=self.team_b, winner=self.team_a,
+                status='completed', score_a='21', score_b='8',
+            )
+        advance = BracketMatch.objects.create(
+            event=self.event, match_number=0, round_name='Winners Semifinals',
+            team_a=self.team_a, winner=self.team_a, is_automatic_advance=True,
+            status='completed', next_match_winner=semifinal,
+        )
+        self.publish()
+        response = self.client.get(reverse('public_result_detail', args=[self.event.pk]))
+        nodes = [match for lane in response.context['bracket_lanes']
+                 for column in lane['rounds'] for match in column['matches']]
+        self.assertEqual(len(nodes), 17)
+        self.assertTrue(next(match for match in nodes if match['id'] == advance.pk)['automatic_advance'])
+        node = next(match for match in nodes if match['id'] == semifinal.pk)
+        self.assertEqual(node['next_winner'], self.match.pk)
+        self.assertEqual(node['next_loser'], losers.pk)
+        self.assertContains(response, 'class="official-match-card"', count=17)
+        self.assertNotContains(response, 'PRIVATE STAFF NOTES')
+        self.assertNotContains(response, 'PRIVATE MEMBER INFORMATION')
+        self.match.save()
+        response = self.client.get(reverse('public_result_detail', args=[self.event.pk]))
+        nodes = [match for lane in response.context['bracket_lanes']
+                 for column in lane['rounds'] for match in column['matches']]
+        node = next(match for match in nodes if match['id'] == semifinal.pk)
+        self.assertEqual(node['next_winner'], '')
+        self.assertNotContains(response, f'data-match-id="{self.match.pk}"')
 
     def test_approval_and_tabulation_are_required_by_configured_workflow(self):
         cases = [
@@ -240,6 +595,21 @@ class PublicPortalTests(TestCase):
         invalid = self.client.get(reverse('home'), {'featured_type': 'bad', 'featured_sort': 'bad', 'featured_page': 'bad'})
         self.assertEqual(invalid.status_code, 200)
         self.assertEqual(invalid.context['featured_filters']['sort'], 'date')
+
+    def test_home_cultural_and_arts_tabs_use_public_event_categories(self):
+        cultural = self.create_event('Pageants', category='Cultural', scoring_method='criteria')
+        arts = self.create_event('Singing Showcase', category='Arts', scoring_method='criteria')
+        combined = self.create_event('Vocal Duet', category='Socio-Cultural & Literary Arts', scoring_method='criteria')
+        self.create_event('Private Cultural Event', category='Cultural', publication_status='draft')
+        self.create_event('Uncategorized Criteria', category='Special Event', scoring_method='criteria')
+        home = reverse('home')
+        cultural_response = self.client.get(home, {'featured_type': 'cultural'})
+        self.assertEqual({row['id'] for row in cultural_response.context['featured_events']}, {cultural.pk, combined.pk})
+        arts_response = self.client.get(home, {'featured_type': 'arts', 'featured_q': 'Singing', 'featured_sort': 'name'})
+        self.assertEqual([row['id'] for row in arts_response.context['featured_events']], [arts.pk])
+        self.assertIn('featured_type=arts', arts_response.context['featured_query_string'])
+        all_arts = self.client.get(home, {'featured_type': 'arts'})
+        self.assertEqual({row['id'] for row in all_arts.context['featured_events']}, {arts.pk, combined.pk})
 
     def test_schedule_union_uses_fixtures_without_duplicate_event_entries(self):
         singing = self.create_event('Singing', scoring_method='criteria', category='Special Event', venue='Hall')

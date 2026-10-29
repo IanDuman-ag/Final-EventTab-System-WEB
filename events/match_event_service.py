@@ -1,5 +1,6 @@
 """Transactional validation, bracket generation, and scheduling for match events."""
 import json
+import logging
 import random
 from datetime import date, datetime, timedelta
 
@@ -12,6 +13,9 @@ from django.utils import timezone
 from .models import BracketMatch, BracketTeam, Event, Team
 
 
+logger = logging.getLogger(__name__)
+
+
 class MatchEventValidationError(ValueError):
     pass
 
@@ -21,7 +25,7 @@ ALLOWED_FORMATS = {'single_elimination', 'double_elimination', 'round_robin'}
 ALLOWED_PAIRING = {'random_draw', 'seeded_draw', 'manual_pairing'}
 ALLOWED_SPORT_TYPES = {
     'Basketball', 'Volleyball', 'Badminton', 'Table Tennis', 'Chess',
-    'Sepak Takraw', 'Esports', 'Custom',
+    'Sepak Takraw', 'Pickleball', 'Dart', 'Esports', 'Custom',
 }
 RESULT_FORMAT_BY_SPORT = {
     'Basketball': 'team_final_score',
@@ -30,6 +34,8 @@ RESULT_FORMAT_BY_SPORT = {
     'Table Tennis': 'best_of_games',
     'Chess': 'win_draw_loss',
     'Sepak Takraw': 'best_of_sets',
+    'Pickleball': 'manual_winner',
+    'Dart': 'manual_winner',
     'Esports': 'maps_rounds_custom',
     'Custom': 'manual_winner',
 }
@@ -1007,6 +1013,38 @@ def _validated_tabulator(data, user_model, required=True):
     return tabulator
 
 
+def _separate_department_openers(ordered_ids, departments):
+    """Minimize same-department opening pairs, retaining the draw when already valid.
+
+    Byes occupy the leading slots in the canonical graph. Pair the two largest
+    remaining department groups first, including known matchups between bye recipients.
+    Ties retain the randomized input order. Missing departments are independent.
+    """
+    _, pairs = _opening_pairs(ordered_ids)
+    def group_key(team_id):
+        return ('department', departments[team_id]) if departments.get(team_id) else ('team', team_id)
+    bye_ids = [a for a, b in pairs if b is None]
+    known_pairs = [(a, b) for a, b in pairs if b is not None]
+    known_pairs += list(zip(bye_ids[::2], bye_ids[1::2]))
+    if all(group_key(a) != group_key(b) for a, b in known_pairs):
+        return list(ordered_ids)
+    groups = {}
+    for team_id in ordered_ids:
+        groups.setdefault(group_key(team_id), []).append(team_id)
+    paired = []
+    for _ in range(len(ordered_ids) // 2):
+        largest = sorted((key for key in groups if groups[key]), key=lambda key: -len(groups[key]))
+        first = largest[0]
+        second = largest[1] if len(largest) > 1 else first
+        paired.extend([groups[first].pop(0), groups[second].pop(0)])
+    remaining = [team_id for group in groups.values() for team_id in group]
+    if remaining:
+        # An odd bye count leaves one team waiting for a played opening match.
+        insert_at = len(bye_ids) - 1
+        paired[insert_at:insert_at] = remaining
+    return paired
+
+
 def build_match_blueprint(
     team_ids,
     tournament_type,
@@ -1023,6 +1061,9 @@ def build_match_blueprint(
             random.SystemRandom().shuffle(ordered_ids)
     if len(ordered_ids) < 2:
         raise MatchEventValidationError('Select at least two active teams.')
+    if draw_order is None and tournament_type in {'single_elimination', 'double_elimination'}:
+        departments = dict(Team.objects.filter(pk__in=ordered_ids).values_list('pk', 'department_id'))
+        ordered_ids = _separate_department_openers(ordered_ids, departments)
     include_third_place = tournament_type == 'single_elimination' and len(ordered_ids) >= 4
 
     matches = []
@@ -1404,19 +1445,43 @@ def _notify_faculty(event, actor, created):
 
 
 def validate_event_image(upload):
-    """Validate actual image content rather than trusting its filename or MIME type."""
-    from PIL import Image, UnidentifiedImageError
+    """Validate decoded content and normalize other raster formats for web display."""
+    from io import BytesIO
+    from uuid import uuid4
+
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    from PIL import Image, ImageOps, UnidentifiedImageError
+    from pillow_heif import register_heif_opener
+
+    register_heif_opener(thumbnails=False)
+
     if upload is None:
-        return
+        return None
     if upload.size > 5 * 1024 * 1024:
         raise MatchEventValidationError('Event image must be 5 MB or smaller.')
     try:
         with Image.open(upload) as image:
-            if image.format not in {'JPEG', 'PNG', 'WEBP'}:
-                raise MatchEventValidationError('Upload a JPEG, PNG, or WebP event image.')
             image.verify()
-    except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError) as exc:
-        raise MatchEventValidationError('Upload a valid JPEG, PNG, or WebP event image.') from exc
+        upload.seek(0)
+        with Image.open(upload) as image:
+            image.load()
+            extensions = {'JPEG': 'jpg', 'PNG': 'png', 'WEBP': 'webp', 'GIF': 'gif', 'AVIF': 'avif'}
+            if image.format in extensions:
+                upload.seek(0)
+                return SimpleUploadedFile(
+                    f'{uuid4().hex}.{extensions[image.format]}', upload.read(),
+                    content_type=Image.MIME[image.format],
+                )
+            # Browsers cannot reliably display formats such as TIFF and BMP.
+            output = BytesIO()
+            ImageOps.exif_transpose(image).convert('RGBA').save(output, format='PNG')
+            return SimpleUploadedFile(
+                f'{uuid4().hex}.png', output.getvalue(), content_type='image/png'
+            )
+    except (UnidentifiedImageError, OSError, ValueError, SyntaxError, Image.DecompressionBombError) as exc:
+        raise MatchEventValidationError(
+            'This image is damaged or its format is not supported. Try exporting it as PNG or JPEG.'
+        ) from exc
     finally:
         upload.seek(0)
 
@@ -1429,7 +1494,7 @@ def save_match_event(data, actor, instance=None, files=None):
     created = instance is None
     event = instance or Event(created_by=actor)
     image = files.get('event_image') if files else None
-    validate_event_image(image)
+    image = validate_event_image(image)
     if image is not None:
         event.image = image
     classification = _required(data, 'event_classification', 'Event Classification')
@@ -1642,7 +1707,8 @@ def save_match_event(data, actor, instance=None, files=None):
         try:
             event.image.save(image.name, image, save=False)
         except Exception as exc:
-            raise MatchEventValidationError('The event image could not be uploaded. Please try again.') from exc
+            logger.exception('Event image storage failed')
+            raise MatchEventValidationError('Image storage is temporarily unavailable. Please try again shortly.') from exc
     event.save()
     if faculty and event.faculty_account_id != faculty.id:
         Event.objects.filter(pk=event.pk).update(

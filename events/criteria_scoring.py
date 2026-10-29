@@ -5,6 +5,64 @@ from decimal import Decimal, InvalidOperation
 from .models import CriteriaEventEntry, CriteriaScoreSubmission, RegistryCandidate, Team
 
 
+def combine_round_results(event, results, round_index):
+    """Combine finalist scores on a 0–100 scale; never include award segments.
+
+    Numerical rounds must use percentage scoring. Ordinal rounds are converted
+    to 100 * (group size - mean rank) / (group size - 1), or 100 for one entry.
+    Cumulative results are the arithmetic mean of these normalized round scores.
+    Only finalists receive final placements; eliminated entries retain scores.
+    """
+    from .criteria_faculty_service import criteria_rounds, round_participant_ids
+    from .divisions import group_participants, participant_division, rank_divisions
+    method = (event.result_processing_config or {}).get('final_result_basis')
+    rounds = criteria_rounds(event)
+    if method not in {'weighted_rounds', 'cumulative_rounds'} or round_index != len(rounds) - 1:
+        return results
+    snapshots = (event.result_processing_config or {}).get('confirmed_stages') or {}
+    values = defaultdict(list)
+    for index, stage in enumerate(rounds):
+        rows = results if index == round_index else snapshots.get(str(index), {}).get('results', [])
+        by_id = {row['participant_id']: row for row in rows}
+        categories = list(event.scoring_categories.filter(assigned_round_id=stage['id'], purpose='official'))
+        ranking = bool(categories) and all(category.judge_mode == 'ranking' for category in categories)
+        groups = group_participants(event, round_participant_ids(event, index))
+        weight = Decimal(str(stage.get('weight', 0))) if method == 'weighted_rounds' else Decimal(1)
+        if not weight.is_finite() or weight < 0:
+            raise ValueError('Round weights must be finite and nonnegative.')
+        for finalist in results:
+            participant_id = finalist['participant_id']
+            if participant_id not in by_id:
+                raise ValueError('Every finalist requires an approved score from each previous round.')
+            row = by_id[participant_id]
+            value = Decimal(str(row.get('round_score', row['final_score'])))
+            if ranking:
+                size = len(groups[participant_division(event, participant_id)])
+                value = Decimal(100) if size == 1 else 100 * (size - value) / (size - 1)
+            elif event.criteria_score_method != 'weighted_percentage':
+                raise ValueError('Combining rounds requires normalized weighted-percentage scoring.')
+            if not value.is_finite():
+                raise ValueError('Round scores must be finite.')
+            values[participant_id].append((value, weight))
+    total_weight = sum((weight for _, weight in next(iter(values.values()), [])), Decimal(0))
+    if total_weight <= 0 or (method == 'weighted_rounds' and total_weight != 100):
+        raise ValueError('Round weights must total 100%.')
+    combined = []
+    for original in results:
+        row = dict(original)
+        row['round_score'] = original['final_score']
+        row['final_score'] = float(sum((value * weight for value, weight in values[row['participant_id']]), Decimal(0)) / total_weight)
+        combined.append(row)
+    combined.sort(key=lambda row: -row['final_score'])
+    prior, rank = None, 0
+    for position, row in enumerate(combined, 1):
+        if row['final_score'] != prior:
+            rank = position
+        prior = row['final_score']
+        row['rank'] = rank
+    return rank_divisions(event, combined)
+
+
 def normalized_criterion_score(raw_score, maximum_score, criterion_weight):
     try:
         raw, maximum, weight = (
@@ -43,6 +101,12 @@ def compute_official_criteria_rankings(event, *, round_id, accepted_statuses=Non
         expected[category.id] = {row.id for row in criteria}
 
     roster = event.participant_ids if participant_ids is None else participant_ids
+    from .criteria_faculty_service import criteria_rounds
+    from .participant_removal_service import excluded_participant_ids
+    index = next((index for index, row in enumerate(criteria_rounds(event)) if row['id'] == round_id), None)
+    excluded = excluded_participant_ids(event, index) if index is not None else set()
+    if excluded:
+        roster = [participant_id for participant_id in roster if participant_id not in excluded]
     participants = {row.id: row for row in CriteriaEventEntry.objects.filter(event=event, id__in=roster)}
     if not participants:  # legacy fallback before migration
         registry = RegistryCandidate if event.participation_type == 'individual' else Team
@@ -53,12 +117,16 @@ def compute_official_criteria_rankings(event, *, round_id, accepted_statuses=Non
         judge_id__in=judge_ids, participant_id__in=participants,
         status__in=accepted_statuses or [CriteriaScoreSubmission.STATUS_APPROVED], is_active=True,
     ).select_related('criterion', 'category')
+    from .divisions import group_participants, participant_division
+    division_groups = group_participants(event, participants)
+    rank_groups = group_participants(event, event.participant_ids if excluded else participants)
     sheets = defaultdict(dict)
     for row in scores:
         if row.criterion.category_id != row.category_id:
             raise ValueError('Score criterion does not belong to the submission category.')
         ranking = configured and row.category.judge_mode == 'ranking'
-        if ranking and (row.raw_score != row.raw_score.to_integral_value() or not 1 <= row.raw_score <= len(participants)):
+        rank_limit = len(rank_groups[participant_division(event, row.participant_id)])
+        if ranking and (row.raw_score != row.raw_score.to_integral_value() or not 1 <= row.raw_score <= rank_limit):
             raise ValueError('Ranking submissions must contain valid ordinal participant ranks.')
         if not ranking and row.raw_score < row.criterion.min_score:
             raise ValueError('Score is below the criterion minimum.')
@@ -128,9 +196,13 @@ def compute_official_criteria_rankings(event, *, round_id, accepted_statuses=Non
     if ranking_mode:
         for judge_id in judge_ids:
             for criterion_id in required:
-                ranks = [sheet[criterion_id].raw_score for (participant_id, sheet_judge), sheet in sheets.items() if sheet_judge == judge_id and criterion_id in sheet]
-                if len(ranks) == len(participants) and set(ranks) != {Decimal(value) for value in range(1, len(participants) + 1)}:
-                    raise ValueError('Each ranking criterion must assign each participant a distinct ordinal rank.')
+                for members in division_groups.values():
+                    ranks = [sheet[criterion_id].raw_score for (participant_id, sheet_judge), sheet in sheets.items()
+                             if participant_id in members and sheet_judge == judge_id and criterion_id in sheet]
+                    # Exclusions retain original ordinal scores; only gaps are allowed.
+                    if len(ranks) == len(members) and (len(set(ranks)) != len(ranks) or
+                            (not excluded and set(ranks) != {Decimal(value) for value in range(1, len(members) + 1)})):
+                        raise ValueError('Each ranking criterion must assign distinct ordinal ranks within each division.')
     def ordering(row):
         keys = [row['final_score'] if ranking_mode else -row['final_score']]
         if configured:
@@ -156,4 +228,5 @@ def compute_official_criteria_rankings(event, *, round_id, accepted_statuses=Non
             rank = index
         prior = comparison
         row['rank'] = rank
-    return rows
+    from .divisions import rank_divisions
+    return rank_divisions(event, rows)

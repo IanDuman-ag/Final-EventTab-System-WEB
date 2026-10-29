@@ -114,6 +114,165 @@ class FacultyCriteriaPortalTests(TestCase):
         self.assertFalse(self.event.results_finalized)
         self.assertTrue(self.event.result_processing_config['ready_for_publication'])
 
+        dashboard = self.client.get(reverse('faculty_dashboard'))
+        self.assertEqual([row['id'] for row in dashboard.context['publication_queue']], [self.event.pk])
+        self.assertEqual(dashboard.context['publication_ready_count'], 1)
+        self.assertContains(dashboard, '1 Ready for Publication')
+        self.assertContains(dashboard, 'Final round approved')
+        self.assertNotContains(dashboard, '0/0 matches confirmed')
+        self.assertNotContains(dashboard, 'data-open-publication="publication-')
+        ready = self.client.get(reverse('faculty_my_events'), {'status': 'ready'})
+        self.assertEqual([row['id'] for row in ready.context['event_rows']], [self.event.pk])
+        self.assertEqual(ready.context['event_rows'][0]['status'], 'Ready for Publication')
+
+    def test_unsubmitted_criteria_is_pending_even_when_event_visibility_is_published(self):
+        self.event.publication_status = 'published'
+        self.event.save(update_fields=['publication_status'])
+        response = self.client.get(reverse('faculty_dashboard'))
+        self.assertEqual(response.context['publication_queue'], [])
+        self.assertEqual(response.context['recent_events'][0]['status'], 'Pending Review')
+
+    def test_single_round_requires_confirmation_then_publishes_and_leaves_queue(self):
+        from events.public_service import criteria_results
+        self.event.rounds_config = [self.event.rounds_config[0]]
+        self.event.save()
+        self.complete()
+        approve_criteria_round(self.event, self.faculty, 0)
+        self.assertContains(self.client.get(self.url + '?tab=results'), 'Confirm &amp; Publish')
+        dashboard = self.client.get(reverse('faculty_dashboard'))
+        self.assertEqual(dashboard.context['publication_ready_count'], 1)
+        self.assertContains(dashboard, 'Review &amp; Publish')
+        self.client.post(self.url, {'action': 'publish'})
+        self.event.refresh_from_db()
+        self.assertFalse(self.event.results_finalized)
+        self.assertNotIn('faculty_submitted_at', self.event.result_processing_config)
+        response = self.client.post(self.url, {'action': 'publish', 'confirm': 'yes', 'tab': 'results'}, follow=True)
+        self.assertContains(response, 'Official results published.')
+        self.event.refresh_from_db()
+        self.assertTrue(self.event.results_finalized)
+        self.assertEqual(self.event.result_processing_config['published_by'], self.faculty.pk)
+        self.assertEqual(len(criteria_results(self.event)[0]), 2)
+        self.assertEqual(self.client.get(reverse('faculty_dashboard')).context['publication_queue'], [])
+
+    def test_legacy_criteria_publication_saves_department_points_snapshot(self):
+        from events.faculty_service import leaderboard_rows, publish_results
+        from events.models import Department
+        department = Department.objects.create(name='Arts', code='ART')
+        self.event.rounds_config = [self.event.rounds_config[0]]
+        self.event.event_classification = 'major'
+        self.event.apply_championship_points = True
+        self.event.championship_points_config = [{'points': 100}, {'points': 75}]
+        self.event.save()
+        for entry in self.entries:
+            entry.department = department
+            entry.save()
+        self.complete()
+        approve_criteria_round(self.event, self.faculty, 0)
+        response = self.client.post(self.url, {'action': 'publish', 'confirm': 'yes'}, follow=True)
+        self.assertContains(response, 'Official results published.')
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.result_processing_config['published_championship_awards'],
+                         {str(department.pk): 175})
+        self.assertEqual(leaderboard_rows()[0]['points'], 175)
+        publish_results(self.event, self.faculty)
+        self.assertEqual(leaderboard_rows()[0]['points'], 175)
+
+    def test_previously_submitted_multi_round_results_can_be_published(self):
+        self.complete()
+        approve_criteria_round(self.event, self.faculty, 0)
+        unlock_criteria_round(self.event, self.faculty, 1)
+        self.complete('final')
+        approve_criteria_round(self.event, self.faculty, 1)
+        submit_criteria_publication(self.event, self.faculty)
+        self.assertContains(self.client.get(self.url + '?tab=results'), 'Confirm &amp; Publish')
+        self.client.post(self.url, {'action': 'publish', 'confirm': 'yes'})
+        self.event.refresh_from_db()
+        self.assertTrue(self.event.results_finalized)
+
+    def test_criteria_removal_requires_confirmation_preserves_rankings_and_allows_republication(self):
+        from events.public_service import criteria_results
+        self.event.rounds_config = [self.event.rounds_config[0]]
+        self.event.save()
+        self.complete()
+        approve_criteria_round(self.event, self.faculty, 0)
+        self.client.post(self.url, {'action': 'publish', 'confirm': 'yes'})
+        self.event.refresh_from_db()
+        approved = self.event.result_processing_config['confirmed_stages']
+        scores = list(CriteriaScoreSubmission.objects.values_list('pk', 'raw_score', 'status'))
+        for url in [reverse('faculty_dashboard'), reverse('faculty_my_events'), self.url + '?tab=results']:
+            self.assertContains(self.client.get(url), 'Remove Publish')
+        removal = reverse('faculty_publication_review', args=[self.event.pk])
+        self.client.post(removal, {'action': 'unpublish'})
+        self.event.refresh_from_db()
+        self.assertTrue(self.event.results_finalized)
+        response = self.client.post(removal, {'action': 'unpublish', 'confirm': 'yes', 'return_to': 'dashboard'}, follow=True)
+        self.assertContains(response, 'Publication removed.')
+        self.assertNotContains(response, 'Remove Publish')
+        self.event.refresh_from_db()
+        self.assertFalse(self.event.results_finalized)
+        self.assertEqual(self.event.result_processing_config['confirmed_stages'], approved)
+        self.assertEqual(list(CriteriaScoreSubmission.objects.values_list('pk', 'raw_score', 'status')), scores)
+        self.assertEqual(criteria_results(self.event)[0], [])
+        self.assertEqual(self.client.get(reverse('public_result_detail', args=[self.event.pk])).status_code, 404)
+        self.assertEqual(response.context['publication_ready_count'], 1)
+        self.client.post(self.url, {'action': 'publish', 'confirm': 'yes'})
+        self.event.refresh_from_db()
+        self.assertTrue(self.event.results_finalized)
+        self.assertEqual(len(criteria_results(self.event)[0]), 2)
+        response = self.client.post(removal, {'action': 'unpublish', 'confirm': 'yes', 'return_to': 'my_events'}, follow=True)
+        self.assertEqual(response.redirect_chain[-1][0], reverse('faculty_my_events'))
+        self.assertContains(response, 'Ready for Publication')
+
+    def test_criteria_removal_rejects_other_faculty_and_missing_csrf(self):
+        from events.faculty_service import unpublish_results, FacultyServiceError
+        self.event.rounds_config = [self.event.rounds_config[0]]
+        self.event.save()
+        self.complete()
+        approve_criteria_round(self.event, self.faculty, 0)
+        self.client.post(self.url, {'action': 'publish', 'confirm': 'yes'})
+        removal = reverse('faculty_publication_review', args=[self.event.pk])
+        self.client.force_login(self.other)
+        self.client.post(removal, {'action': 'unpublish', 'confirm': 'yes'})
+        self.event.refresh_from_db()
+        self.assertTrue(self.event.results_finalized)
+        with self.assertRaises(FacultyServiceError):
+            unpublish_results(self.event, self.other)
+        csrf_client = Client(enforce_csrf_checks=True)
+        csrf_client.force_login(self.faculty)
+        self.assertEqual(csrf_client.post(removal, {'action': 'unpublish', 'confirm': 'yes'}).status_code, 403)
+        self.event.refresh_from_db()
+        self.assertTrue(self.event.results_finalized)
+
+    def test_publish_rejects_unapproved_round_and_other_faculty(self):
+        self.client.post(self.url, {'action': 'publish', 'confirm': 'yes'})
+        self.event.refresh_from_db()
+        self.assertFalse(self.event.results_finalized)
+        self.client.force_login(self.other)
+        self.client.post(self.url, {'action': 'publish', 'confirm': 'yes'})
+        self.event.refresh_from_db()
+        self.assertFalse(self.event.results_finalized)
+
+    def test_publish_service_preserves_tabulator_and_admin_requirements(self):
+        from events.faculty_service import publish_results, FacultyServiceError
+        self.event.rounds_config = [self.event.rounds_config[0]]
+        self.event.save()
+        self.complete()
+        approve_criteria_round(self.event, self.faculty, 0)
+        submit_criteria_publication(self.event, self.faculty)
+        self.event.result_processing_config.update(verification_mode='tabulator_admin_approval', approved=False)
+        self.event.save()
+        with self.assertRaises(FacultyServiceError):
+            publish_results(self.event, self.faculty)
+        self.event.result_processing_config['tabulation_confirmed_at'] = timezone.now().isoformat()
+        self.event.save()
+        with self.assertRaises(FacultyServiceError):
+            publish_results(self.event, self.faculty)
+        self.event.result_processing_config['approved'] = True
+        self.event.save()
+        publish_results(self.event, self.faculty)
+        self.event.refresh_from_db()
+        self.assertTrue(self.event.results_finalized)
+
     def test_authorized_publication_reads_approved_final_snapshot(self):
         from events.points_settings_service import criteria_placements
         from events.public_service import criteria_results
@@ -130,6 +289,10 @@ class FacultyCriteriaPortalTests(TestCase):
         from events.faculty_service import publish_results
         admin = get_user_model().objects.create_user(username='portal-publisher', is_staff=True)
         publish_results(self.event, admin)
+        dashboard = self.client.get(reverse('faculty_dashboard'))
+        self.assertEqual(dashboard.context['publication_queue'], [])
+        self.assertEqual(dashboard.context['publication_ready_count'], 0)
+        self.assertEqual(dashboard.context['recent_events'][0]['status'], 'Published Results')
         results,_=criteria_results(self.event)
         self.assertEqual([row['name'] for row in results],[self.entries[0].display_name])
         self.assertEqual(results[0]['score'],'')
@@ -166,3 +329,35 @@ class FacultyCriteriaPortalTests(TestCase):
         self.assertEqual(response.status_code,403)
         self.event.refresh_from_db()
         self.assertEqual(self.event.rounds_config[1]['status'],'locked')
+
+    def test_my_events_summary_filters_and_scoped_list(self):
+        match = Event.objects.create(name='Basketball', category='Sports', venue='Court',
+            event_date=date.today(), scoring_method='match', faculty_account=self.faculty)
+        Event.objects.create(name='Other Faculty Event', category='Private', venue='Hall',
+            event_date=date.today(), scoring_method='criteria', faculty_account=self.other)
+        url = reverse('faculty_my_events')
+        response = self.client.get(url, {'type': 'criteria', 'category': 'Arts', 'q': 'Dance'})
+        self.assertEqual([row['id'] for row in response.context['event_rows']], [self.event.pk])
+        self.assertEqual(response.context['event_summary'], {'total': 2, 'published': 0, 'ready': 0, 'criteria': 1, 'match': 1})
+        self.assertEqual(response.context['categories'], ['Arts', 'Sports'])
+        self.assertContains(response, 'events-summary')
+        self.assertNotContains(response, 'Other Faculty Event')
+        response = self.client.get(url, {'type': 'match', 'category': 'Sports'})
+        self.assertEqual([row['id'] for row in response.context['event_rows']], [match.pk])
+        self.assertEqual(response.context['event_summary']['total'], 2)
+        self.assertEqual(self.client.get(url, {'type': 'criteria', 'category': 'Sports'}).context['event_rows'], [])
+
+    def test_my_events_pagination_keeps_active_filters(self):
+        for index in range(11):
+            Event.objects.create(name=f'Dance {index}', category='Arts', venue='Hall',
+                event_date=date.today(), scoring_method='criteria', faculty_account=self.faculty)
+        response = self.client.get(reverse('faculty_my_events'), {
+            'type': 'criteria', 'category': 'Arts', 'q': 'Dance', 'sort': 'name', 'status': 'all', 'page': 2})
+        self.assertEqual(response.context['page_obj'].number, 2)
+        self.assertEqual(len(response.context['event_rows']), 2)
+        query = response.context['pagination_query']
+        self.assertIn('type=criteria', query)
+        self.assertIn('category=Arts', query)
+        self.assertIn('q=Dance', query)
+        self.assertNotIn('page=', query)
+        self.assertContains(response, 'Previous page')

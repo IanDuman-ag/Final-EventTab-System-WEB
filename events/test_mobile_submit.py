@@ -180,3 +180,45 @@ class MobileSubmitTests(TransactionTestCase):
             with connection.cursor() as cursor:
                 cursor.execute('ALTER TABLE events_judgescore DROP CONSTRAINT submit_test_wrong_user_fk')
                 cursor.execute('DROP TABLE submit_test_legacy_user')
+
+    def test_submission_audit_has_judge_round_participant_and_device(self):
+        from .models import AuditLog
+        from .audit_service import build_audit_rows
+        response = self.api.post(self.url, self.payload, format='json',
+            HTTP_USER_AGENT='Mozilla/5.0 (Linux; Android 14) Chrome/120.0')
+        self.assertEqual(response.status_code, 200)
+        audit = AuditLog.objects.get(action='Submitted Final Score')
+        self.assertEqual(audit.user_id, 57)
+        self.assertEqual(audit.contestant, self.candidates[0].name)
+        self.assertEqual(audit.device, 'Android Mobile')
+        self.assertEqual(audit.metadata['round_id'], 'prelim')
+        self.assertEqual(audit.metadata['criteria_count'], 5)
+        self.assertIn('prelim', audit.description)
+        rows = build_audit_rows(role='Judge', action='Submitted Final Score')
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]['contestant'], self.candidates[0].name)
+
+    def test_same_second_submissions_for_different_candidates_are_not_merged(self):
+        from .models import JudgeActivityLog
+        from .audit_service import build_audit_rows
+        from unittest.mock import patch
+        now = timezone.now().replace(microsecond=0)
+        with patch('django.utils.timezone.now', return_value=now):
+            for candidate in self.candidates[:2]:
+                JudgeActivityLog.log(judge=self.judges[-1], action=JudgeActivityLog.ACTION_SUBMIT_SCORE,
+                    event=self.mobile, candidate=candidate, details=f'Submitted for {candidate.name}')
+        rows = build_audit_rows(role='Judge', action='Submitted Final Score')
+        self.assertEqual(len(rows), 2)
+        self.assertEqual({row['contestant'] for row in rows}, {c.name for c in self.candidates[:2]})
+
+    def test_opening_assignment_and_scoring_candidate_are_audited(self):
+        from .models import AuditLog
+        response = self.api.get('/api/events/judge/assignments/63/')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(AuditLog.objects.filter(user_id=57, action='Opened Assigned Event').exists())
+        response = self.api.get('/api/events/judging-events/63/my_scores/',
+            {'candidate_id': self.candidates[0].pk})
+        self.assertEqual(response.status_code, 200)
+        audit = AuditLog.objects.get(user_id=57, action='Started Scoring Contestant')
+        self.assertEqual(audit.contestant, self.candidates[0].name)
+        self.assertEqual(JudgeScore.objects.filter(judge_id=57).count(), 0)

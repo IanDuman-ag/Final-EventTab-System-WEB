@@ -81,7 +81,14 @@ class JudgingEventDetailSerializer(serializers.ModelSerializer):
             data.update(criteria=CriterionSerializer(instance.criteria.filter(pk__in=criterion_ids), many=True).data,
                         candidates=CandidateSerializer(instance.candidates.filter(pk__in=candidate_ids), many=True).data,
                         candidate_count=len(candidate_ids), rounds=detail['stages'],
-                        active_round=detail['current_stage'], round_id=detail['selected_round_id'])
+                        active_round=detail['current_stage'], round_id=detail['selected_round_id'],
+                        segment_performance_orders=detail.get('segment_performance_orders', []))
+            if detail.get('divisions_enabled'):
+                stored = {row['id']: row for row in data['candidates']}
+                data['candidates'] = [dict(stored[row['id']], division=row['division'], appearance_order=row['appearance_order'], number=row['number'], candidate_number=row.get('candidate_number', str(row['number'])))
+                    for row in detail['participants'] if row['is_qualified'] and row['id'] in stored]
+                data['divisions_enabled'] = True
+                data['divisions'] = [{'name': group['name'], 'candidate_ids': [row['id'] for row in group['participants'] if row['is_qualified']]} for group in detail['divisions']]
         return data
 
 

@@ -1,4 +1,5 @@
-<aside class="et-sidebar" id="etSidebar" aria-label="Tabulator navigation">
+{% load static %}
+<aside data-portal-mobile data-portal-logo="{% get_media_prefix %}landingpagelogo/logoeventtab%20(1).png" class="et-sidebar" id="etSidebar" aria-label="Tabulator navigation">
   <div class="et-brand"><strong>Event<span>Tab</span></strong><small>TABULATOR PORTAL</small></div>
   <nav class="et-nav" aria-label="Main navigation">
     <a class="et-nav-link{% if active == 'dashboard' %} is-active{% endif %}" href="{% url 'tabulator_dashboard' %}{% if event %}?event_id={{ event.id }}{% endif %}" {% if active == 'dashboard' %}aria-current="page"{% endif %}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h8v8H3zm10 0h8v8h-8zM3 13h8v8H3zm10 0h8v8h-8z"/></svg>Dashboard</a>
@@ -11,3 +12,6 @@
   </div>
 </aside>
 <div class="et-backdrop" id="etBackdrop" hidden></div>
+
+<link rel="stylesheet" href="{% static 'admindash/sidebar-scrollbar.css' %}?v=20261019notifications">
+<script src="{% static 'js/admin_sidebar.js' %}?v=20261019notifications"></script>

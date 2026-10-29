@@ -1,0 +1,18 @@
+[Unit]
+Description=EventTab confirmed database recovery worker
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=eventtab
+Group=eventtab
+WorkingDirectory=/srv/eventtab/Final-EventTab-System-WEB
+ExecStart=/srv/eventtab/Final-EventTab-System-WEB/venv/bin/python -m events.recovery_worker
+Restart=on-failure
+RestartSec=5
+UMask=0077
+TimeoutStopSec=660
+KillMode=control-group
+
+[Install]
+WantedBy=multi-user.target

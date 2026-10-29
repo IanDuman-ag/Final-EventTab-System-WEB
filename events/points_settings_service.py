@@ -298,9 +298,9 @@ def criteria_placements(event, rules):
         if any(row['participant_id'] not in entries for row in approved_final):
             return [], 'Approved final results need event-specific participant records.'
         rows = [{'id': row['participant_id'], 'rank': row['rank'],
-                 'department_id': entries[row['participant_id']].department_id}
+                 'department_id': entries[row['participant_id']].department_id, 'division': row.get('division', '')}
                 for row in approved_final]
-        if len({row['rank'] for row in rows}) != len(rows) and rules['tie_policy'] != 'shared':
+        if len({(row.get('division', ''), row['rank']) for row in rows}) != len(rows) and rules['tie_policy'] != 'shared':
             return [], 'Tied criteria rankings require resolution under the official judging rules.'
         return rows, ''
     if is_multiround(event) or len(result_rounds(event)) > 1:
@@ -314,13 +314,15 @@ def criteria_placements(event, rules):
         except ValueError as exc:
             return [], str(exc)
         entries = {row.id: row for row in event.criteria_entries.all()}
-        if not rankings or len(rankings) != len(event.participant_ids) or not all(row['complete'] for row in rankings):
+        from .participant_removal_service import active_participant_ids
+        if not rankings or len(rankings) != len(active_participant_ids(event)) or not all(row['complete'] for row in rankings):
             return [], 'Complete approved judge scores are required.'
-        rows = [{'id': row['participant_id'], 'rank': row['rank'], 'department_id': entries[row['participant_id']].department_id}
+        rows = [{'id': row['participant_id'], 'rank': row['rank'], 'department_id': entries[row['participant_id']].department_id, 'division': row.get('division', '')}
                 for row in rankings if row['participant_id'] in entries]
     elif event.judging_event_id:
         from .models import JudgeScore
-        candidates = list(event.judging_event.candidates.all())
+        from .participant_removal_service import active_mobile_candidate_ids
+        candidates = list(event.judging_event.candidates.filter(pk__in=active_mobile_candidate_ids(event)))
         criteria = list(event.judging_event.criteria.values_list('id', flat=True))
         judges = list(event.assigned_judges.filter(is_active=True).values_list('id', flat=True))
         locked = set(JudgeScore.objects.filter(candidate__event=event.judging_event, is_locked=True).values_list('candidate_id', 'criterion_id', 'judge_id'))
@@ -341,7 +343,7 @@ def criteria_placements(event, rules):
             rows.append({'id': row['candidate_id'], 'rank': rank, 'department_id': departments[row['candidate_id']]})
     else:
         return [], 'No supported official final rankings are available.'
-    if len({row['rank'] for row in rows}) != len(rows) and rules['tie_policy'] != 'shared':
+    if len({(row.get('division', ''), row['rank']) for row in rows}) != len(rows) and rules['tie_policy'] != 'shared':
         return [], 'Tied criteria rankings require resolution under the official judging rules.'
     return rows, ''
 
@@ -523,11 +525,32 @@ def official_department_awards(event_ids=None):
             continue
         cfg = event.result_processing_config or {}
         if cfg.get('championship_scoring'):
-            if cfg.get('championship_pending') or 'published_championship_awards' not in cfg:
+            if cfg.get('championship_pending'):
                 continue
-            for department_id, value in cfg['published_championship_awards'].items():
-                yield event, int(department_id), value
+            if 'published_championship_awards' in cfg:
+                for department_id, value in cfg['published_championship_awards'].items():
+                    yield event, int(department_id), value
+                continue
+        if event.scoring_method == 'criteria':
+            # Older publications did not persist criteria department awards.
+            # Recover only from this event's saved rules and verified final ranks.
+            # Never substitute current global settings or unpublished awards.
+            if cfg.get('championship_requires_republication') or not event.apply_championship_points:
+                continue
+            rules = cfg.get('championship_scoring') or match_championship_rules(event)
+            if (not rules or rules.get('classification') not in {'major', 'minor'}
+                    or not rules.get('placements')):
+                continue
+            placements, pending = criteria_placements(event, rules)
+            if pending:
+                continue
+            table = {row['rank']: row[rules['classification']] for row in rules['placements']}
+            for row in placements:
+                if row['department_id']:
+                    yield event, row['department_id'], table.get(row['rank'], 0)
         else:
+            if cfg.get('championship_scoring'):
+                continue
             for team in event.bracket_teams.all():
                 if team.department_id:
                     yield event, team.department_id, team.points

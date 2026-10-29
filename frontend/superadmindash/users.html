@@ -6,10 +6,25 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>User Management · Superadmin · EventTab</title>
   <link rel="stylesheet" href="{% static 'superadmin_dashboard.css' %}?v=20260803a">
-  <link rel="stylesheet" href="{% static 'admin_v2.css' %}?v=20260524a">
-  <link rel="stylesheet" href="{% static 'superadmindash/pages.css' %}?v=20260803a">
+  <link rel="stylesheet" href="{% static 'admin_v2.css' %}?v=20261019sidebar">
+  <link rel="stylesheet" href="{% static 'superadmindash/pages.css' %}?v=20261025accounts">
 </head>
-<body class="admin-v2-page">
+<body class="admin-v2-page sa-users-reference">
+<svg class="su-symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
+<symbol id="su-users" viewBox="0 0 24 24"><circle cx="9" cy="7" r="3"/><circle cx="18" cy="9" r="2.5"/><path d="M2 21v-5a7 7 0 0 1 14 0v5ZM17 21v-6a6 6 0 0 0-1-3c4-2 7 1 7 5v4Z"/></symbol>
+<symbol id="su-crown" viewBox="0 0 24 24"><path d="m2 5 5 6 5-9 5 9 5-6-3 15H5L2 5ZM5 22h14v2H5Z"/></symbol>
+<symbol id="su-gavel" viewBox="0 0 24 24"><path d="m12 2 2-2 10 10-2 2-3-1-3 3 1 3-2 2-4-4-8 8-3-3 8-8-4-4 2-2 3 1 3-3Z"/></symbol>
+<symbol id="su-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11"/><path d="m7 12 3 3 7-7" fill="none" stroke="white" stroke-width="2"/></symbol>
+<symbol id="su-search" viewBox="0 0 24 24"><circle cx="10" cy="10" r="6"/><path d="m15 15 6 6"/></symbol>
+<symbol id="su-plus" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M7 12h10"/></symbol>
+<symbol id="su-eye" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></symbol>
+<symbol id="su-edit" viewBox="0 0 24 24"><path d="m4 16 12-12 4 4L8 20l-5 1 1-5ZM14 6l4 4"/></symbol>
+<symbol id="su-key" viewBox="0 0 24 24"><circle cx="16" cy="8" r="5"/><path d="m12 12-9 9v-5l3-3h3l3-3"/></symbol>
+<symbol id="su-ban" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m6 18 12-12"/></symbol>
+<symbol id="su-trash" viewBox="0 0 24 24"><path d="M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7"/></symbol>
+<symbol id="su-filter" viewBox="0 0 24 24"><path d="M3 4h18l-7 8v8l-4-2v-6Z"/></symbol>
+<symbol id="su-reset" viewBox="0 0 24 24"><path d="M4 9a8 8 0 1 1 0 7M4 3v6h6"/></symbol>
+</defs></svg>
   <div class="dashboard-shell">
     {% include 'superadmindash/_sidebar.html' with active='users' %}
     <div class="v2sa-content dashboard-area">
@@ -18,36 +33,38 @@
           <p class="sa-kicker">MANAGE</p>
           <h1 class="sa-page-title" style="margin:0">User Management</h1>
         </div>
-        <button class="sa-btn" type="button" id="sa-open-create">Create User</button>
       </header>
       <main class="sa-page-main">
+        <div class="su-summary" aria-label="User summary">
+          <article class="su-summary-blue"><span class="su-summary-icon"><svg aria-hidden="true"><use href="#su-users"/></svg></span><div><span>Total Users</span><strong>{{ summary.total }}</strong></div><svg class="su-summary-watermark" aria-hidden="true"><use href="#su-users"/></svg></article>
+          <article class="su-summary-gold"><span class="su-summary-icon"><svg aria-hidden="true"><use href="#su-crown"/></svg></span><div><span>Admins</span><strong>{{ summary.admins }}</strong></div><svg class="su-summary-watermark" aria-hidden="true"><use href="#su-crown"/></svg></article>
+          <article class="su-summary-purple"><span class="su-summary-icon"><svg aria-hidden="true"><use href="#su-gavel"/></svg></span><div><span>Judges</span><strong>{{ summary.judges }}</strong></div><svg class="su-summary-watermark" aria-hidden="true"><use href="#su-gavel"/></svg></article>
+          <article class="su-summary-green"><span class="su-summary-icon"><svg aria-hidden="true"><use href="#su-check"/></svg></span><div><span>Active Users</span><strong>{{ summary.active }}</strong></div><span class="su-summary-watermark su-growth" aria-hidden="true"><i></i><i></i><i></i></span></article>
+        </div>
         <section class="sa-card">
           <form class="sa-toolbar" method="get">
-            <input type="search" name="q" value="{{ search_query }}" placeholder="Search name, email, role…">
-            <select name="role">
+            <label class="su-search"><svg aria-hidden="true"><use href="#su-search"/></svg><input type="search" name="q" value="{{ search_query }}" placeholder="Search name, email, role..." aria-label="Search name, email, role"></label><input type="hidden" name="sort" value="{{ sort }}"><input type="hidden" name="dir" value="{{ direction }}">
+            <select name="role" aria-label="Role">
               <option value="all" {% if selected_role == 'all' %}selected{% endif %}>All Roles</option>
               <option value="admin" {% if selected_role == 'admin' %}selected{% endif %}>Admin</option>
               <option value="faculty" {% if selected_role == 'faculty' %}selected{% endif %}>Faculty In-Charge</option>
               <option value="judge" {% if selected_role == 'judge' %}selected{% endif %}>Judge</option>
             </select>
-            <select name="status">
+            <select name="status" aria-label="Status">
               <option value="all" {% if selected_status == 'all' %}selected{% endif %}>All Status</option>
               <option value="active" {% if selected_status == 'active' %}selected{% endif %}>Active</option>
               <option value="inactive" {% if selected_status == 'inactive' %}selected{% endif %}>Inactive</option>
             </select>
-            <select name="department">
-              <option value="all">All Departments</option>
-              {% for d in departments %}
-              <option value="{{ d }}" {% if selected_department == d %}selected{% endif %}>{{ d }}</option>
-              {% endfor %}
-            </select>
-            <button class="sa-btn-sm" type="submit">Filter</button>
+            <button class="sa-btn-sm su-filter" type="submit"><svg aria-hidden="true"><use href="#su-filter"/></svg>Filter</button><a class="sa-btn-sm sa-btn-secondary su-reset-filters" href="{% url 'superadmin_users' %}"><svg aria-hidden="true"><use href="#su-reset"/></svg>Reset</a>
           </form>
+          <div class="su-table-heading"><div><h2>User Accounts</h2><p>{{ total_count }} account{{ total_count|pluralize }}</p></div>
+        <button class="sa-btn" type="button" id="sa-open-create"><svg aria-hidden="true"><use href="#su-plus"/></svg>Create User</button>
+          </div>
           <div class="sa-table-wrap">
             <table class="sa-table">
               <thead>
                 <tr>
-                  <th>Name</th><th>Email</th><th>Role</th><th>Department</th><th>Status</th><th>Last Login</th><th>Actions</th>
+                  {% for header in sort_headers %}<th scope="col" aria-sort="{{ header.aria_sort }}"><a href="{{ header.url }}">{{ header.label }}<span aria-hidden="true">↕</span></a></th>{% endfor %}<th scope="col">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -55,52 +72,49 @@
                 <tr data-id="{{ row.id }}">
                   <td><strong>{{ row.name }}</strong><br><small>{{ row.username }}</small></td>
                   <td>{{ row.email|default:"—" }}</td>
-                  <td><span class="sa-pill">{{ row.role }}</span></td>
-                  <td>{{ row.department }}</td>
+                  <td><span class="sa-pill su-role {% if row.role == 'Judge' %}su-role-judge{% elif row.role == 'Faculty In-Charge' %}su-role-faculty{% else %}su-role-admin{% endif %}">{{ row.role }}</span></td>
                   <td><span class="sa-pill {% if not row.is_active %}sa-pill--inactive{% else %}sa-pill--completed{% endif %}">{{ row.status }}</span></td>
                   <td>{{ row.last_login }}</td>
                   <td>
                     <div class="sa-actions">
-                      <button class="sa-btn-sm sa-btn-secondary sa-view" type="button" data-id="{{ row.id }}">View</button>
+                      <button class="sa-btn-sm sa-btn-secondary sa-view" type="button" data-id="{{ row.id }}"><svg aria-hidden="true"><use href="#su-eye"/></svg>View</button>
                       <button class="sa-btn-sm sa-btn-secondary sa-edit" type="button"
                         data-id="{{ row.id }}" data-username="{{ row.username }}" data-email="{{ row.email }}"
-                        data-role="{{ row.role }}" data-department="{{ row.department }}" data-active="{{ row.is_active|yesno:'1,0' }}">Edit</button>
-                      <button class="sa-btn-sm sa-btn-secondary sa-reset" type="button" data-id="{{ row.id }}">Reset PW</button>
+                        data-role="{{ row.role }}" data-active="{{ row.is_active|yesno:'1,0' }}"><svg aria-hidden="true"><use href="#su-edit"/></svg>Edit</button>
+                      <button class="sa-btn-sm sa-btn-secondary sa-reset" type="button" data-id="{{ row.id }}"><svg aria-hidden="true"><use href="#su-key"/></svg>Reset PW</button>
                       {% if row.is_active %}
-                      <button class="sa-btn-sm sa-btn-secondary sa-toggle" type="button" data-id="{{ row.id }}" data-active="0">Deactivate</button>
+                      <button class="sa-btn-sm sa-btn-secondary sa-toggle" type="button" data-id="{{ row.id }}" data-active="0"><svg aria-hidden="true"><use href="#su-ban"/></svg>Deactivate</button>
                       {% else %}
-                      <button class="sa-btn-sm sa-btn-secondary sa-toggle" type="button" data-id="{{ row.id }}" data-active="1">Activate</button>
+                      <button class="sa-btn-sm sa-btn-secondary sa-toggle" type="button" data-id="{{ row.id }}" data-active="1"><svg aria-hidden="true"><use href="#su-check"/></svg>Activate</button>
                       {% endif %}
                       {% if row.can_delete %}
-                      <button class="sa-btn-sm sa-btn-danger sa-delete" type="button" data-id="{{ row.id }}">Delete</button>
+                      <button class="sa-btn-sm sa-btn-danger sa-delete" type="button" data-id="{{ row.id }}"><svg aria-hidden="true"><use href="#su-trash"/></svg>Delete</button>
                       {% endif %}
                     </div>
                   </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="7" class="sa-empty">No users found.</td></tr>
+                <tr><td colspan="6" class="sa-empty">No users found.</td></tr>
                 {% endfor %}
               </tbody>
             </table>
           </div>
-          {% if page_obj.has_other_pages %}
-          <div style="padding:12px 16px;display:flex;gap:8px;align-items:center;">
-            {% if page_obj.has_previous %}<a class="sa-btn-sm sa-btn-secondary" href="?page={{ page_obj.previous_page_number }}&q={{ search_query }}&role={{ selected_role }}&status={{ selected_status }}&department={{ selected_department }}">Prev</a>{% endif %}
-            <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }} · {{ total_count }} users</span>
-            {% if page_obj.has_next %}<a class="sa-btn-sm sa-btn-secondary" href="?page={{ page_obj.next_page_number }}&q={{ search_query }}&role={{ selected_role }}&status={{ selected_status }}&department={{ selected_department }}">Next</a>{% endif %}
-          </div>
-          {% endif %}
+          <footer class="su-pagination"><span>Page {{ page_obj.number }} of {{ paginator.num_pages }} <span aria-hidden="true">·</span> {{ total_count }} users</span><nav aria-label="User pagination">
+            {% if page_obj.has_previous %}<a href="?page={{ page_obj.previous_page_number }}&{{ pagination_query }}">‹ <span>Previous</span></a>{% else %}<span class="su-page-disabled" aria-disabled="true">‹ <span>Previous</span></span>{% endif %}
+            {% for number in page_numbers %}{% if number == paginator.ELLIPSIS %}<span class="su-page-ellipsis">{{ number }}</span>{% elif number == page_obj.number %}<span class="su-page-current" aria-current="page">{{ number }}</span>{% else %}<a href="?page={{ number }}&{{ pagination_query }}">{{ number }}</a>{% endif %}{% endfor %}
+            {% if page_obj.has_next %}<a href="?page={{ page_obj.next_page_number }}&{{ pagination_query }}"><span>Next</span> ›</a>{% else %}<span class="su-page-disabled" aria-disabled="true"><span>Next</span> ›</span>{% endif %}
+          </nav></footer>
         </section>
       </main>
     </div>
   </div>
 
   <div class="sa-modal-backdrop" id="sa-user-modal">
-    <div class="sa-modal">
-      <h3 id="sa-modal-title">Create User</h3>
+    <div class="sa-modal" role="dialog" aria-modal="true" aria-labelledby="sa-modal-title">
+      <h3 id="sa-modal-title">Create User</h3><p class="su-dialog-description">Manage account access and sign-in details.</p>
       <form id="sa-user-form" class="sa-form" style="padding:0;max-width:none">
         <input type="hidden" id="sa-user-id" value="">
-        <label>Username<input id="sa-username" required></label>
+        <label>Username<input id="sa-username" autocomplete="off" required></label>
         <label>Email<input id="sa-email" type="email"></label>
         <label>Role
           <select id="sa-role">
@@ -109,19 +123,34 @@
             <option value="Judge">Judge</option>
           </select>
         </label>
-        <label>Department
-          <select id="sa-department">
-            <option value="">—</option>
-            {% for d in departments %}<option value="{{ d }}">{{ d }}</option>{% endfor %}
-          </select>
-        </label>
-        <label id="sa-password-wrap">Password<input id="sa-password" type="text"></label>
         <label class="row"><input id="sa-active" type="checkbox" checked> Active</label>
+        <label id="sa-password-wrap">Password<span class="su-password-field"><input id="sa-password" type="password" autocomplete="new-password"><button type="button" class="su-show-password" data-target="sa-password" aria-label="Show password">Show</button></span></label>
+        <label id="sa-confirm-wrap">Confirm Password<input id="sa-password-confirm" type="password" autocomplete="new-password"></label>
+        <p class="su-form-message" id="sa-user-message" role="status" aria-live="polite"></p>
         <div class="sa-modal-actions">
           <button type="button" class="sa-btn sa-btn-secondary" id="sa-modal-cancel">Cancel</button>
           <button type="submit" class="sa-btn">Save</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <div class="sa-modal-backdrop" id="sa-reset-modal">
+    <div class="sa-modal" role="dialog" aria-modal="true" aria-labelledby="sa-reset-title">
+      <h3 id="sa-reset-title">Reset Password</h3><p class="su-dialog-description" id="sa-reset-account"></p>
+      <form id="sa-reset-form" class="sa-form">
+        <label>New Password<span class="su-password-field"><input id="sa-reset-password" type="password" autocomplete="new-password" required><button type="button" class="su-show-password" data-target="sa-reset-password" aria-label="Show password">Show</button></span></label>
+        <label>Confirm New Password<input id="sa-reset-confirm" type="password" autocomplete="new-password" required></label>
+        <p class="su-form-message" id="sa-reset-message" role="status" aria-live="polite"></p>
+        <div class="sa-modal-actions"><button type="button" class="sa-btn sa-btn-secondary" data-close="sa-reset-modal">Cancel</button><button type="submit" class="sa-btn">Reset Password</button></div>
+      </form>
+    </div>
+  </div>
+  <div class="sa-modal-backdrop" id="sa-detail-modal">
+    <div class="sa-modal" role="dialog" aria-modal="true" aria-labelledby="sa-detail-title">
+      <h3 id="sa-detail-title">Account Details</h3><dl id="sa-account-details" class="su-account-details"></dl>
+      <div class="su-password-note"><strong>Password</strong><p>Passwords are securely hashed and cannot be viewed. Use Reset Password to set a new password.</p></div>
+      <div class="sa-modal-actions"><button type="button" class="sa-btn sa-btn-secondary" data-close="sa-detail-modal">Close</button><button type="button" class="sa-btn" id="sa-detail-reset">Reset Password</button></div>
     </div>
   </div>
 
@@ -136,6 +165,6 @@
       csrf: "{{ csrf_token }}"
     };
   </script>
-  <script src="{% static 'js/superadmin_users.js' %}?v=20260803a"></script>
+  <script src="{% static 'js/superadmin_users.js' %}?v=20261025accounts"></script>
 </body>
 </html>

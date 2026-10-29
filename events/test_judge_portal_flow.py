@@ -50,7 +50,7 @@ class JudgePortalFlowTests(TestCase):
             raw_score=score, status=status, source='MANUAL',
             submitted_at=timezone.now() if status != 'DRAFT' else None)
 
-    def test_pageants_saved_history_deduplicates_bridge_and_refreshes_dashboard(self):
+    def test_pageants_saved_history_deduplicates_bridge_and_preserves_live_dashboard(self):
         first = self.api.post(self.url, self.payload, format='json')
         self.assertEqual(first.status_code, 200)
         self.assertEqual(self.api.post(self.url, self.payload, format='json').json(), first.json())
@@ -63,11 +63,15 @@ class JudgePortalFlowTests(TestCase):
         self.assertEqual(row['title'], 'Pageants')
         self.assertEqual(row['score'], 80)
         self.assertEqual(row['round_id'], 'prelim')
+        self.assertEqual(row['candidate_id'], self.candidates[0].pk)
         self.assertEqual(len(row['receipt_scores']), 5)
         self.assertEqual(sum(item['weight_percent'] for item in row['receipt_criteria']), 100)
         self.assertEqual(detail['participants_scored'], 1)
-        self.assertEqual(dashboard['stats']['submitted'], 1)
-        self.assertEqual(dashboard['last_submission']['candidate_id'], self.candidates[0].pk)
+        # The deployed dashboard reports event status; own submission receipts
+        # remain available through the history endpoint checked above.
+        self.assertEqual(dashboard['stats'], {'total_events': 1, 'ongoing_events': 1, 'completed_events': 0})
+        self.assertIsNone(dashboard['last_submission'])
+        self.assertEqual([row['id'] for row in dashboard['assigned_events']], [self.mobile.pk])
         self.assertEqual(list(JudgeScore.objects.exclude(judge_id=57).order_by('pk').values()), self.before)
 
     def test_admin_synced_duet_uses_own_web_assignment_without_provisioning(self):

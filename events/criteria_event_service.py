@@ -1,6 +1,7 @@
 """Transactional validation and persistence for criteria-based events."""
 import json
 import logging
+import math
 from collections import Counter, defaultdict, deque
 from threading import Thread
 from datetime import date
@@ -83,21 +84,31 @@ def _validated_event_entries(participation_type, data, *, strict=False):
             department = ordered[0].department if ordered[0].department_id == ordered[1].department_id else None
             cleaned.append({'entry_type': 'pair', 'source': None, 'display_name': f'{ordered[0].name} + {ordered[1].name}', 'department': department, 'members': ordered, 'order': order})
             used_pairs.add(pair_key); used_people.update(member_ids)
+    for item, row in zip(cleaned, rows):
+        item['division'] = str(row.get('division') or '').strip()
+    identities = [_proposed_entry_identity(item) for item in cleaned]
+    if len(identities) != len(set(identities)):
+        raise CriteriaEventValidationError('The same participant cannot be assigned twice to an event.')
     if strict and not cleaned:
         raise CriteriaEventValidationError('Add at least one valid event entry.')
     return cleaned
 
 
+def _entry_identity(entry):
+    if entry.entry_type == 'pair':
+        return ('pair', tuple(sorted(link.individual_id for link in entry.member_links.all())))
+    return (entry.entry_type, entry.source_individual_id if entry.entry_type == 'individual' else entry.source_team_id)
+
+
+def _proposed_entry_identity(entry):
+    if entry['entry_type'] == 'pair':
+        return ('pair', tuple(sorted(member.pk for member in entry['members'])))
+    return (entry['entry_type'], entry['source'].pk)
+
+
 def _sync_event_entries(event, entries, data):
     existing = list(event.criteria_entries.prefetch_related('member_links').all())
-    def current_signature(row):
-        if row.entry_type == 'individual': return ('individual', row.source_individual_id)
-        if row.entry_type == 'team': return ('team', row.source_team_id)
-        return ('pair', tuple(sorted(row.member_links.values_list('individual_id', flat=True))))
-    def proposed_signature(row):
-        if row['entry_type'] in {'individual', 'team'}: return (row['entry_type'], row['source'].id)
-        return ('pair', tuple(sorted(member.id for member in row['members'])))
-    replacement = bool(existing) and Counter(current_signature(row) for row in existing) != Counter(proposed_signature(row) for row in entries)
+    replacement = bool(existing) and Counter(_entry_identity(row) for row in existing) != Counter(_proposed_entry_identity(row) for row in entries)
     if replacement and CriteriaScoreSubmission.objects.filter(event=event).exists():
         raise CriteriaEventValidationError('Participants cannot be replaced after judging scores have been recorded.')
     if existing and not replacement:
@@ -105,10 +116,14 @@ def _sync_event_entries(event, entries, data):
         # by scores and round qualification maps, so update snapshots in place.
         by_signature = defaultdict(deque)
         for entry in existing:
-            by_signature[current_signature(entry)].append(entry)
+            by_signature[_entry_identity(entry)].append(entry)
+        # Vacate unique positions before swapping any existing entry.
+        offset = max((entry.display_order for entry in existing), default=0) + len(existing) + 1
+        from django.db.models import F
+        event.criteria_entries.update(display_order=F('display_order') + offset)
         ordered_entries = []
         for item in entries:
-            entry = by_signature[proposed_signature(item)].popleft()
+            entry = by_signature[_proposed_entry_identity(item)].popleft()
             ordered_entries.append(entry)
             entry.display_name = item['display_name']
             entry.department = item['department']
@@ -680,6 +695,8 @@ def _boolish(data, key, default=False):
 
 def _percent_total(values, label, required=True):
     total = round(sum(values), 2)
+    if not math.isfinite(total):
+        raise CriteriaEventValidationError(f'{label} must contain finite numbers.')
     if required and abs(total - 100) > 0.01:
         raise CriteriaEventValidationError(f'{label} must total 100% (currently {total}%).')
     return total
@@ -792,7 +809,7 @@ def _validated_criteria(data, strict=True):
     return cleaned
 
 
-def _validated_rounds(event_format, data, participant_count=0, strict=False):
+def _validated_rounds(event_format, data, participant_count=0, strict=False, division_counts=None):
     rows = _json_list(data.get('rounds_config'), 'Competition stage configuration')
 
     def _extra(row):
@@ -812,7 +829,7 @@ def _validated_rounds(event_format, data, participant_count=0, strict=False):
             'weight_locked': bool(row.get('weight_locked', False)),
         }
 
-    if event_format == 'single_performance' or len(rows) <= 1:
+    if len(rows) <= 1:
         if not rows:
             return [{
                 'stage_number': 1,
@@ -922,6 +939,9 @@ def _validated_rounds(event_format, data, participant_count=0, strict=False):
                 qualifiers = _positive_int(row.get('qualifiers'), 'Each qualification stage qualifier count')
                 if qualifiers < 1:
                     raise CriteriaEventValidationError('Each qualification stage needs at least one qualifier.')
+                limit = min(division_counts.values()) if division_counts else current_round_participant_count
+                if qualifiers > limit and division_counts:
+                    raise CriteriaEventValidationError(f'Top {qualifiers} cannot exceed the {limit} eligible participants in the smallest division.')
                 if strict and qualifiers > current_round_participant_count:
                     raise CriteriaEventValidationError(
                         f'Top {qualifiers} cannot exceed the {current_round_participant_count} eligible participants.'
@@ -957,11 +977,13 @@ def _validated_rounds(event_format, data, participant_count=0, strict=False):
         })
         cleaned[-1]['qualification_method'] = qualification_method
         cleaned[-1]['advancement_rule'] = qualification_method or cleaned[-1].get('advancement_rule')
+        if not is_final and division_counts and qualification_method not in {'advance_all', 'minimum_score'}:
+            division_counts = {name: min(count, qualifiers) for name, count in division_counts.items()}
         if not is_final:
-            current_round_participant_count = _stage_actual_qualifiers(
+            current_round_participant_count = (sum(division_counts.values()) if division_counts else _stage_actual_qualifiers(
                 qualifiers or current_round_participant_count,
                 current_round_participant_count,
-            )
+            ))
         weights.append(weight)
 
     _percent_total(weights, 'Total stage weight')
@@ -1231,13 +1253,14 @@ def _save_event_image(event, files):
     if image is None:
         return
     try:
-        validate_event_image(image)
+        image = validate_event_image(image)
     except MatchEventValidationError as exc:
         raise CriteriaEventValidationError(str(exc)) from exc
     try:
         event.image.save(image.name, image, save=False)
     except Exception as exc:
-        raise CriteriaEventValidationError('The event image could not be uploaded. Please try again.') from exc
+        logger.exception('Criteria event image storage failed')
+        raise CriteriaEventValidationError('Image storage is temporarily unavailable. Please try again shortly.') from exc
 
 
 def _save_pageant_event(data, user, files=None, instance=None):
@@ -1483,8 +1506,81 @@ def _save_pageant_event(data, user, files=None, instance=None):
         _schedule_assignment_notifications(event, uniq)
     try:
         sync_event_to_mobile(event)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.exception("Mobile judging sync failed for event %s", event.pk)
+        raise CriteriaEventValidationError(
+            "The event could not be synced to the judge app. Please try again or contact support."
+        ) from exc
+    return event
+
+
+def _validated_segment_orders(event, entries, raw_orders):
+    if not isinstance(raw_orders, dict):
+        raise CriteriaEventValidationError('Segment performance orders must be an object.')
+    categories = set(event.scoring_categories.values_list('pk', flat=True))
+    sources = {(entry.source_individual_id or entry.source_team_id): entry.pk for entry in entries}
+    orders = {}
+    for key, values in raw_orders.items():
+        try:
+            segment_id = int(key)
+            ids = [int(value) for value in values] if isinstance(values, list) else []
+        except (TypeError, ValueError) as exc:
+            raise CriteriaEventValidationError('Segment performance order contains invalid IDs.') from exc
+        if segment_id not in categories or not isinstance(values, list) or len(ids) != len(set(ids)) or set(ids) != set(sources):
+            raise CriteriaEventValidationError('Each segment order must contain every selected individual exactly once and belong to this event.')
+        orders[str(segment_id)] = [sources[value] for value in ids]
+    return orders
+
+
+@transaction.atomic
+def save_criteria_participant_setup(event, data, user):
+    """Save only the roster and appearance settings from Individuals."""
+    from .divisions import assign_gender_divisions, validate_division_setup, participant_division
+    event = Event.objects.select_for_update().get(pk=event.pk)
+    if event.scoring_method != 'criteria' or event.participation_type != 'individual':
+        raise CriteriaEventValidationError('Select an individual criteria-based event.')
+    if event.results_finalized:
+        raise CriteriaEventValidationError('Finalized event participants are read-only.')
+    entries = _validated_event_entries('individual', data, strict=event.publication_status == Event.PUBLICATION_PUBLISHED)
+    incoming = _json_dict(data.get('result_processing_config'), 'Participant settings')
+    assign_gender_divisions(incoming.get('event_divisions', {}), entries)
+    try:
+        divisions = validate_division_setup(incoming.get('event_divisions', {}), entries)
+    except ValueError as exc:
+        raise CriteriaEventValidationError(str(exc)) from exc
+    cfg = dict(event.result_processing_config or {})
+    history = (event.criteria_score_submissions.exists() or bool(cfg.get('confirmed_stages'))
+               or (event.judging_event_id and event.judging_event.candidates.filter(scores__isnull=False).exists()))
+    old_entries = list(event.criteria_entries.all())
+    if history:
+        old = {entry.source_individual_id: participant_division(event, entry.pk) for entry in old_entries}
+        proposed = {item['source'].pk: item['division'] if divisions.get('enabled') else '' for item in entries}
+        if old != proposed or bool((cfg.get('event_divisions') or {}).get('enabled')) != bool(divisions.get('enabled')):
+            raise CriteriaEventValidationError('Participants and division assignments cannot change after scoring or round approval.')
+    if divisions.get('enabled'):
+        counts = dict(Counter(item['division'] for item in entries))
+        for round_cfg in (event.rounds_config or [])[:-1]:
+            method = round_cfg.get('qualification_method') or 'top_ranking'
+            if method in {'advance_all', 'minimum_score', 'no_advancement'}:
+                continue
+            count = int(round_cfg.get('qualifiers') or 0)
+            if counts and count > min(counts.values()):
+                raise CriteriaEventValidationError('The qualifier count exceeds the eligible participants in a division. Update the event qualification settings first.')
+            counts = {name: min(size, count) for name, size in counts.items()}
+    saved, replaced = _sync_event_entries(event, entries, data)
+    if divisions.get('enabled'):
+        divisions['assignments'] = {str(entry.pk): item['division'] for entry, item in zip(saved, entries)}
+    cfg['event_divisions'] = divisions
+    cfg['segment_performance_orders'] = _validated_segment_orders(event, saved, incoming.get('segment_performance_orders', {}))
+    if replaced:
+        cfg['qualified_participant_ids'] = {'0': list(event.participant_ids)}
+    event.result_processing_config = cfg
+    event.save(update_fields=['result_processing_config', 'updated_at'])
+    if replaced or not event.judging_event_id:
+        sync_event_to_mobile(event)
+    LogEntry.objects.create(user=user, content_type=ContentType.objects.get_for_model(Event),
+        object_id=str(event.pk), object_repr=event.name, action_flag=CHANGE,
+        change_message='Updated event participants and performance order.')
     return event
 
 
@@ -1552,13 +1648,29 @@ def save_criteria_event(data, user, files=None, instance=None):
         if strict or data.get('event_entries') or _json_list(data.get('participant_ids'), 'Participants'):
             raise
         event_entries = []
+    from .divisions import assign_gender_divisions, validate_division_setup, participant_division
+    incoming_processing = _json_dict(data.get('result_processing_config'), 'Result processing')
+    previous_divisions = ((instance.result_processing_config or {}).get('event_divisions') or {}) if instance else {}
+    raw_divisions = incoming_processing.get('event_divisions', previous_divisions)
+    if 'event_divisions' not in incoming_processing and previous_divisions.get('enabled') and instance:
+        previous_sources = {_entry_identity(entry): participant_division(instance, entry.pk) for entry in instance.criteria_entries.prefetch_related('member_links')}
+        for item in event_entries:
+            item['division'] = previous_sources.get(_proposed_entry_identity(item), '')
+    assign_gender_divisions(raw_divisions, event_entries)
+    try:
+        divisions = validate_division_setup(raw_divisions, event_entries)
+    except ValueError as exc:
+        raise CriteriaEventValidationError(str(exc)) from exc
+    division_counts = dict(Counter(item['division'] for item in event_entries)) if divisions.get('enabled') else None
     participant_ids, participants = [], []
     rounds_config = _validated_rounds(
         event_format,
         data,
         participant_count=len(event_entries) if strict else max(1, len(event_entries)),
-        strict=strict,
+        strict=strict, division_counts=division_counts,
     )
+    if not divisions.get('enabled') and any(row.get('qualification_method') == 'top_n_per_division' for row in rounds_config):
+        raise CriteriaEventValidationError('Enable divisions before using division qualification.')
     if len(rounds_config) >= 2:
         event_format = 'multiple_stage'
     else:
@@ -1573,6 +1685,21 @@ def save_criteria_event(data, user, files=None, instance=None):
             raise
         chief, judges, faculty = None, [], None
     result_processing = {**DEFAULT_RESULT_PROCESSING, **_json_dict(data.get('result_processing_config'), 'Result processing')}
+    basis = result_processing.get('final_result_basis', (instance.result_processing_config or {}).get('final_result_basis', 'main_round') if instance else 'final_round_only')
+    if basis not in {'main_round', 'final_round_only', 'weighted_rounds', 'cumulative_rounds', 'manual_authorized'}:
+        raise CriteriaEventValidationError('Select a valid result calculation method.')
+    result_processing['final_result_basis'] = basis
+    if basis in {'weighted_rounds', 'cumulative_rounds'}:
+        if score_method != 'weighted_percentage':
+            raise CriteriaEventValidationError('Combined rounds require weighted-percentage scoring; ordinal rounds are normalized separately.')
+        if basis == 'weighted_rounds' and abs(sum(float(row.get('weight') or 0) for row in rounds_config) - 100) > 0.000001:
+            raise CriteriaEventValidationError('Round weights must total 100%.')
+    default_mode = result_processing.get('default_scoring_mode', 'scoring')
+    if default_mode not in {'scoring', 'ranking'}:
+        raise CriteriaEventValidationError('Select a valid default scoring mode.')
+    result_processing['default_scoring_mode'] = default_mode
+    if result_processing.get('ranking_aggregation') not in {None, 'mean_rank', 'weighted_mean_rank'}:
+        raise CriteriaEventValidationError('Select a valid ordinal ranking aggregation method.')
     faculty_in_charge = _validated_faculty_in_charge(data, faculty, instance)
     _normalize_verification_mode(result_processing, faculty)
     stage_tiebreak = str(result_processing.get('stage_tiebreak_method') or 'highest_selected_criterion').strip()
@@ -1595,6 +1722,26 @@ def save_criteria_event(data, user, files=None, instance=None):
     tie_breaks = _validated_tie_breaks(data, criteria or [{'id': 'overall', 'name': 'Overall'}])
     points = _validated_points(data, classification)
 
+    if instance:
+        old_cfg = instance.result_processing_config or {}
+        has_history = (instance.criteria_score_submissions.exists() or bool(old_cfg.get('confirmed_stages'))
+                       or (instance.judging_event_id and instance.judging_event.candidates.filter(scores__isnull=False).exists()))
+        if has_history:
+            old_assignments = {_entry_identity(entry): participant_division(instance, entry.pk) for entry in instance.criteria_entries.prefetch_related('member_links')}
+            changed = bool(previous_divisions.get('enabled')) != bool(divisions.get('enabled'))
+            changed = changed or any(old_assignments.get(_proposed_entry_identity(item), '') != item['division'] for item in event_entries)
+            if changed:
+                raise CriteriaEventValidationError('Division assignments cannot change after scoring or round approval.')
+        if has_history:
+            old_rounds = {str(row.get('id')): row for row in instance.rounds_config or []}
+            for row in rounds_config:
+                if str(row.get('id')) in old_rounds:
+                    row['status'] = old_rounds[str(row['id'])].get('status', row['status'])
+        # Runtime approvals and qualifications are owned by the Faculty workflow.
+        for key in ('confirmed_stages', 'qualified_participant_ids', 'active_stage_index', 'verified_stages', 'mobile_round_mapping'):
+            if key in old_cfg:
+                result_processing[key] = old_cfg[key]
+    result_processing['event_divisions'] = divisions
     creating = instance is None
     event = instance or Event()
     if instance and instance.results_finalized and not user.is_superuser:
@@ -1652,6 +1799,15 @@ def save_criteria_event(data, user, files=None, instance=None):
     event.save()
     saved_entries, roster_replaced = _sync_event_entries(event, event_entries, data)
     participant_ids = [entry.id for entry in saved_entries]
+    if 'segment_performance_orders' in incoming_processing:
+        event.result_processing_config['segment_performance_orders'] = _validated_segment_orders(event, saved_entries, incoming_processing['segment_performance_orders'])
+    elif instance:
+        event.result_processing_config['segment_performance_orders'] = old_cfg.get('segment_performance_orders', {})
+    event.save(update_fields=['result_processing_config'])
+    if divisions.get('enabled'):
+        divisions['assignments'] = {str(entry.pk): item['division'] for entry, item in zip(saved_entries, event_entries)}
+        event.result_processing_config['event_divisions'] = divisions
+        event.save(update_fields=['result_processing_config'])
     if event_format == 'multiple_stage':
         cfg = dict(event.result_processing_config or {})
         qualified = dict(cfg.get('qualified_participant_ids') or {})
@@ -1686,8 +1842,11 @@ def save_criteria_event(data, user, files=None, instance=None):
         _schedule_assignment_notifications(event, recipients)
     try:
         sync_event_to_mobile(event)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.exception("Mobile judging sync failed for event %s", event.pk)
+        raise CriteriaEventValidationError(
+            "The event could not be synced to the judge app. Please try again or contact support."
+        ) from exc
     return event
 
 
@@ -1712,10 +1871,13 @@ def serialize_criteria_event(event):
     faculty_owner = event.faculty_account if event.faculty_account and event.faculty_account.groups.filter(name__iexact='Faculty').exists() else None
     entries = list(event.criteria_entries.select_related('department', 'source_individual', 'source_team').prefetch_related('member_links__individual'))
     participant_names = [entry.display_name for entry in entries]
+    from .divisions import participant_division
     serialized_entries = [{
         'id': entry.id, 'entry_type': entry.entry_type, 'display_name': entry.display_name,
         'department': entry.department.name if entry.department else '',
         'department_id': entry.department_id,
+        'division': participant_division(event, entry.pk),
+        'candidate_number': entry.source_individual.number if entry.source_individual else entry.display_order + 1,
         'source_individual_id': entry.source_individual_id, 'source_team_id': entry.source_team_id,
         'members': [{'id': link.individual_id, 'name': link.individual.name, 'number': link.individual.number, 'position': link.position} for link in entry.member_links.all()],
     } for entry in entries]
@@ -1837,6 +1999,10 @@ def serialize_criteria_event(event):
         'points_config': event.championship_points_config or [],
         'championship_scoring': (event.result_processing_config or {}).get('championship_scoring'),
         'results_finalized': event.results_finalized,
+        'division_setup_locked': bool(event.results_finalized
+            or (event.result_processing_config or {}).get('confirmed_stages')
+            or event.criteria_score_submissions.exists()
+            or (event.judging_event_id and event.judging_event.candidates.filter(scores__isnull=False).exists())),
         'next_actions': (
             [
                 'Assign or confirm judges',

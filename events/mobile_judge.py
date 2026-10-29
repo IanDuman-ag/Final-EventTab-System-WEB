@@ -13,8 +13,8 @@ from rest_framework.response import Response
 
 from .criteria_faculty_service import criteria_rounds, round_is_scoreable, round_participant_ids
 from .faculty_service import FacultyServiceError
-from .judging_views import IsJudgeUser
-from .models import CriteriaScoreSubmission, Event, EventScoringCriterion, JudgeScore, JudgingEvent
+from .judging_views import IsJudgeUser, _client_ip
+from .models import JudgeActivityLog, CriteriaScoreSubmission, Event, EventScoringCriterion, JudgeScore, JudgingEvent
 from .public_service import image_url
 from .mobile_scoring_compatibility import legacy_score_is_submitted, read_mobile_mapping, round_mapping_issues
 
@@ -35,6 +35,19 @@ def date_display(value):
     if isinstance(value, datetime) and timezone.is_aware(value):
         value = timezone.localtime(value, timezone=ZoneInfo('Asia/Manila'))
     return value.strftime('%b %d, %Y') if value else ''
+
+
+def entry_photo_urls(entry, legacy_photo=''):
+    """Use explicit registry links; never guess a participant's photo by name."""
+    if entry.entry_type == 'individual' and entry.source_individual_id:
+        photos = [image_url(entry.source_individual.image)]
+    elif entry.entry_type == 'team' and entry.source_team_id:
+        photos = [image_url(entry.source_team.image)]
+    elif entry.entry_type == 'pair':
+        photos = [image_url(link.individual.image) for link in entry.member_links.all()]
+    else:
+        photos = []
+    return [url for url in photos if url] or ([legacy_photo] if legacy_photo else [])
 
 
 def round_projection(event):
@@ -114,7 +127,7 @@ def detail_payload(user, event, requested_round=None):
                     'weight_percent': float(category.overall_weight_percent * definition.weight_percent / 100),
                     'order': stored.order if stored else len(all_criteria) + 1,
                     'category_order': definition.display_order, 'round_id': category.assigned_round_id,
-                    'segment_name': category.name, 'decimal_places': 2,
+                    'segment_name': category.name, 'segment_id': category.pk, 'decimal_places': 2,
                     'comment_enabled': False, 'comment_required': False,
                     'subcriteria': [{'id': None, 'normalized_subcriterion_id': child.pk, 'name': child.name,
                                      'max_score': float(child.max_score), 'display_order': child.display_order}
@@ -171,7 +184,15 @@ def detail_payload(user, event, requested_round=None):
         ).exclude(status=CriteriaScoreSubmission.STATUS_SUPERSEDED):
             normalized_sheets[submission.participant_id].append(submission)
     participants = []
-    source = portal.criteria_entries.filter(pk__in=portal.participant_ids).select_related('department') if normalized else event.candidates.all()
+    legacy_photos = {row.pk: image_url(row.photo) for row in event.candidates.all()}
+    source = (portal.criteria_entries.filter(pk__in=portal.participant_ids)
+              .select_related('department', 'source_individual', 'source_team')
+              .prefetch_related('member_links__individual')) if normalized else event.candidates.all()
+    if portal:
+        from .participant_removal_service import excluded_participant_ids, active_mobile_candidate_ids
+        round_index = rounds.index(selected)
+        source = (source.exclude(pk__in=excluded_participant_ids(portal, round_index)) if normalized else
+                  source.filter(pk__in=active_mobile_candidate_ids(portal, round_index)))
     for candidate in source:
         entry_id = candidate.pk if normalized else None
         mobile_id = candidates.get(str(entry_id)) if normalized else candidate.pk
@@ -182,14 +203,40 @@ def detail_payload(user, event, requested_round=None):
         if qualified and normalized_sheets[candidate.pk]:
             state = submission_state(normalized_sheets[candidate.pk], required)
             complete = state == 'submitted'
+        photos = entry_photo_urls(candidate, legacy_photos.get(mobile_id, '')) if normalized else ([image_url(candidate.photo)] if candidate.photo else [])
         participants.append({'id': mobile_id, 'entry_id': entry_id,
                              'number': candidate.display_order + 1 if normalized else candidate.number,
                              'name': candidate.display_name if normalized else candidate.name,
                              'department': (candidate.department.name if candidate.department else '') if normalized else candidate.department,
-                             'photo': '' if normalized else image_url(candidate.photo),
+                             'photo': photos[0] if photos else '', 'photos': photos,
                              'is_qualified': qualified, 'scoring_status': state,
                              'scoring_status_label': state.replace('_', ' ').title(), 'review_note': '',
                              'draft_step': 0, 'action_label': 'View Submission' if complete else 'Score'})
+    from .divisions import division_config, participant_division
+    divisions = division_config(portal) if portal else {}
+    if divisions and normalized:
+        positions = defaultdict(int)
+        by_entry = {candidate.pk: candidate for candidate in source}
+        mobile_numbers = dict(event.candidates.values_list('pk', 'number'))
+        for row in participants:
+            row['division'] = participant_division(portal, row['entry_id'])
+            positions[row['division']] += 1
+            row['appearance_order'] = positions[row['division']]
+            original = by_entry[row['entry_id']].source_individual
+            if original:
+                row['candidate_number'] = original.number
+                # Keep the existing integer API contract; the display identifier
+                # also supports registry numbers with letters or leading zeros.
+                row['number'] = int(original.number) if original.number.isdecimal() else mobile_numbers.get(row['id'], row['number'])
+        participants.sort(key=lambda row: (divisions['names'].index(row['division']), row['appearance_order']))
+    segment_orders = []
+    if portal and normalized:
+        from .divisions import segment_participant_order
+        by_entry = {row['entry_id']: row for row in participants if row['is_qualified']}
+        for category in portal.scoring_categories.filter(assigned_round_id=rid):
+            ids = segment_participant_order(portal, category.pk, list(by_entry))
+            segment_orders.append({'id': category.pk, 'name': category.name,
+                'candidate_ids': [by_entry[value]['id'] for value in ids]})
     total = sum(row['is_qualified'] for row in participants)
     scored = sum(row['is_qualified'] and row['scoring_status'] == 'submitted' for row in participants)
     source_status = portal.status if portal else event.status
@@ -235,6 +282,9 @@ def detail_payload(user, event, requested_round=None):
             'participant_label': {'team': 'Teams', 'pair': 'Pairs', 'group': 'Groups'}.get(portal.participation_type, 'Participants') if portal else 'Participants',
             'participation_type': portal.participation_type if portal else 'individual',
             'criteria_count': len(all_criteria), 'criteria_names': [row['name'] for row in all_criteria],
+            'segment_performance_orders': segment_orders,
+            'divisions_enabled': bool(divisions),
+            'divisions': [{'name': name, 'participants': [row for row in participants if row.get('division') == name]} for name in divisions.get('names', [])],
             'total_points': 100, 'criteria': criteria, 'all_criteria': all_criteria, 'participants': participants,
             'stages': rounds, 'current_stage': selected, 'current_round': selected['name'], 'selected_round_id': rid,
             'can_score': not reasons,
@@ -269,7 +319,11 @@ def assignments(request):
 @permission_classes([IsJudgeUser])
 def assignment_detail(request, judging_event_id):
     event = get_object_or_404(assigned_events(request.user), pk=judging_event_id)
-    return Response(detail_payload(request.user, event, request.query_params.get('round_id')))
+    payload = detail_payload(request.user, event, request.query_params.get('round_id'))
+    JudgeActivityLog.log(judge=request.user, action=JudgeActivityLog.ACTION_VIEW_EVENT,
+        details=f'Opened assigned event "{event.title}".', event=event,
+        ip_address=_client_ip(request), request=request)
+    return Response(payload)
 
 
 @api_view(['GET'])
@@ -277,7 +331,11 @@ def assignment_detail(request, judging_event_id):
 def portal_assignment_detail(request, portal_event_id):
     # An explicit portal route prevents numeric ID collisions with JudgingEvent.
     event = get_object_or_404(assigned_events(request.user), portal_event__pk=portal_event_id)
-    return Response(detail_payload(request.user, event, request.query_params.get('round_id')))
+    payload = detail_payload(request.user, event, request.query_params.get('round_id'))
+    JudgeActivityLog.log(judge=request.user, action=JudgeActivityLog.ACTION_VIEW_EVENT,
+        details=f'Opened assigned event "{event.title}".', event=event,
+        ip_address=_client_ip(request), request=request)
+    return Response(payload)
 
 
 def history_payload(user):

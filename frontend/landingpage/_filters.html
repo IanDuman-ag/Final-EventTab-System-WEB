@@ -1,17 +1,24 @@
 <form class="filter-panel" method="get" aria-label="Filter competitions">
+{% if active == 'schedules' and selected_day %}<input type="hidden" name="day" value="{{ selected_day }}">{% endif %}
+{% if active == 'schedules' and filters.team %}<input type="hidden" name="team" value="{{ filters.team }}">{% endif %}
 <div class="filter-grid">
 <div class="filter-search">
-<label for="search">Search</label><input class="form-control" id="search" type="search" name="q" value="{{ filters.q }}" placeholder="Search by event name">
+<label for="search">{% if active == 'games' or active == 'schedules' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 6 6"/></svg>{% endif %}{% if active == 'schedules' %}Search by event name{% else %}Search{% endif %}</label><input class="form-control" id="search" type="search" name="q" value="{{ filters.q }}" placeholder="Search by event name">
 </div>
 <div>
-<label for="competition-type">Competition type</label><select class="form-select" id="competition-type" name="type"><option value="all">All competitions</option><option value="match" {% if filters.type == 'match' %}selected{% endif %}>Match-Based</option><option value="criteria" {% if filters.type == 'criteria' %}selected{% endif %}>Criteria-Based</option>
+<label for="competition-type">{% if active == 'games' or active == 'schedules' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18M8 3v6M16 9v6M8 15v6"/></svg>{% endif %}Competition type</label><select class="form-select" id="competition-type" name="type"><option value="all">All competitions</option><option value="match" {% if filters.type == 'match' %}selected{% endif %}>Match-Based</option><option value="criteria" {% if filters.type == 'criteria' %}selected{% endif %}>Criteria-Based</option>
 </select>
 </div>
 <div>
-<label for="category">Category</label><select class="form-select" id="category" name="category"><option value="">All categories</option>
+<label for="category">{% if active == 'games' or active == 'schedules' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>{% endif %}Category</label><select class="form-select" id="category" name="category"><option value="">All categories</option>
+{% if active == 'games' %}
+<option value="major" {% if filters.category == 'major' %}selected{% endif %}>Major</option>
+<option value="minor" {% if filters.category == 'minor' %}selected{% endif %}>Minor</option>
+{% else %}
 {% for category in categories %}
 <option {% if filters.category == category %}selected{% endif %} value="{{ category }}">{{ category }}</option>
 {% endfor %}
+{% endif %}
 </select>
 </div>
 {% if active == 'schedules' %}
@@ -27,7 +34,7 @@
 </div>
 {% endif %}
 <div class="filter-actions">
-<a class="reset-link" href="{{ request.path }}">Clear</a>
+<a class="reset-link" href="{{ request.path }}">{% if active == 'results' %}Clear Filters{% else %}Clear{% endif %}</a>
 </div>
 </div>
 {% if active == 'schedules' %}

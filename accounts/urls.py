@@ -9,4 +9,5 @@ urlpatterns = [
     path('forgot-password/', views.forgot_password, name='auth_forgot_password'),
     path('reset-password/', views.reset_password, name='auth_reset_password'),
     path('me/', views.me, name='auth_me'),
+    path('access-code/', views.access_code_login, name='auth_access_code'),
 ]

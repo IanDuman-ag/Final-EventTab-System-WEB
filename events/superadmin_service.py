@@ -3,8 +3,6 @@ from __future__ import annotations
 
 import csv
 import io
-import secrets
-import string
 from collections import Counter, defaultdict
 from datetime import timedelta
 
@@ -131,6 +129,38 @@ def chart_events_by_category():
         .order_by('-count')[:8]
     )
     return [{'label': r['category'] or 'Other', 'value': r['count']} for r in rows]
+
+
+def dashboard_distributions():
+    """Partition dashboard records without treating event visibility as result publication."""
+    from .public_service import result_is_published
+
+    statuses = Counter()
+    publications = Counter()
+    for event in Event.objects.only('status', 'publication_status', 'results_finalized', 'result_processing_config'):
+        statuses[event.get_status_display()] += 1
+        config = event.result_processing_config or {}
+        state = 'Published' if result_is_published(event) else 'Approved' if config.get('approved') is True else 'Pending'
+        publications[state] += 1
+    roles = Counter()
+    for user in User.objects.prefetch_related('groups'):
+        groups = {group.name.lower() for group in user.groups.all()}
+        if user.is_superuser or user.is_staff:
+            role = 'Admins'
+        elif 'tabulator' in groups:
+            role = 'Tabulators'
+        elif 'faculty' in groups:
+            role = 'Faculty'
+        elif groups & {'judge', 'judges', 'scorer'}:
+            role = 'Judges'
+        else:
+            role = 'Other users'
+        roles[role] += 1
+    return {
+        'status': [{'label': label, 'value': statuses[label]} for label in ('Upcoming', 'Active', 'Completed', 'Deactivated')],
+        'roles': [{'label': label, 'value': roles[label]} for label in ('Admins', 'Judges', 'Faculty', 'Tabulators', 'Other users')],
+        'publication': [{'label': label, 'value': publications[label]} for label in ('Pending', 'Approved', 'Published')],
+    }
 
 
 def chart_events_by_month(months=12):
@@ -430,9 +460,16 @@ def reset_user_password(*, actor, user_id, password=None):
     user = User.objects.filter(pk=user_id).first()
     if not user:
         raise SuperadminServiceError('User not found.')
-    if not password:
-        alphabet = string.ascii_letters + string.digits
-        password = ''.join(secrets.choice(alphabet) for _ in range(10))
+    if user.is_superuser and actor.id != user.id:
+        raise SuperadminServiceError('Cannot reset another Superadmin account.')
+    if not isinstance(password, str) or not password:
+        raise SuperadminServiceError('Enter a new password.')
+    from django.contrib.auth.password_validation import validate_password
+    from django.core.exceptions import ValidationError
+    try:
+        validate_password(password, user)
+    except ValidationError as exc:
+        raise SuperadminServiceError(' '.join(exc.messages)) from exc
     user.set_password(password)
     user.save(update_fields=['password'])
     _log_user_action(actor, user, CHANGE, 'Password reset.')

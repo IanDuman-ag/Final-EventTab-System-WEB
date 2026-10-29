@@ -301,7 +301,10 @@
 #points-fieldset.points-disabled .points-editor,
 #points-fieldset.points-disabled .points-editor-actions { opacity:.48; pointer-events:none; }
 .review-summary { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); border-top:1px solid var(--line); border-left:1px solid var(--line); }.review-summary div { padding:13px 15px; border-right:1px solid var(--line); border-bottom:1px solid var(--line); }.review-summary span,.review-summary strong { display:block; }.review-summary span { color:#5a6c80; font-size:9px; letter-spacing:.08em; text-transform:uppercase; font-weight:800; }.review-summary strong { margin-top:5px; color:var(--navy); font-size:13px; }
-.wizard-footer { min-height:68px; display:flex; align-items:center; gap:9px; padding:13px 22px; border-top:1px solid var(--line); }.wizard-error { flex:1; color:var(--red); font-size:12px; }.final-action { display:none; }.wizard.at-review .final-action { display:inline-block; }.wizard.at-review #wizard-next { display:none; }
+.wizard-footer { min-height:68px; display:flex; align-items:center; gap:9px; padding:13px 22px; border-top:1px solid var(--line); }.wizard-error { flex:1; color:var(--red); font-size:12px; }.wizard.at-review #wizard-next { display:none; }
+.wizard #publish-action[hidden] { display:none !important; }
+#draft-status { color:var(--muted); font-size:11px; max-width:190px; }
+#select-all-teams { margin:0 0 8px; }
 .summary-dialog { width:min(620px,calc(100vw - 28px)); margin:auto; border:0; padding:0; box-shadow:0 25px 70px rgba(4,25,50,.3); }.summary-dialog header { background:var(--navy); color:#fff; padding:16px 20px; display:flex; justify-content:space-between; }.summary-dialog h2 { margin:0; }.summary-dialog header button { background:none; border:0; color:#fff; font-size:24px; cursor:pointer; }.summary-dialog>div { padding:20px; }
 .sr-only { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0,0,0,0); }
 @media (max-width:1100px) and (min-width:761px) {

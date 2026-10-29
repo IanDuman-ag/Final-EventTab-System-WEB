@@ -1,10 +1,10 @@
 {% load static %}<!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="The official EventTab intramural community portal. Explore competitions, schedules, team standings and published results."><title>{{ page_title|default:"EventTab" }}</title><link rel="stylesheet" href="{% static 'admindash/vendor/bootstrap-5.3.8.min.css' %}"><link rel="stylesheet" href="{% static 'landingpage/public.css' %}"><script defer src="{% static 'landingpage/public.js' %}?v=20261010a">
-</script>
-</head>
-<body>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="The official EventTab intramural community portal. Explore competitions, schedules, team standings and published results."><title>{{ page_title|default:"EventTab" }}</title><link rel="stylesheet" href="{% static 'admindash/vendor/bootstrap-5.3.8.min.css' %}"><link rel="stylesheet" href="{% static 'landingpage/public.css' %}?v=20261023classification">{% block public_scripts %}<script defer src="{% static 'landingpage/public.js' %}?v=20261023homefilters">
+</script>{% endblock %}
+{% block extra_head %}{% endblock %}</head>
+<body class="{% block body_class %}{% endblock %}">
 <a class="skip-link" href="#main">Skip to content</a>
 <header class="site-header">
 <nav class="container portal-nav" aria-label="Main navigation">
@@ -16,7 +16,7 @@
 </span>
 </button>
 <div class="nav-menu" id="public-menu">
-<a {% if active == 'home' %}class="active" aria-current="page"{% endif %} href="{% url 'home' %}">Home</a><a {% if active == 'schedules' %}class="active" aria-current="page"{% endif %} href="{% url 'public_schedules' %}">Schedules</a><a {% if active == 'games' %}class="active" aria-current="page"{% endif %} href="{% url 'public_games' %}">Games</a><a {% if active == 'leaderboard' %}class="active" aria-current="page"{% endif %} href="{% url 'public_leaderboard' %}">Leaderboard</a><a {% if active == 'results' %}class="active" aria-current="page"{% endif %} href="{% url 'public_results' %}">Results</a><a class="btn btn-yellow nav-login" href="{% url 'login' %}">Login <span aria-hidden="true">&#8599;</span>
+<a {% if active == 'home' %}class="active" aria-current="page"{% endif %} href="{% url 'home' %}">Home</a><a {% if active == 'schedules' %}class="active" aria-current="page"{% endif %} href="{% url 'public_schedules' %}">Schedules</a><a {% if active == 'games' %}class="active" aria-current="page"{% endif %} href="{% url 'public_games' %}">Events</a><a {% if active == 'leaderboard' %}class="active" aria-current="page"{% endif %} href="{% url 'public_leaderboard' %}">Leaderboards</a><a {% if active == 'results' %}class="active" aria-current="page"{% endif %} href="{% url 'public_results' %}">Results</a><a class="btn btn-yellow nav-login" href="{% url 'login' %}">Login <span aria-hidden="true">&#8599;</span>
 </a>
 </div>
 </nav>
@@ -45,7 +45,7 @@ One event. One community.<br>Every achievement, together.
 EXPLORE THE COMPETITION
 </p>
 <div class="footer-links">
-<a href="{% url 'public_games' %}">Games &amp; Events</a><a href="{% url 'public_schedules' %}">Schedules</a><a href="{% url 'public_leaderboard' %}">Team Standings</a><a href="{% url 'public_results' %}">Official Results</a>
+<a href="{% url 'public_games' %}">Games &amp; Events</a><a href="{% url 'public_schedules' %}">Schedules</a><a href="{% url 'public_leaderboard' %}">Leaderboards</a><a href="{% url 'public_results' %}">Official Results</a>
 </div>
 </div>
 <div>

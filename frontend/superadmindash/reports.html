@@ -6,10 +6,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Reports - EventTab</title>
   <link rel="stylesheet" href="{% static 'superadmindash/superadmin_dashboard.css' %}?v=20260524a">
-  <link rel="stylesheet" href="{% static 'reports.css' %}">
-  <link rel="stylesheet" href="{% static 'admin_v2.css' %}?v=20260524b">
+  <link rel="stylesheet" href="{% static 'admin_v2.css' %}?v=20261019sidebar">
+  <link rel="stylesheet" href="{% static 'superadmindash/reports.css' %}?v=20261019reports">
 </head>
-<body class="reports-page admin-v2-page">
+<body class="reports-page admin-v2-page sr-reference">
+<svg class="sr-symbols" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><defs><symbol id="sr-calendar" viewBox="0 0 24 24"><path d="M5 3v4m14-4v4M3 10h18M3 5h18v16H3ZM8 14l3 3 5-5"/></symbol><symbol id="sr-file" viewBox="0 0 24 24"><path d="M5 2h10l5 5v15H5ZM15 2v6h5M9 12h7m-7 4h7"/></symbol><symbol id="sr-shield" viewBox="0 0 24 24"><path d="m12 2 9 4v7c0 5-9 9-9 9S3 18 3 13V6l9-4Zm0 5v6m0 3v1"/></symbol><symbol id="sr-clock" viewBox="0 0 24 24"><path d="M12 7v6l4 2M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0"/></symbol><symbol id="sr-gear" viewBox="0 0 24 24"><path d="m9 3 1-2h4l1 2 3 2 2 1 2 4-1 2v3l-1 2-4 3-2-1h-3l-2 1-4-3-1-2v-3l-1-2 2-4 2-1 3-2Zm-1 9a4 4 0 1 0 8 0 4 4 0 0 0-8 0"/></symbol><symbol id="sr-download" viewBox="0 0 24 24"><path d="M12 2v14m-5-5 5 5 5-5M4 16v5h16v-5"/></symbol><symbol id="sr-plus" viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/></symbol><symbol id="sr-eye" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Zm10-3a3 3 0 1 0 0 6 3 3 0 0 0 0-6"/></symbol><symbol id="sr-list" viewBox="0 0 24 24"><path d="M9 6h12M9 12h12M9 18h12M3 6h1M3 12h1M3 18h1"/></symbol></defs></svg>
   <div class="reports-shell">
     {% include 'superadmindash/_sidebar.html' with active='reports' %}
 
@@ -17,9 +18,9 @@
       <header class="topbar">
         <div></div>
         <div class="topbar-actions">
-          <button class="icon-button" type="button" aria-label="Notifications">
+          <a class="icon-button" href="{% url 'superadmin_activity_logs' %}" aria-label="View system activity">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm8-6-2-2v-5a6 6 0 1 0-12 0v5l-2 2v1h16v-1Z"></path></svg>
-          </button>
+          </a>
           <div class="profile-avatar" aria-label="{{ request.user.username }}">
             {{ request.user.username|default:"SA"|slice:":2"|upper }}
           </div>
@@ -27,54 +28,20 @@
       </header>
 
       <main class="reports-main">
-        <section class="reports-header">
-          <h2>Reports</h2>
-          <p>Generate and monitor exports from a single dashboard.</p>
+        <header class="reports-header"><div><span class="sr-kicker">REPORTS</span><h1>Reports &amp; Analytics</h1><p>Generate, monitor, and export intramurals reports from one dashboard.</p></div><div class="sr-header-actions"><button type="button" class="sr-btn" id="sr-new-report"><svg aria-hidden="true"><use href="#sr-plus"/></svg>Generate New Report</button><a class="sr-btn sr-btn-secondary" href="?export=all"><svg aria-hidden="true"><use href="#sr-download"/></svg>Export All</a></div></header>
+        {% if messages %}<div class="sr-messages" role="status">{% for message in messages %}<p>{{ message }}</p>{% endfor %}</div>{% endif %}
+        <section class="kpi-grid" aria-label="Reporting summary">
+          <article class="kpi-card sr-kpi-events"><span class="sr-kpi-icon"><svg aria-hidden="true"><use href="#sr-calendar"/></svg></span><div><span>Total Events</span><strong>{{ total_events_count }}</strong></div><div class="sr-kpi-change"><strong>{{ event_change }}</strong><small>vs. last month</small></div></article>
+          <article class="kpi-card sr-kpi-generated"><span class="sr-kpi-icon"><svg aria-hidden="true"><use href="#sr-file"/></svg></span><div><span>Reports Generated</span><strong>{{ reports_generated_count }}</strong></div><div class="sr-kpi-change"><strong>{{ report_change }}</strong><small>vs. last month</small></div></article>
+          <article class="kpi-card sr-kpi-critical"><span class="sr-kpi-icon"><svg aria-hidden="true"><use href="#sr-shield"/></svg></span><div><span>Critical Logs</span><strong>{{ critical_logs_count }}</strong></div><div class="sr-kpi-change"><strong>{{ critical_change }}</strong><small>vs. last month</small></div></article>
+          <article class="kpi-card sr-kpi-last"><span class="sr-kpi-icon"><svg aria-hidden="true"><use href="#sr-clock"/></svg></span><div><span>Last Export</span><strong>{{ last_export_label }}</strong><small>{% if last_export_at %}{{ last_export_at|timesince }} ago{% else %}No exports yet{% endif %}</small></div></article>
         </section>
-
-        <section class="kpi-grid" aria-label="Reporting KPIs">
-          <article class="kpi-card">
-            <span>Total Events</span>
-            <strong>{{ total_events_count|default:"0" }}</strong>
-          </article>
-          <article class="kpi-card">
-            <span>Reports Generated</span>
-            <strong>{{ reports_generated_count|default:"0" }}</strong>
-          </article>
-          <article class="kpi-card">
-            <span>Critical Logs</span>
-            <strong>{{ critical_logs_count|default:"0" }}</strong>
-          </article>
-          <article class="kpi-card">
-            <span>Last Export</span>
-            <strong>{{ last_export_label|default:"Never" }}</strong>
-          </article>
-        </section>
-
-        <section class="report-summary" aria-label="Report summaries">
-          <article class="activity-summary-card">
-            <div class="summary-copy">
-              <h3>Activity Logs</h3>
-              <p>Full chronological audit trail with latest admin events.</p>
-            </div>
-            <svg class="summary-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h12a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3Zm0 2a1 1 0 0 0-1 1v1h14V7a1 1 0 0 0-1-1H6Zm-1 5v6a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-6H5Zm3 2h8v2H8v-2Z"></path></svg>
-            <div class="summary-footer">
-              <strong>{{ activity_log_count_label|default:"0" }}</strong>
-              <a href="{% url 'superadmin_activity_logs' %}" aria-label="View all activity logs">
-                View All
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4 10.59 5.41 16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8-8-8Z"></path></svg>
-              </a>
-            </div>
-          </article>
-        </section>
-
         <section class="report-generator">
-          <div class="generator-heading">
+          <div class="generator-heading"><span class="sr-section-icon"><svg aria-hidden="true"><use href="#sr-gear"/></svg></span>
             <div>
               <h3>Report Generator</h3>
-              <p>Export high-fidelity academic outcomes and event metrics.</p>
+              <p>Hint: Select scope, choose report type, pick date range and metrics, then generate your report.</p>
             </div>
-            <span class="decor-dot" aria-hidden="true"></span>
           </div>
 
           <form id="report-generator-form" class="generator-form" action="{% url 'generate_superadmin_report' %}" method="post">
@@ -132,6 +99,7 @@
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h16a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Zm3 4v10h10V7H7Zm2 2h2v2H9V9Zm4 0h2v2h-2V9Zm-4 4h2v2H9v-2Zm4 0h2v2h-2v-2Z"></path></svg>
                     Excel
                   </label>
+                  <label class="format-option"><input type="radio" name="format" value="csv"><svg aria-hidden="true"><use href="#sr-file"/></svg>CSV</label>
                 </div>
               </fieldset>
             </div>
@@ -148,7 +116,7 @@
             </div>
 
             <fieldset class="metrics-panel">
-              <legend>Included Metrics</legend>
+              <legend>Include Metrics</legend>
               <div class="metric-options">
                 <label>
                   <input type="checkbox" name="metrics" value="rankings" checked>
@@ -166,11 +134,12 @@
                   <input type="checkbox" name="metrics" value="scores" checked>
                   Scoring Breakdown
                 </label>
+                <label><input type="checkbox" name="metrics" value="event_summary">Event Summary</label><label><input type="checkbox" name="metrics" value="publication_status">Publication Status</label>
               </div>
             </fieldset>
 
             <div class="generator-actions">
-              <button id="generate-report-btn" class="generate-btn" type="submit">Generate Report</button>
+              <button id="generate-report-btn" class="sr-btn generate-btn" type="submit" name="action" value="generate"><svg aria-hidden="true"><use href="#sr-download"/></svg>Generate Report</button><button class="sr-btn sr-btn-secondary" type="submit" name="action" value="preview" id="sr-preview-btn"><svg aria-hidden="true"><use href="#sr-eye"/></svg>Preview Report</button>
               <p id="generator-status" class="generator-status" role="status" aria-live="polite"></p>
             </div>
           </form>
@@ -178,8 +147,7 @@
 
         <section class="report-history" aria-label="Recent report history">
           <div class="history-header">
-            <h3>Recent Report History</h3>
-            <span>Latest generated exports</span>
+            <span class="sr-section-icon"><svg aria-hidden="true"><use href="#sr-list"/></svg></span><div><h3>Recent Report History</h3><p>Latest generated reports from the system.</p></div><a class="sr-btn sr-btn-secondary" href="?history=all">View All</a>
           </div>
 
           <div class="history-table-wrap">
@@ -201,8 +169,8 @@
                     <td>{{ report.created_by }}</td>
                     <td>{{ report.created_at }}</td>
                     <td>{{ report.format }}</td>
-                    <td><span class="status-pill">{{ report.status }}</span></td>
-                    <td><a href="{% url 'superadmin_activity_logs' %}">View Logs</a></td>
+                    <td><span class="status-pill {% if report.status != 'Ready' %}sr-status-recorded{% endif %}">{{ report.status }}</span></td>
+                    <td><div class="sr-history-actions"><a class="sr-btn sr-btn-secondary" href="{% url 'superadmin_activity_logs' %}?q=Generated&amp;user={{ report.created_by|urlencode }}">View Logs</a>{% if report.has_file %}<a class="sr-btn sr-btn-secondary" href="?download={{ report.id }}"><svg aria-hidden="true"><use href="#sr-download"/></svg>Download</a>{% else %}<span class="sr-download-unavailable" title="Generate this report again to save a downloadable file">No saved file</span>{% endif %}</div></td>
                   </tr>
                 {% empty %}
                   <tr>
@@ -212,10 +180,12 @@
               </tbody>
             </table>
           </div>
+          {% if show_all_history and report_page.has_other_pages %}<nav class="sr-pagination" aria-label="Report history pagination">{% if report_page.has_previous %}<a href="?history=all&amp;page={{ report_page.previous_page_number }}">Previous</a>{% endif %}<span>Page {{ report_page.number }} of {{ report_page.paginator.num_pages }}</span>{% if report_page.has_next %}<a href="?history=all&amp;page={{ report_page.next_page_number }}">Next</a>{% endif %}</nav>{% endif %}
         </section>
       </main>
     </div>
   </div>
-  <script src="{% static 'js/reports.js' %}?v=20260517a"></script>
+  <dialog id="sr-preview-dialog" aria-labelledby="sr-preview-title"><header><h2 id="sr-preview-title">Report Preview</h2><button type="button" id="sr-preview-close" class="sr-btn sr-btn-secondary">Close</button></header><p id="sr-preview-description"></p><div class="history-table-wrap"><table class="history-table"><thead id="sr-preview-head"></thead><tbody id="sr-preview-body"></tbody></table></div></dialog>
+  <script src="{% static 'js/reports.js' %}?v=20261019reports"></script>
 </body>
 </html>

@@ -4,10 +4,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Generate Reports · Admin · EventTab</title>
+  <title>Generate Reports &middot; Admin &middot; EventTab</title>
   {% include 'admindash/_bootstrap.html' %}
   <link rel="stylesheet" href="{% static 'admindash/admindashboard.css' %}?v=20260616c">
-  <link rel="stylesheet" href="{% static 'admindash/generatereport.css' %}?v=20260803a">
+  <link rel="stylesheet" href="{% static 'admindash/generatereport.css' %}?v=20261020reports">
   <link rel="stylesheet" href="{% static 'admindash/bootstrap-admin.css' %}?v=1">
 </head>
 <body class="admin-dashboard-page admin-dashboard-v2 admin-generate-report-page">
@@ -16,12 +16,26 @@
     <div class="content-area v2-content">
       <header class="v2-topbar">
         <div>
+          <span class="rpt-kicker">REPORTS</span>
           <h2 class="v2-welcome">Generate Reports</h2>
           <p class="v2-subtitle">Generate, preview, filter, and export official intramurals reports.</p>
         </div>
+        <div class="v2-topbar-right rpt-header-actions">
+          <a href="#reportHistory" class="rpt-btn"><svg aria-hidden="true"><use href="#rpt-history-icon"/></svg>Report History</a>
+          <button class="rpt-btn primary" type="submit" form="reportForm" name="action" value="preview"><svg aria-hidden="true"><use href="#rpt-document-icon"/></svg>Generate Report</button>
+        </div>
       </header>
 
+      <svg class="rpt-symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
+        <symbol id="rpt-document-icon" viewBox="0 0 24 24"><path d="M7 3h7l4 4v14H7zM14 3v5h4M10 12h5m-5 4h5"/></symbol>
+        <symbol id="rpt-history-icon" viewBox="0 0 24 24"><path d="M4 5v5h5M4 10a8 8 0 1 1 1 8m7-12v6l4 2"/></symbol>
+        <symbol id="rpt-download-icon" viewBox="0 0 24 24"><path d="M12 3v12m-4-4 4 4 4-4M5 16v5h14v-5"/></symbol>
+        <symbol id="rpt-eye-icon" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></symbol>
+        <symbol id="rpt-print-icon" viewBox="0 0 24 24"><path d="M7 8V3h10v5M7 17H3V8h18v9h-4M7 14h10v7H7z"/></symbol>
+        <symbol id="rpt-search-icon" viewBox="0 0 24 24"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></symbol>
+      </defs></svg>
       <main class="container-fluid v2-main rpt-main">
+        <div class="rpt-info"><span aria-hidden="true">i</span>Choose category, select report type, apply filters, preview results, then generate or export.</div>
         {% if messages %}
         <ul class="events-flash" role="list">
           {% for message in messages %}
@@ -34,21 +48,19 @@
           {% csrf_token %}
           <div class="rpt-layout">
             <div class="rpt-left">
-              <section class="rpt-section">
-                <h3 class="rpt-section-title">Report Category</h3>
-                <p class="rpt-section-sub">Choose a category, then pick the report type.</p>
+              <section class="rpt-section rpt-setup">
+                <div class="rpt-panel-heading"><span class="rpt-panel-icon"><svg aria-hidden="true"><use href="#rpt-document-icon"/></svg></span><div><h3 class="rpt-section-title">Report Setup</h3><p class="rpt-section-sub">Select the report category and apply filters to generate your report.</p></div></div>
+                <fieldset class="rpt-fieldset"><legend class="rpt-step-title">1. Report Category</legend>
                 <div class="rpt-cat-grid">
                   {% for key, cat in catalog.items %}
                   <label class="rpt-cat-card{% if selected.category == key %} active{% endif %}">
-                    <input class="form-check-input" type="radio" name="category" value="{{ key }}" {% if selected.category == key %}checked{% endif %} hidden>
-                    <strong>{{ cat.label }}</strong>
+                    <input class="form-check-input" type="radio" name="category" value="{{ key }}" {% if selected.category == key %}checked{% endif %}>
+                    <svg viewBox="0 0 24 24" aria-hidden="true">{% if key == 'events' %}<path d="M4 5h16v16H4zM4 10h16M8 2v6m8-6v6M8 14h3m2 0h3m-8 3h3"/>{% elif key == 'results' %}<path d="M7 3h10v7a5 5 0 0 1-10 0zM7 5H3v4a4 4 0 0 0 4 4m10-8h4v4a4 4 0 0 1-4 4m-5 2v5m-5 1h10"/>{% elif key == 'participation' %}<circle cx="8" cy="7" r="3"/><circle cx="17" cy="9" r="2"/><path d="M2 21v-4a6 6 0 0 1 12 0v4m2-6a4 4 0 0 1 6 3v3"/>{% elif key == 'scoresheets' %}<path d="M3 4h18v17H3zM3 10h18M9 4v17m6-17v17M3 15h18"/>{% else %}<circle cx="12" cy="7" r="4"/><path d="M4 22v-4a8 8 0 0 1 16 0v4"/>{% endif %}</svg>
+                    <strong>{{ cat.label }}</strong><span class="rpt-cat-check" aria-hidden="true">&#10003;</span>
                   </label>
                   {% endfor %}
-                </div>
-              </section>
-
-              <section class="rpt-section">
-                <h3 class="rpt-section-title">Report Type</h3>
+                </div></fieldset>
+                <label for="reportType" class="rpt-step-title">2. Report Type</label>
                 <select name="report_type" id="reportType" class="form-select rpt-select">
                   {% for key, cat in catalog.items %}
                     {% for type_key, type_label in cat.types %}
@@ -57,22 +69,19 @@
                     {% endfor %}
                   {% endfor %}
                 </select>
-              </section>
-
-              <section class="rpt-section">
-                <h3 class="rpt-section-title">Filters</h3>
+                <h4 class="rpt-step-title rpt-filters-title">3. Filters</h4>
                 <div class="rpt-filters-grid">
                   <div class="rpt-filter-group">
-                    <label>Date From</label>
-                    <input class="form-control" type="date" name="date_from" value="{{ selected.date_from }}">
+                    <label for="rpt-date_from">Date From</label>
+                    <input class="form-control" type="date" id="rpt-date_from" name="date_from" value="{{ selected.date_from }}">
                   </div>
                   <div class="rpt-filter-group">
-                    <label>Date To</label>
-                    <input class="form-control" type="date" name="date_to" value="{{ selected.date_to }}">
+                    <label for="rpt-date_to">Date To</label>
+                    <input class="form-control" type="date" id="rpt-date_to" name="date_to" value="{{ selected.date_to }}">
                   </div>
                   <div class="rpt-filter-group">
-                    <label>Event</label>
-                    <select class="form-select" name="event_id">
+                    <label for="rpt-event_id">Event</label>
+                    <select class="form-select" id="rpt-event_id" name="event_id">
                       <option value="all">All Events</option>
                       {% for ev in filter_events %}
                       <option value="{{ ev.id }}" {% if selected.event_id == ev.id|stringformat:"s" %}selected{% endif %}>{{ ev.name }}</option>
@@ -80,16 +89,16 @@
                     </select>
                   </div>
                   <div class="rpt-filter-group">
-                    <label>Event Type</label>
-                    <select class="form-select" name="event_type">
+                    <label for="rpt-event_type">Event Type</label>
+                    <select class="form-select" id="rpt-event_type" name="event_type">
                       <option value="all" {% if selected.event_type == 'all' %}selected{% endif %}>All Types</option>
                       <option value="match" {% if selected.event_type == 'match' %}selected{% endif %}>Match-Based</option>
                       <option value="criteria" {% if selected.event_type == 'criteria' %}selected{% endif %}>Criteria-Based</option>
                     </select>
                   </div>
                   <div class="rpt-filter-group">
-                    <label>Category</label>
-                    <select class="form-select" name="category_filter">
+                    <label for="rpt-category_filter">Category</label>
+                    <select class="form-select" id="rpt-category_filter" name="category_filter">
                       <option value="all">All Categories</option>
                       {% for c in categories %}
                       <option value="{{ c }}" {% if selected.category_filter == c %}selected{% endif %}>{{ c }}</option>
@@ -97,16 +106,16 @@
                     </select>
                   </div>
                   <div class="rpt-filter-group">
-                    <label>Event Classification</label>
-                    <select class="form-select" name="classification">
+                    <label for="rpt-classification">Event Classification</label>
+                    <select class="form-select" id="rpt-classification" name="classification">
                       <option value="all" {% if selected.classification == 'all' %}selected{% endif %}>All</option>
                       <option value="major" {% if selected.classification == 'major' %}selected{% endif %}>Major</option>
                       <option value="minor" {% if selected.classification == 'minor' %}selected{% endif %}>Minor</option>
                     </select>
                   </div>
                   <div class="rpt-filter-group">
-                    <label>Department</label>
-                    <select class="form-select" name="department">
+                    <label for="rpt-department">Department</label>
+                    <select class="form-select" id="rpt-department" name="department">
                       <option value="all">All Departments</option>
                       {% for d in departments %}
                       <option value="{{ d }}" {% if selected.department == d %}selected{% endif %}>{{ d }}</option>
@@ -114,8 +123,8 @@
                     </select>
                   </div>
                   <div class="rpt-filter-group">
-                    <label>Faculty In-Charge</label>
-                    <select class="form-select" name="faculty_id">
+                    <label for="rpt-faculty_id">Faculty In-Charge</label>
+                    <select class="form-select" id="rpt-faculty_id" name="faculty_id">
                       <option value="all">All Faculty</option>
                       {% for u in faculty_users %}
                       <option value="{{ u.id }}" {% if selected.faculty_id == u.id|stringformat:"s" %}selected{% endif %}>{{ u.first_name }} {{ u.last_name }} ({{ u.username }})</option>
@@ -123,8 +132,8 @@
                     </select>
                   </div>
                   <div class="rpt-filter-group">
-                    <label>Judge</label>
-                    <select class="form-select" name="judge_id">
+                    <label for="rpt-judge_id">Judge</label>
+                    <select class="form-select" id="rpt-judge_id" name="judge_id">
                       <option value="all">All Judges</option>
                       {% for u in judge_users %}
                       <option value="{{ u.id }}" {% if selected.judge_id == u.id|stringformat:"s" %}selected{% endif %}>{{ u.first_name }} {{ u.last_name }} ({{ u.username }})</option>
@@ -132,8 +141,8 @@
                     </select>
                   </div>
                   <div class="rpt-filter-group">
-                    <label>Status</label>
-                    <select class="form-select" name="status">
+                    <label for="rpt-status">Status</label>
+                    <select class="form-select" id="rpt-status" name="status">
                       <option value="all" {% if selected.status == 'all' %}selected{% endif %}>All Status</option>
                       <option value="upcoming" {% if selected.status == 'upcoming' %}selected{% endif %}>Upcoming</option>
                       <option value="active" {% if selected.status == 'active' %}selected{% endif %}>Active</option>
@@ -142,8 +151,8 @@
                     </select>
                   </div>
                   <div class="rpt-filter-group">
-                    <label>Export Format</label>
-                    <select class="form-select" name="export_format">
+                    <label for="rpt-export_format">Export Format</label>
+                    <select class="form-select" id="rpt-export_format" name="export_format">
                       <option value="pdf" {% if selected.export_format == 'pdf' %}selected{% endif %}>PDF</option>
                       <option value="excel" {% if selected.export_format == 'excel' %}selected{% endif %}>Excel</option>
                       <option value="csv" {% if selected.export_format == 'csv' %}selected{% endif %}>CSV</option>
@@ -152,19 +161,21 @@
                 </div>
 
                 <div class="rpt-actions">
-                  <button class="btn btn-primary rpt-btn primary" type="submit" name="action" value="preview">Generate Report</button>
-                  <button class="btn btn-outline-secondary rpt-btn" type="submit" name="action" value="download_pdf">Download PDF</button>
-                  <button class="btn btn-outline-secondary rpt-btn" type="submit" name="action" value="download_excel">Export Excel</button>
-                  <button class="btn btn-outline-secondary rpt-btn" type="button" id="printReportBtn">Print Report</button>
+                  <button class="rpt-btn primary" type="submit" name="action" value="preview"><svg aria-hidden="true"><use href="#rpt-document-icon"/></svg>Generate Report</button>
+                  <button class="rpt-btn rpt-preview-btn" type="submit" name="action" value="preview"><svg aria-hidden="true"><use href="#rpt-eye-icon"/></svg>Preview</button>
+                  <button class="btn btn-outline-secondary rpt-btn" type="submit" name="action" value="download_pdf"><svg aria-hidden="true"><use href="#rpt-download-icon"/></svg>Download PDF</button>
+                  <button class="btn btn-outline-secondary rpt-btn" type="submit" name="action" value="download_excel"><svg aria-hidden="true"><use href="#rpt-download-icon"/></svg>Export Excel</button>
+                  <button class="btn btn-outline-secondary rpt-btn" type="button" id="printReportBtn" {% if not preview %}disabled{% endif %}><svg aria-hidden="true"><use href="#rpt-print-icon"/></svg>Print Report</button>
                 </div>
               </section>
             </div>
 
             <div class="rpt-right">
-              <section class="rpt-section" id="reportPreview">
-                <h3 class="rpt-section-title">Report Preview</h3>
+              <section class="rpt-section rpt-preview" id="reportPreview" data-has-preview="{% if preview %}true{% else %}false{% endif %}">
+                <div class="rpt-panel-heading"><span class="rpt-panel-icon amber"><svg aria-hidden="true"><use href="#rpt-document-icon"/></svg></span><div><h3 class="rpt-section-title">Report Preview</h3><p class="rpt-section-sub">Select a report type and filters, then click Generate Report to preview results.</p></div></div>
+                <div class="rpt-preview-content">
                 {% if preview %}
-                <p class="rpt-section-sub">{{ preview.category }} · Generated {{ preview.generated_at }}</p>
+                <p class="rpt-section-sub">{{ preview.category }} &middot; Generated {{ preview.generated_at }}</p>
 
                 {% if preview.highlight.title %}
                 <div class="rpt-highlight">
@@ -209,16 +220,22 @@
                 <p class="rpt-section-sub">Showing first 40 of {{ preview.stats.rows }} rows. Export to download the full report.</p>
                 {% endif %}
                 {% else %}
-                <p class="rpt-section-sub">Select a report type and filters, then click <strong>Generate Report</strong> to preview results. Reports are read-only and do not modify finalized event data.</p>
+                <div class="rpt-preview-empty">
+                  <svg class="rpt-empty-document" viewBox="0 0 160 140" aria-hidden="true"><g fill="none" stroke="#e1e9f2" stroke-width="15" stroke-linecap="round"><path d="M78 25h51M42 44h70M30 65h98M40 87h92M54 108h57"/></g><rect x="40" y="37" width="59" height="83" rx="4" fill="#dce5ef"/><rect x="49" y="27" width="61" height="87" rx="3" fill="#edf2f8" stroke="#d9e2ed"/><rect x="58" y="22" width="62" height="86" rx="3" fill="white" stroke="#cbd8e8"/><path d="M71 37h35M71 79h35M71 87h29M71 95h20" stroke="#cad6e6" stroke-width="3"/><path d="M73 70V58m10 12V49m10 21V55" stroke="#88adf9" stroke-width="5"/><path d="M102 50h8m-8 7h8m-8 7h8" stroke="#d6e0eb" stroke-width="2"/></svg>
+                  <strong>Report preview will appear here</strong>
+                  <p>Choose a report category, select a report type and apply filters,<br>then click Generate Report to preview the results.</p>
+                </div>
                 {% endif %}
+                </div><p class="rpt-readonly"><span aria-hidden="true">!</span>Reports are read-only and do not modify finalized event data.</p>
+                <p class="rpt-print-message" id="printMessage" role="status"></p>
               </section>
             </div>
           </div>
         </form>
 
-        <section class="rpt-section">
-          <h3 class="rpt-section-title">Report History</h3>
-          <p class="rpt-section-sub">Previously generated exports. Historical data cannot be edited here.</p>
+        <section class="rpt-section rpt-history" id="reportHistory">
+          <div class="rpt-history-heading"><div class="rpt-panel-heading"><span class="rpt-panel-icon green"><svg aria-hidden="true"><use href="#rpt-history-icon"/></svg></span><div><h3 class="rpt-section-title">Report History</h3><p class="rpt-section-sub">Previously generated reports. Historical data cannot be edited here.</p></div></div>
+          <label class="rpt-history-search"><svg aria-hidden="true"><use href="#rpt-search-icon"/></svg><input type="search" id="historySearch" placeholder="Search reports..." aria-label="Search report history"></label></div>
           <div class="table-responsive rpt-table-wrap">
             <table class="table table-hover align-middle rpt-table">
               <thead>
@@ -232,7 +249,7 @@
               </thead>
               <tbody>
                 {% for h in history %}
-                <tr>
+                <tr data-report-history>
                   <td><strong>{{ h.name }}</strong><br><small>{{ h.category }}</small></td>
                   <td>{{ h.generated_by }}</td>
                   <td>{{ h.generated_date }}</td>
@@ -257,6 +274,7 @@
                 {% empty %}
                 <tr><td colspan="5" class="rpt-empty">No report history yet.</td></tr>
                 {% endfor %}
+                <tr id="historyNoResults" hidden><td colspan="5" class="rpt-empty">No reports match your search.</td></tr>
               </tbody>
             </table>
           </div>
@@ -295,16 +313,28 @@
       });
       syncTypes();
 
+      var historySearch = document.getElementById('historySearch');
+      historySearch.addEventListener('input', function () {
+        var query = historySearch.value.trim().toLowerCase();
+        var rows = document.querySelectorAll('[data-report-history]');
+        var visible = 0;
+        rows.forEach(function (row) {
+          row.hidden = row.textContent.toLowerCase().indexOf(query) === -1;
+          if (!row.hidden) visible++;
+        });
+        document.getElementById('historyNoResults').hidden = !rows.length || visible > 0;
+      });
       var printBtn = document.getElementById('printReportBtn');
       if (printBtn) {
         printBtn.addEventListener('click', function () {
           var preview = document.getElementById('reportPreview');
-          if (!preview) return;
+          if (!preview || preview.dataset.hasPreview !== 'true') return;
           var win = window.open('', '_blank');
-          win.document.write('<html><head><title>Print Report</title>');
+          if (!win) { document.getElementById('printMessage').textContent = 'Allow pop-ups in your browser to print this report.'; return; }
+          win.document.write('<html><head><title>Generate Reports &middot; Admin &middot; EventTab</title>');
           win.document.write('<style>body{font-family:sans-serif;padding:24px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ccc;padding:8px;font-size:12px;text-align:left}th{background:#021943;color:#fff}</style>');
           win.document.write('</head><body>');
-          win.document.write(preview.innerHTML);
+          win.document.write(preview.querySelector('.rpt-preview-content').innerHTML);
           win.document.write('</body></html>');
           win.document.close();
           win.focus();

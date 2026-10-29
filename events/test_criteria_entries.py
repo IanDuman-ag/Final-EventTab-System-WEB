@@ -38,6 +38,20 @@ class CriteriaEventEntryValidationTests(TestCase):
         self.assertEqual(rows[0]['entry_type'], 'team')
         self.assertEqual(rows[0]['source'].id, self.team.id)
 
+    def test_duplicate_individual_or_team_is_rejected(self):
+        for kind, participant in [('individual', self.people[0]), ('team', self.team)]:
+            with self.subTest(kind=kind), self.assertRaisesMessage(CriteriaEventValidationError, 'assigned twice'):
+                _validated_event_entries(kind, {'participant_ids': json.dumps([participant.pk, participant.pk])})
+
+    def test_pair_reorder_keeps_entry_ids_and_members(self):
+        event = Event.objects.create(name='Pairs', category='Special Event', event_date='2026-09-27', venue='Hall', scoring_method='criteria', participation_type='pair')
+        rows = _validated_event_entries('pair', self.payload([[p.pk for p in self.people[:2]], [p.pk for p in self.people[2:]]]))
+        first, _ = _sync_event_entries(event, rows, {})
+        reordered, replaced = _sync_event_entries(event, list(reversed(rows)), {})
+        self.assertFalse(replaced)
+        self.assertEqual([entry.pk for entry in reordered], [entry.pk for entry in reversed(first)])
+        self.assertEqual(event.criteria_entries.count(), 2)
+
     def test_confirmed_roster_replacement_reports_change_for_qualification_reset(self):
         event = Event.objects.create(name='Duet', category='Special Event', event_date='2026-09-27', venue='Hall', scoring_method='criteria', participation_type='individual')
         first = _validated_event_entries('individual', {'participant_ids': json.dumps([self.people[0].id])}, strict=True)

@@ -24,6 +24,20 @@
         {% for message in messages %}<div class="alert alert-success" role="status">{{ message }}</div>{% endfor %}
         {% if error %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endif %}
         {% if field_errors %}<div class="alert alert-danger" role="alert"><strong>Review the highlighted settings.</strong><ul class="mb-0 mt-2">{% for field,message in field_errors.items %}<li>{{ message }}</li>{% endfor %}</ul></div>{% endif %}
+        {% if not override_event %}
+        <section class="scoring-card mb-4" id="schedule-navigation" aria-labelledby="schedule-navigation-title">
+          <h2 id="schedule-navigation-title">Public schedule days</h2>
+          <p class="scoring-help">Public Day 1, Day 2, and subsequent days follow unique dates with published schedules in Asia/Manila. Calendar references below do not create empty days or override active-day numbering.</p>
+          <form method="post" action="{% url 'admin_settings' %}">
+            {% csrf_token %}<input type="hidden" name="operation" value="schedule_navigation">
+            <div class="row g-3">
+              {% for field in schedule_form %}<div class="col-md-6 scoring-field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% for error in field.errors %}<p class="text-danger small mt-1" role="alert">{{ error }}</p>{% endfor %}</div>{% endfor %}
+            </div>
+            <p class="scoring-help mt-2">Enter reference dates as YYYY-MM-DD, separated by commas or new lines. Actual published competitions remain visible and determine public day numbers.</p>
+            <button class="btn btn-primary mt-2" type="submit">Save schedule days</button>
+          </form>
+        </section>
+        {% endif %}
         <div class="scoring-context"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg><div>{% if override_event %}<strong>Editing the saved rules for {{ override_event.name }}</strong><p>This audited override affects this event only. A reason is required. Published standings still follow the authorized correction and publication workflow.</p><a href="{% url 'admin_settings' %}">Return to global defaults &rarr;</a>{% else %}<strong>Settings apply to existing and new Major and Minor events.</strong><p>Saving updates existing event scoring configurations using their Major or Minor classification. Recorded scores and placements are preserved. Changed events need renewed approval and publication before their updated points appear publicly.</p>{% endif %}</div></div>
         {{ config|json_script:"scoring-config" }}
         {{ saved_config|json_script:"scoring-saved" }}

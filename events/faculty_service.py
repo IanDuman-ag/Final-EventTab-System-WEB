@@ -216,6 +216,7 @@ def serialize_event_row(event):
 
 
 def serialize_event_detail(event):
+    from .participant_removal_service import active_participant_ids, active_mobile_candidate_ids
     row = serialize_event_row(event)
     judges = [
         (j.get_full_name() or j.username)
@@ -228,7 +229,7 @@ def serialize_event_detail(event):
     participants = []
     participant_rows = []
     if event.scoring_method == 'criteria' or event.participation_type == 'individual':
-        entries = list(event.criteria_entries.all()) if event.scoring_method == 'criteria' else []
+        entries = list(event.criteria_entries.filter(pk__in=active_participant_ids(event))) if event.scoring_method == 'criteria' else []
         participants.extend(entry.display_name for entry in entries)
         participant_rows.extend({
             'name': entry.display_name,
@@ -236,7 +237,7 @@ def serialize_event_detail(event):
             'seed': '—',
             'status': 'Assigned',
         } for entry in entries)
-        ids = event.participant_ids or []
+        ids = active_participant_ids(event)
         if not entries:
             for c in RegistryCandidate.objects.filter(id__in=ids):
                 participants.append(f'#{c.number} {c.name}')
@@ -246,8 +247,8 @@ def serialize_event_detail(event):
                     'seed': c.number or '—',
                     'status': 'Assigned',
                 })
-        if not participants and event.judging_event_id:
-            for c in event.judging_event.candidates.all()[:50]:
+        if not participants and not event.participant_ids and event.judging_event_id:
+            for c in event.judging_event.candidates.filter(pk__in=active_mobile_candidate_ids(event))[:50]:
                 participants.append(c.name)
                 participant_rows.append({
                     'name': c.name,
@@ -475,6 +476,8 @@ def recent_notifications(user, limit=8):
 
 
 def judge_monitoring(event):
+    from .participant_removal_service import active_mobile_candidate_ids
+    candidate_ids = active_mobile_candidate_ids(event)
     judges = list(event.assigned_judges.all())
     if event.chief_judge_id and event.chief_judge not in judges:
         judges.append(event.chief_judge)
@@ -485,7 +488,7 @@ def judge_monitoring(event):
         status = 'Pending'
         submitted_at = None
         if judging:
-            scores = JudgeScore.objects.filter(candidate__event=judging, judge=judge)
+            scores = JudgeScore.objects.filter(candidate__event=judging, candidate_id__in=candidate_ids, judge=judge)
             if scores.filter(is_locked=True).exists():
                 status = 'Submitted'
                 submitted += 1
@@ -517,7 +520,8 @@ def compute_criteria_rankings(event):
     criteria = list(judging.criteria.all())
     weight_by_id = {c.id: float(c.weight_percent or 0) or 1.0 for c in criteria}
     max_by_id = {c.id: float(c.max_score or 100) for c in criteria}
-    candidates = list(judging.candidates.all())
+    from .participant_removal_service import active_mobile_candidate_ids
+    candidates = list(judging.candidates.filter(pk__in=active_mobile_candidate_ids(event)))
     candidate_ids = [candidate.id for candidate in candidates]
     scores = JudgeScore.objects.filter(
         candidate_id__in=candidate_ids,
@@ -960,6 +964,15 @@ def publish_results(event, user):
         raise FacultyServiceError('You do not have permission to publish results for this event.')
     if current.results_finalized and (current.result_processing_config or {}).get('published_at'):
         return
+    if event.scoring_method == 'criteria' and (
+        (event.result_processing_config or {}).get('confirmed_stages') or event.faculty_account_id == user.pk
+    ):
+        from .criteria_faculty_service import criteria_faculty_portal, approved_final_rankings
+        publication = criteria_faculty_portal(event, user)['publication']
+        if publication['publish_errors']:
+            raise FacultyServiceError(' '.join(publication['publish_errors']))
+        if approved_final_rankings(event) is None:
+            raise FacultyServiceError('Submit the approved final rankings before publishing results.')
     if event_type_label(event) == 'Match-Based':
         from .publication_service import match_publication_review
         from .points_settings_service import match_championship_rules
@@ -972,6 +985,14 @@ def publish_results(event, user):
             event.result_processing_config = cfg
             event.save(update_fields=['result_processing_config'])
     cfg = dict(event.result_processing_config or {})
+    if event.scoring_method == 'criteria' and not cfg.get('championship_scoring'):
+        from .points_settings_service import match_championship_rules
+        # The legacy placement-table adapter also applies to criteria events.
+        legacy_rules = match_championship_rules(event)
+        if legacy_rules:
+            cfg['championship_scoring'] = legacy_rules
+            event.result_processing_config = cfg
+            event.save(update_fields=['result_processing_config'])
     faculty_workflow = faculty_publication_workflow(event)
     if faculty_workflow:
         # The explicitly confirmed publication is the assigned faculty's final approval.

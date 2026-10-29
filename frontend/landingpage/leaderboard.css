@@ -1,0 +1,155 @@
+/* Public championship standings, aligned with the supplied reference. */
+.public-standings { background:#f1f7fd; }
+.public-standings .standings-content,
+.public-standings .standings-tab-inner { width:calc(100% - 70px); max-width:1120px; padding-inline:0; }
+.public-standings .standings-hero { background:#031d3b; }
+.public-standings .standings-hero-photo { opacity:1; object-position:center 58%; }
+.public-standings .standings-hero::before,
+.public-standings .standings-hero::after { display:none; }
+.public-standings .standings-hero-inner { width:calc(100% - 120px); max-width:1070px; height:clamp(178px,22vw,264px); padding:0; }
+.public-standings .standings-heading { max-width:32%; padding-top:clamp(28px,4vw,48px); }
+.public-standings .standings-eyebrow { color:#bdcfe1; font-size:clamp(7px,.75vw,9px); letter-spacing:3px; margin-bottom:8px; }
+.public-standings .standings-eyebrow::before { display:none; }
+.public-standings .standings-heading h1 { font-size:clamp(27px,3.6vw,43px); line-height:1.04; letter-spacing:-1.5px; margin-bottom:8px; }
+.public-standings .standings-heading h1 span { color:#ffce1c; }
+.public-standings .standings-heading>p:last-child { max-width:250px; font-size:clamp(9px,1.15vw,13px); line-height:1.4; color:#b4c8dc; }
+.public-standings .standings-podium { left:34%; transform:none; width:52%; gap:5px; grid-template-columns:1fr 1.08fr 1fr; }
+.public-standings .podium-crest { width:clamp(44px,6vw,68px); height:clamp(44px,6vw,68px); margin-bottom:4px; }
+.public-standings .place-1 .podium-crest { width:clamp(56px,7.6vw,88px); height:clamp(56px,7.6vw,88px); margin-bottom:5px; }
+.public-standings .podium-medallion { padding:5px; border-width:3px; box-shadow:0 0 0 3px #ffffff28; }
+.public-standings .podium-laurel { width:155%; height:125%; bottom:-9px; }
+.public-standings .podium-crown { display:none; }
+.public-standings .place-1 .podium-crown { display:block; width:30px; height:24px; top:-27px; }
+.public-standings .podium-block { padding:8px 9px 9px; box-shadow:inset 0 1px 0 #ffffff70; }
+.public-standings .place-1 .podium-block { height:clamp(90px,11.4vw,135px); background:linear-gradient(110deg,#ffe45b,#ffc400); color:#08223f; }
+.public-standings .place-2 .podium-block { height:clamp(80px,9.6vw,113px); padding:5px 7px; background:linear-gradient(120deg,#9cbfda,#40668e); }
+.public-standings .place-3 .podium-block { height:clamp(78px,9.3vw,110px); padding:5px 7px; background:linear-gradient(120deg,#eeb27e,#a56846); }
+.public-standings .podium-block::before { height:7px; }
+.public-standings .podium-rank,
+.public-standings .place-2 .podium-rank,
+.public-standings .place-3 .podium-rank { font-size:clamp(18px,2.2vw,26px); margin-bottom:5px; }
+.public-standings .place-1 .podium-rank { font-size:clamp(23px,2.8vw,33px); }
+.public-standings .podium-block h2,
+.public-standings .place-2 .podium-block h2,
+.public-standings .place-3 .podium-block h2 { font-size:clamp(7px,.92vw,11px); font-weight:500; line-height:1.2; margin-bottom:5px; }
+.public-standings .podium-points { padding:3px 14px; font-size:clamp(7px,.8vw,9px); border-radius:3px; }
+.public-standings .podium-points strong { font-size:clamp(13px,1.6vw,19px); }
+.public-standings .place-1 .podium-points { color:#fff; background:#9b7603; }
+.public-standings .standings-hero--empty .standings-hero-inner { min-height:178px; }
+.public-standings .standings-tab-bar { background:#fff; border-bottom:1px solid #dce7f4; }
+.standings-tab-inner { display:flex; justify-content:space-between; align-items:center; gap:15px; }
+.public-standings .standings-tabs { gap:18px; margin:0; }
+.public-standings .standings-tabs button { color:#516987; font-size:clamp(10px,1vw,12px); font-weight:600; padding:13px 14px 11px; border-bottom-width:3px; white-space:nowrap; }
+.public-standings .standings-tabs button.selected { color:#081e46; font-weight:800; border-color:#ffcd17; }
+.public-standings .standings-year { position:static; display:flex; align-items:center; gap:8px; width:180px; height:31px; padding:0 10px; border:1px solid #dce5f1; border-radius:4px; flex:none; }
+.public-standings .standings-year>svg { width:14px; height:14px; color:#193c6a; flex:none; }
+.public-standings .standings-year select { width:100%; min-width:0; border:0; padding:0; color:#23446e; background:#fff; font-size:10px; }
+.public-standings .standings-content { padding-top:15px; padding-bottom:30px; }
+.public-standings .standings-filters { grid-template-columns:minmax(0,1.65fr) minmax(0,1fr) minmax(0,1fr); gap:12px; border:0; padding:0; background:none; margin-bottom:11px; }
+.public-standings .standings-search,
+.public-standings .standings-select { display:flex; align-items:center; gap:10px; min-width:0; height:34px; border:1px solid #d4e1f1; border-radius:5px; background:#fff; padding:0 12px; }
+.public-standings .standings-search { font-size:11px; grid-column:auto; }
+.public-standings .standings-search input::placeholder { color:#657f9f; opacity:1; }
+.public-standings .standings-search svg,
+.public-standings .standings-select svg { width:16px; height:16px; color:#183861; flex:none; }
+.public-standings .standings-select>svg { fill:none; stroke:currentColor; stroke-width:1.8; }
+.public-standings .standings-select select { border:0; padding:0; height:30px; width:100%; min-width:0; font-size:10px; color:#1e3a5f; background:transparent; }
+.public-standings .standings-select:focus-within,
+.public-standings .standings-year:focus-within { outline:2px solid #175cd9; outline-offset:2px; }
+.standings-symbols { position:absolute; width:0; height:0; overflow:hidden; }
+.championship-table-scroll { overflow-x:auto; background:#fff; border:1px solid #e2ebf6; border-radius:7px; }
+.championship-table-scroll:focus-visible { outline:2px solid #175cd9; outline-offset:3px; }
+.championship-table { width:100%; table-layout:fixed; border-collapse:separate; border-spacing:0; color:#102b54; font-size:clamp(10px,1vw,12px); line-height:1.25; }
+.championship-table .col-rank { width:6%; }
+.championship-table .col-department { width:26%; }
+.championship-table .col-points { width:9%; }
+.championship-table .col-progress { width:32%; }
+.championship-table .col-medal { width:6%; }
+.championship-table .col-events { width:9%; }
+.championship-table thead th { height:37px; padding:4px 8px; color:#587198; font-size:clamp(6px,.65vw,8px); font-weight:650; text-transform:uppercase; vertical-align:middle; border-bottom:1px solid #e2ebf6; }
+.championship-table thead th:first-child { text-align:center; }
+.championship-table thead th:nth-child(3) { white-space:nowrap; padding-left:0; letter-spacing:-.15px; }
+.championship-table thead th:nth-child(4) { padding-left:clamp(50px,8vw,90px); }
+.championship-table thead th:nth-child(n+5) { text-align:center; padding-inline:2px; }
+.championship-table thead th:nth-child(5) { border-left:1px solid #edf1f7; }
+.tally-icon { display:block; width:14px; height:17px; margin:0 auto 1px; fill:currentColor; }
+.gold { color:#f5b600; }.silver { color:#94a6c0; }.bronze { color:#ca733d; }.people { color:#124c94; }
+.events-column-heading { display:flex; align-items:center; justify-content:center; gap:5px; line-height:1.15; }
+.events-column-heading .tally-icon { margin:0; width:17px; height:17px; }
+.championship-row { --progress-color:#102e60; }
+.championship-row.rank-1 { --progress-color:#ffc400; background:#fffbea; }
+.championship-row.rank-2 { --progress-color:#0860c7; }
+.championship-row.rank-3 { --progress-color:#ff7830; }
+.championship-row>td,.championship-row>th { height:49px; padding:5px 8px; border-bottom:1px solid #e9eff7; font-weight:600; vertical-align:middle; }
+.championship-row:last-child>td,.championship-row:last-child>th { border-bottom:0; }
+.championship-row.rank-1>td,.championship-row.rank-1>th { border-top:1px solid #ffda56; border-bottom:1px solid #ffda56; }
+.championship-row.rank-1>td:first-child { border-left:1px solid #ffda56; border-radius:6px 0 0 6px; }
+.championship-row.rank-1>td:last-child { border-right:1px solid #ffda56; border-radius:0 6px 6px 0; }
+.championship-rank { display:grid; place-items:center; margin:auto; width:26px; height:26px; background:#eaf0f9; border-radius:3px; font-size:14px; font-weight:800; color:#122d54; }
+.rank-1 .championship-rank,.rank-2 .championship-rank,.rank-3 .championship-rank { height:39px; width:30px; clip-path:polygon(50% 0,100% 15%,100% 80%,50% 100%,0 80%,0 15%); border-radius:0; background:linear-gradient(100deg,#ffe15e,#ffbd00); font-size:19px; }
+.rank-2 .championship-rank { background:linear-gradient(100deg,#ecf3ff,#a3b9d5); }
+.rank-3 .championship-rank { background:linear-gradient(100deg,#fbc397,#d17b40); }
+.championship-department { display:flex; align-items:center; gap:13px; }
+.championship-department>img,.championship-initial { display:grid; place-items:center; width:38px; height:38px; flex:none; object-fit:contain; border-radius:50%; }
+.championship-initial { background:#eaf1fb; font-size:17px; font-weight:800; }
+.championship-department>span:last-child { max-width:190px; font-weight:750; font-size:clamp(9px,.95vw,12px); overflow-wrap:break-word; }
+.championship-points { white-space:nowrap; padding-left:0!important; }
+.championship-points strong { font-size:clamp(21px,2.5vw,28px); letter-spacing:-1px; font-weight:800; }
+.championship-points>span { font-size:10px; margin-left:4px; }
+.rank-1 .championship-points { color:#0d1a29; }
+.championship-progress { display:flex; align-items:center; gap:10px; padding-right:6px; }
+.championship-track { position:relative; height:13px; flex:1; min-width:0; overflow:hidden; background:#dfe5f0; border-radius:4px; }
+.championship-track>span { display:block; width:var(--progress); height:100%; border-radius:inherit; background:var(--progress-color); }
+.championship-percentage { min-width:34px; color:#536c91; font-size:clamp(9px,.9vw,11px); font-variant-numeric:tabular-nums; text-align:right; }
+.championship-row>.championship-tally { text-align:center; border-left:1px solid #edf1f7; padding:4px 2px; }
+.championship-tally .tally-icon { width:15px; height:17px; }
+.championship-tally>span { display:block; font-size:clamp(10px,1vw,12px); font-weight:700; }
+@media (max-width:1000px) {
+  .public-standings .standings-tabs { gap:10px; }
+  .public-standings .standings-tabs button { padding:11px 12px 9px; }
+  .public-standings .standings-year { width:135px; height:27px; }
+  .public-standings .standings-year select { font-size:8px; }
+  .public-standings .standings-content { padding-top:11px; }
+  .public-standings .standings-search,.public-standings .standings-select { height:28px; font-size:9px; }
+  .public-standings .standings-select select { height:25px; font-size:9px; }
+  .championship-row>td,.championship-row>th { height:37px; padding:3px 7px; }
+  .championship-table thead th { height:29px; }
+  .championship-rank { width:20px; height:22px; font-size:11px; }
+  .rank-1 .championship-rank,.rank-2 .championship-rank,.rank-3 .championship-rank { width:25px; height:31px; font-size:16px; }
+  .championship-department { gap:10px; }
+  .championship-department>img,.championship-initial { width:30px; height:30px; }
+  .championship-points strong { font-size:20px; }
+  .championship-points>span { font-size:8px; margin-left:3px; }
+  .championship-track { height:10px; }
+  .championship-progress { gap:7px; }
+  .championship-tally .tally-icon { width:12px; height:14px; }
+}
+@media (max-width:640px) {
+  .public-standings .standings-content,.public-standings .standings-tab-inner { width:calc(100% - 28px); }
+  .public-standings .standings-hero-inner { width:calc(100% - 40px); height:355px; }
+  .public-standings .standings-heading { max-width:85%; padding-top:22px; }
+  .public-standings .standings-heading h1 { font-size:32px; }
+  .public-standings .standings-heading>p:last-child { font-size:11px; max-width:240px; }
+  .public-standings .standings-eyebrow { font-size:8px; }
+  .public-standings .standings-podium { left:0; width:100%; }
+  .public-standings .podium-crest { width:46px; height:46px; }
+  .public-standings .place-1 .podium-crest { width:58px; height:58px; }
+  .public-standings .place-1 .podium-block { height:110px; }
+  .public-standings .place-2 .podium-block { height:92px; }
+  .public-standings .place-3 .podium-block { height:88px; }
+  .public-standings .podium-block { padding-inline:5px; }
+  .public-standings .podium-block h2,.public-standings .place-2 .podium-block h2,.public-standings .place-3 .podium-block h2 { font-size:8px; }
+  .public-standings .podium-rank,.public-standings .place-2 .podium-rank,.public-standings .place-3 .podium-rank { font-size:21px; }
+  .public-standings .standings-hero--empty .standings-hero-inner { height:auto; min-height:185px; }
+  .public-standings .standings-tab-inner { flex-wrap:wrap; gap:0; padding-top:8px; }
+  .public-standings .standings-tabs { order:2; width:100%; gap:8px; }
+  .public-standings .standings-tabs button { flex:1; font-size:11px; padding-inline:8px; }
+  .public-standings .standings-year { margin-left:auto; width:153px; height:30px; }
+  .public-standings .standings-year select { font-size:10px; }
+  .public-standings .standings-filters { grid-template-columns:1fr 1fr; gap:9px; }
+  .public-standings .standings-search { grid-column:1/-1; }
+  .public-standings .standings-search,.public-standings .standings-select { height:36px; font-size:12px; }
+  .public-standings .standings-select select { height:32px; font-size:11px; }
+  .championship-table { min-width:720px; }
+  .championship-table thead th { font-size:7px; }
+}

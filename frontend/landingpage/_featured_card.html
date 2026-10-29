@@ -3,17 +3,30 @@
   <a class="featured-banner" href="{{ event.detail_url }}" aria-label="View {{ event.name }}">
     {% if event.image_url %}
       <img src="{{ event.image_url }}" alt="{{ event.name }}" loading="lazy" {% if event.banner_key %}data-banner-fallback="{% static 'landingpage/assets/competitions/' %}{{ event.banner_key }}.webp"{% else %}data-featured-generic="true"{% endif %}>
+    {% elif event.banner_key == 'pageant' or event.banner_key == 'duet' or event.banner_key == 'singing' %}
+      <span class="home-event-poster home-poster-{{ event.banner_key }}" aria-hidden="true">
+        <svg viewBox="0 0 330 100" preserveAspectRatio="xMidYMid slice" focusable="false"><path fill="#06254b" d="M0 0h330v100H0z"/><path fill="#113d6b" d="m0 0 140 100h60L60 0zm205 0 125 78v22h-23L158 0z"/><path fill="#ffce18" d="m0 78 42 22H0zm330-78-67 100h36L330 55zM0 13l64 58-33-9L0 33zm205-13 41 20 24-20z"/><path fill="#fff" d="m0 90 30 10H0zm330-13-23 23h23z"/>
+        {% if event.banner_key == 'pageant' %}
+        <g fill="#ffd022"><path d="m27 42 13 12 13-26 13 26 14-12-6 31H33z"/><rect x="32" y="77" width="44" height="5" rx="2"/><circle cx="27" cy="40" r="3"/><circle cx="53" cy="25" r="3"/><circle cx="80" cy="40" r="3"/><path d="m281 24 3 10 11 3-11 3-3 11-3-11-11-3 11-3zm-185-9 2 7 7 2-7 2-2 7-2-7-7-2 7-2z"/></g><g stroke="#eeb91b" fill="none" stroke-width="2"><path d="M27 91Q6 75 13 49m64 42q21-16 16-42"/><path d="m18 76-9-5m14 13-10-2m-2-22 8 7m65 9 9-5m-14 13 10-2m2-22-8 7"/></g>
+        {% elif event.banner_key == 'duet' %}
+        <g transform="translate(56 48) rotate(31)"><rect x="-15" y="-34" width="30" height="47" rx="14" fill="#173e69" stroke="#dceafb" stroke-width="2"/><path d="M-12-27h24m-26 6h28m-28 6h28m-28 6h28m-28 6h28m-25 6h22m-18 6h14" stroke="#aacbe8" stroke-width="1.5"/><path d="M-21-7V5q0 21 21 21T21 5V-7M0 26v18m-14 0h28" stroke="#82b2df" fill="none" stroke-width="3"/><path d="M-6-31v41m8-43v45m7-41V9" stroke="#e8f3fe" stroke-width="1" opacity=".7"/></g><g fill="#ffcf1b"><path d="M16 17v20q-10-2-10 5t12 2V24l10-3v-7zm263 43v18q-10-2-10 5t12 2V67l10-3v-8z"/><path d="m88 9 2 7 7 2-7 2-2 7-2-7-7-2 7-2z"/></g>
+        {% else %}
+        <g transform="translate(57 49) rotate(-25)" stroke="#ffd023" fill="none" stroke-width="2.2"><rect x="-14" y="-33" width="28" height="45" rx="13" fill="#153450"/><path d="M-21-10v13q0 20 21 20T21 3V-10M0 23v22m-14 0h28M-12-24h24m-26 7h28m-28 7h28m-27 7h26m-22 7h18M-5-31v41m10-41v41"/></g><g fill="#ffcf1b"><path d="M20 14v18q-10-2-10 5t12 2V21l10-3v-8z"/><path d="m88 12 2 7 7 2-7 2-2 7-2-7-7-2 7-2zm190 53 2 7 7 2-7 2-2 7-2-7-7-2 7-2z"/></g>
+        {% endif %}</svg>
+        <span class="home-poster-title">{% if event.banner_key == 'pageant' %}<small>MR. &amp; MS.</small>INTRAMURALS{% elif event.banner_key == 'duet' %}VOCAL<br>DUET<small>COMPETITION</small>{% else %}SINGING<small>COMPETITION</small>{% endif %}</span>
+      </span>
     {% elif event.banner_key %}
       <img src="{% static 'landingpage/assets/competitions/' %}{{ event.banner_key }}.webp" alt="" loading="lazy">
     {% else %}
       <span class="featured-generic-art" aria-hidden="true">{% include "landingpage/_category_icon.html" %}</span>
     {% endif %}
     <span class="featured-banner-shade" aria-hidden="true"></span>
-    <span class="featured-category"><span class="featured-category-icon">{% include "landingpage/_category_icon.html" %}</span>{{ event.category }}</span>
+
   </a>
   <div class="featured-card-body">
-    <div class="featured-meta"><span>{{ event.type_label }}</span><span class="status status-{{ event.status }}">{{ event.status_label }}</span></div>
+    <div class="featured-meta"><span>{{ event.type_label }}</span><span class="home-card-category">{{ event.category }}</span></div>
     <h3><a href="{{ event.detail_url }}">{{ event.name }}</a></h3>
+    {% if event.classification_label %}<span class="classification-tag classification-{{ event.classification }}" aria-label="Event classification">{{ event.classification_label }}</span>{% endif %}
     <p class="featured-date"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4m8-4v4M4 11h16"/></svg><span>{% if event.date %}{{ event.date|date:"M j, Y" }}{% else %}Date to be announced{% endif %}{% if event.time %} &middot; {{ event.time|time:"g:i A" }}{% endif %}</span></p>
     <p class="featured-venue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 1 1 14 0Z"/><circle cx="12" cy="10" r="2.5"/></svg><span>{{ event.venue|default:"Venue to be announced" }}</span></p>
     <a class="featured-card-link" href="{{ event.detail_url }}">View Details <span aria-hidden="true">&#8594;</span></a>

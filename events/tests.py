@@ -95,7 +95,7 @@ class FacultyMatchWorkspaceTests(TestCase):
         self.assertEqual(self.match.status, BracketMatch.STATUS_PENDING)
         self.assertFalse((self.match_event.result_processing_config or {}).get('ready_for_publication', False))
 
-    def test_successful_confirmations_progress_authored_links_and_gate_readiness(self):
+    def test_confirmations_progress_links_but_missing_departments_block_publication(self):
         team_c = BracketTeam.objects.create(event=self.match_event, name='Green')
         team_d = BracketTeam.objects.create(event=self.match_event, name='Red')
         winner_target = BracketMatch.objects.create(
@@ -137,7 +137,11 @@ class FacultyMatchWorkspaceTests(TestCase):
         )
         self.assertEqual(second_response.status_code, 200)
         self.match_event.refresh_from_db()
-        self.assertTrue(self.match_event.result_processing_config['ready_for_publication'])
+        from .publication_service import match_publication_review
+        review = match_publication_review(self.match_event)
+        self.assertTrue(review['all_confirmed'])
+        self.assertTrue(any('department mapping' in error for error in review['errors']))
+        self.assertFalse(self.match_event.result_processing_config['ready_for_publication'])
 
     def test_other_owner_draft_is_not_overwritten(self):
         ScoreSheet.objects.create(
@@ -218,12 +222,15 @@ class FacultyMatchWorkspaceTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertContains(response, 'can no longer be changed', status_code=400)
 
-    def test_faculty_cannot_publish(self):
+    def test_assigned_faculty_cannot_publish_without_explicit_confirmation(self):
         response = self.client.post(
             reverse('faculty_results_action', args=[self.match_event.id]),
             data=json.dumps({'action': 'publish'}), content_type='application/json',
         )
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, 'Explicit publication confirmation is required', status_code=400)
+        self.match_event.refresh_from_db()
+        self.assertFalse(self.match_event.results_finalized)
 
 
 class MatchEventWorkflowTests(TestCase):
@@ -255,6 +262,65 @@ class MatchEventWorkflowTests(TestCase):
         self.team_b = Team.objects.create(name='Gold Hawks', code='GH', department=department)
         self.team_c = Team.objects.create(name='Red Kites', code='RK', department=department)
         self.client.force_login(self.admin)
+
+    def test_generated_elimination_draw_separates_departments(self):
+        from events.match_event_service import build_match_blueprint, _opening_pairs
+        other = Department.objects.create(name='Other department', code='OTHER')
+        self.team_c.department = other
+        self.team_c.save(update_fields=['department'])
+        team_d = Team.objects.create(name='Other B', code='OB', department=other)
+        ids = [self.team_a.pk, self.team_b.pk, self.team_c.pk, team_d.pk]
+        departments = dict(Team.objects.filter(pk__in=ids).values_list('pk', 'department_id'))
+        for format_name in ['single_elimination', 'double_elimination']:
+            for _ in range(12):
+                blueprint = build_match_blueprint(ids, format_name)
+                self.assertCountEqual(blueprint['draw_order'], ids)
+                for a, b in _opening_pairs(blueprint['draw_order'])[1]:
+                    if b is not None:
+                        self.assertNotEqual(departments[a], departments[b])
+                saved = build_match_blueprint(ids, format_name, draw_order=blueprint['draw_order'])
+                self.assertEqual(saved, blueprint)
+
+    def test_department_draw_handles_byes_and_unavoidable_conflicts(self):
+        from events.match_event_service import _separate_department_openers, _opening_pairs
+        for count in [3, 5, 6, 7, 8, 9, 12, 16]:
+            ids = list(range(1, count + 1))
+            departments = {team: (team - 1) // 2 + 1 for team in ids}
+            ordered = _separate_department_openers(ids, departments)
+            self.assertCountEqual(ordered, ids)
+            pairs = _opening_pairs(ordered)[1]
+            byes = [a for a, b in pairs if b is None]
+            known_pairs = [(a, b) for a, b in pairs if b is not None]
+            known_pairs += list(zip(byes[::2], byes[1::2]))
+            for a, b in known_pairs:
+                self.assertNotEqual(departments[a], departments[b])
+        ids = [1, 2, 3, 4, 5, 6, 7, 8]
+        departments = {team: 1 if team <= 6 else 2 for team in ids}
+        ordered = _separate_department_openers(ids, departments)
+        conflicts = sum(departments[a] == departments[b] for a, b in _opening_pairs(ordered)[1])
+        self.assertEqual(conflicts, 2)
+        self.assertEqual(_separate_department_openers(ids, {}), ids)
+
+    def test_bracket_view_exposes_department_logo_and_saved_schedule(self):
+        event = Event.objects.create(name='Bracket display', category='Sports', scoring_method='match', event_date='2026-11-10', end_date='2026-11-15')
+        department = self.team_a.department
+        department.logo = 'department_logos/display.png'
+        department.save(update_fields=['logo'])
+        a = BracketTeam.objects.create(event=event, name=self.team_a.name, department=department, seed=1)
+        b = BracketTeam.objects.create(event=event, name=self.team_b.name, department=department, seed=2)
+        BracketMatch.objects.create(event=event, match_number=1, round_name='Finals', team_a=a, team_b=b,
+                                    match_date='2026-11-10', match_time='09:30', winner=a, status='completed')
+        response = self.client.get(reverse('admin_view_bracket', args=[event.pk]))
+        self.assertEqual(response.status_code, 200)
+        match = response.json()['matches'][0]
+        self.assertTrue(match['team_a_logo'].endswith('/department_logos/display.png'))
+        self.assertEqual(match['team_a_logo'], match['winner_logo'])
+        self.assertEqual(match['match_date'], '2026-11-10')
+        self.assertEqual(match['match_time'], '9:30 AM')
+        self.assertIsNone(match['next_match_winner_id'])
+        department.logo = ''
+        department.save(update_fields=['logo'])
+        self.assertEqual(self.client.get(reverse('admin_view_bracket', args=[event.pk])).json()['matches'][0]['team_a_logo'], '')
 
     def payload(self, **overrides):
         data = {
@@ -292,6 +358,31 @@ class MatchEventWorkflowTests(TestCase):
         }
         data.update(overrides)
         return data
+
+    def test_wizard_json_save_returns_id_and_validation_errors(self):
+        url = reverse('admin_match_events')
+        invalid = self.client.post(url, self.payload(venue=''), HTTP_ACCEPT='application/json')
+        self.assertEqual(invalid.status_code, 400)
+        self.assertFalse(invalid.json()['success'])
+        self.assertFalse(Event.objects.filter(name='Basketball Championship').exists())
+        saved = self.client.post(url, self.payload(), HTTP_ACCEPT='application/json')
+        self.assertEqual(saved.status_code, 200)
+        event = Event.objects.get(pk=saved.json()['id'])
+        self.assertTrue(saved.json()['success'])
+        self.assertEqual(event.publication_status, Event.PUBLICATION_DRAFT)
+
+    def test_new_sports_can_be_saved_without_custom_sport_name(self):
+        for sport in ('Pickleball', 'Dart'):
+            with self.subTest(sport=sport):
+                response = self.client.post(
+                    reverse('admin_match_events'),
+                    self.payload(event_name=f'{sport} Cup', sport_type=sport, result_entry_format=''),
+                    HTTP_ACCEPT='application/json',
+                )
+                self.assertEqual(response.status_code, 200)
+                event = Event.objects.get(pk=response.json()['id'])
+                self.assertEqual(event.sport_type, sport)
+                self.assertEqual(event.result_entry_format, 'manual_winner')
 
     def test_create_draft_persists_teams_bracket_and_schedule(self):
         response = self.client.post(reverse('admin_match_events'), self.payload())
@@ -601,10 +692,15 @@ class MatchEventWorkflowTests(TestCase):
     def test_criteria_event_creation_is_reachable(self):
         response = self.client.post(reverse('admin_criteria_events'), {
             'event_name': 'Academic Quiz',
-            'category': 'Academic',
+            'category': 'Special Event',
+            'event_classification': 'minor',
+            'participation_type': 'individual',
             'division': 'Open',
             'venue': 'Library Hall',
-            'event_date': '2026-08-20',
+            'start_date': '2026-08-20',
+            'end_date': '2026-08-20',
+            'event_format': 'single_performance',
+            'criteria_score_method': 'weighted_percentage',
         })
         self.assertRedirects(response, reverse('admin_criteria_events'))
         event = Event.objects.get(name='Academic Quiz')
@@ -934,10 +1030,13 @@ class TournamentBracketsListingTests(TestCase):
         self.assertEqual(response.status_code, 200)
         body = response.content.decode('utf-8')
         self.assertIn('Tournament Brackets', body)
-        self.assertNotIn('Create Bracket', body)
+        # The legacy regeneration dialog remains in the DOM but is not a
+        # listing action. Check the actual navigation/control, not hidden text.
+        self.assertNotIn('id="openCreateBracketBtn"', body)
         self.assertNotIn('Pop Solo', body)
         self.assertNotIn('Dance Sports', body)
-        self.assertIn('Go to Match-Based Events', body)
+        self.assertIn('Complete Event Setup', body)
+        self.assertIn(f'href="{listing["event_rows"][0]["edit_url"]}"', body)
 
     def test_summary_cards_exclude_criteria(self):
         self._create_match_event('Generated Later')
@@ -1095,15 +1194,15 @@ class PageantCriteriaEventTests(TestCase):
         self.admin = User.objects.create_user(
             username='pageant-admin', password='test-password', is_staff=True,
         )
-        self.faculty = User.objects.create_user(
-            username='pageant-faculty', password='test-password', is_staff=True,
+        self.tabulator = User.objects.create_user(
+            username='pageant-tabulator', password='test-password',
         )
         self.judge = User.objects.create_user(
             username='pageant-judge', password='test-password', is_staff=True,
         )
-        faculty_group, _ = Group.objects.get_or_create(name='Faculty')
+        tabulator_group, _ = Group.objects.get_or_create(name='Tabulator')
         judge_group, _ = Group.objects.get_or_create(name='Judge')
-        self.faculty.groups.add(faculty_group)
+        self.tabulator.groups.add(tabulator_group)
         self.judge.groups.add(judge_group)
         from .models import RegistryCandidate
         self.cand_a = RegistryCandidate.objects.create(number='1', name='Alex Rivera')
@@ -1131,7 +1230,7 @@ class PageantCriteriaEventTests(TestCase):
             'event_format': 'multiple_stage',
             'criteria_score_method': 'weighted_percentage',
             'publication_status': publication,
-            'faculty_account': str(self.faculty.id),
+            'faculty_account': str(self.tabulator.id),
             'chief_judge': str(self.judge.id),
             'judge_ids': json.dumps([self.judge.id]),
             'participant_ids': json.dumps([self.cand_a.id, self.cand_b.id]),
@@ -1374,7 +1473,11 @@ class CriteriaRoundAdvancementValidationTests(TestCase):
                 thread.assert_not_called()
             thread.return_value.start.assert_called_once()
             notify.assert_not_called()
-            thread.call_args.kwargs['target']()
+            # Production calls this in a separate thread. Running it inline
+            # must not close this TestCase's active transaction/connection.
+            with patch('events.criteria_event_service.close_old_connections') as close_connections:
+                thread.call_args.kwargs['target']()
+            self.assertEqual(close_connections.call_count, 2)
             self.assertEqual(notify.call_args.args[0], event)
             self.assertIn(self.tabulator, notify.call_args.args[1])
 
@@ -1412,7 +1515,9 @@ class CriteriaRoundAdvancementValidationTests(TestCase):
         self.assertTrue(response.json()['success'])
         event = Event.objects.get(pk=response.json()['event']['id'])
         self.assertEqual(event.publication_status, Event.PUBLICATION_DRAFT)
-        self.assertEqual(event.participant_ids, [candidate.id for candidate in self.candidates[:4]])
+        entries = list(event.criteria_entries.order_by('display_order'))
+        self.assertEqual([entry.source_individual_id for entry in entries], [candidate.id for candidate in self.candidates[:4]])
+        self.assertEqual(event.participant_ids, [entry.id for entry in entries])
         self.assertEqual(len(event.rounds_config), 2)
         self.assertEqual(list(event.assigned_judges.values_list('id', flat=True)), [self.judge.id])
 
@@ -1470,8 +1575,10 @@ class CriteriaRoundAdvancementValidationTests(TestCase):
 
     def test_zero_candidates_is_blocked(self):
         from events.criteria_event_service import CriteriaEventValidationError, save_criteria_event
-        with self.assertRaisesMessage(CriteriaEventValidationError, 'Select at least one candidate.'):
+        before = Event.objects.count()
+        with self.assertRaisesMessage(CriteriaEventValidationError, 'Add at least one valid event entry.'):
             save_criteria_event(self._payload(0, qualifiers=10, publication_status='published'), self.admin)
+        self.assertEqual(Event.objects.count(), before)
 
     def test_zero_candidates_can_be_saved_as_draft(self):
         from events.criteria_event_service import save_criteria_event
@@ -1501,20 +1608,20 @@ class CriteriaRoundAdvancementValidationTests(TestCase):
         from events.criteria_event_service import save_criteria_event
         from events.faculty_service import FacultyServiceError, confirm_stage_advancement
         event = save_criteria_event(self._payload(4, qualifiers=4), self.admin)
-        first_id = self.candidates[0].id
+        first_id = event.participant_ids[0]
         with self.assertRaisesMessage(FacultyServiceError, 'Duplicate qualifier selections are not allowed.'):
             confirm_stage_advancement(
                 event,
                 self.tabulator,
                 0,
-                [first_id, first_id, self.candidates[1].id, self.candidates[2].id],
+                [first_id, first_id, *event.participant_ids[1:3]],
             )
 
     def test_stage_confirmation_advances_adjusted_four_candidates(self):
         from events.criteria_event_service import save_criteria_event
         from events.faculty_service import confirm_stage_advancement
         event = save_criteria_event(self._payload(4, qualifiers=10), self.admin)
-        ids = [c.id for c in self.candidates[:4]]
+        ids = event.participant_ids
         result = confirm_stage_advancement(event, self.tabulator, 0, ids)
         event.refresh_from_db()
         self.assertEqual(result['qualifier_ids'], ids)
@@ -1530,6 +1637,120 @@ class EventScoringCategoryTests(TestCase):
             venue='Hall',
             scoring_method='criteria',
         )
+        self.admin = get_user_model().objects.create_superuser('segment-order-admin', 'segments@example.test', 'test-password')
+        self.client.force_login(self.admin)
+        self.rounds = [
+            {'id': 'round-temp-preliminary', 'name': 'Preliminary Round', 'weight': 50,
+             'round_type': 'scoring', 'qualification_method': 'advance_all', 'status': 'open'},
+            {'id': '2', 'name': 'Selection of Mr. & Ms. USTP Ambassador', 'weight': 50,
+             'is_final': True, 'status': 'locked'},
+        ]
+        self.event.rounds_config = self.rounds
+        self.event.save(update_fields=['rounds_config'])
+
+    def create_segment(self, name, round_id, order=1):
+        payload = {'workflow_action': 'create_category', 'event_id': self.event.pk,
+                   'category_name': name, 'assigned_round_id': round_id, 'purpose': 'official',
+                   'judge_mode': 'scoring', 'overall_weight_percent': 100}
+        if order is not None:
+            payload['display_order'] = order
+        return self.client.post(reverse('admin_criteria_events'), payload)
+
+    def test_segments_can_each_start_at_one_in_different_rounds(self):
+        from .models import EventScoringCategory
+        first = self.create_segment('Top 5 Selection', self.rounds[0]['id'])
+        second = self.create_segment('Ambassador Final Selection', self.rounds[1]['id'])
+        self.assertEqual(first.status_code, 200, first.content)
+        self.assertEqual(second.status_code, 200, second.content)
+        for response, round_config in [(first, self.rounds[0]), (second, self.rounds[1])]:
+            data = response.json()['category']
+            self.assertIsInstance(data['id'], int)
+            self.assertEqual(data['assigned_round_id'], round_config['id'])
+            self.assertEqual(data['display_order'], 1)
+            EventScoringCategory.objects.get(pk=data['id']).full_clean()
+        duplicate = self.create_segment('Duplicate Preliminary Order', self.rounds[0]['id'])
+        self.assertEqual(duplicate.status_code, 400)
+        self.assertIn('selected round', duplicate.json()['message'])
+
+    def test_database_constraint_rejects_duplicate_order_only_in_same_round(self):
+        from django.db import IntegrityError, transaction
+        from .models import EventScoringCategory
+        for name, round_id in [('First', self.rounds[0]['id']), ('Final', self.rounds[1]['id'])]:
+            EventScoringCategory.objects.create(event=self.event, name=name, assigned_round_id=round_id,
+                judge_mode='scoring', display_order=1, overall_weight_percent=100)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            EventScoringCategory.objects.create(event=self.event, name='Duplicate', assigned_round_id=self.rounds[0]['id'],
+                judge_mode='scoring', display_order=1, overall_weight_percent=100)
+        self.assertEqual(self.event.scoring_categories.count(), 2)
+
+    def test_next_segment_order_uses_selected_round_maximum_not_count(self):
+        self.assertEqual(self.create_segment('Preliminary first', self.rounds[0]['id']).status_code, 200)
+        self.assertEqual(self.create_segment('Preliminary fourth', self.rounds[0]['id'], 4).status_code, 200)
+        final = self.create_segment('Final first', self.rounds[1]['id'], None)
+        preliminary = self.create_segment('Preliminary next', self.rounds[0]['id'], None)
+        self.assertEqual(final.status_code, 200, final.content)
+        self.assertEqual(preliminary.status_code, 200, preliminary.content)
+        self.assertEqual(final.json()['category']['display_order'], 1)
+        self.assertEqual(preliminary.json()['category']['display_order'], 5)
+
+    def test_update_checks_target_round_and_excludes_current_segment(self):
+        from .models import EventScoringCategory
+        first = self.create_segment('Preliminary', self.rounds[0]['id']).json()['category']
+        second = self.create_segment('Final', self.rounds[1]['id']).json()['category']
+        payload = {'workflow_action': 'update_category', 'event_id': self.event.pk,
+                   'category_id': second['id'], 'category_name': second['name'], 'purpose': 'official',
+                   'judge_mode': 'scoring', 'overall_weight_percent': 100, 'display_order': 1,
+                   'assigned_round_id': self.rounds[1]['id']}
+        self.assertEqual(self.client.post(reverse('admin_criteria_events'), payload).status_code, 200)
+        payload['assigned_round_id'] = self.rounds[0]['id']
+        response = self.client.post(reverse('admin_criteria_events'), payload)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('selected round', response.json()['message'])
+        self.assertEqual(EventScoringCategory.objects.get(pk=second['id']).assigned_round_id, self.rounds[1]['id'])
+        self.assertTrue(EventScoringCategory.objects.filter(pk=first['id'], display_order=1).exists())
+
+    def test_save_reload_preserves_round_orders_segments_criteria_and_scores(self):
+        from unittest.mock import patch
+        from .models import CriteriaEventEntry, CriteriaScoreSubmission, EventScoringCategory, EventScoringCriterion
+        from .criteria_event_service import save_criteria_event
+        self.admin.groups.add(Group.objects.get_or_create(name='Judge')[0])
+        self.event.assigned_judges.add(self.admin)
+        team = Team.objects.create(name='Segment Test Team', code='SEG')
+        entry = CriteriaEventEntry.objects.create(event=self.event, entry_type='team', source_team=team,
+            display_name=team.name, display_order=0)
+        self.event.participant_ids = [entry.pk]
+        self.event.participation_type = 'team'
+        self.event.save()
+        for name, stage in [('Top 5 Selection', self.rounds[0]), ('Ambassador Final Selection', self.rounds[1])]:
+            response = self.create_segment(name, stage['id'])
+            self.assertEqual(response.status_code, 200, response.content)
+            category = EventScoringCategory.objects.get(pk=response.json()['category']['id'])
+            EventScoringCriterion.objects.create(category=category, name=name + ' criterion',
+                weight_percent=100, max_score=100, display_order=1)
+        first = self.event.scoring_categories.get(assigned_round_id=self.rounds[0]['id'])
+        CriteriaScoreSubmission.objects.create(event=self.event, assigned_round_id=first.assigned_round_id,
+            category=first, criterion=first.criteria.get(), judge=self.admin, participant_type='entry',
+            participant_id=entry.pk, source='MOBILE', status='SUBMITTED', raw_score=88)
+        categories_before = list(self.event.scoring_categories.order_by('pk').values())
+        criteria_before = list(EventScoringCriterion.objects.filter(category__event=self.event).order_by('pk').values())
+        scores_before = list(CriteriaScoreSubmission.objects.filter(event=self.event).values())
+        payload = {'criteria_wizard_version': '4', 'event_name': self.event.name, 'category': 'Special Event',
+            'event_classification': 'minor', 'participation_type': 'team', 'venue': 'Hall',
+            'start_date': date.today().isoformat(), 'end_date': date.today().isoformat(),
+            'publication_status': 'draft', 'event_format': 'multiple_stage', 'criteria_score_method': 'weighted_percentage',
+            'rounds_config': json.dumps(self.rounds), 'event_entries': json.dumps([{'source_team_id': team.pk}]),
+            'judge_ids': json.dumps([self.admin.pk])}
+        with patch('events.criteria_event_service._schedule_assignment_notifications'):
+            save_criteria_event(payload, self.admin, instance=self.event)
+        self.event.refresh_from_db()
+        self.assertEqual([row['stage_number'] for row in self.event.rounds_config], [1, 2])
+        self.assertEqual([row['id'] for row in self.event.rounds_config], [row['id'] for row in self.rounds])
+        self.assertEqual(list(self.event.scoring_categories.order_by('pk').values()), categories_before)
+        self.assertEqual(list(EventScoringCriterion.objects.filter(category__event=self.event).order_by('pk').values()), criteria_before)
+        self.assertEqual(list(CriteriaScoreSubmission.objects.filter(event=self.event).values()), scores_before)
+        reloaded = self.client.post(reverse('admin_criteria_events'), {'workflow_action': 'list_categories', 'event_id': self.event.pk})
+        self.assertEqual(reloaded.status_code, 200)
+        self.assertEqual([row['display_order'] for row in reloaded.json()['categories']], [1, 1])
 
     def test_category_and_criteria_are_scoped_to_event(self):
         from .models import EventScoringCategory, EventScoringCriterion
@@ -1643,8 +1864,9 @@ class TabulatorResultsPortalTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, 'tabulator/tabresults.html')
         self.assertEqual(response.context['payload']['selected_participant']['candidate_id'], self.cand_b.id)
-        for section in ('Live Rankings', 'Official Results', 'Detailed Score Breakdown', 'Result verification'):
+        for section in ('Live Rankings', 'Official Results', 'Detailed Score Breakdown'):
             self.assertContains(response, section)
+        self.assertContains(response, 'Results are awaiting verification and publication.')
         self.assertEqual(response.context['results_page']['default_tab'], 'breakdown')
         self.assertNotContains(response, 'Back to Results')
         self.assertNotContains(response, 'View Full Results')

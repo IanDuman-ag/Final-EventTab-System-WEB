@@ -2,6 +2,7 @@
   'use strict';
   const page = document.querySelector('.criteria-page');
   if (!page) return;
+  page.classList.add('has-js');
   const dateFormat = new Intl.DateTimeFormat('en-PH', {
     timeZone: 'Asia/Manila', month: 'short', day: 'numeric', year: 'numeric',
     hour: 'numeric', minute: '2-digit',
@@ -9,6 +10,64 @@
   document.querySelectorAll('[data-local-time]').forEach(time => {
     const value = new Date(time.dateTime);
     if (!Number.isNaN(value.getTime())) time.textContent = dateFormat.format(value);
+  });
+  // Division tabs only filter the read-only compact results preview.
+  const qualifiedTabs = [...document.querySelectorAll('[data-qualified-tab]')];
+  const selectQualifiedTab = tab => {
+    qualifiedTabs.forEach(item => {
+      const selected = item === tab;
+      item.setAttribute('aria-selected', String(selected));
+      item.tabIndex = selected ? 0 : -1;
+      const panel = document.getElementById(item.getAttribute('aria-controls'));
+      if (panel) panel.hidden = !selected;
+    });
+  };
+  qualifiedTabs.forEach((tab, index) => {
+    tab.addEventListener('click', () => selectQualifiedTab(tab));
+    tab.addEventListener('keydown', event => {
+      let next;
+      if (event.key === 'ArrowRight') next = (index + 1) % qualifiedTabs.length;
+      else if (event.key === 'ArrowLeft') next = (index - 1 + qualifiedTabs.length) % qualifiedTabs.length;
+      else if (event.key === 'Home') next = 0;
+      else if (event.key === 'End') next = qualifiedTabs.length - 1;
+      else return;
+      event.preventDefault();
+      selectQualifiedTab(qualifiedTabs[next]);
+      qualifiedTabs[next].focus();
+    });
+  });
+  document.querySelectorAll('[data-results-dashboard]').forEach(dashboard => {
+    const filters = [...dashboard.querySelectorAll('[data-results-filter]')];
+    const rows = [...dashboard.querySelectorAll('[data-result-division]')];
+    filters.forEach(filter => {
+      filter.addEventListener('click', () => {
+        const division = filter.dataset.resultsFilter;
+        filters.forEach(item => item.setAttribute('aria-pressed', String(item === filter)));
+        rows.forEach(row => { row.hidden = division !== 'all' && row.dataset.resultDivision !== division; });
+      });
+    });
+    dashboard.querySelector('[data-export-results]')?.addEventListener('click', () => {
+      const headings = ['Rank', 'Candidate', 'Department', 'Judge Average', 'Weighted Score', 'Qualification Status', 'Division'];
+      const csvValue = value => {
+        let text = String(value ?? '').trim();
+        if (/^[\s]*[=+@\-]/.test(text)) text = `'${text}`;
+        return `"${text.replaceAll('"', '""')}"`;
+      };
+      const resultRows = [...dashboard.querySelectorAll('.results-rankings tbody tr[data-result-division]')].map(row => [
+        ...[0, 1, 2, 3, 4, 5].map(index => row.cells[index]?.innerText ?? ''),
+        row.dataset.resultDivision || '',
+      ]);
+      const csv = [headings, ...resultRows].map(row => row.map(csvValue).join(',')).join('\r\n');
+      const blob = new Blob([`\uFEFF${csv}`], {type: 'text/csv;charset=utf-8'});
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'round-results.csv';
+      document.body.append(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    });
   });
   let posting = false;
   let fetching = false;

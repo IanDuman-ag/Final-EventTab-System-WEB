@@ -6,72 +6,63 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Audit Logs · Superadmin · EventTab</title>
   <link rel="stylesheet" href="{% static 'superadmin_dashboard.css' %}?v=20260803a">
-  <link rel="stylesheet" href="{% static 'admin_v2.css' %}?v=20260524a">
-  <link rel="stylesheet" href="{% static 'superadmindash/pages.css' %}?v=20260803b">
+  <link rel="stylesheet" href="{% static 'admin_v2.css' %}?v=20261019sidebar">
+  <link rel="stylesheet" href="{% static 'superadmindash/pages.css' %}?v=20261019audit">
 </head>
-<body class="admin-v2-page superadmin-dashboard-page">
+<body class="admin-v2-page sa-audit-reference">
+<svg class="al-symbols" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><defs><symbol id="al-logs" viewBox="0 0 24 24"><path d="M5 3h14v18H5ZM9 7h6M9 12h6M9 17h6"/></symbol><symbol id="al-calendar" viewBox="0 0 24 24"><path d="M5 3v4m14-4v4M3 10h18M3 5h18v16H3Z"/></symbol><symbol id="al-shield" viewBox="0 0 24 24"><path d="m12 2 9 4v7c0 5-9 9-9 9S3 18 3 13V6l9-4Zm0 5v6m0 3v1"/></symbol><symbol id="al-clock" viewBox="0 0 24 24"><path d="M12 7v6l4 2M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0"/></symbol><symbol id="al-user" viewBox="0 0 24 24"><path d="M8 7a4 4 0 1 0 8 0 4 4 0 0 0-8 0M4 22v-3a8 8 0 0 1 16 0v3Z"/></symbol><symbol id="al-database" viewBox="0 0 24 24"><path d="M3 5c0-5 18-5 18 0s-18 5-18 0Zm0 0v14c0 5 18 5 18 0V5M3 12c0 5 18 5 18 0"/></symbol><symbol id="al-filter" viewBox="0 0 24 24"><path d="M3 4h18l-7 8v8l-4-2v-6Z"/></symbol><symbol id="al-export" viewBox="0 0 24 24"><path d="M12 16V2m-5 5 5-5 5 5M4 13v8h16v-8"/></symbol><symbol id="al-file" viewBox="0 0 24 24"><path d="M5 2h10l5 5v15H5ZM15 2v6h5M9 12h7m-7 4h7"/></symbol><symbol id="al-search" viewBox="0 0 24 24"><path d="M15 15l6 6M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0"/></symbol><symbol id="al-reset" viewBox="0 0 24 24"><path d="M4 9a8 8 0 1 1 0 7M4 3v6h6"/></symbol><symbol id="al-chart" viewBox="0 0 24 24"><path d="M4 21V10m7 11V3m7 18V7"/></symbol><symbol id="al-gear" viewBox="0 0 24 24"><path d="m9 3 1-2h4l1 2 3 2 2 1 2 4-1 2v3l-1 2-4 3-2-1h-3l-2 1-4-3-1-2v-3l-1-2 2-4 2-1 3-2Zm-1 9a4 4 0 1 0 8 0 4 4 0 0 0-8 0"/></symbol><symbol id="al-desktop" viewBox="0 0 24 24"><path d="M2 3h20v14H2Zm10 14v5m-5 0h10"/></symbol><symbol id="al-login" viewBox="0 0 24 24"><path d="M13 3h8v18h-8M2 12h14m-5-5 5 5-5 5"/></symbol></defs></svg>
   <div class="dashboard-shell">
     {% include 'superadmindash/_sidebar.html' with active='audit_logs' %}
-    <div class="dashboard-area">
-      <header class="topbar">
+    <div class="dashboard-area v2sa-content">
+      <header class="topbar v2sa-topbar">
         <div class="topbar-context">
           <p class="sa-kicker">SYSTEM</p>
-          <h1 class="sa-page-title" style="margin:0">Audit Logs</h1>
+          <h1 class="sa-page-title" style="margin:0">Audit Logs</h1><p class="al-note">Read-only transparency log. Entries cannot be edited or deleted.</p>
         </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <a class="sa-btn sa-btn-secondary" href="?q={{ search_query|urlencode }}&user={{ selected_user }}&role={{ selected_role }}&module={{ selected_module }}&action={{ selected_action }}&date_from={{ date_from }}&date_to={{ date_to }}&export=pdf">Export PDF</a>
-          <a class="sa-btn" href="?q={{ search_query|urlencode }}&user={{ selected_user }}&role={{ selected_role }}&module={{ selected_module }}&action={{ selected_action }}&date_from={{ date_from }}&date_to={{ date_to }}&export=excel">Export Excel</a>
+        <div class="al-exports">
+          <a class="sa-btn sa-btn-secondary" href="?{{ filter_query }}&export=pdf"><svg aria-hidden="true"><use href="#al-file"/></svg>Export PDF</a>
+          <a class="sa-btn" href="?{{ filter_query }}&export=excel"><svg aria-hidden="true"><use href="#al-file"/></svg>Export Excel</a>
         </div>
       </header>
 
       <main class="sa-page-main">
-        <p class="sa-note">Read-only transparency log. Entries cannot be edited or deleted.</p>
-
-        <div class="sa-stats" style="margin-bottom:14px">
-          <article><span>Filtered Logs</span><strong>{{ filtered_count }}</strong></article>
-          <article><span>Today</span><strong>{{ today_count }}</strong></article>
-          <article><span>Failed</span><strong>{{ failed_count }}</strong></article>
-          <article><span>Latest</span><strong style="font-size:14px">{{ latest_activity }}</strong></article>
-        </div>
-
-        <section class="sa-card">
-          <form class="sa-toolbar" method="get" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;">
-            <input type="search" name="q" value="{{ search_query }}" placeholder="Search user, action, description…">
-            <select name="user">
+        <div class="al-summary"><article class="al-summary-logs"><span class="al-summary-icon"><svg aria-hidden="true"><use href="#al-logs"/></svg></span><div><span>Filtered Logs</span><strong>{{ filtered_count }}</strong></div><div class="al-delta"><strong>{{ weekly_change }}</strong><small>vs. last week</small></div></article><article class="al-summary-today"><span class="al-summary-icon"><svg aria-hidden="true"><use href="#al-calendar"/></svg></span><div><span>Today</span><strong>{{ today_count }}</strong></div><div class="al-delta"><strong>{{ today_change }}</strong><small>vs. yesterday</small></div></article><article class="al-summary-failed"><span class="al-summary-icon"><svg aria-hidden="true"><use href="#al-shield"/></svg></span><div><span>Failed</span><strong>{{ failed_count }}</strong></div><div class="al-delta"><strong>{{ failed_change }}</strong><small>vs. yesterday</small></div></article><article class="al-summary-latest"><span class="al-summary-icon"><svg aria-hidden="true"><use href="#al-clock"/></svg></span><div><span>Latest</span><strong>{{ latest_activity }}</strong><small>Most recent log entry</small></div></article></div>
+        <section class="al-filter-card" aria-label="Audit log filters">
+          <form class="sa-toolbar" method="get">
+            <label class="al-search"><svg aria-hidden="true"><use href="#al-search"/></svg><input type="search" name="q" value="{{ search_query }}" placeholder="Search user, action, description..." aria-label="Search audit logs"></label>
+            <label class="al-select al-select-user"><svg aria-hidden="true"><use href="#al-user"/></svg><select name="user" aria-label="All Users">
               <option value="all">All Users</option>
               {% for u in filter_users %}
               <option value="{{ u }}" {% if selected_user == u %}selected{% endif %}>{{ u }}</option>
               {% endfor %}
-            </select>
-            <select name="role">
+            </select></label>
+            <label class="al-select al-select-role"><svg aria-hidden="true"><use href="#al-shield"/></svg><select name="role" aria-label="All Roles">
               <option value="all">All Roles</option>
               {% for r in filter_roles %}
               <option value="{{ r }}" {% if selected_role == r %}selected{% endif %}>{{ r }}</option>
               {% endfor %}
-            </select>
-            <select name="module">
+            </select></label>
+            <label class="al-select al-select-module"><svg aria-hidden="true"><use href="#al-database"/></svg><select name="module" aria-label="All Modules">
               <option value="all">All Modules</option>
               {% for m in filter_modules %}
               <option value="{{ m }}" {% if selected_module == m %}selected{% endif %}>{{ m }}</option>
               {% endfor %}
-            </select>
-            <select name="action">
+            </select></label>
+            <label class="al-select al-select-action"><svg aria-hidden="true"><use href="#al-login"/></svg><select name="action" aria-label="All Actions">
               <option value="all">All Actions</option>
               {% for a in filter_actions %}
               <option value="{{ a }}" {% if selected_action == a %}selected{% endif %}>{{ a }}</option>
               {% endfor %}
-            </select>
-            <div style="display:flex;gap:8px;align-items:center;">
-              <input type="date" name="date_from" value="{{ date_from }}" title="From">
-              <input type="date" name="date_to" value="{{ date_to }}" title="To">
-            </div>
-            <div style="grid-column:1/-1;display:flex;gap:8px;">
-              <button class="sa-btn-sm" type="submit">Apply Filters</button>
-              <a class="sa-btn-sm sa-btn-secondary" href="{% url 'superadmin_activity_logs' %}">Reset</a>
-            </div>
+            </select></label>
+            <label class="al-date"><svg aria-hidden="true"><use href="#al-calendar"/></svg><span>From date</span><input type="date" name="date_from" value="{{ date_from }}" aria-label="From date"></label><label class="al-date"><svg aria-hidden="true"><use href="#al-calendar"/></svg><span>To date</span><input type="date" name="date_to" value="{{ date_to }}" aria-label="To date"></label>
+            <input type="hidden" name="result" value="{{ selected_result }}"><input type="hidden" name="insights" value="{{ insight_period }}">
+            <div class="al-filter-actions"><button class="sa-btn-sm" type="submit"><svg aria-hidden="true"><use href="#al-filter"/></svg>Apply Filters</button><a class="sa-btn-sm sa-btn-secondary" href="{% url 'superadmin_activity_logs' %}"><svg aria-hidden="true"><use href="#al-reset"/></svg>Reset</a></div>
           </form>
 
-          <div class="sa-table-wrap">
+          <nav class="al-quick" aria-label="Quick filters"><strong>Quick Filters:</strong>{% for filter in quick_filters %}<a href="?{{ filter.query }}" class="al-quick-{{ filter.key }} {% if filter.active %}is-active{% endif %}" {% if filter.active %}aria-current="true"{% endif %}>{{ filter.label }}</a>{% endfor %}</nav>
+        </section>
+        <div class="al-content-grid"><section class="sa-card al-entries"><header><h2><svg aria-hidden="true"><use href="#al-logs"/></svg>Audit Log Entries</h2><nav aria-label="Audit pagination"><span>Showing {{ page_obj.start_index }}–{{ page_obj.end_index }} of {{ filtered_count }} entries</span>{% if page_obj.has_previous %}<a href="?page={{ page_obj.previous_page_number }}&{{ filter_query }}" aria-label="Previous page">‹</a>{% else %}<span class="al-page-disabled" aria-disabled="true">‹</span>{% endif %}{% if page_obj.has_next %}<a href="?page={{ page_obj.next_page_number }}&{{ filter_query }}" aria-label="Next page">›</a>{% else %}<span class="al-page-disabled" aria-disabled="true">›</span>{% endif %}</nav></header>
+          <div class="sa-table-wrap" tabindex="0" role="region" aria-label="Audit log entries">
             <table class="sa-table">
               <thead>
                 <tr>
@@ -84,7 +75,7 @@
                   <th>IP Address</th>
                   <th>Device</th>
                   <th>Status</th>
-                  <th></th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -95,12 +86,12 @@
                     <small>{{ row.time_display }}</small>
                   </td>
                   <td>{{ row.user_name }}</td>
-                  <td><span class="sa-pill">{{ row.user_role }}</span></td>
+                  <td><span class="sa-pill al-role {% if row.user_role == 'Judge' %}al-role-judge{% elif row.user_role == 'Faculty In-Charge' %}al-role-faculty{% endif %}">{{ row.user_role }}</span></td>
                   <td>{{ row.module }}</td>
                   <td><strong>{{ row.action }}</strong></td>
                   <td>{{ row.description|truncatechars:80 }}</td>
                   <td>{{ row.ip_address }}</td>
-                  <td>{{ row.device }}</td>
+                  <td><span class="al-device"><svg aria-hidden="true"><use href="#al-desktop"/></svg>{{ row.device }}</span></td>
                   <td>
                     <span class="sa-pill {% if row.status_key == 'failed' %}sa-pill--inactive{% else %}sa-pill--completed{% endif %}">{{ row.status }}</span>
                   </td>
@@ -128,25 +119,14 @@
             </table>
           </div>
 
-          {% if page_obj.has_other_pages %}
-          <div style="padding:12px 16px;display:flex;gap:8px;align-items:center;">
-            {% if page_obj.has_previous %}
-            <a class="sa-btn-sm sa-btn-secondary" href="?page={{ page_obj.previous_page_number }}&q={{ search_query|urlencode }}&user={{ selected_user }}&role={{ selected_role }}&module={{ selected_module }}&action={{ selected_action }}&date_from={{ date_from }}&date_to={{ date_to }}">Prev</a>
-            {% endif %}
-            <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
-            {% if page_obj.has_next %}
-            <a class="sa-btn-sm sa-btn-secondary" href="?page={{ page_obj.next_page_number }}&q={{ search_query|urlencode }}&user={{ selected_user }}&role={{ selected_role }}&module={{ selected_module }}&action={{ selected_action }}&date_from={{ date_from }}&date_to={{ date_to }}">Next</a>
-            {% endif %}
-          </div>
-          {% endif %}
-        </section>
+        </section><aside class="al-insights sa-card"><header><div><h2><svg aria-hidden="true"><use href="#al-chart"/></svg>Log Insights</h2><p>Quick overview of audit log data.</p></div><form method="get">{% for key,value in insight_fields %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}<select name="insights" aria-label="Insights period" onchange="this.form.submit()"><option value="7" {% if insight_period == '7' %}selected{% endif %}>Last 7 days</option><option value="30" {% if insight_period == '30' %}selected{% endif %}>Last 30 days</option><option value="all" {% if insight_period == 'all' %}selected{% endif %}>All Time</option></select></form></header><section class="al-status"><h3>Log Status</h3><div class="al-status-body"><div class="al-donut {% if not insight_count %}al-donut-empty{% endif %}" style="--al-success:{{ success_percent }}%" role="img" aria-label="{{ insight_count }} logs: {{ insight_success }} successful, {{ insight_failed }} failed"><div><strong>{{ insight_count }}</strong><span>Total Logs</span></div></div><dl><div><dt><i></i>Success</dt><dd>{{ insight_success }} ({{ success_percent }}%)</dd></div><div class="al-failed"><dt><i></i>Failed</dt><dd>{{ insight_failed }} ({{ failed_percent }}%)</dd></div></dl></div></section><section class="al-modules"><h3>Top Modules</h3>{% for module in top_modules %}<div><span>{{ module.name }}</span><progress max="100" value="{{ module.percent }}" aria-label="{{ module.name }}: {{ module.count }} logs"></progress><strong>{{ module.count }}</strong></div>{% empty %}<p>No logs in this period.</p>{% endfor %}</section></aside></div>
       </main>
     </div>
   </div>
 
   <div class="sa-modal-backdrop" id="sa-audit-modal">
-    <div class="sa-modal" style="width:min(560px,94vw)">
-      <h3>Audit Log Details</h3>
+    <div class="sa-modal" role="dialog" aria-modal="true" aria-labelledby="al-detail-title" style="width:min(560px,94vw)">
+      <h3 id="al-detail-title">Audit Log Details</h3>
       <div class="sa-readonly" id="sa-audit-detail" style="grid-template-columns:1fr;padding:0">
         <div><span>User</span><strong id="d-user">—</strong></div>
         <div><span>Role</span><strong id="d-role">—</strong></div>
@@ -174,8 +154,9 @@
       function close() { modal.classList.remove('is-open'); }
       closeBtn.addEventListener('click', close);
       modal.addEventListener('click', function (e) { if (e.target === modal) close(); });
-      document.querySelectorAll('.sa-view-log').forEach(function (btn) {
-        btn.addEventListener('click', function () {
+      document.addEventListener('click', function (event) {
+          var btn = event.target.closest('.sa-view-log');
+          if (!btn) return;
           document.getElementById('d-user').textContent = btn.dataset.user || '—';
           document.getElementById('d-role').textContent = btn.dataset.role || '—';
           document.getElementById('d-module').textContent = btn.dataset.module || '—';
@@ -189,7 +170,45 @@
           document.getElementById('d-ip').textContent = btn.dataset.ip || '—';
           document.getElementById('d-status').textContent = btn.dataset.status || '—';
           modal.classList.add('is-open');
-        });
+      });
+      var refreshing = false;
+      var stopped = false;
+      async function refreshLogs() {
+        if (refreshing || stopped || document.hidden || modal.classList.contains('is-open') ||
+            (document.activeElement && document.activeElement.closest('form'))) return;
+        refreshing = true;
+        var controller = new AbortController();
+        var timeout = setTimeout(function () { controller.abort(); }, 15000);
+        try {
+          var response = await fetch(window.location.href, {
+            credentials: 'same-origin', cache: 'no-store', signal: controller.signal,
+            headers: {'X-Requested-With': 'XMLHttpRequest'}
+          });
+          if (response.redirected || response.status === 401 || response.status === 403) {
+            stopped = true;
+            return;
+          }
+          if (!response.ok) return;
+          var incoming = new DOMParser().parseFromString(await response.text(), 'text/html');
+          if (!incoming.querySelector('.al-entries')) return;
+          // Recheck after the request: a user may have opened details or started editing.
+          if (document.hidden || modal.classList.contains('is-open') ||
+              (document.activeElement && document.activeElement.closest('form'))) return;
+          ['.al-summary', '.al-entries', '.al-insights'].forEach(function (selector) {
+            var current = document.querySelector(selector);
+            var next = incoming.querySelector(selector);
+            if (current && next && current.outerHTML !== next.outerHTML) current.replaceWith(next);
+          });
+        } catch (error) {
+          // Keep the current entries visible offline; the next interval retries.
+        } finally {
+          clearTimeout(timeout);
+          refreshing = false;
+        }
+      }
+      setInterval(refreshLogs, 5000);
+      document.addEventListener('visibilitychange', function () {
+        if (!document.hidden) refreshLogs();
       });
     })();
   </script>

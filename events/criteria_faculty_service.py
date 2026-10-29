@@ -39,7 +39,9 @@ def round_participant_ids(event, round_index):
         raise FacultyServiceError('Round participants are invalid.') from exc
     if len(cleaned) != len(set(cleaned)) or not set(cleaned).issubset(set(event.participant_ids)):
         raise FacultyServiceError('Round participants contain duplicates or unknown entries.')
-    return cleaned
+    from .participant_removal_service import excluded_participant_ids
+    excluded = excluded_participant_ids(event, round_index)
+    return [participant_id for participant_id in cleaned if participant_id not in excluded]
 
 
 def round_is_scoreable(event, round_index):
@@ -88,7 +90,33 @@ def _participants(event):
     return [{'id': row.pk, 'name': row.name, 'department': str(row.department or ''), 'entry_type': event.participation_type} for row in model.objects.filter(pk__in=event.participant_ids)]
 
 
-def _qualifiers(round_cfg, results, selection=None):
+def _qualifiers(round_cfg, results, selection=None, event=None):
+    from .divisions import division_config, participant_division
+    if event is not None and division_config(event) and not round_cfg['is_final']:
+        selected_ids, errors = [], []
+        try:
+            groups = {}
+            for row in results:
+                name = participant_division(event, row['participant_id'])
+                groups.setdefault(name, []).append(row)
+            requested = [int(value) for value in selection] if selection is not None else None
+            if requested is not None and (len(requested) != len(set(requested)) or not set(requested).issubset({row['participant_id'] for row in results})):
+                raise FacultyServiceError('Select distinct eligible qualifiers.')
+            for name, rows in groups.items():
+                cfg = dict(round_cfg)
+                if cfg.get('qualification_method') == 'top_n_per_division':
+                    cfg['qualification_method'] = 'top_ranking'
+                if cfg.get('qualification_method') not in {'advance_all', 'no_elimination', 'no_advancement', 'minimum_score'} and int(cfg.get('qualifiers') or 0) > len(rows):
+                    errors.append(f'{name}: qualifier count exceeds the {len(rows)} eligible participants.')
+                    continue
+                chosen = None if requested is None else [value for value in requested if value in {row['participant_id'] for row in rows}]
+                ids, issues = _qualifiers(cfg, rows, chosen)
+                selected_ids.extend(ids)
+                errors.extend(f'{name}: {issue}' for issue in issues)
+        except (TypeError, ValueError) as exc:
+            raise FacultyServiceError(str(exc)) from exc
+        return selected_ids, errors
+
     if round_cfg['is_final']:
         return [], []
     method = round_cfg.get('qualification_method') or 'top_ranking'
@@ -124,12 +152,15 @@ def _round_data(event, index, participants, judges, *, require_verification=True
     cfg = event.result_processing_config or {}
     approval = (cfg.get('confirmed_stages') or {}).get(str(index), {})
     eligible = round_participant_ids(event, index)
+    from .participant_removal_service import excluded_participant_ids
+    from .divisions import group_participants, participant_division
+    rank_groups = group_participants(event, event.participant_ids if excluded_participant_ids(event, index) else eligible)
     errors, results, monitor = [], [], []
     categories = list(event.scoring_categories.filter(assigned_round_id=round_cfg['id'], purpose='official').prefetch_related('criteria'))
     required = {criterion.pk: criterion for category in categories for criterion in category.criteria.all()}
     accepted = FINALIZED
     verification = cfg.get('verification_mode') in {'tabulator_verification', 'tabulator_admin_approval'}
-    scores = list(CriteriaScoreSubmission.objects.filter(event=event, assigned_round_id=round_cfg['id'], is_active=True, judge_id__in=[j.pk for j in judges], participant_id__in=eligible).select_related('criterion', 'category'))
+    scores = list(CriteriaScoreSubmission.objects.filter(event=event, assigned_round_id=round_cfg['id'], category__purpose='official', is_active=True, judge_id__in=[j.pk for j in judges], participant_id__in=eligible).select_related('criterion', 'category'))
     if required:
         seen, invalid_cells = set(), set()
         for score in scores:
@@ -142,7 +173,8 @@ def _round_data(event, index, participants, judges, *, require_verification=True
                 continue
             try:
                 if score.category.judge_mode == 'ranking':
-                    if score.raw_score != score.raw_score.to_integral_value() or not 1 <= score.raw_score <= len(eligible):
+                    rank_limit = len(rank_groups[participant_division(event, score.participant_id)])
+                    if score.raw_score != score.raw_score.to_integral_value() or not 1 <= score.raw_score <= rank_limit:
                         raise ValueError('Ranking scores must be valid ordinal ranks.')
                 else:
                     normalized_criterion_score(score.raw_score, score.criterion.max_score, score.criterion.weight_percent)
@@ -157,7 +189,8 @@ def _round_data(event, index, participants, judges, *, require_verification=True
             expected = len(eligible) * len(required)
             complete = expected > 0 and completed == expected
             timestamps = [row.submitted_at for row in sheet if row.submitted_at]
-            monitor.append({'id': judge.pk, 'name': _name(judge), 'status': 'Submitted' if complete else 'Pending', 'progress_percent': round(100 * completed / expected) if expected else 0, 'completed_scores': completed, 'required_scores': expected, 'submitted_at': max(timestamps).isoformat() if timestamps else None})
+            sources = sorted({row.source for row in sheet})
+            monitor.append({'id': judge.pk, 'name': _name(judge), 'status': 'Submitted' if complete else 'Pending', 'progress_percent': round(100 * completed / expected) if expected else 0, 'completed_scores': completed, 'required_scores': expected, 'submitted_at': max(timestamps).isoformat() if timestamps else None, 'submission_method': ' / '.join('OCR / Paper-Based' if source == 'OCR' else 'Mobile' if source == 'MOBILE' else 'Manual' for source in sources) or '—'})
         if len({row.judge_mode for row in categories}) > 1:
             errors.append('Mixed ordinal ranking and numerical scoring categories need an explicit conversion rule.')
         if event.criteria_score_method == 'ranking_based' and any(row.judge_mode != 'ranking' for row in categories):
@@ -191,6 +224,9 @@ def _round_data(event, index, participants, judges, *, require_verification=True
                 matches = by_name.get(candidate.name, [])
                 if len(matches) == 1:
                     candidate_to_entry[candidate.pk] = matches[0]
+        candidate_to_entry = {key: value for key, value in candidate_to_entry.items() if value in eligible}
+        candidates = [row for row in candidates if row.pk in candidate_to_entry]
+        legacy = [row for row in legacy if row.candidate_id in candidate_to_entry]
         if set(candidate_to_entry.values()) != set(eligible) or len(candidate_to_entry) != len(candidates):
             errors.append('Legacy participants need an explicit validated mobile mapping.')
         expected_keys = {(candidate.pk, criterion.pk) for candidate in candidates for criterion in legacy_criteria}
@@ -204,14 +240,15 @@ def _round_data(event, index, participants, judges, *, require_verification=True
                 except ValueError as exc:
                     errors.append(str(exc))
             complete = bool(expected_keys) and keys == expected_keys
-            monitor.append({'id': judge.pk, 'name': _name(judge), 'status': 'Submitted' if complete else 'Pending', 'progress_percent': round(100 * len(keys & expected_keys) / len(expected_keys)) if expected_keys else 0, 'completed_scores': len(keys & expected_keys), 'required_scores': len(expected_keys), 'submitted_at': max(timestamps).isoformat() if timestamps else None})
+            monitor.append({'id': judge.pk, 'name': _name(judge), 'status': 'Submitted' if complete else 'Pending', 'progress_percent': round(100 * len(keys & expected_keys) / len(expected_keys)) if expected_keys else 0, 'completed_scores': len(keys & expected_keys), 'required_scores': len(expected_keys), 'submitted_at': max(timestamps).isoformat() if timestamps else None, 'submission_method': 'Mobile' if sheet else '?'})
         if verification and require_verification and not cfg.get('tabulation_confirmed_at'):
             errors.append('The Tabulation Officer must confirm the legacy tabulation first.')
         if event.criteria_score_method == 'ranking_based' or (event.judge_settings or {}).get('remove_high_low') or event.deductions_enabled:
             errors.append('This legacy scoring configuration needs normalized round scores before faculty approval.')
         if judges and all(row['status'] == 'Submitted' for row in monitor) and not errors:
             for row in compute_criteria_rankings(event):
-                results.append({'participant_id': candidate_to_entry[row['candidate_id']], 'name': row['name'], 'final_score': row['final_score'], 'rank': row['rank'], 'complete': True, 'judge_scores': [], 'criteria_breakdown': []})
+                if row['candidate_id'] in candidate_to_entry:
+                    results.append({'participant_id': candidate_to_entry[row['candidate_id']], 'name': row['name'], 'final_score': row['final_score'], 'rank': len(results) + 1, 'complete': True, 'judge_scores': [], 'criteria_breakdown': []})
     else:
         errors.append('No official scoring criteria are configured for this round.')
     if not eligible:
@@ -224,6 +261,7 @@ def _round_data(event, index, participants, judges, *, require_verification=True
         results = []
     criterion_names = {key: value for key, value in required.items()}
     judge_names = {row.pk: _name(row) for row in judges}
+    from .divisions import division_config, participant_division
     for row in results:
         for detail in row['judge_scores']:
             detail['name'] = judge_names.get(detail['judge_id'], '')
@@ -236,7 +274,8 @@ def _round_data(event, index, participants, judges, *, require_verification=True
         row['final_score'] = float(row['final_score'])
         if 'deduction' in row:
             row['deduction'] = float(row['deduction'])
-    if results and round_cfg.get('carry_previous_scores') and index:
+    explicit_basis = cfg.get('final_result_basis') in {'final_round_only', 'weighted_rounds', 'cumulative_rounds'}
+    if results and round_cfg.get('carry_previous_scores') and index and not explicit_basis:
         previous = (cfg.get('confirmed_stages') or {}).get(str(index - 1), {}).get('results', [])
         by_id = {row['participant_id']: row for row in previous}
         if not all(row['participant_id'] in by_id for row in results):
@@ -274,13 +313,39 @@ def _round_data(event, index, participants, judges, *, require_verification=True
                         rank = position
                     prior = comparison
                     row['rank'] = rank
-    qualifiers, qualification_errors = _qualifiers(round_cfg, results) if results else ([], [])
+    from .divisions import rank_divisions
+    # Normalized round rankings already have division ranks. Legacy totals and
+    # cumulative scores need their per-division ranks rebuilt here.
+    if results and (not required or (round_cfg.get('carry_previous_scores') and index)):
+        results = rank_divisions(event, results)
+    if results and explicit_basis:
+        from .criteria_scoring import combine_round_results
+        try:
+            results = combine_round_results(event, results, index)
+        except ValueError as exc:
+            errors.append(str(exc))
+    qualifiers, qualification_errors = _qualifiers(round_cfg, results, event=event) if results else ([], [])
     errors.extend(qualification_errors)
     if approval.get('approved_at'):
         results = approval.get('results', results)
         qualifiers = approval.get('qualifier_ids', qualifiers)
         errors = []
     for row in results:
+        participant = next((item for item in participants if item['id'] == row['participant_id']), {})
+        row['division'] = participant_division(event, row['participant_id']) if division_config(event) else ''
+        row['department'] = participant.get('department', '')
+        judge_totals = {detail['judge_id']: detail for detail in row.get('judge_scores', [])}
+        row['judge_score_cells'] = [
+            {'id': judge.pk, 'name': _name(judge),
+             'total': float(judge_totals[judge.pk]['total']) if judge.pk in judge_totals else None}
+            for judge in judges
+        ]
+        judge_average = Decimal(str(row.get('round_score', row['final_score'])))
+        included_judges = len(judges)
+        if (event.judge_settings or {}).get('remove_high_low') and included_judges >= 3:
+            included_judges -= 2
+        row['judge_average'] = float(judge_average)
+        row['weighted_score'] = float(judge_average * included_judges)
         row['qualified'] = row['participant_id'] in qualifiers
         row['qualification_status'] = 'Finalist' if round_cfg['is_final'] else ('Pending Manual Selection' if round_cfg.get('qualification_method') == 'manual_selection' and not approval else ('Qualified' if row['qualified'] else 'Not Qualified'))
     submitted = sum(row['status'] == 'Submitted' for row in monitor)
@@ -291,6 +356,24 @@ def _round_data(event, index, participants, judges, *, require_verification=True
         'completed': 'Completed', 'locked': 'Locked', 'ready': 'Ready for Review',
         'awaiting': 'Awaiting Submissions', 'active': 'Active',
     }
+    from .divisions import division_config
+    divisions = division_config(event)
+    division_counts = [
+        {'name': name, 'count': sum(participant_division(event, value) == name for value in eligible)}
+        for name in divisions.get('names', [])
+    ]
+    method = round_cfg.get('qualification_method') or 'top_ranking'
+    target = int(round_cfg.get('qualifiers') or 0)
+    qualification_label = ''
+    if not round_cfg['is_final']:
+        if method in {'top_ranking', 'top_n_overall', 'top_n_per_division'} and target:
+            qualification_label = f'Top {target}' + (' per division' if divisions else ' overall')
+        elif method == 'manual_selection':
+            qualification_label = 'Manual selection'
+        elif method == 'minimum_score':
+            qualification_label = f"Minimum score: {round_cfg.get('minimum_score') or 0}"
+        elif method in {'advance_all', 'no_elimination', 'no_advancement'}:
+            qualification_label = 'All participants advance'
     qualifier_count = len(qualifiers) if results and (
         round_cfg.get('qualification_method') != 'manual_selection' or approval
     ) else None
@@ -313,12 +396,22 @@ def _round_data(event, index, participants, judges, *, require_verification=True
         'approved_at': approval.get('approved_at'),
         'blockers': list(dict.fromkeys(errors)),
         'qualification_rule': round_cfg.get('qualification_method') or '',
+        'qualification_label': qualification_label, 'division_counts': division_counts,
+        'divisions': division_config(event).get('names', []),
+        'criteria_categories': [
+            {'name': category.name, 'weight': float(category.overall_weight_percent)}
+            for category in categories
+        ],
+        'criteria_weight_total': float(sum(
+            (category.overall_weight_percent for category in categories), Decimal(0)
+        )),
         'judges': monitor, 'results': results,
     }
 
 
 
 def criteria_faculty_portal(event, user, selected_round_index=0):
+    from .participant_removal_service import excluded_participant_ids, participant_change_round
     participants = _participants(event)
     judges = list(event.assigned_judges.filter(is_active=True))
     rounds = [_round_data(event, index, participants, judges) for index in range(len(criteria_rounds(event)))]
@@ -328,6 +421,14 @@ def criteria_faculty_portal(event, user, selected_round_index=0):
         row['can_unlock'] &= authorized
     selected = rounds[max(0, min(int(selected_round_index), len(rounds) - 1))]
     cfg = event.result_processing_config or {}
+    excluded = excluded_participant_ids(event)
+    active_participants = [row for row in participants if row['id'] not in excluded]
+    try:
+        change_index = participant_change_round(event)
+        can_manage_participants = authorized
+    except FacultyServiceError:
+        change_index = None
+        can_manage_participants = False
     current = rounds[max(0, min(int(cfg.get('active_stage_index') or 0), len(rounds) - 1))]
     publication_errors = []
     if not (cfg.get('confirmed_stages') or {}).get(str(len(rounds) - 1), {}).get('approved_at'):
@@ -336,6 +437,10 @@ def criteria_faculty_portal(event, user, selected_round_index=0):
         verified = cfg.get('verified_stages') or {}
         if not cfg.get('tabulation_confirmed_at') or (verified and str(len(rounds) - 1) not in verified):
             publication_errors.append('The Tabulation Officer must confirm final tabulation first.')
+    publish_errors = list(publication_errors)
+    if cfg.get('verification_mode') == 'tabulator_admin_approval' and not cfg.get('approved'):
+        publish_errors.append('Admin approval is required before publishing results.')
+    from .publication_service import can_publish_event
     tabulator = event.assigned_tabulators.first()
     event_status = event.get_status_display()
     publication_status = (
@@ -346,28 +451,51 @@ def criteria_faculty_portal(event, user, selected_round_index=0):
         'header': {
             'name': event.name, 'category': event.category.title() if event.category.isupper() else event.category, 'venue': event.venue,
             'schedule': _schedule_label(event),
-            'participant_count': len(participants),
+            'participant_count': len(active_participants),
             'faculty_name': _name(event.faculty_account), 'tabulator_name': _name(tabulator),
             'status': event_status, 'status_key': event.status,
         },
         'summary': {
-            'participant_count': len(participants), 'judge_count': len(judges),
+            'participant_count': len(active_participants), 'judge_count': len(judges),
             'round_count': len(rounds), 'current_round_name': current['name'],
             'submitted_judges': current['submitted_judges'], 'total_judges': len(judges),
             'progress_percent': current['progress_percent'], 'event_status': event_status,
         },
         'rounds': rounds, 'current_round': current, 'selected_round': selected,
-        'judges': selected['judges'], 'results': selected['results'], 'participants': participants,
+        'judges': selected['judges'], 'results': selected['results'], 'participants': active_participants,
+        'can_manage_participants': can_manage_participants,
+        'participant_change_round_index': change_index,
+        'participant_change_round_name': criteria_rounds(event)[change_index].get('name', 'Round') if change_index is not None else '',
+        'removal_history': list(reversed(cfg.get('participant_removals') or [])),
         'publication': {
             'status': publication_status,
             'can_submit': authorized and not publication_errors and not cfg.get('faculty_submitted_at'),
             'submitted_at': cfg.get('faculty_submitted_at'),
             'submitted_by': cfg.get('faculty_submitted_by'),
             'submitted_by_name': cfg.get('faculty_submitted_by_name'),
-            'errors': publication_errors, 'published': event.results_finalized, 'can_publish': False,
+            'errors': publication_errors, 'publish_errors': publish_errors,
+            'published': event.results_finalized,
+            'can_publish': authorized and can_publish_event(user, event) and not publish_errors,
+            'can_unpublish': _can_mutate(event, user) and can_publish_event(user, event)
+            and event.results_finalized and bool(cfg.get('published_at')),
         },
         'errors': selected['blockers'],
     }
+    # A compact results preview uses the same authoritative qualification flags
+    # as the full results table. Do not imply pending participants are qualified.
+    from .divisions import division_config, participant_division
+    names = division_config(event).get('names', [])
+    by_id = {row['id']: row for row in participants}
+    preview = []
+    for row in selected['results']:
+        if row.get('qualified') or selected['is_final']:
+            participant = by_id.get(row['participant_id'], {})
+            preview.append({**row, 'department': participant.get('department', ''),
+                'division': participant_division(event, row['participant_id']) if names else ''})
+    portal['qualified_groups'] = [
+        {'name': name, 'rows': [row for row in preview if row['division'] == name]}
+        for name in names
+    ] if names else [{'name': '', 'rows': preview}]
     portal['revision'] = hashlib.sha256(json.dumps(portal, sort_keys=True, default=str).encode()).hexdigest()
     return portal
 
@@ -393,7 +521,7 @@ def approve_criteria_round(event, user, round_index, qualifier_ids=None):
     if not selected['can_approve'] or not round_is_scoreable(event, round_index):
         raise FacultyServiceError(' '.join(selected['blockers']) or 'This round is not available for approval.')
     rounds = criteria_rounds(event)
-    qualifiers, errors = _qualifiers(rounds[round_index], selected['results'], qualifier_ids)
+    qualifiers, errors = _qualifiers(rounds[round_index], selected['results'], qualifier_ids, event=event)
     if errors or (not rounds[round_index]['is_final'] and not qualifiers):
         raise FacultyServiceError(' '.join(errors) or 'Select eligible qualifiers before approval.')
     cfg = dict(event.result_processing_config or {})
@@ -505,4 +633,7 @@ def approved_final_rankings(event):
             or {row.get('participant_id') for row in results} != set(eligible)
             or not all(row.get('complete') and row.get('rank', 0) > 0 for row in results)):
         raise FacultyServiceError('The approved final rankings do not match the qualified participants.')
+    from .divisions import division_config, participant_division
+    if division_config(event) and any(row.get('division') != participant_division(event, row['participant_id']) for row in results):
+        raise FacultyServiceError('Approved rankings do not match the event divisions.')
     return results

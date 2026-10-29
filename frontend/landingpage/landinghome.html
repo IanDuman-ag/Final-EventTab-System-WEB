@@ -1,105 +1,70 @@
-{% extends "landingpage/base.html" %}{% load static %}{% block content %}
+{% extends "landingpage/base.html" %}{% load static %}{% block extra_head %}<style id="home-reference-styles">{% include "landingpage/schedules.css" %}{% include "landingpage/home.css" %}</style>{% endblock %}{% block public_scripts %}<script>{% include "landingpage/public.js" %}</script>{% endblock %}{% block body_class %}public-home home-reference{% endblock %}{% block content %}
 <section class="hero">
-<img class="hero-photo" src="{% get_media_prefix %}landingpagelogo/landingpage.jpg" alt="USTP campus building" fetchpriority="high">
-<div class="hero-shade">
+<div class="home-athlete-art" aria-hidden="true">
+  <img class="home-arena-photo" src="{% static 'landingpage/assets/hero.webp' %}" alt="" fetchpriority="high">
+  <img class="home-dancer-photo" src="{% static 'landingpage/assets/competitions/dance.webp' %}" alt="">
+  <span class="home-hero-slash"></span>
 </div>
 <div class="container hero-content">
 <p class="eyebrow">
 <span>
-</span> THE OFFICIAL INTRAMURAL HUB
+</span> INTRAMURALS. ONE COMMUNITY.
 </p>
 <h1>
-ONE EVENT.<br>ONE COMMUNITY.<br><em>COUNTLESS<br class="mobile-break"> CHAMPIONS.</em>
+ONE EVENT.<br>ONE COMMUNITY.<br><em>COUNTLESS CHAMPIONS.</em>
 </h1>
 <p class="hero-description">
 Your official hub for intramural events,<br class="desktop-break"> schedules, live standings, and results.
 </p>
 <div class="hero-actions">
 <a class="btn btn-yellow" href="{% url 'public_games' %}">Explore Events <span aria-hidden="true">&#8599;</span>
-</a><a class="btn btn-hero-outline" href="{% url 'public_schedules' %}">View Schedules</a>
+</a><a class="btn btn-hero-outline" href="{% url 'public_schedules' %}">View Schedule</a>
 </div>
 </div>
-<div class="hero-caption">
-THE GAME BRINGS US TOGETHER.
-</div>
-</section>
-<section class="quick-section container" aria-label="Quick access">
-<a href="{% url 'public_schedules' %}" class="quick-link"><span class="quick-icon" aria-hidden="true">{% include "landingpage/_icon.html" with icon="calendar" %}</span>
-<div>
-<h2>
-Event Schedules
-</h2>
-<p>
-Find your next competition.
-</p>
-</div>
-<span aria-hidden="true">&#8599;</span>
-</a><a href="{% url 'public_games' %}" class="quick-link"><span class="quick-icon" aria-hidden="true">{% include "landingpage/_icon.html" with icon="trophy" %}</span>
-<div>
-<h2>
-All Competitions
-</h2>
-<p>
-Sports, talent, and everything between.
-</p>
-</div>
-<span aria-hidden="true">&#8599;</span>
-</a><a href="{% url 'public_results' %}" class="quick-link"><span class="quick-icon" aria-hidden="true">{% include "landingpage/_icon.html" with icon="flag" %}</span>
-<div>
-<h2>
-Official Results
-</h2>
-<p>
-Celebrate the confirmed winners.
-</p>
-</div>
-<span aria-hidden="true">&#8599;</span>
-</a><a href="{% url 'public_leaderboard' %}" class="quick-link"><span class="quick-icon" aria-hidden="true">{% include "landingpage/_icon.html" with icon="chart" %}</span>
-<div>
-<h2>
-Team Standings
-</h2>
-<p>
-Follow the race to the top.
-</p>
-</div>
-<span aria-hidden="true">&#8599;</span>
-</a>
 </section>
 <section class="featured-competitions" id="featured-competitions" aria-labelledby="featured-title">
   <div class="container section-space">
     <div class="section-heading">
       <div>
-        <p class="eyebrow">EXPLORE EVENTS</p>
-        <h2 id="featured-title">Where community meets <span>competition.</span></h2>
-        <p>From the court to the stage, there's a place for everyone.</p>
+        <p class="eyebrow">EXPLORE THE COMPETITION</p>
+        <h2 id="featured-title">Games <span>&amp; Events</span></h2>
+        <p>Discover all intramural competitions and find your next event.</p>
       </div>
-      <a class="text-link" href="{% url 'public_games' %}">All competitions <span aria-hidden="true">&#8594;</span></a>
+      <a class="text-link" href="{% url 'public_games' %}">View all events <span aria-hidden="true">&#8594;</span></a>
     </div>
     <form class="featured-controls" method="get" action="{% url 'home' %}#featured-competitions" aria-label="Filter featured competitions">
-      <div class="featured-tabs" aria-label="Competition type">
-        <button type="submit" name="featured_type" value="all" class="{% if featured_filters.type == 'all' %}selected{% endif %}" aria-pressed="{% if featured_filters.type == 'all' %}true{% else %}false{% endif %}">All</button>
-        <button type="submit" name="featured_type" value="match" class="{% if featured_filters.type == 'match' %}selected{% endif %}" aria-pressed="{% if featured_filters.type == 'match' %}true{% else %}false{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M4 12h16M12 4v16M7 6c7 4 7 8 0 12M17 6c-7 4-7 8 0 12"/></svg>Sports</button>
-        <button type="submit" name="featured_type" value="criteria" class="{% if featured_filters.type == 'criteria' %}selected{% endif %}" aria-pressed="{% if featured_filters.type == 'criteria' %}true{% else %}false{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m12 3 3 6 6 .8-4.4 4.3 1 6.2-5.6-3-5.6 3 1-6.2L3 9.8 9 9l3-6Z"/></svg>Criteria-Based</button>
-      </div>
       <div class="featured-tools">
         <div class="featured-search">
           <label class="visually-hidden" for="featured-search">Search featured events</label>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg>
-          <input id="featured-search" type="search" name="featured_q" value="{{ featured_filters.q }}" placeholder="Search events...">
+          <input id="featured-search" type="search" name="featured_q" value="{{ featured_filters.q }}" placeholder="Search by event name...">
         </div>
+        <label class="visually-hidden" for="featured-type">Competition type</label>
+        <select class="form-select" id="featured-type" name="featured_type">
+          <option value="all">All competitions</option>
+          <option value="match" {% if featured_filters.type == 'match' %}selected{% endif %}>Match-Based</option>
+          <option value="criteria" {% if featured_filters.type == 'criteria' %}selected{% endif %}>Criteria-Based</option>
+          <option value="cultural" {% if featured_filters.type == 'cultural' %}selected{% endif %}>Cultural</option>
+          <option value="arts" {% if featured_filters.type == 'arts' %}selected{% endif %}>Arts</option>
+        </select>
+        <label class="visually-hidden" for="featured-classification">Event category</label>
+        <select class="form-select" id="featured-classification" name="featured_classification">
+          <option value="">All categories</option>
+          <option value="major" {% if featured_filters.classification == 'major' %}selected{% endif %}>Major</option>
+          <option value="minor" {% if featured_filters.classification == 'minor' %}selected{% endif %}>Minor</option>
+        </select>
         <label class="visually-hidden" for="featured-sort">Sort featured events</label>
         <select class="form-select" id="featured-sort" name="featured_sort">
-          <option value="date" {% if featured_filters.sort == 'date' %}selected{% endif %}>Sort by date</option>
-          <option value="name" {% if featured_filters.sort == 'name' %}selected{% endif %}>Sort by name</option>
+          <option value="date" {% if featured_filters.sort == 'date' %}selected{% endif %}>By date</option>
+          <option value="name" {% if featured_filters.sort == 'name' %}selected{% endif %}>By name</option>
         </select>
-        <button class="btn featured-apply" type="submit" name="featured_type" value="{{ featured_filters.type|default:'all' }}">Search</button>
+        <button class="btn featured-apply" type="submit">Search</button>
       </div>
       <p class="featured-loading" role="status" hidden>Loading competitions...</p>
     </form>
     <div class="featured-grid">
       {% for event in featured_events %}
-        {% include "landingpage/_featured_card.html" %}
+        {% include "landingpage/_event_card.html" %}
       {% empty %}
         <div class="empty-state">
           <span class="empty-icon" aria-hidden="true">{% include "landingpage/_icon.html" with icon="trophy" %}</span>
@@ -109,47 +74,41 @@ Follow the race to the top.
         </div>
       {% endfor %}
     </div>
-    {% if featured_page_obj.has_other_pages %}
-      <nav class="pagination-bar" aria-label="Featured competitions pagination">
-        {% if featured_page_obj.has_previous %}<a class="btn btn-outline-navy" href="?{{ featured_query_string }}&amp;featured_page={{ featured_page_obj.previous_page_number }}#featured-competitions">&#8592; Previous</a>{% endif %}
-        <span>Page {{ featured_page_obj.number }} of {{ featured_page_obj.paginator.num_pages }}</span>
-        {% if featured_page_obj.has_next %}<a class="btn btn-outline-navy" href="?{{ featured_query_string }}&amp;featured_page={{ featured_page_obj.next_page_number }}#featured-competitions">Next &#8594;</a>{% endif %}
-      </nav>
-    {% endif %}
   </div>
 </section>
 <section class="upcoming-section">
-<div class="container section-space">
-<div class="section-heading">
-<div>
-<p class="eyebrow">
-MARK YOUR CALENDAR
-</p>
-<h2>
-Coming up next.
-</h2>
-<p>
-Your next courtside moment starts here.
-</p>
+<div class="container section-space home-schedule-layout">
+<div class="home-schedule-intro">
+<p class="eyebrow">STAY UPDATED</p>
+<h2>Upcoming <span>Schedules</span></h2>
+<p>Don't miss your next competition. Follow event dates and match schedules.</p>
+<a class="btn btn-yellow" href="{% url 'public_schedules' %}">View Full Schedule <span aria-hidden="true">&#8594;</span></a>
+<span class="home-calendar-watermark" aria-hidden="true">{% include "landingpage/_icon.html" with icon="calendar" %}</span>
 </div>
-<a class="text-link" href="{% url 'public_schedules' %}">View All Schedules <span aria-hidden="true">&#8599;</span>
-</a>
-</div>
+<div class="home-schedule-entries">
 <div class="schedule-list">
 {% for item in upcoming_schedules %}{% include "landingpage/_schedule_row.html" %}{% empty %}
-<div class="empty-state compact">
+<div class="empty-state compact"><span class="home-empty-calendar" aria-hidden="true">{% include "landingpage/_icon.html" with icon="calendar" %}</span><div>
 <h3>
 No upcoming schedules yet.
 </h3>
 <p>
-New event dates and venues will appear here when announced.
+New events will appear here once they are scheduled.
 </p>
-</div>
+</div></div>
 {% endfor %}
 </div>
 <p class="timezone-note">
 All times are shown in {{ timezone_label }}.
 </p>
 </div>
-</section>
+</div></section>
+<section class="home-leaderboard" aria-labelledby="home-leaderboard-title">
+<div class="container home-leaderboard-layout">
+<div class="home-leaderboard-copy"><p class="eyebrow">TRACK THE COMPETITION</p><h2 id="home-leaderboard-title">Leaderboard</h2><p>See who's ahead in the standings and celebrate your department's achievements.</p><a class="btn btn-yellow" href="{% url 'public_leaderboard' %}">View Leaderboards <span aria-hidden="true">&#8594;</span></a></div>
+<div class="home-podium" aria-hidden="true"><span class="podium-confetti confetti-one"></span><span class="podium-confetti confetti-two"></span><span class="podium-confetti confetti-three"></span>
+<div class="podium-place podium-silver"><span class="podium-medal">2</span><span class="podium-block">SECOND<small>PLACE</small></span></div>
+<div class="podium-place podium-gold"><span class="podium-medal">1</span><span class="podium-block">FIRST<small>PLACE</small></span></div>
+<div class="podium-place podium-bronze"><span class="podium-medal">3</span><span class="podium-block">THIRD<small>PLACE</small></span></div>
+</div></div></section>
 {% endblock %}

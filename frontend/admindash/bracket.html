@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Tournament Brackets - EventTab</title>
   {% include 'admindash/_bootstrap.html' %}
-  <link rel="stylesheet" href="{% static 'admindash/bracket.css' %}?v=20261009b">
+  <link rel="stylesheet" href="{% static 'admindash/bracket.css' %}?v=20261029lanes">
   <link rel="stylesheet" href="{% static 'admindash/bootstrap-admin.css' %}?v=1">
 </head>
 <body class="admin-dashboard-page bracket-page admin-dashboard-v2">
@@ -431,6 +431,8 @@
             <span class="legend-item"><span class="legend-dot legend-dot--pending"></span>Pending</span>
           </div>
           <div class="bracket-view-actions">
+            <button type="button" class="btn-toolbar" id="bracketFullscreen" aria-label="Expand bracket" title="Expand bracket">&#x26F6;</button>
+            <span class="bracket-view-format" id="bracketViewFormat"></span>
             <button type="button" class="btn-toolbar" id="bracketZoomOut" aria-label="Zoom out">−</button>
             <output id="bracketZoomLabel" aria-live="polite">100%</output>
             <button type="button" class="btn-toolbar" id="bracketZoomIn" aria-label="Zoom in">+</button>
@@ -1616,7 +1618,14 @@
           rounds[key].push(m);
         });
         roundOrder.forEach(r => rounds[r].sort((a, b) => (a.match_number || 0) - (b.match_number || 0)));
-        return roundOrder.map(name => ({ name, matches: rounds[name] }));
+        const columns = roundOrder.map(name => ({ name, matches: rounds[name] }));
+        const placement = columns.find(col => /third|3rd|bronze/i.test(col.name));
+        const final = columns.find(col => /^(?:winners? )?finals?$/i.test(col.name));
+        if (placement && final && placement !== final) {
+          final.matches.push(...placement.matches);
+          return columns.filter(col => col !== placement);
+        }
+        return columns;
       }
 
       function computeTreeLayout(roundColumns) {
@@ -1625,20 +1634,58 @@
 
         // Losers rounds must not exponentially increase the diagram height.
         const maxMatches = Math.max(...roundColumns.map(col => col.matches.length), 1);
-        const matchSpacing = 180;
-        const treeHeight = maxMatches * matchSpacing;
+        const matchSpacing = 110;
+        let treeHeight = maxMatches * matchSpacing;
 
         let champion = null;
+        const positioned = new Map();
         const rounds = roundColumns.map((col, rIdx) => {
+          let previousTop = -110;
           const matches = col.matches.map((m, mIdx) => {
-            const topPx = (mIdx + 0.5) * treeHeight / col.matches.length - 64;
-            if (rIdx === numRounds - 1 && m.winner) champion = m.winner;
+            let topPx = (mIdx + 0.5) * treeHeight / col.matches.length - 46;
+            const sources = [...positioned.values()].filter(source => source.next_match_winner_id === m.id || source.next_match_loser_id === m.id);
+            if (sources.length) topPx = sources.reduce((total, source) => total + source.topPx, 0) / sources.length;
+            if (/third|3rd|bronze/i.test(m.round_name || '')) topPx += 130;
+            topPx = Math.max(0, topPx, previousTop + 110);
+            previousTop = topPx;
+            positioned.set(m.id, {...m, topPx});
+
             return { ...m, topPx, mIdx, rIdx };
           });
           return { name: col.name, matches, rIdx };
         });
 
-        return { rounds, treeHeight, champion };
+        treeHeight = Math.max(treeHeight, ...rounds.flatMap(round => round.matches.map(m => m.topPx + 110)));
+        const double = rounds.some(round => /^losers /i.test(round.name));
+        let columnCount = rounds.length;
+        let height = treeHeight + 62;
+        if (double) {
+          const winners = rounds.filter(round => /^winners /i.test(round.name));
+          const losers = rounds.filter(round => /^losers /i.test(round.name));
+          const finals = rounds.filter(round => !winners.includes(round) && !losers.includes(round));
+          const laneHeight = Math.max(220, ...rounds.map(round => round.matches.length * 120));
+          const finalColumn = Math.max(winners.length, losers.length);
+          [winners, losers, finals].forEach((lane, laneIndex) => {
+            lane.forEach((round, index) => {
+              round.x = (laneIndex === 2 ? finalColumn + index : index) * 290;
+              round.y = laneIndex === 1 ? laneHeight + 130 : 32;
+              round.height = laneHeight;
+              round.matches.forEach((match, matchIndex) => {
+                match.topPx = (matchIndex + 0.5) * laneHeight / round.matches.length - 47;
+                match.x = round.x;
+                match.y = round.y + 62 + match.topPx;
+              });
+            });
+          });
+          columnCount = finalColumn + finals.length;
+          height = 2 * laneHeight + 224;
+        }
+        const allMatches = rounds.flatMap(round => round.matches);
+        const grandFinals = allMatches.filter(m => /grand final/i.test(m.round_name || ''));
+        const finals = grandFinals.length ? grandFinals : allMatches.filter(m => /^(?:winners? )?finals?$/i.test(m.round_name || ''));
+        const championMatch = [...finals].reverse().find(m => m.winner && ['completed', 'forfeit'].includes(m.status));
+        champion = championMatch?.winner || null;
+        return { rounds, treeHeight, double, columnCount, height, champion, championMatch, finalMatch: finals[finals.length - 1] };
       }
 
       function renderBestOfGames(m) {
@@ -1679,24 +1726,26 @@
         const scoreA = (m.score_a == null ? '' : String(m.score_a)).trim();
         const scoreB = (m.score_b == null ? '' : String(m.score_b)).trim();
 
-        function slotHtml(name, score, isWinner) {
+        let pendingSlot = 0;
+        const missingTeams = [teamA, teamB].filter(name => !name || name.toUpperCase() === 'TBD').length;
+        function slotHtml(name, score, isWinner, logo) {
           const n = name || 'TBD';
           const upper = n.toUpperCase();
-          if (upper === 'TBD') return '<div class="bf-slot bf-slot--tbd"><span>TBD</span></div>';
+          if (upper === 'TBD') return '<div class="bf-slot bf-slot--tbd"><span>' + escapeHtml(m.sources?.length === missingTeams ? m.sources[pendingSlot++] : 'Awaiting opponent') + '</span></div>';
           if (upper === 'BYE') return '<div class="bf-slot bf-slot--bye"><span>BYE</span></div>';
           const winCls = isWinner && winner ? ' bf-slot--winner' : '';
           const scoreHtml = score ? '<span class="bf-score">' + escapeHtml(score) + '</span>' : '';
-          return '<div class="bf-slot' + winCls + '"><span class="bf-team">' + escapeHtml(n) + '</span>' + scoreHtml + '</div>';
+          return '<div class="bf-slot' + winCls + '">' + teamLogo(logo, n) + '<span class="bf-team">' + escapeHtml(n) + '</span>' + scoreHtml + '</div>';
         }
 
         const isWinA = winner && teamA && winner === teamA;
         const isWinB = winner && teamB && winner === teamB;
 
-        let html = '<div class="bf-match bf-match--' + statusKey + '" data-match="' + (m.match_number || '') + '">';
-        html += '<div class="bf-match-label">Match ' + (m.match_number || '?') + '</div>';
-        html += slotHtml(teamA, scoreA, isWinA);
+        let html = '<div class="bf-match bf-match--' + statusKey + '" data-match="' + (m.match_number || '') + '" title="' + escapeHtml(statusLabel + (m.sources?.length ? ' | ' + m.sources.join(' / ') : '')) + '">';
+        html += '<div class="bf-match-label"><span>' + (/third|3rd|bronze/i.test(m.round_name || '') ? escapeHtml(m.round_name) : 'Match ' + (m.match_number || '?')) + '</span><time>' + escapeHtml(m.match_time || '') + '</time></div>';
+        html += slotHtml(teamA, scoreA, isWinA, m.team_a_logo);
         html += '<div class="bf-divider"></div>';
-        html += slotHtml(teamB, scoreB, isWinB);
+        html += slotHtml(teamB, scoreB, isWinB, m.team_b_logo);
         html += renderBestOfGames(m);
         html += '<div class="bf-match-foot">';
         html += '<span class="match-status-badge match-status-' + statusKey + '">' + escapeHtml(statusLabel) + '</span>';
@@ -1713,68 +1762,86 @@
           return { champion: null, rounds: 0, teams: 0 };
         }
 
-        const roundColumns = groupMatchesByRound(matches);
+        const roundColumns = groupMatchesByRound(matches.map(match => ({...match,
+          sources: matches.flatMap(source => [
+            source.next_match_winner_id === match.id ? 'Winner of Match ' + source.match_number : '',
+            source.next_match_loser_id === match.id ? 'Loser of Match ' + source.match_number : ''
+          ].filter(Boolean))
+        })));
         const layout = computeTreeLayout(roundColumns);
         const numRounds = layout.rounds.length;
 
         /* Estimate team count from first round */
         const teamsCount = (roundColumns[0]?.matches.length || 0) * 2;
 
-        let html = '<div class="bracket-flow" style="--tree-height:' + layout.treeHeight + 'px; --slot-h:' + BRACKET_SLOT_H + 'px;">';
+        let html = '<div class="bracket-flow' + (layout.double ? ' bracket-flow--double' : '') + '" style="' + (layout.double ? 'width:' + ((layout.columnCount + 1) * 290) + 'px;height:' + layout.height + 'px;' : '') + '--tree-height:' + layout.treeHeight + 'px; --slot-h:' + BRACKET_SLOT_H + 'px;">';
 
+        if (layout.double) html += '<h3 class="bf-lane-label" style="top:0">Winners Bracket</h3><h3 class="bf-lane-label" style="top:' + (layout.rounds.find(round => /^losers /i.test(round.name)).y - 32) + 'px">Losers Bracket</h3>';
         layout.rounds.forEach((round, rIdx) => {
-          const isLast = rIdx === numRounds - 1;
-          html += '<div class="bracket-flow-col" data-round="' + rIdx + '">';
-          html += '<div class="bracket-flow-col-title">' + escapeHtml(round.name.toUpperCase()) + '</div>';
-          html += '<div class="bracket-flow-col-track" style="height:' + layout.treeHeight + 'px">';
+          html += '<div class="bracket-flow-col" style="' + (layout.double ? 'position:absolute;left:' + round.x + 'px;top:' + round.y + 'px;' : '') + '" data-round="' + rIdx + '">';
+          const dates = [...new Set(round.matches.map(m => m.match_date).filter(Boolean))].sort();
+          const labels = dates.map(d => new Date(d + 'T12:00:00+08:00').toLocaleDateString('en-US', {timeZone:'Asia/Manila',month:'short',day:'numeric',year:'numeric'}));
+          const dateLabel = labels.length > 1 ? labels[0] + ' - ' + labels[labels.length - 1] : labels[0] || '';
+          html += '<div class="bracket-flow-col-title">' + escapeHtml(round.name) + '<small>' + escapeHtml(dateLabel) + '</small></div>';
+          html += '<div class="bracket-flow-col-track" style="height:' + (round.height || layout.treeHeight) + 'px">';
 
           round.matches.forEach(m => {
-            html += '<div class="bracket-flow-node" style="top:' + m.topPx + 'px" data-r="' + rIdx + '" data-m="' + m.mIdx + '">';
+            html += '<div class="bracket-flow-node" style="top:' + m.topPx + 'px" data-x="' + (m.x ?? rIdx * 290) + '" data-y="' + (m.y ?? 62 + m.topPx) + '" data-r="' + rIdx + '" data-m="' + m.mIdx + '" data-id="' + m.id + '" data-next="' + (m.next_match_winner_id || '') + '" data-loser="' + (m.next_match_loser_id || '') + '">';
             html += renderFlowMatchCard(m, options.mode || 'view');
-            if (!isLast) {
-              html += '<div class="bf-connector bf-connector--out" aria-hidden="true"></div>';
-            }
-            if (rIdx > 0) {
-              html += '<div class="bf-connector bf-connector--in" aria-hidden="true"></div>';
-            }
             html += '</div>';
           });
 
           html += '</div></div>';
         });
 
-        /* Champion column */
-        if (layout.champion) {
-          html += '<div class="bracket-flow-col bracket-flow-col--champion">';
-          html += '<div class="bracket-flow-col-title">CHAMPION</div>';
-          html += '<div class="bracket-flow-col-track" style="height:' + layout.treeHeight + 'px">';
-          html += '<div class="bf-champion-node" style="top:' + (layout.treeHeight / 2 - 40) + 'px">';
-          html += '<span class="bf-champion-crown" aria-hidden="true">🏆</span>';
-          html += '<strong>' + escapeHtml(layout.champion) + '</strong>';
-          html += '<small>Tournament Winner</small>';
-          html += '</div></div></div>';
+        if (layout.finalMatch) {
+        const finalMatch = layout.championMatch;
+        html += '<div class="bracket-flow-col bracket-flow-col--champion" style="' + (layout.double ? 'position:absolute;left:' + layout.columnCount * 290 + 'px;top:32px;' : '') + '"><div class="bracket-flow-col-title">Champion</div>';
+        html += '<div class="bracket-flow-col-track" style="height:' + layout.treeHeight + 'px">';
+        html += '<div class="bf-champion-node" style="top:' + (layout.finalMatch?.topPx ?? layout.treeHeight / 2 - 46) + 'px">';
+        html += '<div class="bf-champion-label">&#127942; CHAMPION</div><div class="bf-champion-team">';
+        html += teamLogo(finalMatch?.winner_logo || '', layout.champion || 'Champion');
+        html += '<strong>' + escapeHtml(layout.champion || 'To be determined') + '</strong><span class="bf-crown" aria-hidden="true">&#9819;</span>';
+        html += '</div></div></div></div>';
+
         }
 
         html += '</div>';
         container.innerHTML = html;
-        applyConnectorArms(container);
+        applyConnectorArms(container, layout.finalMatch?.id);
         return { champion: layout.champion, rounds: numRounds, teams: teamsCount };
       }
 
-      function applyConnectorArms(container) {
-        container.querySelectorAll('.bracket-flow-node').forEach(node => {
-          const rIdx = parseInt(node.dataset.r, 10);
-          const mIdx = parseInt(node.dataset.m, 10);
-          if (isNaN(rIdx) || isNaN(mIdx)) return;
-          const nextTrack = container.querySelector('[data-round="' + (rIdx + 1) + '"] .bracket-flow-col-track');
-          const targets = nextTrack ? Array.from(nextTrack.querySelectorAll('.bracket-flow-node')) : [];
-          const target = targets[Math.min(Math.floor(mIdx / 2), targets.length - 1)];
-          const delta = target ? parseFloat(target.style.top) - parseFloat(node.style.top) : 0;
-          const armH = Math.abs(delta);
-          node.style.setProperty('--arm-h', armH + 'px');
-          node.classList.toggle('bf-node--arm-down', delta >= 0);
-          node.classList.toggle('bf-node--arm-up', delta < 0);
+      function teamLogo(url, name) {
+        if (!url || !/^(https?:\/\/|\/(?!\/))/.test(url)) return '<span class="bf-logo-fallback" aria-hidden="true"></span>';
+        return '<img class="bf-department-logo" src="' + escapeHtml(url) + '" alt="' + escapeHtml(name) + ' department logo" loading="lazy">';
+      }
+      function applyConnectorArms(container, finalId) {
+        const flow = container.querySelector('.bracket-flow');
+        if (!flow) return;
+        const nodes = [...flow.querySelectorAll('.bracket-flow-node')];
+        const byId = new Map(nodes.map(node => [node.dataset.id, node]));
+        const point = node => ({x: Number(node.dataset.x), y: Number(node.dataset.y) + 47});
+        const paths = [];
+        nodes.forEach(node => {
+          const from = point(node);
+          [node.dataset.next, node.dataset.loser].filter(Boolean).forEach(id => {
+            const target = byId.get(id);
+            if (!target) return;
+            // Cross-lane drops are identified by source labels instead of lines through other cards.
+            if (flow.classList.contains('bracket-flow--double') && id === node.dataset.loser) return;
+            const to = point(target), start = from.x + 250, middle = start + (to.x - start) / 2;
+            paths.push('M ' + start + ' ' + from.y + ' H ' + middle + ' V ' + to.y + ' H ' + to.x);
+          });
         });
+        const championColumn = flow.querySelector('.bracket-flow-col--champion');
+        const championX = championColumn?.style.left ? parseFloat(championColumn.style.left) : (flow.querySelectorAll('.bracket-flow-col').length - 1) * 290;
+        const finalNode = byId.get(String(finalId));
+        if (finalNode) {
+          const from = point(finalNode);
+          paths.push('M ' + (from.x + 250) + ' ' + from.y + ' H ' + championX);
+        }
+        flow.insertAdjacentHTML('afterbegin', '<svg class="bf-links" aria-hidden="true">' + paths.map(d => '<path d="' + d + '"/>').join('') + '</svg>');
       }
 
       const viewModal = document.getElementById('viewBracketModal');
@@ -1789,6 +1856,14 @@
         document.getElementById('bracketZoomOut').disabled = bracketZoom <= 0.2;
         document.getElementById('bracketZoomIn').disabled = bracketZoom >= 2;
       }
+      document.getElementById('bracketFullscreen').addEventListener('click', async () => {
+        const panel = document.querySelector('#viewBracketModal .bracket-modal-container');
+        if (!document.fullscreenEnabled) { document.getElementById('bracketFitView').click(); return; }
+        try {
+          if (document.fullscreenElement) await document.exitFullscreen();
+          else await panel.requestFullscreen();
+        } catch (_) { document.getElementById('bracketFitView').click(); }
+      });
       document.getElementById('bracketZoomOut').addEventListener('click', () => setBracketZoom(bracketZoom - 0.1));
       document.getElementById('bracketZoomIn').addEventListener('click', () => setBracketZoom(bracketZoom + 0.1));
       document.getElementById('bracketActualSize').addEventListener('click', () => setBracketZoom(1));
@@ -1813,14 +1888,9 @@
       function populateBracketDetails(data) {
         const ev = data.event || {};
         const prog = data.progress || {};
-        if (viewTitleEl) viewTitleEl.textContent = ev.name || 'Bracket Details';
-        if (viewMetaEl) {
-          viewMetaEl.textContent = [
-            ev.category,
-            ev.division !== '—' ? ev.division : null,
-            ev.tournament_type_label || data.format,
-          ].filter(Boolean).join(' · ');
-        }
+        if (viewTitleEl) viewTitleEl.textContent = 'Bracket';
+        document.getElementById('bracketViewFormat').textContent = ev.tournament_type_label || data.format || '';
+        if (viewMetaEl) viewMetaEl.textContent = 'Track the matches and progress of the teams.';
         if (viewBadgesEl) {
           let badges = '<span class="bracket-bracket-status bracket-bracket-status--' + (prog.bracket_status || 'not_generated') + '">' +
             escapeHtml(prog.bracket_status_label || 'Not Generated') + '</span>';

@@ -22,3 +22,12 @@ djangorestframework==3.16.1
 
 # Timezone support
 pytz==2024.1
+reportlab==5.0.1
+openpyxl==3.1.5
+
+# Local, offline score-sheet OCR and scanned-PDF rendering
+Pillow==12.2.0
+pillow-heif==1.8.1
+opencv-python-headless==5.0.0.93
+pytesseract==0.3.13
+pypdfium2==5.14.0

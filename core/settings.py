@@ -166,6 +166,16 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 # Teams → assets/teams/  |  Candidates → assets/candidates/
 MEDIA_URL = '/assets/'
 MEDIA_ROOT = BASE_DIR / 'assets'
+OCR_PRIVATE_ROOT = Path(config('OCR_PRIVATE_ROOT', default=str(BASE_DIR / 'private_uploads' / 'score_sheets')))
+TESSERACT_CMD = config('TESSERACT_CMD', default='')
+
+# Covers are prepared on save; paid generation runs only in the bounded worker command.
+EVENT_COVERS_ENABLED = config_bool('EVENT_COVERS_ENABLED', default=False)
+OPENAI_API_KEY = config('OPENAI_API_KEY', default='')
+EVENT_COVER_MODEL = config('EVENT_COVER_MODEL', default='gpt-image-2')
+EVENT_COVER_DAILY_LIMIT = config('EVENT_COVER_DAILY_LIMIT', default=5, cast=int)
+EVENT_COVER_MAX_ATTEMPTS = config('EVENT_COVER_MAX_ATTEMPTS', default=2, cast=int)
+EVENT_COVER_RUN_LIMIT = config('EVENT_COVER_RUN_LIMIT', default=5, cast=int)
 
 # New image uploads can use Cloudinary; existing files and documents stay local.
 USE_CLOUDINARY = config_bool('USE_CLOUDINARY', default=False)
@@ -191,8 +201,10 @@ STORAGES = {
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Superadmin: restore remains opt-in for safety
-SUPERADMIN_ALLOW_RESTORE = config_bool('SUPERADMIN_ALLOW_RESTORE', default=False)
+# Recovery additionally requires a healthy, separately installed recovery worker.
+SUPERADMIN_ALLOW_RESTORE = config_bool('SUPERADMIN_ALLOW_RESTORE', default=True)
+DATABASE_RECOVERY_ROOT = Path(config('DATABASE_RECOVERY_ROOT', default=str(BASE_DIR / 'private_uploads' / 'database_recovery')))
+DATABASE_RECOVERY_MAX_BYTES = 20 * 1024 * 1024
 
 # Email — Gmail SMTP when credentials are set; otherwise console (dev only)
 EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')

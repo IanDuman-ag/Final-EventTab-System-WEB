@@ -2,106 +2,68 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Dashboard · Superadmin · EventTab</title>
-  <link rel="stylesheet" href="{% static 'superadmin_dashboard.css' %}?v=20260803a">
-  <link rel="stylesheet" href="{% static 'admin_v2.css' %}?v=20260524a">
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard · Super Admin · EventTab</title>
+  <link rel="stylesheet" href="{% static 'superadmin_dashboard.css' %}?v=20261025readable">
+  <link rel="stylesheet" href="{% static 'admin_v2.css' %}?v=20261019sidebar">
   <link rel="stylesheet" href="{% static 'superadmindash/pages.css' %}?v=20260803a">
 </head>
-<body class="superadmin-dashboard-page admin-v2-page">
-  <div class="dashboard-shell">
-    {% include 'superadmindash/_sidebar.html' with active='dashboard' %}
-    <div class="dashboard-area">
-      <header class="topbar">
-        <div class="topbar-context">
-          <span>DASHBOARD</span>
-          <small>System Overview</small>
-        </div>
-        <div class="topbar-actions">
-          <a class="icon-button" href="{% url 'superadmin_activity_logs' %}" aria-label="Audit logs">
-            <svg viewBox="0 0 24 24"><path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm8-6-2-2v-5a6 6 0 1 0-12 0v5l-2 2v1h16v-1Z"/></svg>
-            {% if notification_count %}<span class="notification-badge">{{ notification_count }}</span>{% endif %}
-          </a>
-          <a class="profile-avatar" href="{% url 'superadmin_profile' %}">{{ request.user.username|default:"SA"|slice:":2"|upper }}</a>
-        </div>
-      </header>
-
-      <main class="dashboard-main sa-page-main">
-        <section class="sa-welcome">
-          <div class="sa-welcome-text">
-            <h2>Welcome back, {{ request.user.get_full_name|default:request.user.username }}</h2>
-            <p>Monitor users, events, championship standings, and system activity.</p>
-          </div>
-        </section>
-
-        <div class="sa-stats">
-          <article><span>Total Users</span><strong>{{ cards.total_users }}</strong></article>
-          <article><span>Total Events</span><strong>{{ cards.total_events }}</strong></article>
-          <article><span>Active Events</span><strong>{{ cards.active_events }}</strong></article>
-          <article><span>Completed Events</span><strong>{{ cards.completed_events }}</strong></article>
-          <article><span>Total Departments</span><strong>{{ cards.total_departments }}</strong></article>
-          <article><span>Total Judges</span><strong>{{ cards.total_judges }}</strong></article>
-          <article><span>Faculty In-Charge</span><strong>{{ cards.total_faculty }}</strong></article>
-          <article><span>Published Results</span><strong>{{ cards.published_results }}</strong></article>
-        </div>
-
-        <div class="sa-charts">
-          <section class="sa-card">
-            <header><h2>Events by Category</h2></header>
-            <div class="sa-chart-box" id="chart-category" data-chart='{{ chart_category|safe }}'></div>
-          </section>
-          <section class="sa-card">
-            <header><h2>Events by Month</h2></header>
-            <div class="sa-chart-box" id="chart-month" data-chart='{{ chart_month|safe }}'></div>
-          </section>
-          <section class="sa-card">
-            <header><h2>Department Championship Points</h2></header>
-            <div class="sa-chart-box" id="chart-points" data-chart='{{ chart_points|safe }}'></div>
-          </section>
-          <section class="sa-card">
-            <header><h2>User Activity</h2></header>
-            <div class="sa-chart-box" id="chart-activity" data-chart='{{ chart_activity|safe }}'></div>
-          </section>
-        </div>
-
-        <div class="sa-grid-2">
-          <section class="sa-card">
-            <header>
-              <h2>Recent Activity</h2>
-              <a class="sa-btn-sm sa-btn-secondary" href="{% url 'superadmin_activity_logs' %}">View All</a>
-            </header>
-            <ul class="sa-notes">
-              {% for item in activities %}
-              <li>
-                <strong>{{ item.title }}</strong>
-                <span>{{ item.message }}</span>
-                <small>{{ item.user }} · {{ item.time }}</small>
-              </li>
-              {% empty %}
-              <li><span>No recent activity.</span></li>
-              {% endfor %}
-            </ul>
-          </section>
-          <section class="sa-card">
-            <header>
-              <h2>Quick Links</h2>
-            </header>
-            <div style="padding:16px;display:grid;gap:10px;">
-              <a class="sa-btn" href="{% url 'superadmin_users' %}">Manage Users</a>
-              <a class="sa-btn sa-btn-secondary" href="{% url 'superadmin_event_monitoring' %}">Monitor Events</a>
-              <a class="sa-btn sa-btn-secondary" href="{% url 'superadmin_leaderboard' %}">View Leaderboard</a>
-              <a class="sa-btn sa-btn-secondary" href="{% url 'superadmin_reports' %}">Generate Reports</a>
-            </div>
-          </section>
-        </div>
-      </main>
-    </div>
+<body class="superadmin-dashboard-page admin-v2-page sa-dashboard-reference">
+<svg class="sa-symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
+<symbol id="sa-users" viewBox="0 0 24 24"><circle cx="12" cy="7" r="3"/><circle cx="5" cy="10" r="2"/><circle cx="19" cy="10" r="2"/><path d="M7 21v-5a5 5 0 0 1 10 0v5ZM1 20v-5a4 4 0 0 1 5-4v9Zm17 0v-9a4 4 0 0 1 5 4v5Z"/></symbol>
+<symbol id="sa-calendar" viewBox="0 0 24 24"><path d="M4 4h16v17H4ZM7 1h2v6H7Zm8 0h2v6h-2Z"/><path d="M7 10h10M7 14h10M7 18h10" stroke="white" stroke-width="1.5"/></symbol>
+<symbol id="sa-play" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="m10 7 7 5-7 5Z" fill="white"/></symbol>
+<symbol id="sa-check" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="m7 12 4 4 6-9" fill="none" stroke="white" stroke-width="2"/></symbol>
+<symbol id="sa-building" viewBox="0 0 24 24"><path d="M3 21V5l9-4 9 4v16Z"/><path d="M7 7h2m6 0h2M7 11h2m6 0h2M7 15h2m6 0h2m-6 6v-5h2v5" fill="none" stroke="white" stroke-width="1.5"/></symbol>
+<symbol id="sa-cap" viewBox="0 0 24 24"><path d="m1 8 11-6 11 6-11 6ZM5 12v6c4 4 10 4 14 0v-6l-7 4Zm17-2h1v9h-1Z"/></symbol>
+<symbol id="sa-file" viewBox="0 0 24 24"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 7h8M8 11h8M8 15h8M8 19h5" stroke="white" stroke-width="1.5"/></symbol>
+<symbol id="sa-bars" viewBox="0 0 24 24"><path d="M3 13h4v9H3Zm7-7h4v16h-4Zm7-5h4v21h-4Z"/></symbol>
+<symbol id="sa-donut" viewBox="0 0 24 24"><path d="M11 1a11 11 0 1 0 12 12H11Z"/><path d="M14 1v9h9a10 10 0 0 0-9-9Z" opacity=".6"/></symbol>
+<symbol id="sa-trophy" viewBox="0 0 24 24"><path d="M8 3h8v6c0 4-2 6-4 6S8 13 8 9V3ZM8 5H3v3c0 4 3 5 6 5m7-8h5v3c0 4-3 5-6 5m-3 2v5m-5 1h10" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+<symbol id="sa-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 6v6l4 2" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+<symbol id="sa-pulse" viewBox="0 0 24 24"><path d="M1 12h5l3-9 5 18 3-9h6" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+</defs></svg>
+<div class="dashboard-shell">
+  {% include 'superadmindash/_sidebar.html' with active='dashboard' %}
+  <div class="dashboard-area">
+    <header class="topbar">
+      <button class="sa-menu-toggle" type="button" aria-controls="sa-dashboard-navigation" aria-expanded="false" aria-label="Toggle navigation">☰</button>
+      <div class="topbar-context"><h1>Dashboard</h1><small>Home <span aria-hidden="true">›</span> Dashboard</small></div>
+      <div class="topbar-actions">
+        <form class="sa-dashboard-search" action="{% url 'superadmin_users' %}" method="get" role="search"><label class="sa-visually-hidden" for="sa-search">Search users</label><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 6 6"/></svg><input id="sa-search" name="q" type="search" placeholder="Search users..."></form>
+        <a class="icon-button" href="{% url 'superadmin_activity_logs' %}" aria-label="Audit logs"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm8-6-2-2v-5a6 6 0 1 0-12 0v5l-2 2v1h16v-1Z"/></svg>{% if notification_count %}<span class="notification-badge">{{ notification_count }}</span>{% endif %}</a>
+        <a class="sa-dashboard-profile" href="{% url 'superadmin_profile' %}"><span class="profile-avatar">{{ request.user.username|default:"SA"|slice:":2"|upper }}</span><span>Super Admin</span><span aria-hidden="true">⌄</span></a>
+      </div>
+    </header>
+    <main class="dashboard-main sa-page-main">
+      <section class="sa-welcome"><div class="sa-welcome-text"><h2>Welcome back, <span>{{ user_display|default:"Super Admin" }}!</span></h2><p>Monitor users, events, championship standings, and system activity<br>for a successful and organized intramurals.</p></div><div class="sa-welcome-art" aria-hidden="true"><p>“Great events build<br>greater communities.”</p><svg><use href="#sa-trophy"/></svg></div></section>
+      <div class="sa-stats">
+        <article><span class="sa-metric-icon metric-blue"><svg><use href="#sa-users"/></svg></span><div><span>Total Users</span><strong>{{ cards.total_users }}</strong></div></article>
+        <article><span class="sa-metric-icon metric-yellow"><svg><use href="#sa-calendar"/></svg></span><div><span>Total Events</span><strong>{{ cards.total_events }}</strong></div></article>
+        <article><span class="sa-metric-icon metric-green"><svg><use href="#sa-play"/></svg></span><div><span>Active Events</span><strong>{{ cards.active_events }}</strong></div></article>
+        <article><span class="sa-metric-icon metric-blue"><svg><use href="#sa-check"/></svg></span><div><span>Completed Events</span><strong>{{ cards.completed_events }}</strong></div></article>
+        <article><span class="sa-metric-icon metric-purple"><svg><use href="#sa-building"/></svg></span><div><span>Total Departments</span><strong>{{ cards.total_departments }}</strong></div></article>
+        <article><span class="sa-metric-icon metric-red"><svg><use href="#sa-users"/></svg></span><div><span>Total Judges</span><strong>{{ cards.total_judges }}</strong></div></article>
+        <article><span class="sa-metric-icon metric-blue"><svg><use href="#sa-cap"/></svg></span><div><span>Faculty In-Charge</span><strong>{{ cards.total_faculty }}</strong></div></article>
+        <article><span class="sa-metric-icon metric-yellow"><svg><use href="#sa-file"/></svg></span><div><span>Published Results</span><strong>{{ cards.published_results }}</strong></div></article>
+      </div>
+      <div class="sa-charts">
+        <section class="sa-card"><header><svg class="sa-panel-icon"><use href="#sa-bars"/></svg><div><h2>Events by Category</h2><p>Number of events per category</p></div><span class="sa-chart-scope">All events</span></header><div class="sa-chart-box" id="chart-category" data-sa-chart="data-chart-category" data-kind="bars" role="img" aria-label="Events by category"></div></section>
+        <section class="sa-card"><header><svg class="sa-panel-icon"><use href="#sa-donut"/></svg><div><h2>Event Status Distribution</h2><p>Current status of all events</p></div><span class="sa-chart-scope">Overview</span></header><div class="sa-chart-box" id="chart-status" data-sa-chart="data-chart-status" data-kind="donut" data-unit="Events" role="img" aria-label="Event status distribution"></div></section>
+        <section class="sa-card"><header><svg class="sa-panel-icon"><use href="#sa-users"/></svg><div><h2>User Role Distribution</h2><p>Total users per role</p></div><span class="sa-chart-scope">Overview</span></header><div class="sa-chart-box" id="chart-roles" data-sa-chart="data-chart-roles" data-kind="donut" data-unit="Users" role="img" aria-label="User role distribution"></div></section>
+        <section class="sa-card"><header><svg class="sa-panel-icon"><use href="#sa-file"/></svg><div><h2>Results Publication Status</h2><p>Status of event results</p></div><span class="sa-chart-scope">Overview</span></header><div class="sa-chart-box" id="chart-publication" data-sa-chart="data-chart-publication" data-kind="bars" role="img" aria-label="Results publication status"></div></section>
+      </div>
+      <div class="sa-grid-2">
+        <section class="sa-card"><header><svg class="sa-panel-icon"><use href="#sa-clock"/></svg><div><h2>Recent Activity</h2><p>Latest system activity and updates</p></div><a class="sa-btn-sm sa-btn-secondary" href="{% url 'superadmin_activity_logs' %}">View All</a></header><ul class="sa-notes">{% for item in activities %}<li><span class="sa-activity-dot"><svg><use href="#sa-file"/></svg></span><strong>{{ item.title }}</strong><span>{{ item.message }}</span><small>{{ item.user }} · {{ item.time }}</small></li>{% empty %}<li class="sa-no-activity">No recent activity.</li>{% endfor %}</ul><details class="sa-activity-history"><summary>User activity · last 30 days</summary><div class="sa-chart-box" id="chart-activity" data-sa-chart="data-chart-activity" data-kind="line" role="img" aria-label="User activity in the last thirty days"></div></details></section>
+        <section class="sa-card"><header><svg class="sa-panel-icon"><use href="#sa-pulse"/></svg><div><h2>System Status</h2><p>Availability for this dashboard request</p></div></header><ul class="sa-system-status"><li><span>Application Server</span><strong>Online</strong></li><li><span>Database</span><strong>Connected</strong></li><li><span>Event Records</span><strong>Available</strong></li></ul><nav class="sa-quick-links" aria-label="Quick links"><a href="{% url 'superadmin_users' %}">Manage Users</a><a href="{% url 'superadmin_event_monitoring' %}">Monitor Events</a><a href="{% url 'superadmin_leaderboard' %}">View Leaderboard</a><a href="{% url 'superadmin_reports' %}">Generate Reports</a></nav></section>
+      </div>
+    </main>
   </div>
-  {{ chart_category|json_script:"data-chart-category" }}
-  {{ chart_month|json_script:"data-chart-month" }}
-  {{ chart_points|json_script:"data-chart-points" }}
-  {{ chart_activity|json_script:"data-chart-activity" }}
-  <script src="{% static 'js/superadmin_charts.js' %}?v=20260803a"></script>
-</body>
-</html>
+</div>
+{{ chart_category|json_script:"data-chart-category" }}
+{{ chart_activity|json_script:"data-chart-activity" }}
+{{ chart_status|json_script:"data-chart-status" }}
+{{ chart_roles|json_script:"data-chart-roles" }}
+{{ chart_publication|json_script:"data-chart-publication" }}
+<script src="{% static 'js/superadmin_charts.js' %}?v=20261025readable"></script>
+</body></html>

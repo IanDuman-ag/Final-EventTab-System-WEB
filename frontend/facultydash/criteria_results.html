@@ -1,43 +1,63 @@
-<article class="criteria-panel">
-<header>
-<h2>{% if compact %}Qualified Participants{% else %}Round Results{% endif %} <small>({{ portal.selected_round.name|default:'No round' }})</small>
-</h2>{% if compact %}<a class="criteria-small-button" href="?tab=results&amp;round={{ selected_round_index }}">View Full Results</a>{% endif %}</header>
-<div class="criteria-table-wrap" tabindex="0" role="region" aria-label="Round rankings">
-<table>
-<thead>
-<tr>
-<th>Rank</th>
-<th>Participant / Team</th>
-<th>Total Score</th>
-<th>Status</th>{% if not compact %}<th>Breakdown</th>{% endif %}</tr>
-</thead>
-<tbody>{% for result in portal.results %}<tr>
-<td>
-<span class="criteria-rank rank-{{ result.rank }}">{{ result.rank }}</span>
-</td>
-<td>
-<strong>{{ result.name }}</strong>
-</td>
-<td>{{ result.final_score|floatformat:2 }}</td>
-<td>
-<span class="criteria-badge {% if result.qualified %}status-qualified{% elif result.qualification_status == 'Not Qualified' %}status-not-qualified{% else %}status-pending{% endif %}">{{ result.qualification_status }}</span>
-</td>{% if not compact %}<td>
-<details>
-<summary>Score details</summary>
-<div class="score-breakdown">
-<h3>Individual Judge Totals</h3>{% for score in result.judge_scores %}<p>
-<span>{{ score.name }}</span>
-<strong>{{ score.total|floatformat:2 }}</strong>
-</p>{% empty %}<p>No judge breakdown available.</p>{% endfor %}<h3>Criteria Breakdown</h3>{% for criterion in result.criteria_breakdown %}<p>
-<span>{{ criterion.name }}{% if criterion.weight != None %} ({{ criterion.weight }}%){% endif %}</span>
-<strong>{{ criterion.score|floatformat:2 }}{% if criterion.contribution != None %}<small class="criteria-contribution">Weighted: {{ criterion.contribution|floatformat:2 }}</small>{% endif %}</strong>
-</p>{% empty %}<p>No criteria breakdown available.</p>{% endfor %}</div>
-</details>
-</td>{% endif %}</tr>{% empty %}<tr>
-<td colspan="5" class="criteria-empty">Results will appear once all required judge submissions have been finalized and validated.</td>
-</tr>{% endfor %}</tbody>
-</table>
+<div class="results-dashboard" data-results-dashboard>
+  <section class="results-summary" aria-label="Selected round summary">
+    <article class="results-summary-card">
+      <span class="results-summary-icon is-blue" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.4"/><path d="M3 20v-2a6 6 0 0 1 12 0v2H3Zm13-5a5 5 0 0 1 5 5h-4v-2a7.8 7.8 0 0 0-1-3Z"/></svg></span>
+      <div><span>Participants</span><strong>{{ portal.selected_round.participant_count }}</strong><small>{% for division in portal.selected_round.division_counts %}{% if not forloop.first %} &nbsp;|&nbsp; {% endif %}{{ division.name }}: {{ division.count }}{% empty %}{{ portal.header.participant_count }} assigned{% endfor %}</small></div>
+    </article>
+    <article class="results-summary-card">
+      <span class="results-summary-icon is-green" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m7 12 3.2 3.2L17.5 8"/></svg></span>
+      <div><span>Judges Completed</span><strong>{{ portal.selected_round.submitted_judges }} / {{ portal.selected_round.judge_count }}</strong><div class="results-progress" role="progressbar" aria-label="Judge submission progress" aria-valuenow="{{ portal.selected_round.progress_percent }}" aria-valuemin="0" aria-valuemax="100"><i style="width:{{ portal.selected_round.progress_percent }}%"></i></div></div><small class="results-summary-percent">{{ portal.selected_round.progress_percent }}%</small>
+    </article>
+    <article class="results-summary-card">
+      <span class="results-summary-icon is-blue" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m12 2 2.8 6 6.6.8-4.9 4.5 1.3 6.5-5.8-3.2-5.8 3.2 1.3-6.5-4.9-4.5L9.2 8 12 2Z"/></svg></span>
+      <div><span>Qualified</span><strong>{% if portal.selected_round.qualifier_count != None %}{{ portal.selected_round.qualifier_count }}{% else %}—{% endif %} <small>{{ portal.selected_round.qualification_label|default:'Final results' }}</small></strong><small>{% if portal.selected_round.qualifier_count == None %}Qualification pending{% elif portal.selected_round.divisions %}{% for group in portal.qualified_groups %}{% if not forloop.first %} &nbsp;|&nbsp; {% endif %}{{ group.name }}: {{ group.rows|length }}{% endfor %}{% else %}{{ portal.selected_round.qualifier_count }} participants{% endif %}</small></div>
+    </article>
+    <article class="results-summary-card">
+      <span class="results-summary-icon is-blue" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v15H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Z"/><path d="M14 2v6h6M8 13h8M8 17h8"/></svg></span>
+      <div><span>Score Calculation</span><strong>{{ portal.selected_round.calculation_status }}</strong><small>Scores use the configured criteria for this round.</small></div>
+      <span class="results-status-chip {% if portal.selected_round.calculation_status == 'Completed' %}is-complete{% endif %}">{{ portal.selected_round.calculation_status }}</span>
+    </article>
+  </section>
+
+  <div class="results-dashboard__toolbar">
+    <div class="results-round-control">{% include 'facultydash/criteria_round_select.html' %}</div>
+    <div class="results-dashboard__filters" role="group" aria-label="View division">
+      <span>View Division</span>
+      <button type="button" data-results-filter="all" aria-pressed="true">All</button>
+      {% for division in portal.selected_round.divisions %}<button type="button" data-results-filter="{{ division|escape }}" aria-pressed="false">{{ division }}</button>{% endfor %}
+    </div>
+  </div>
+
+  <div class="results-dashboard__grid">
+    <article class="criteria-panel results-rankings">
+      <header><div><h2><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20v-7m5 7V8m5 12V4m5 16V2"/></svg>Computed Rankings</h2><p>Rankings are based on the weighted scores from all judges.</p></div><details class="results-all-details"><summary>View Score Details</summary><span>Open a candidate’s Scores row for judge totals and individual criteria scores.</span></details></header>
+      <div class="criteria-table-wrap" tabindex="0" role="region" aria-label="Round rankings">
+        <table><thead><tr><th>Rank</th><th>Candidate</th><th>Department</th><th>Judge Average</th><th>Weighted Score</th><th>Qualification Status</th><th>Details</th></tr></thead>
+          <tbody>{% for result in portal.results %}
+            <tr data-result-division="{{ result.division|default:''|escape }}"><td><span class="criteria-rank rank-{{ result.rank }}">{{ result.rank }}</span></td><td><strong>{{ result.name }}</strong></td><td>{{ result.department|default:'—' }}</td><td>{{ result.judge_average|floatformat:2 }}</td><td><strong>{{ result.weighted_score|floatformat:2 }}</strong></td><td><span class="criteria-badge {% if result.qualified %}status-qualified{% elif result.qualification_status == 'Not Qualified' %}status-not-qualified{% else %}status-pending{% endif %}">{{ result.qualification_status }}</span></td><td><details class="results-score-details"><summary>Scores</summary><div class="score-breakdown"><h3>Individual Judge Totals</h3>{% for score in result.judge_scores %}<p><span>{{ score.name }}</span><strong>{{ score.total|floatformat:2 }}</strong></p>{% empty %}<p>No judge breakdown available.</p>{% endfor %}<h3>Criteria Breakdown</h3>{% for criterion in result.criteria_breakdown %}<p><span>{{ criterion.name }}{% if criterion.weight != None %} ({{ criterion.weight }}%){% endif %}</span><strong>{{ criterion.score|floatformat:2 }}{% if criterion.contribution != None %}<small class="criteria-contribution">Weighted: {{ criterion.contribution|floatformat:2 }}</small>{% endif %}</strong></p>{% empty %}<p>No criteria breakdown available.</p>{% endfor %}</div></details></td></tr>
+          {% empty %}<tr><td colspan="7" class="criteria-empty">Results will appear once all required judge submissions have been finalized and validated.</td></tr>{% endfor %}</tbody>
+        </table>
+      </div>
+    </article>
+
+    <div class="results-dashboard__side">
+      <article class="criteria-panel results-judges">
+        <header><div><h2><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="7" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3H3Zm13-13a3 3 0 1 1 6 0 3 3 0 0 1-6 0Zm1 5h2a4 4 0 0 1 4 4v2h-5"/></svg>Judge Score Comparison</h2><p>Total weighted scores per candidate from each judge.</p></div></header>
+        <div class="criteria-table-wrap" tabindex="0" role="region" aria-label="Individual judge score comparison"><table><thead><tr><th>Candidate</th>{% for judge in portal.selected_round.judges %}<th>{{ judge.name }}</th>{% endfor %}<th>Average</th></tr></thead>
+          <tbody>{% for result in portal.results %}<tr data-result-division="{{ result.division|default:''|escape }}"><td><strong>{{ result.name }}</strong></td>{% for cell in result.judge_score_cells %}<td>{% if cell.total != None %}{{ cell.total|floatformat:2 }}{% else %}—{% endif %}</td>{% endfor %}<td><strong>{{ result.judge_average|floatformat:2 }}</strong></td></tr>{% empty %}<tr><td colspan="{{ portal.selected_round.judge_count|add:2 }}" class="criteria-empty">No judge scores are available yet.</td></tr>{% endfor %}</tbody>
+        </table></div>
+        <div class="results-judge-cards">{% for judge in portal.selected_round.judges %}<article><span class="results-judge-avatar">{{ judge.name|slice:':1'|upper }}</span><div><strong>{{ judge.name }}</strong><span class="results-judge-state {% if judge.status == 'Submitted' %}is-complete{% endif %}">{{ judge.status }}</span><small>{{ judge.completed_scores }}/{{ judge.required_scores }} scores</small></div></article>{% empty %}<p class="results-empty-note">No judges are assigned to this round.</p>{% endfor %}</div>
+      </article>
+
+      <article class="criteria-panel results-criteria"><header><div><h2><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14v18H5zM9 7h6M9 11h6M9 15h3"/></svg>Criteria Breakdown <small>({{ portal.selected_round.name }})</small></h2></div><span class="results-total-chip">Total: {{ portal.selected_round.criteria_weight_total|floatformat:0 }}%</span></header>
+        <div class="results-criteria__body">{% for category in portal.selected_round.criteria_categories %}<div class="results-criterion"><div><span><i aria-hidden="true"></i>{{ category.name }}</span><strong>{{ category.weight|floatformat:0 }}%</strong></div><div class="results-criterion__track"><i style="width:{{ category.weight }}%"></i></div></div>{% empty %}<p class="results-empty-note">Criteria weights will appear when configured for this round.</p>{% endfor %}</div>
+      </article>
+    </div>
+  </div>
+
+  <article class="criteria-panel results-qualified"><header><div><h2><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14v18H5zM8 8h8M8 12h8M8 16h5"/></svg>{% if portal.selected_round.is_final %}Final Participants Preview{% else %}Qualified Participants Preview{% endif %} <small>({{ portal.selected_round.qualification_label|default:'Final results' }})</small></h2></div></header>
+    <div class="results-qualified__groups">{% for group in portal.qualified_groups %}<section class="results-qualified-group"><h3>{% if group.name %}{{ group.name }}{% else %}Participants{% endif %}{% if not portal.selected_round.is_final %} — {{ portal.selected_round.qualification_label|default:'Qualified' }}{% endif %}</h3><div class="criteria-table-wrap" tabindex="0" role="region" aria-label="{% if group.name %}{{ group.name }} {% endif %}qualified participants"><table><thead><tr><th>Rank</th><th>Candidate</th><th>Department</th><th>Weighted Score</th></tr></thead><tbody>{% for result in group.rows %}<tr data-result-division="{{ result.division|default:''|escape }}"><td>{{ result.rank }}</td><td><strong>{{ result.name }}</strong></td><td>{{ result.department|default:'Not set' }}</td><td>{{ result.weighted_score|floatformat:2 }}</td></tr>{% empty %}<tr><td colspan="4" class="criteria-empty">Qualified participants will appear after scores are completed and validated.</td></tr>{% endfor %}</tbody></table></div></section>{% endfor %}</div>
+  </article>
+
+  <div class="results-action-bar"><a class="criteria-button secondary" href="?tab=rounds&amp;round={{ selected_round_index }}"><span aria-hidden="true">&#8592;</span> Back to Round Management</a><div><button class="criteria-button secondary" type="button" data-export-results>Export Results</button>{% if portal.selected_round.can_approve %}<button class="criteria-button results-approve-action" type="button" data-open-dialog="approve-{{ portal.selected_round.index }}"><span aria-hidden="true">&#10003;</span> Approve Round Results</button>{% endif %}</div></div>
 </div>
-</article>
-
-

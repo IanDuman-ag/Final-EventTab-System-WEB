@@ -20,8 +20,9 @@ from django.urls import include, path
 from django.conf import settings
 from django.conf.urls.static import static
 from django.views.generic import RedirectView
-from .api_views import health_check
+from .api_views import health_check, portal_notifications
 from . import public_views
+from . import ocr_views
 from .admin_settings_views import admin_settings
 from .views import (
     admin_brackets,
@@ -133,6 +134,9 @@ from .superadmin_views import (
     superadmin_leaderboard_export,
     superadmin_settings,
     superadmin_settings_save,
+    superadmin_database_export,
+    superadmin_database_restore,
+    superadmin_recovery_status,
     superadmin_profile,
     superadmin_profile_update,
     superadmin_change_password,
@@ -142,6 +146,11 @@ from .superadmin_views import (
 urlpatterns = [
     path('admin/settings/', admin_settings, name='admin_settings'),
     path('api/health/', health_check, name='health_check'),
+    path('api/portal-notifications/', portal_notifications, name='portal_notifications'),
+    path('faculty/ocr/', ocr_views.ocr_page, name='faculty_ocr'),
+    path('faculty/ocr/api/', ocr_views.ocr_api, name='faculty_ocr_api'),
+    path('faculty/ocr/sheets/<uuid:sheet_id>/original/', ocr_views.original_sheet, name='faculty_ocr_original'),
+    path('faculty/ocr/sheets/<uuid:sheet_id>/print/', ocr_views.print_sheet, name='faculty_ocr_print'),
     path('api/auth/', include('accounts.urls')),
     path('api/events/', include('events.api_urls')),
     path('', public_views.home, name='home'),
@@ -261,6 +270,9 @@ urlpatterns = [
     path('super-admin/leaderboard/', superadmin_leaderboard, name='superadmin_leaderboard'),
     path('super-admin/leaderboard/export/', superadmin_leaderboard_export, name='superadmin_leaderboard_export'),
     path('super-admin/settings/', superadmin_settings, name='superadmin_settings'),
+    path('super-admin/settings/restore-database/', superadmin_database_restore, name='superadmin_database_restore'),
+    path('super-admin/settings/recovery/<uuid:job_id>/', superadmin_recovery_status, name='superadmin_recovery_status'),
+    path('super-admin/settings/export-database/', superadmin_database_export, name='superadmin_database_export'),
     path('super-admin/settings/save/', superadmin_settings_save, name='superadmin_settings_save'),
     path('super-admin/profile/', superadmin_profile, name='superadmin_profile'),
     path('super-admin/profile/update/', superadmin_profile_update, name='superadmin_profile_update'),
