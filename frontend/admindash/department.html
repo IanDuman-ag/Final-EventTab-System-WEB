@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Departments - EventTab</title>
   {% include 'admindash/_bootstrap.html' %}
-  <link rel="stylesheet" href="{% static 'admindash/department.css' %}?v=20260616c">
+  <link rel="stylesheet" href="{% static 'admindash/department.css' %}?v=20261029clean">
   <link rel="stylesheet" href="{% static 'admindash/bootstrap-admin.css' %}?v=1">
 </head>
 <body class="admin-dashboard-page department-page admin-dashboard-v2">
@@ -32,7 +32,7 @@
         <div class="dept-page-header">
           <div class="dept-page-header-text">
             <h2>Department Registry</h2>
-            <p>Review academic units, deans, and member counts.<br>Departments are synced from user groups.</p>
+            <p>Manage department names, codes, logos, and availability.</p>
           </div>
           <button class="btn btn-primary btn-add-dept" id="openModalBtn" type="button">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2Z"/></svg>
@@ -60,15 +60,6 @@
               <strong class="stat-value">{{ active_department_count|default:"0" }}</strong>
             </div>
           </div>
-          <div class="dept-stat-card">
-            <div class="stat-icon stat-icon--purple">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4Zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4Z"/></svg>
-            </div>
-            <div class="stat-text">
-              <span class="stat-label">With Dean Assigned</span>
-              <strong class="stat-value">{{ with_dean_count|default:"0" }} / {{ total_department_count|default:"0" }}</strong>
-            </div>
-          </div>
         </div>
 
         <!-- ── Management panel ────────────────────────────────────────── -->
@@ -84,19 +75,13 @@
           <div class="dept-filter-bar">
             <div class="dept-search-wrap">
               <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5Zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14Z"/></svg>
-              <input class="form-control" type="text" id="deptSearchInput" placeholder="Search department name, dean, code…" value="{{ search_query }}" autocomplete="off">
+              <input class="form-control" type="text" id="deptSearchInput" placeholder="Search department name or code..." value="{{ search_query }}" autocomplete="off">
             </div>
             <select id="filterStatus" class="form-select dept-filter-select">
               <option value="">Filter by Status</option>
               <option value="active">Active</option>
               <option value="inactive">Inactive</option>
               <option value="archived">Archived</option>
-            </select>
-            <select id="filterDean" class="form-select dept-filter-select">
-              <option value="">Filter by Dean</option>
-              {% for dean in unique_deans %}
-                <option value="{{ dean }}">{{ dean }}</option>
-              {% endfor %}
             </select>
             <select id="sortBy" class="form-select dept-filter-select">
               <option value="name-az">Sort by: Name (A–Z)</option>
@@ -135,7 +120,7 @@
                   <th class="col-check"></th>
                   <th>Department</th>
                   <th>Dept Code</th>
-                  <th>Dean</th>
+
                   <th>Status</th>
                   <th>Actions</th>
                 </tr>
@@ -146,7 +131,7 @@
                     data-id="{{ row.id }}"
                     data-name="{{ row.name|escapejs }}"
                     data-code="{{ row.code|escapejs }}"
-                    data-dean="{{ row.dean|escapejs }}"
+
                     data-status="{{ row.status|default:'active'|escapejs }}"
                   >
                     <td class="col-check">
@@ -157,16 +142,14 @@
                         {% if row.logo %}
                           <img src="{{ row.logo }}" alt="{{ row.short_name }}" class="dept-avatar dept-avatar--img">
                         {% else %}
-                          <span class="dept-avatar" style="background-color: {{ row.color|default:'#244b89' }};">{{ row.short_name|slice:":2"|upper }}</span>
+                          <span class="dept-avatar">{{ row.short_name|slice:":2"|upper }}</span>
                         {% endif %}
                         <div class="dept-cell-text">
                           <strong>{{ row.name }}</strong>
-                          <small>{{ row.description|default:"" }}</small>
                         </div>
                       </div>
                     </td>
                     <td class="cell-code">{{ row.code }}</td>
-                    <td class="cell-dean">{{ row.dean }}</td>
                     <td>
                       <span class="status-badge status-badge--{{ row.status|default:'active' }}">{{ row.status|default:"active"|title }}</span>
                     </td>
@@ -190,10 +173,10 @@
                             data-name="{{ row.name|escapejs }}"
                             data-code="{{ row.code|escapejs }}"
                             data-unit=""
-                            data-color="{{ row.color|default:'#022068'|escapejs }}"
-                            data-head="{{ row.head|default:''|escapejs }}"
+
+
                             data-status="{{ row.status|default:'active'|escapejs }}"
-                            data-remarks="{{ row.remarks|default:''|escapejs }}"
+
                           >
                             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 17.25 11.06-11.06 3.75 3.75L6.75 21H3v-3.75ZM19.71 8.04 15.96 4.3l1.33-1.33a1 1 0 0 1 1.42 0l2.33 2.33a1 1 0 0 1 0 1.42l-1.33 1.33Z"/></svg>
                             Edit
@@ -212,7 +195,7 @@
                   </tr>
                 {% empty %}
                   <tr class="empty-row">
-                    <td colspan="6">
+                    <td colspan="5">
                       <div class="empty-state">
                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Zm-7 14H7v-2h5v2Zm5-4H7v-2h10v2Zm0-4H7V7h10v2Z"/></svg>
                         <p>{% if search_query %}No departments match your search.{% else %}No departments yet.{% endif %}</p>
@@ -243,11 +226,11 @@
   </div>
 
   <!-- ── Create Department Modal ──────────────────────────────────────────── -->
-  <div class="modal-overlay" id="deptModal">
+  <div class="modal-overlay" role="dialog" aria-modal="true" id="deptModal">
     <div class="modal-container">
       <div class="modal-header">
         <h3>Create Department</h3>
-        <button class="close-modal" id="closeModalBtn" type="button">&times;</button>
+        <button class="close-modal" id="closeModalBtn" type="button" aria-label="Close dialog">&times;</button>
       </div>
       <form class="modal-form" id="createDeptForm" action="{% url 'admin_create_department' %}" method="POST" enctype="multipart/form-data">
         {% csrf_token %}
@@ -261,17 +244,6 @@
               <label for="deptCode">Department Code</label>
               <input class="form-control" type="text" id="deptCode" name="code" placeholder="e.g. COE" required>
             </div>
-            <div class="form-group">
-              <label for="delegationColor">Delegation Color</label>
-              <div class="color-input-wrap">
-                <input type="color" id="delegationColor" name="color" value="#022068">
-                <span class="color-hex">#022068</span>
-              </div>
-            </div>
-            <div class="form-group full-width">
-              <label for="deptHead">Department Head / Dean</label>
-              <input class="form-control" type="text" id="deptHead" name="head" placeholder="Dean's Full Name">
-            </div>
             <div class="form-group full-width">
               <label for="deptStatus">Status</label>
               <select class="form-select" id="deptStatus" name="status">
@@ -284,10 +256,6 @@
               <label for="deptLogo">Department Logo</label>
               <input class="form-control" type="file" id="deptLogo" name="logo" accept="image/*">
             </div>
-            <div class="form-group full-width">
-              <label for="deptRemarks">Remarks</label>
-              <textarea class="form-control" id="deptRemarks" name="remarks" rows="3" placeholder="Additional notes..."></textarea>
-            </div>
           </div>
         </div>
         <div class="modal-footer">
@@ -299,11 +267,11 @@
   </div>
 
   <!-- ── Edit Department Modal ────────────────────────────────────────────── -->
-  <div class="modal-overlay" id="editDeptModal">
+  <div class="modal-overlay" role="dialog" aria-modal="true" id="editDeptModal">
     <div class="modal-container">
       <div class="modal-header">
         <h3>Edit Department</h3>
-        <button class="close-modal" id="closeEditModalBtn" type="button">&times;</button>
+        <button class="close-modal" id="closeEditModalBtn" type="button" aria-label="Close dialog">&times;</button>
       </div>
       <form class="modal-form" id="editDeptForm" method="POST" enctype="multipart/form-data">
         {% csrf_token %}
@@ -317,17 +285,6 @@
               <label for="editDeptCode">Department Code</label>
               <input class="form-control" type="text" id="editDeptCode" name="code" required>
             </div>
-            <div class="form-group">
-              <label for="editDelegationColor">Delegation Color</label>
-              <div class="color-input-wrap">
-                <input type="color" id="editDelegationColor" name="color">
-                <span class="color-hex" id="editColorHex">#022068</span>
-              </div>
-            </div>
-            <div class="form-group full-width">
-              <label for="editDeptHead">Department Head / Dean</label>
-              <input class="form-control" type="text" id="editDeptHead" name="head">
-            </div>
             <div class="form-group full-width">
               <label for="editDeptStatus">Status</label>
               <select class="form-select" id="editDeptStatus" name="status">
@@ -340,10 +297,6 @@
               <label for="editDeptLogo">Department Logo</label>
               <input class="form-control" type="file" id="editDeptLogo" name="logo" accept="image/*">
             </div>
-            <div class="form-group full-width">
-              <label for="editDeptRemarks">Remarks</label>
-              <textarea class="form-control" id="editDeptRemarks" name="remarks" rows="3"></textarea>
-            </div>
           </div>
         </div>
         <div class="modal-footer">
@@ -355,11 +308,11 @@
   </div>
 
   <!-- ── Delete Department Modal ──────────────────────────────────────────── -->
-  <div class="modal-overlay" id="deleteDeptModal">
+  <div class="modal-overlay" role="dialog" aria-modal="true" id="deleteDeptModal">
     <div class="modal-container modal-container--sm">
       <div class="modal-header">
         <h3>Delete Department</h3>
-        <button class="close-modal" id="closeDeleteModalBtn" type="button">&times;</button>
+        <button class="close-modal" id="closeDeleteModalBtn" type="button" aria-label="Close dialog">&times;</button>
       </div>
       <div class="modal-body">
         <p>Are you sure you want to delete <strong id="deleteDeptName"></strong>? This action cannot be undone.</p>
@@ -372,11 +325,11 @@
   </div>
 
   <!-- ── Bulk Delete Modal ─────────────────────────────────────────────────── -->
-  <div class="modal-overlay" id="bulkDeleteModal">
+  <div class="modal-overlay" role="dialog" aria-modal="true" id="bulkDeleteModal">
     <div class="modal-container modal-container--sm">
       <div class="modal-header">
         <h3>Delete Selected Departments</h3>
-        <button class="close-modal" id="closeBulkDeleteBtn" type="button">&times;</button>
+        <button class="close-modal" id="closeBulkDeleteBtn" type="button" aria-label="Close dialog">&times;</button>
       </div>
       <div class="modal-body">
         <p>Are you sure you want to delete <strong id="bulkDeleteCount">0</strong> department(s)? This cannot be undone.</p>
@@ -390,11 +343,11 @@
   </div>
 
   <!-- ── View Department Modal ─────────────────────────────────────────────── -->
-  <div class="modal-overlay" id="viewDeptModal">
+  <div class="modal-overlay" role="dialog" aria-modal="true" id="viewDeptModal">
     <div class="modal-container">
       <div class="modal-header">
         <h3>Department Details</h3>
-        <button class="close-modal" id="closeViewModalBtn" type="button">&times;</button>
+        <button class="close-modal" id="closeViewModalBtn" type="button" aria-label="Close dialog">&times;</button>
       </div>
       <div class="modal-body view-details" id="viewDeptDetails">
         <div class="loading-spinner">Loading…</div>
@@ -437,18 +390,11 @@
     const openCreateBtn  = document.getElementById('openModalBtn');
     const closeCreateBtn = document.getElementById('closeModalBtn');
     const cancelCreateBtn = document.getElementById('cancelModalBtn');
-    const createColorInput = document.getElementById('delegationColor');
-    const createColorHex   = document.querySelector('.color-hex');
 
     if (openCreateBtn)   openCreateBtn.addEventListener('click',   () => toggleModal(createModal, true));
     if (closeCreateBtn)  closeCreateBtn.addEventListener('click',  () => toggleModal(createModal, false));
     if (cancelCreateBtn) cancelCreateBtn.addEventListener('click', () => toggleModal(createModal, false));
 
-    if (createColorInput) {
-      createColorInput.addEventListener('input', e => {
-        if (createColorHex) createColorHex.textContent = e.target.value.toUpperCase();
-      });
-    }
 
     const createForm = document.getElementById('createDeptForm');
     if (createForm) {
@@ -469,17 +415,10 @@
     const closeEditBtn = document.getElementById('closeEditModalBtn');
     const cancelEditBtn = document.getElementById('cancelEditModalBtn');
     const editForm     = document.getElementById('editDeptForm');
-    const editColorInput = document.getElementById('editDelegationColor');
-    const editColorHex   = document.getElementById('editColorHex');
 
     if (closeEditBtn)  closeEditBtn.addEventListener('click',  () => toggleModal(editModal, false));
     if (cancelEditBtn) cancelEditBtn.addEventListener('click', () => toggleModal(editModal, false));
 
-    if (editColorInput) {
-      editColorInput.addEventListener('input', e => {
-        if (editColorHex) editColorHex.textContent = e.target.value.toUpperCase();
-      });
-    }
 
     document.querySelectorAll('.action-menu-item.edit').forEach(btn => {
       btn.addEventListener('click', function () {
@@ -487,12 +426,7 @@
         editForm.action = `/admin/departments/${id}/edit/`;
         document.getElementById('editDeptName').value    = this.dataset.name;
         document.getElementById('editDeptCode').value    = this.dataset.code;
-        const color = this.dataset.color || '#022068';
-        editColorInput.value = color;
-        editColorHex.textContent = color.toUpperCase();
-        document.getElementById('editDeptHead').value    = this.dataset.head;
         document.getElementById('editDeptStatus').value  = this.dataset.status;
-        document.getElementById('editDeptRemarks').value = this.dataset.remarks;
         toggleModal(editModal, true);
         closeAllMenus();
       });
@@ -571,7 +505,7 @@
             <div class="view-header-details">
               ${d.logo
                 ? `<img src="${d.logo}" alt="${d.name}" class="view-logo">`
-                : `<div class="view-avatar" style="background:${d.delegation_color}">${d.code.slice(0,2)}</div>`}
+                : `<div class="view-avatar">${d.code.slice(0,2)}</div>`}
               <div>
                 <h4>${d.name}</h4>
                 <span class="status-badge status-badge--${d.status}">${d.status.toUpperCase()}</span>
@@ -583,25 +517,11 @@
                 <span class="view-value">${d.code}</span>
               </div>
               <div class="view-item">
-                <span class="view-label">Head / Dean</span>
-                <span class="view-value">${d.head || 'Not Assigned'}</span>
-              </div>
-              <div class="view-item">
                 <span class="view-label">Members</span>
                 <span class="view-value">${d.students}</span>
               </div>
-              <div class="view-item">
-                <span class="view-label">Color</span>
-                <span class="view-value view-value--color">
-                  <span class="color-swatch" style="background:${d.delegation_color}"></span>
-                  ${d.delegation_color}
-                </span>
-              </div>
             </div>
-            <div class="view-item view-item--full" style="margin-top:16px">
-              <span class="view-label">Remarks</span>
-              <p class="view-value">${d.remarks || 'No remarks added.'}</p>
-            </div>`;
+            `;
         } catch (err) {
           viewDetailsContainer.innerHTML = `<div class="error-msg">Failed to load: ${err.message}</div>`;
         }
@@ -701,7 +621,6 @@
     // ── Client-side filter / sort ─────────────────────────────────────────────
     const searchInput   = document.getElementById('deptSearchInput');
     const filterStatus  = document.getElementById('filterStatus');
-    const filterDean    = document.getElementById('filterDean');
     const sortBy        = document.getElementById('sortBy');
     const clearFilters  = document.getElementById('clearFiltersBtn');
     const tbody         = document.getElementById('departmentsBody');
@@ -710,18 +629,15 @@
     const applyFilters = () => {
       const q      = (searchInput?.value || '').trim().toLowerCase();
       const status = filterStatus?.value  || '';
-      const dean   = filterDean?.value    || '';
       const sort   = sortBy?.value        || 'name-az';
 
-      const rows = Array.from(tbody.querySelectorAll('tr:not(.empty-row)'));
+      const rows = Array.from(tbody.querySelectorAll('tr:not(.empty-row):not(.filter-empty)'));
       let visible = rows.filter(tr => {
         const name  = (tr.dataset.name  || '').toLowerCase();
         const code  = (tr.dataset.code  || '').toLowerCase();
-        const deanV = (tr.dataset.dean  || '').toLowerCase();
         const stV   = (tr.dataset.status || '').toLowerCase();
-        if (q && !name.includes(q) && !code.includes(q) && !deanV.includes(q)) return false;
+        if (q && !name.includes(q) && !code.includes(q)) return false;
         if (status && stV !== status.toLowerCase()) return false;
-        if (dean   && !deanV.includes(dean.toLowerCase())) return false;
         return true;
       });
 
@@ -735,7 +651,7 @@
       rows.forEach(tr => tr.style.display = 'none');
       visible.forEach(tr => { tr.style.display = ''; tbody.appendChild(tr); });
 
-      if (paginationInfo) paginationInfo.textContent = `Showing 1 to ${visible.length} of ${rows.length} entries`;
+      if (paginationInfo) paginationInfo.textContent = `Showing ${visible.length ? 1 : 0} to ${visible.length} of ${rows.length} entries`;
 
       // Empty state
       let emptyRow = tbody.querySelector('.filter-empty');
@@ -743,7 +659,7 @@
         if (!emptyRow) {
           emptyRow = document.createElement('tr');
           emptyRow.className = 'filter-empty';
-          emptyRow.innerHTML = '<td colspan="6"><div class="empty-state"><p>No departments match your filters.</p></div></td>';
+          emptyRow.innerHTML = '<td colspan="5"><div class="empty-state"><p>No departments match your filters.</p></div></td>';
           tbody.appendChild(emptyRow);
         }
       } else if (emptyRow) emptyRow.remove();
@@ -751,14 +667,12 @@
 
     if (searchInput)  searchInput.addEventListener('input',  applyFilters);
     if (filterStatus) filterStatus.addEventListener('change', applyFilters);
-    if (filterDean)   filterDean.addEventListener('change',   applyFilters);
     if (sortBy)       sortBy.addEventListener('change',       applyFilters);
 
     if (clearFilters) {
       clearFilters.addEventListener('click', () => {
         if (searchInput)  searchInput.value  = '';
         if (filterStatus) filterStatus.value = '';
-        if (filterDean)   filterDean.value   = '';
         if (sortBy)       sortBy.value       = 'name-az';
         applyFilters();
       });

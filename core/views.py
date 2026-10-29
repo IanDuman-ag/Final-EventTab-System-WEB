@@ -918,9 +918,9 @@ def admin_edit_department(request, dept_id):
         dept.code = code
         dept.unit_number = request.POST.get('unit_number', '').strip()
         dept.delegation_color = request.POST.get('color', dept.delegation_color)
-        dept.head = request.POST.get('head', '').strip()
+        dept.head = request.POST.get('head', dept.head).strip()
         dept.status = request.POST.get('status', dept.status)
-        dept.remarks = request.POST.get('remarks', '').strip()
+        dept.remarks = request.POST.get('remarks', dept.remarks).strip()
 
         if 'logo' in request.FILES:
             dept.logo = request.FILES['logo']
@@ -1460,23 +1460,17 @@ def admin_departments(request):
         department_rows = [
             row for row in department_rows
             if query_lower in row['name'].lower()
-            or query_lower in row['dean'].lower()
-            or query_lower in row['description'].lower()
+            or query_lower in row['code'].lower()
         ]
-    with_dean_count = sum(1 for row in all_rows if row['dean'] != 'Not Assigned')
     active_department_count = sum(1 for row in all_rows if row.get('status', 'active') == 'active')
     total_students = sum(row['students'] for row in all_rows)
-    # Collect unique dean names for filter dropdown
-    unique_deans = sorted({row['dean'] for row in all_rows if row['dean'] != 'Not Assigned'})
     return render(request, 'admindash/department.html', {
         'department_rows': department_rows,
         'total_department_count': len(all_rows),
         'active_department_count': active_department_count,
         'visible_department_count': len(department_rows),
         'search_query': search_query,
-        'with_dean_count': with_dean_count,
         'total_students_count': total_students,
-        'unique_deans': unique_deans,
         'new_department_count': 0,
     })
 
