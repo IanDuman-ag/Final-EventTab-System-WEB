@@ -2977,3 +2977,9 @@
 #viewBracketModal .bf-score { color: #647c9f; font-weight: 500; }
 #viewBracketModal .bracket-modal-container:fullscreen { width: 100vw; max-width: none; height: 100vh; max-height: none; border-radius: 0; }
 @media (prefers-reduced-motion: reduce) { #viewBracketModal, #viewBracketModal .bracket-modal-container { transition: none; } }
+
+/* Separate elimination paths while retaining the saved match graph. */
+#viewBracketModal .bracket-flow--double { display: block; position: relative; }
+#viewBracketModal .bf-lane-label { position: absolute; left: 0; margin: 0; font-size: 15px; font-weight: 700; color: #18365d; }
+#viewBracketModal .bf-slot--tbd { font-style: normal; font-size: 11px; text-align: left; justify-content: flex-start; }
+#viewBracketModal .bf-slot--tbd span { white-space: normal; line-height: 1.2; }
