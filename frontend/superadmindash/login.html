@@ -8,25 +8,20 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{% static 'login.css' %}?v=20261018responsive">
+  <link rel="stylesheet" href="{% static 'login.css' %}?v=20261029centered">
 </head>
 <body class="login-page">
-  <a class="public-home-link" href="{% url 'home' %}">&#8592; Public website</a>
   <main class="login-shell">
     <div class="login-campus" aria-hidden="true">
       <img src="{% static 'loginlogo/ustpentrance.png' %}?v=20261019adminimg" width="1448" height="1086" alt="">
     </div>
-    <div class="login-diagonals" aria-hidden="true">
-      <span class="diagonal-left-blue"></span><span class="diagonal-left-gold"></span>
-      <span class="diagonal-right-blue"></span><span class="diagonal-right-gold"></span>
-    </div>
-    <div class="login-white-panel" aria-hidden="true"></div>
     <section class="login-content" aria-label="Sign in to EventTab">
       <header class="login-brand">
         <h1 class="login-logo"><img src="{% static 'loginlogo/adminlogo.png' %}" alt="EventTab"></h1>
         <p class="login-brand-tagline">Event Management &amp; Scoring System</p>
         <span class="login-brand-rule" aria-hidden="true"></span>
-        <p class="login-brand-desc">A smart and efficient platform for managing school events, scores, and participants in real-time.</p>
+        <h2 class="login-heading">Admin Login</h2>
+        <p class="login-brand-desc">Sign in to manage school events, scores,<br>and participants in real-time.</p>
       </header>
       <div class="login-card">
         {% if error %}
@@ -79,13 +74,14 @@
           </div>
 
           <button class="login-button" type="submit">
-            <span>Log in</span>
+            <span>Log In</span>
             <svg class="login-btn-arrow" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
               <path fill-rule="evenodd" d="M3 10a.75.75 0 0 1 .75-.75h10.638L10.23 5.29a.75.75 0 1 1 1.04-1.08l5.5 5.25a.75.75 0 0 1 0 1.08l-5.5 5.25a.75.75 0 1 1-1.04-1.08l4.158-3.96H3.75A.75.75 0 0 1 3 10Z" clip-rule="evenodd"/>
             </svg>
           </button>
         </form>
       </div>
+      <p class="login-access">Admin Access Only</p>
     </section>
   </main>
   <dialog class="login-recovery" aria-labelledby="recovery-title" aria-describedby="recovery-description">
