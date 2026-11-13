@@ -171,12 +171,12 @@ document.addEventListener('DOMContentLoaded', function () {
         return data.access_code;
       }
     } catch (_) { /* fall through */ }
-    // Fallback preview if the preview endpoint is unavailable
-    return roleVal === 'Scorer' ? 'SCR01' : 'JDG01';
+    // Do not show a fabricated access code when generation fails.
+    return '';
   }
 
   function roleSubtitle(r) {
-    if (r === 'Judge')  { return 'Enter the judge\'s official name and Gmail, then generate an access code (JDG01, JDG02…) to email them.'; }
+    if (r === 'Judge') { return 'Enter the judge\'s official name and Gmail, then generate a random access code with 3 letters followed by 2 numbers (for example, KRM47) to email them.'; }
     if (r === 'Scorer') { return 'Enter the scorer\'s official name and Gmail, then generate an access code (SCR01, SCR02…) to email them.'; }
     if (r === 'Tabulator') {
       return 'Tabulators sign in with username and password and open the Tabulator dashboard.';
@@ -267,7 +267,7 @@ document.addEventListener('DOMContentLoaded', function () {
       return;
     }
 
-    // ── CREATE mode: save account immediately; server allocates JDG## / SCR## ─
+    // ── CREATE mode: save account immediately; server allocates the access code ─
     if (isCreating) {
       btnGenerate.disabled     = true;
       btnGenerate.textContent  = 'Creating account…';
@@ -301,10 +301,16 @@ document.addEventListener('DOMContentLoaded', function () {
       return;
     }
 
-    // ── EDIT mode: preview next sequential code (committed on Save) ──────────
+    // ── EDIT mode: preview an available code (committed on Save) ──────────
     btnGenerate.disabled = true;
     btnGenerate.textContent = 'Generating…';
     var code = await fetchNextAccessCode(roleVal);
+    if (!code) {
+      btnGenerate.disabled = false;
+      btnGenerate.textContent = 'Generate Code';
+      showToast('Could not generate an access code. Try again.', 'error');
+      return;
+    }
     _generatedCode = code;
     _regenPending = true;
     codeValue.textContent = code;
@@ -681,3 +687,39 @@ function showToast(message, type) {
     setTimeout(function () { toast.remove(); }, 350);
   }, 3500);
 }
+
+// Dedicated Faculty/Tabulator password reset; leaves other account fields intact.
+document.addEventListener('DOMContentLoaded', function () {
+  var dialog = document.getElementById('account-password-reset');
+  if (!dialog) return;
+  var form = document.getElementById('account-password-reset-form');
+  var password = document.getElementById('account-new-password');
+  var confirmation = document.getElementById('account-confirm-password');
+  var message = document.getElementById('password-reset-message');
+  var submit = document.getElementById('password-reset-submit');
+  var cancel = document.getElementById('password-reset-cancel');
+  var resetUrl = '';
+  var busy = false;
+  document.querySelectorAll('.reset-account-password').forEach(function (button) {
+    button.addEventListener('click', function () {
+      form.reset(); message.textContent = ''; message.classList.remove('is-success'); cancel.textContent = 'Cancel';
+      resetUrl = button.dataset.resetUrl;
+      document.getElementById('password-reset-account').textContent = 'Set a new password for ' + button.closest('tr').dataset.username + '.';
+      dialog.showModal(); password.focus();
+    });
+  });
+  cancel.addEventListener('click', function () { if (!busy) dialog.close(); });
+  dialog.addEventListener('cancel', function (event) { if (busy) event.preventDefault(); });
+  dialog.addEventListener('close', function () { form.reset(); resetUrl = ''; });
+  form.addEventListener('submit', async function (event) {
+    event.preventDefault();
+    if (busy || !resetUrl) return;
+    message.classList.remove('is-success');
+    if (password.value !== confirmation.value) { message.textContent = 'Passwords do not match.'; confirmation.focus(); return; }
+    busy = true; submit.disabled = true; cancel.disabled = true; submit.textContent = 'Resetting...';
+    var result = await postJson(resetUrl, {password: password.value, password_confirm: confirmation.value});
+    busy = false; submit.disabled = false; cancel.disabled = false; submit.textContent = 'Reset Password';
+    message.textContent = result.message || (result.success ? 'Password reset successfully.' : 'Could not reset the password. Try again.');
+    if (result.success) { form.reset(); message.classList.add('is-success'); cancel.textContent = 'Close'; }
+  });
+});

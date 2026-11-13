@@ -1498,13 +1498,50 @@ def _portal_context(request, active, payload):
     }
 
 
+def _assigned_events_overview(events):
+    """Build a chart from this tabulator's assigned events only."""
+    from math import cos, sin, pi
+
+    counts = {'upcoming': 0, 'ongoing': 0, 'completed': 0, 'other': 0}
+    for event in events:
+        key = event.get('status_key')
+        if event.get('results_finalized') or key in ('published', 'completed'):
+            key = 'completed'
+        elif key not in ('upcoming', 'ongoing'):
+            key = 'other'
+        counts[key] += 1
+    colors = {'upcoming': '#5b9eff', 'ongoing': '#0062ff', 'completed': '#00a550', 'other': '#8fa1ba'}
+    total = len(events)
+    rows = [{'key': key, 'label': key.title(), 'count': counts[key], 'color': colors[key],
+             'percent': round(100 * counts[key] / total) if total else 0}
+            for key in counts if key != 'other' or counts[key]]
+    slices, angle = [], -pi / 2
+    for key in ('ongoing', 'completed', 'upcoming', 'other'):
+        count = counts[key]
+        if not count:
+            continue
+        end = angle + 2 * pi * count / total
+        start_x, start_y = 100 + 90 * cos(angle), 100 + 90 * sin(angle)
+        end_x, end_y = 100 + 90 * cos(end), 100 + 90 * sin(end)
+        middle = (angle + end) / 2
+        slices.append({
+            'full': count == total, 'color': colors[key],
+            'path': f'M100 100 L{start_x:.3f} {start_y:.3f} A90 90 0 {int(end-angle > pi)} 1 {end_x:.3f} {end_y:.3f} Z',
+            'label_x': f'{100 + 57 * cos(middle):.3f}', 'label_y': f'{100 + 57 * sin(middle):.3f}',
+            'percent': round(100 * count / total), 'show_label': count / total >= .05,
+        })
+        angle = end
+    return {'total': total, 'rows': rows, 'slices': slices}
+
+
 @_tabulator_portal_required
 def tabulator_dashboard(request):
     event_id = request.GET.get('event_id')
     payload = _tabulator_results_payload(request.user, event_id=event_id)
     ctx = _portal_context(request, 'dashboard', payload)
     event = _resolve_portal_event(request.user, event_id)
-    ctx['dashboard_stats'] = {'submitted_scores': 0, 'pending_scores': 0}
+    ctx['assigned_overview'] = _assigned_events_overview(ctx['events'])
+    ctx['dashboard_stats'] = {'submitted_scores': 0, 'pending_scores': 0, 'expected_scores': 0}
     ctx['score_scope'] = 'Linked judging event · individual criterion scores'
     ctx['standings_scope'] = 'Official standings' if payload['is_finalized'] else 'Provisional standings'
     ctx['dashboard_final'] = payload['is_finalized']
@@ -1531,17 +1568,17 @@ def tabulator_dashboard(request):
                 judge_id__in=judge_ids, is_locked=True,
             ).count()
             ctx['dashboard_stats'] = {
-                'submitted_scores': submitted,
+                'submitted_scores': submitted, 'expected_scores': expected,
                 'pending_scores': max(0, expected - submitted),
             }
         if event.scoring_categories.exists():
             completion = _judge_completion(event)
             submitted = sum(row['locked'] for row in completion['rows'])
             expected = completion['expected_per_judge'] * completion['total']
-            ctx['dashboard_stats'] = {'submitted_scores': submitted,
+            ctx['dashboard_stats'] = {'submitted_scores': submitted, 'expected_scores': expected,
                                       'pending_scores': max(0, expected - submitted)}
-            ctx['score_scope'] = 'All configured rounds ? individual criterion submissions'
-            ctx['standings_scope'] = f"{payload.get('criteria_round_name', 'Selected round')} ? round standings"
+            ctx['score_scope'] = 'All configured rounds · individual criterion submissions'
+            ctx['standings_scope'] = f"{payload.get('criteria_round_name', 'Selected round')} · round standings"
             ctx['dashboard_final'] = payload['is_finalized']
         elif len(stage_panels(event)) > 1:
             ctx['score_scope'] = 'Linked judging event only · not an overall round total'
@@ -1634,6 +1671,249 @@ def tabulator_full_results(request):
     query = request.GET.urlencode()
     url = reverse('tabulator_results')
     return redirect(f'{url}?{query}' if query else url)
+
+
+def _tabulator_report_document(request, event, page, event_rows, report_type, judge_id):
+    """One assigned-event dataset shared by preview, PDF and Excel."""
+    from decimal import Decimal
+    from zoneinfo import ZoneInfo
+
+    from events.report_header import report_branding
+
+    titles = {'results': 'Event Results', 'breakdown': 'Detailed Score Breakdown',
+              'submissions': 'Judge Submissions', 'assigned': 'Assigned Events'}
+    document = {
+        'title': titles[report_type], 'branding': report_branding(), 'headers': [], 'rows': [], 'note': '',
+        'event_name': event.name if event and report_type != 'assigned' else 'All assigned events',
+        'round_name': page.get('round_name', '') if report_type != 'assigned' else '',
+        'generated_by': request.user.get_full_name() or request.user.username,
+        'generated_on': timezone.localtime(timezone.now(), ZoneInfo('Asia/Manila')).strftime('%B %d, %Y'),
+        'final': bool(page.get('is_published')) and report_type in ('results', 'breakdown'),
+        'judge_name': 'All Judges',
+    }
+    judges = page.get('judges', [])
+    selected_judges = [(index, judge) for index, judge in enumerate(judges)
+                       if not judge_id or str(judge['id']) == judge_id]
+    if judge_id or len(selected_judges) == 1:
+        document['judge_name'] = selected_judges[0][1]['name']
+    if report_type == 'assigned':
+        document['headers'] = ['Event', 'Category', 'Date', 'Venue', 'Status']
+        document['rows'] = [[row['name'], row['category'], row['date'], row['venue'], row['status_label']]
+                            for row in event_rows]
+    elif report_type == 'results':
+        match = page['event_kind'] == 'match'
+        document['headers'] = ['Rank', 'Team' if match else 'Candidate No.', 'Name' if not match else 'Played',
+                               'Score' if not match else 'Wins', 'Result' if not match else 'Points']
+        rows = page['official_rows'] if page['is_published'] else page['live_rows']
+        for row in rows:
+            document['rows'].append(
+                [row.get('rank'), row['name'], row['played'], row['wins'], row['points']] if match else
+                [row.get('rank'), row.get('number'), row['name'], row.get('final_score') if row.get('has_score') else None,
+                 row.get('prize') if page['is_published'] else None])
+        if not page['is_published']:
+            document['note'] = 'Provisional results. Rankings may change until verification and publication.'
+    elif page['event_kind'] == 'match':
+        if report_type == 'breakdown':
+            document['headers'] = ['Match', 'Team A', 'Team B', 'Score A', 'Score B', 'Winner']
+            document['rows'] = [[row['match_number'], row['team_a'], row['team_b'], row['score_a'], row['score_b'], row['winner']]
+                                for row in page['match_results']]
+        else:
+            document['headers'] = ['Judge', 'Submitted Entries', 'Pending Entries', 'Status']
+            document['note'] = 'Judge submissions apply to criteria-based events.'
+    elif report_type == 'submissions':
+        from events.criteria_faculty_service import criteria_rounds, _round_data, _participants
+        rounds = criteria_rounds(event)
+        index = next((i for i, row in enumerate(rounds) if row['id'] == page['selected_round']), 0)
+        assigned = list(event.assigned_judges.filter(is_active=True))
+        monitor = _round_data(event, index, _participants(event), assigned)['judges']
+        document['headers'] = ['Judge', 'Submitted Entries', 'Pending Entries', 'Status']
+        for row in monitor:
+            if judge_id and str(row['id']) != judge_id:
+                continue
+            document['rows'].append([row['name'], row['completed_scores'],
+                                     max(0, row['required_scores'] - row['completed_scores']), row['status']])
+    else:
+        groups = page['breakdown_groups']
+        criteria = groups[0]['rows'] if groups else []
+        document['headers'] = ['Rank', 'Participant', 'Judge'] + [
+            f"{row['name']} / {row['max_score']}" for row in criteria]
+        maximum = sum((row['max_score'] for row in criteria), Decimal(0))
+        document['headers'].append(f'Total / {maximum}')
+        document['criteria_summary'] = ', '.join(f"{row['name']}: {row['max_score']}" for row in criteria)
+        ranked = {(str(row.get('number', '')), row['name']): row.get('rank') for row in page['live_rows']}
+        def rank_order(group):
+            rank = ranked.get((str(group['number']), group['name']))
+            return (rank is None, rank if rank is not None else 0)
+        for group in sorted(groups, key=rank_order):
+            for index, judge in selected_judges:
+                cells = [row['cells'][index] for row in group['rows']]
+                values = [cell['value'] for cell in cells]
+                total = sum(values, Decimal(0)) if values and all(value is not None for value in values) else None
+                if total is None or any(cell['status'] not in ('Approved', 'Submitted') for cell in cells):
+                    document['final'] = False
+                document['rows'].append([ranked.get((str(group['number']), group['name'])),
+                                         group['name'], judge['name']] + values + [total])
+        document['note'] = 'Total = sum of raw criterion scores for each judge. Weighted official scores may differ.'
+    return document
+
+
+def _download_tabulator_report(document, export_format):
+    """Export every preview row, escaping labels and disabling spreadsheet formulas."""
+    from decimal import Decimal
+    if export_format == 'excel':
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill, Alignment
+        from openpyxl.utils import get_column_letter
+        from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
+        book = Workbook()
+        sheet = book.active
+        sheet.title = 'Report'
+        rows = [[document['title']], [document['event_name'], document['round_name']],
+                ['Report status', 'Final' if document['final'] else 'Summary' if document['title'] in ('Assigned Events', 'Judge Submissions') else 'Provisional'],
+                ['Generated by', document['generated_by']], ['Generated on', document['generated_on']],
+                document['headers']] + document['rows']
+        for row_index, row in enumerate(rows, 1):
+            for column, value in enumerate(row, 1):
+                value = float(value) if isinstance(value, Decimal) else value
+                if isinstance(value, str):
+                    value = ILLEGAL_CHARACTERS_RE.sub('', value)
+                cell = sheet.cell(row_index, column, value)
+                if isinstance(value, str):
+                    cell.data_type = 's'
+                cell.alignment = Alignment(vertical='top', wrap_text=True)
+                if row_index == 6:
+                    cell.font = Font(bold=True, color='FFFFFF')
+                    cell.fill = PatternFill('solid', fgColor='14345A')
+        for index in range(1, len(document['headers']) + 1):
+            sheet.column_dimensions[get_column_letter(index)].width = 23
+        sheet.freeze_panes = 'A7'
+        stream = io.BytesIO()
+        book.save(stream)
+        data, content_type, extension = stream.getvalue(), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'xlsx'
+    else:
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        from reportlab.lib.pagesizes import A4, landscape
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib import colors
+        from xml.sax.saxutils import escape
+        stream = io.BytesIO()
+        pdf = SimpleDocTemplate(stream, pagesize=landscape(A4), leftMargin=24, rightMargin=24, topMargin=24, bottomMargin=24)
+        styles = getSampleStyleSheet()
+        cell_style = ParagraphStyle('ReportCell', fontSize=7, leading=9)
+        def text(value):
+            return escape(str(value if value is not None else 'Pending'))
+        from events.report_header import pdf_report_header
+        story = [pdf_report_header(document['title'], pdf.width), Spacer(1, 12),
+                 Paragraph(text(document['event_name']) + ' / ' + text(document['round_name']), styles['Normal']),
+                 Paragraph('Final' if document['final'] else 'Summary / provisional', styles['Normal']), Spacer(1, 12)]
+        table_rows = [[Paragraph(text(value), cell_style) for value in document['headers']]]
+        table_rows += [[Paragraph(text(value), cell_style) for value in row] for row in document['rows']]
+        if len(table_rows) == 1:
+            table_rows.append([Paragraph('No data available.', cell_style)] + [''] * (len(document['headers']) - 1))
+        table = Table(table_rows, repeatRows=1, colWidths=[pdf.width / len(document['headers'])] * len(document['headers']))
+        table.setStyle(TableStyle([('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#eaf0f8')),
+                                  ('GRID', (0, 0), (-1, -1), .3, colors.HexColor('#dce5ef')),
+                                  ('VALIGN', (0, 0), (-1, -1), 'TOP'), ('BOTTOMPADDING', (0, 0), (-1, -1), 7)]))
+        story.extend([table, Spacer(1, 12), Paragraph(text(document['note']), styles['Normal']),
+                      Paragraph('Generated by: ' + text(document['generated_by']) + '<br/>Generated on: ' + text(document['generated_on']), styles['Normal'])])
+        pdf.build(story)
+        data, content_type, extension = stream.getvalue(), 'application/pdf', 'pdf'
+    response = HttpResponse(data, content_type=content_type)
+    response['Content-Disposition'] = f'attachment; filename="tabulator-report.{extension}"'
+    response['Cache-Control'] = 'no-store'
+    return response
+
+
+def _all_published_event_results(request, events, event_rows):
+    """Combine official standings without recalculating scores or cross-event ranks."""
+    from copy import copy
+    from .tabulator_result_page import build_results_page, _round_options
+    from events.public_service import event_kind
+
+    combined = None
+    for event in events:
+        scoped_request = copy(request)
+        scoped_request.GET = request.GET.copy()
+        for key in ('round_id', 'category', 'participant_id', 'judge_id'):
+            scoped_request.GET.pop(key, None)
+        kind = event_kind(event)
+        rounds = _round_options(event, kind == 'criteria' and event.scoring_categories.exists(), kind == 'match')
+        scoped_request.GET['round_id'] = '' if kind == 'match' else rounds[-1]['id']
+        payload = _tabulator_results_payload(request.user, event_id=str(event.pk))
+        page = build_results_page(scoped_request, event, payload)
+        if page['error'] or not page['is_published']:
+            raise ValueError(f'Published results are unavailable for {event.name}.')
+        document = _tabulator_report_document(scoped_request, event, page, event_rows, 'results', '')
+        if combined is None:
+            combined = dict(document, event_name='All published events', round_name='', rows=[],
+                            headers=['Event', 'Event Type', 'Round', 'Rank', 'Candidate No.',
+                                     'Name / Team', 'Score / Points', 'Result'])
+        for row in page['official_rows']:
+            combined['rows'].append([
+                event.name, 'Match-Based' if kind == 'match' else 'Criteria-Based', page['round_name'],
+                row.get('rank'), '' if kind == 'match' else row.get('number'), row['name'],
+                row['points'] if kind == 'match' else row.get('final_score'),
+                row.get('prize', ''),
+            ])
+    return combined
+
+
+@never_cache
+@_tabulator_portal_required
+@require_GET
+def tabulator_reports(request):
+    from .tabulator_result_page import build_results_page
+    from events.public_service import published_events, result_is_published
+
+    event_id = request.GET.get('event_id')
+    report_type = request.GET.get('report_type', 'results')
+    if report_type not in ('results', 'breakdown', 'submissions', 'assigned'):
+        return HttpResponse('Invalid report type.', status=400)
+    all_events = event_id == 'all' and report_type == 'results'
+    if event_id == 'all' and not all_events:
+        return HttpResponse('All published events is available for Event Results only.', status=400)
+    eligible_ids = published_events().values('pk')
+    events = [event for event in _tabulator_event_qs(request.user).filter(pk__in=eligible_ids)
+              .order_by('-updated_at', 'name') if result_is_published(event)]
+    event_rows = [_serialize_portal_event(event) for event in events]
+    event = None if all_events else next((item for item in events if str(item.pk) == event_id), None)
+    if event_id and not all_events and event is None:
+        return HttpResponse('Published event results are not available or not assigned to you.', status=404)
+    if not event_id:
+        event = events[0] if events else None
+    payload = _tabulator_results_payload(request.user, event_id=str(event.pk)) if event else {'events': event_rows}
+    payload['events'] = event_rows
+    ctx = _portal_context(request, 'reports', payload)
+    page = build_results_page(request, event, payload) if event else {'judges': [], 'rounds': [], 'error': ''}
+    judge_id = request.GET.get('judge_id', '') if report_type in ('breakdown', 'submissions') else ''
+    if judge_id and not any(str(judge['id']) == judge_id for judge in page['judges']):
+        return HttpResponse('Judge is not assigned to this event.', status=404)
+    error = page.get('error', '') if report_type != 'assigned' else ''
+    document = None
+    if all_events:
+        try:
+            document = _all_published_event_results(request, events, event_rows)
+        except ValueError as exc:
+            error = str(exc)
+    elif not error and (event or report_type == 'assigned'):
+        document = _tabulator_report_document(request, event, page, event_rows, report_type, judge_id)
+    export_format = request.GET.get('format', '')
+    if export_format:
+        if export_format not in ('pdf', 'excel'):
+            return HttpResponse('Invalid export format.', status=400)
+        if error or document is None:
+            return HttpResponse(error or 'No published event results are available.', status=400)
+        try:
+            return _download_tabulator_report(document, export_format)
+        except Exception:
+            return HttpResponse('Could not generate this report. Please try again.', status=500)
+    ctx.update(report_type=report_type, report=document, report_error=error, report_page=page,
+               selected_judge=judge_id, all_events=all_events, report_cards=[
+                   ('results', 'Event Results', 'Rankings and winners.', 'trophy'),
+                   ('breakdown', 'Detailed Score Breakdown', 'Scores by judge and criterion.', 'file-earmark-text'),
+                   ('submissions', 'Judge Submissions', 'Submitted and missing scores.', 'people'),
+                   ('assigned', 'Assigned Events', 'Your event summary.', 'calendar-check')])
+    return render(request, 'tabulator/tabulatorreports.html', ctx)
 
 
 @_tabulator_portal_required
@@ -1745,10 +2025,10 @@ def tabulator_results_csv(request):
                 write([row.get('rank'), row['name'], row.get('department'), row['played'], row['wins'], row['losses'],
                        row['points'], row.get('prize') if page['is_published'] else '', row['status']])
         else:
-            write(['Rank', 'Number', 'Name', 'Category', 'Score', 'Result', 'Status'])
+            write(['Rank', 'Number', 'Name', 'Category', 'Score', 'Result'])
             for row in rows:
                 write([row.get('rank'), row.get('number'), row['name'], row.get('department'), row['final_score'],
-                       row.get('prize') if page['is_published'] else '', row['status']])
+                       row.get('prize') if page['is_published'] else ''])
     filename = f"results-{event.pk}-{timezone.localdate().strftime('%Y%m%d')}.csv"
     response = HttpResponse(buf.getvalue(), content_type='text/csv')
     response['Content-Disposition'] = f'attachment; filename="{filename}"'

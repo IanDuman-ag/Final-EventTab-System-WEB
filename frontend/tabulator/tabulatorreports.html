@@ -1,0 +1,181 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width,initial-scale=1">
+        <title>Generate Report - EventTab</title>
+        <link rel="stylesheet" href="{% static 'admindash/vendor/bootstrap-5.3.8.min.css' %}">
+        <link rel="stylesheet" href="{% static 'tabulator/vendor/bootstrap-icons.min.css' %}">
+        <link rel="stylesheet" href="{% static 'tabulator/tabulator-shell.css' %}?v=5">
+        <style>
+            {% include 'reports/header.css' %}
+                        {% include 'tabulator/tabulatorreports.css' %}
+        </style>
+        <link rel="stylesheet" href="{% static 'tabulator/notifications.css' %}?v=20261013a">
+        <script defer src="{% static 'tabulator/notifications.js' %}?v=20261013a"></script>
+    </head>
+    <body class="et-tab report-builder-page" data-page="reports">
+        <div class="et-shell">
+            {% include 'tabulator/_sidebar.html' %}
+            <div class="et-main">
+                {% include 'tabulator/_topbar.html' with topbar_title='Generate Report' event=None %}
+                <main class="et-content">
+                    <header class="report-page-heading">
+                        <h1>Generate Report</h1>
+                        <p>Choose a report, preview it, then download.</p>
+                    </header>
+                    <div class="report-builder-grid">
+                        <section class="et-card report-options">
+                            <form method="get" id="report-options" action="{% url 'tabulator_reports' %}">
+                                <h2>1. Choose your report.</h2>
+                                <fieldset class="report-type-grid">
+                                    <legend class="visually-hidden">Report type</legend>
+                                    {% for value,title,description,icon in report_cards %}
+                                        <label class="report-type">
+                                            <input type="radio" name="report_type" value="{{ value }}" {% if report_type == value %}checked{% endif %}>
+                                            <i class="bi bi-{{ icon }}" aria-hidden="true"></i>
+                                            <span class="report-selected-check" aria-hidden="true">
+                                                <i class="bi bi-check"></i>
+                                            </span>
+                                            <strong>{{ title }}</strong>
+                                            <span>{{ description }}</span>
+                                        </label>
+                                    {% endfor %}
+                                </fieldset>
+                                <div class="report-details">
+                                    <h2>2. Select event details.</h2>
+                                    <label for="report-event">Event</label>
+                                    <select class="form-select" id="report-event" name="event_id" {% if report_type == 'assigned' %}disabled{% endif %}>
+                                        {% if report_type == 'results' and events %}
+                                            <option value="all" {% if all_events %}selected{% endif %}>All published events</option>
+                                        {% endif %}
+                                        {% for ev in events %}
+                                            <option value="{{ ev.id }}" {% if event.id == ev.id %}selected{% endif %}>{{ ev.name }}</option>
+                                        {% empty %}
+                                            <option value="">No published events</option>
+                                        {% endfor %}
+                                    </select>
+                                    <label for="report-round">Round</label>
+                                    <select class="form-select" id="report-round" name="round_id" {% if report_type == 'assigned' or all_events %}disabled{% endif %}>
+                                        {% for round in report_page.rounds %}
+                                            <option value="{{ round.id }}" {% if report_page.selected_round == round.id %}selected{% endif %}>{{ round.name }}</option>
+                                        {% empty %}
+                                            <option value="">All rounds</option>
+                                        {% endfor %}
+                                    </select>
+                                    <label for="report-judge">Judge</label>
+                                    <select class="form-select" id="report-judge" name="judge_id" {% if report_type == 'results' or report_type == 'assigned' or all_events %}disabled{% endif %}>
+                                        <option value="">All Judges</option>
+                                        {% for judge in report_page.judges %}
+                                            <option value="{{ judge.id }}" {% if selected_judge == judge.id|stringformat:'s' %}selected{% endif %}>{{ judge.name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <button class="report-preview-button" type="submit">
+                                    <i class="bi bi-file-earmark-text" aria-hidden="true"></i>
+                                    Preview Report
+                                </button>
+                            </form>
+                        </section>
+                        <section class="et-card report-preview">
+                            <div class="report-preview-heading">
+                                <h2>3. Preview and download.</h2>
+                                {% if report %}
+                                    <span class="report-final-badge{% if not report.final %} report-final-badge--draft{% endif %}">{% if report.final %}Final{% elif report_type == 'assigned' or report_type == 'submissions' %}Summary{% else %}Provisional{% endif %}</span>
+                                {% endif %}
+                            </div>
+                            {% if report_error %}
+                                <div class="alert alert-warning" role="alert">
+                                    {{ report_error }}
+                                </div>
+                            {% endif %}
+                            {% if report %}
+                                <article class="report-paper">
+                                    {% include 'reports/_header.html' with branding=report.branding report_title=report.title hide_product=True %}
+                                    <h4>{{ report.event_name }}{% if report.round_name %} &bull; {{ report.round_name }}{% endif %}</h4>
+                                    {% if report_type == 'breakdown' or report_type == 'submissions' %}
+                                        <p class="report-judge-name">Judge: {{ report.judge_name }}</p>
+                                    {% endif %}
+                                    {% if report.criteria_summary %}
+                                        <p class="report-criteria-summary">Criteria maximums: {{ report.criteria_summary }}.</p>
+                                    {% endif %}
+                                    <div class="report-preview-table">
+                                        <table>
+                                            <thead>
+                                                <tr>
+                                                    {% for header in report.headers %}
+                                                        <th scope="col">{{ header }}</th>
+                                                    {% endfor %}
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% for row in report.rows %}
+                                                    <tr>
+                                                        {% for cell in row %}
+                                                            <td>{{ cell|default_if_none:'Pending' }}</td>
+                                                        {% endfor %}
+                                                    </tr>
+                                                {% empty %}
+                                                    <tr>
+                                                        <td colspan="{{ report.headers|length }}" class="report-empty">No report data is available for this selection.</td>
+                                                    </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    {% if report.note %}
+                                        <p class="report-note">
+                                            <i class="bi bi-info-circle" aria-hidden="true"></i>
+                                            {{ report.note }}
+                                        </p>
+                                    {% endif %}
+                                    <footer class="report-paper-footer">
+                                        <span>Generated by:</span>
+                                        <span>{{ report.generated_by }}</span>
+                                        <span>Generated on:</span>
+                                        <span>{{ report.generated_on }}</span>
+                                    </footer>
+                                </article>
+                                <div class="report-downloads">
+                                    <strong>Download as:</strong>
+                                    <button type="submit" form="report-options" name="format" value="pdf" class="report-download-pdf">
+                                        <i class="bi bi-file-earmark-pdf" aria-hidden="true"></i>
+                                        PDF
+                                    </button>
+                                    <button type="submit" form="report-options" name="format" value="excel" class="report-download-excel">
+                                        <i class="bi bi-file-earmark-excel-fill" aria-hidden="true"></i>
+                                        Excel
+                                    </button>
+                                </div>
+                            {% elif not report_error %}
+                                <div class="report-empty">
+                                    No published event results are available for your assigned events.
+                                </div>
+                            {% endif %}
+                        </section>
+                    </div>
+                </main>
+            </div>
+        </div>
+        <script src="{% static 'tabulator/tabulator.js' %}?v=4"></script>
+        <script>
+            (function() {
+                var form = document.getElementById('report-options');
+                form.addEventListener('change', function(event) {
+                    if (event.target.name === 'report_type' && form.elements.event_id.value === 'all') {
+                        form.elements.event_id.disabled = true;
+                        form.elements.round_id.disabled = true;
+                        form.elements.judge_id.disabled = true;
+                    } else if (event.target.name === 'event_id') {
+                        form.elements.round_id.disabled = true;
+                        form.elements.judge_id.disabled = true;
+                    } else if (event.target.name === 'round_id') {
+                        form.elements.judge_id.disabled = true;
+                    }
+                    form.requestSubmit();
+                });
+            }());
+        </script>
+    </body>
+</html>

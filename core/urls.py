@@ -75,6 +75,7 @@ from .views import (
     admin_delete_department,
     admin_bulk_delete_departments,
     create_assignment_account,
+    reset_assignment_account_password,
     next_assignment_access_code,
     create_admin,
     deactivate_admin,
@@ -117,6 +118,7 @@ from .faculty_views import (
     tabulator_confirm_results,
     tabulator_results_data,
     tabulator_results_csv,
+    tabulator_reports,
     tabulator_rankings_data,
 )
 from .superadmin_views import (
@@ -188,7 +190,7 @@ urlpatterns = [
     path('tabulator/assigned/', RedirectView.as_view(pattern_name='tabulator_my_events', permanent=False), name='tabulator_assigned'),
     path('tabulator/scoresheets/', RedirectView.as_view(pattern_name='tabulator_live_rankings', permanent=False), name='tabulator_scoresheets'),
     path('tabulator/ocr/', RedirectView.as_view(pattern_name='tabulator_live_rankings', permanent=False), name='tabulator_ocr_upload'),
-    path('tabulator/reports/', RedirectView.as_view(pattern_name='tabulator_results', permanent=False), name='tabulator_reports'),
+    path('tabulator/reports/', tabulator_reports, name='tabulator_reports'),
     path('tabulator/tabulation/', RedirectView.as_view(pattern_name='tabulator_results', permanent=False), name='tabulator_tabulation'),
     path('tabulator/encode/', RedirectView.as_view(pattern_name='tabulator_results', permanent=False), name='tabulator_encode_score'),
     path('tabulator/encode/<int:sheet_id>/save/', tabulator_save_scores, name='tabulator_save_scores'),
@@ -255,6 +257,7 @@ urlpatterns = [
     path('admin/accounts/create/', create_assignment_account, name='create_assignment_account'),
     path('admin/accounts/next-access-code/', next_assignment_access_code, name='next_assignment_access_code'),
     path('admin/accounts/<int:account_id>/update/', update_assignment_account, name='update_assignment_account'),
+    path('admin/accounts/<int:account_id>/reset-password/', reset_assignment_account_password, name='reset_assignment_account_password'),
     path('admin/accounts/<int:account_id>/delete/', delete_assignment_account, name='delete_assignment_account'),
     path('admin/accounts/bulk-delete/', bulk_delete_assignment_accounts, name='bulk_delete_assignment_accounts'),
     path('super-admin/dashboard/', sa_dashboard, name='superadmin_dashboard'),

@@ -2592,3 +2592,48 @@ select {
 @media(max-width:1250px) { .admin-dashboard-home .v2-charts { grid-template-columns:minmax(0,2fr) minmax(190px,1fr); } .admin-dashboard-home .v2-categories-card { grid-column:1/-1; } .admin-dashboard-home .v2-cat-list { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:18px; } .admin-dashboard-home .v2-topbar { flex-wrap:wrap; } }
 @media(max-width:900px) { .admin-dashboard-home .v2-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); } .admin-dashboard-home .v2-mid-row,.admin-dashboard-home .v2-bottom-row { grid-template-columns:1fr; } }
 @media(max-width:600px) { .admin-dashboard-home .v2-main { padding:0 12px 16px; } .admin-dashboard-home .v2-topbar { padding:16px 12px; } .admin-dashboard-home .v2-welcome { font-size:21px; } .admin-dashboard-home .v2-charts { grid-template-columns:1fr; } .admin-dashboard-home .v2-cat-list { grid-template-columns:repeat(2,minmax(0,1fr)); } .admin-dashboard-home .v2-metric { padding:14px 10px 14px 58px; } .admin-dashboard-home .v2-metric-icon { left:10px; width:36px; height:36px; } .admin-dashboard-home .v2-topbar-right { flex-wrap:wrap; gap:8px; } .calendar-controls { gap:4px; } .calendar-day { padding:3px; min-height:62px; } .admin-dashboard-home .v2-card { padding:12px; } }
+
+/* Dashboard overview panels, matching progress / status / submissions reference. */
+.admin-dashboard-home .dashboard-progress-panels { grid-template-columns:minmax(0,1.55fr) minmax(0,1fr) minmax(0,1fr); gap:12px; align-items:stretch; }
+.admin-dashboard-home .dashboard-progress-panels>.v2-card { min-width:0; padding:16px 20px 12px; border:1px solid #edf3fa; border-radius:10px; background:#fff; }
+.dashboard-panel-heading { display:flex; align-items:flex-start; gap:10px; margin-bottom:16px; }
+.dashboard-panel-heading>svg { width:22px; height:22px; flex-shrink:0; fill:#0068ff; }
+.dashboard-panel-heading h3 { margin:0 0 4px; color:#111d44; font-size:14px; font-weight:750; line-height:1.3; }
+.dashboard-panel-heading p { margin:0; color:#7088b1; font-size:11px; line-height:1.4; }
+.dashboard-progress-group { margin-bottom:17px; }
+.dashboard-progress-label { display:flex; justify-content:space-between; gap:8px; margin-bottom:6px; color:#17244c; font-size:12px; }
+.dashboard-progress-line { display:flex; align-items:center; gap:10px; }
+.dashboard-progress-line>strong { min-width:33px; color:#17244c; font-size:12px; }
+.dashboard-progress-bar { display:block; width:100%; height:15px; flex:1; min-width:0; border:0; border-radius:20px; overflow:hidden; appearance:none; background:#e4ebf4; color:#0068ff; }
+.dashboard-progress-bar::-webkit-progress-bar { border-radius:20px; background:#e4ebf4; }
+.dashboard-progress-bar::-webkit-progress-value { border-radius:20px; background:#0068ff; }
+.dashboard-progress-bar::-moz-progress-bar { border-radius:20px; background:#0068ff; }
+.dashboard-progress-bar--minor { color:#00b995; }
+.dashboard-progress-bar--minor::-webkit-progress-value { background:#00b995; }
+.dashboard-progress-bar--minor::-moz-progress-bar { background:#00b995; }
+.dashboard-progress-group>small { display:block; margin-top:5px; color:#7088b1; font-size:10px; }
+.dashboard-panel-footer { display:flex; align-items:center; gap:9px; padding-top:12px; border-top:1px solid #e5edf7; color:#17244c; font-size:11px; }
+.dashboard-panel-footer small { color:#7088b1; font-size:9px; line-height:1.4; }
+.dashboard-event-progress .dashboard-panel-footer small { margin-left:auto; }
+.dashboard-completion-check { display:grid; place-items:center; width:18px; height:18px; border-radius:50%; background:#0068ff; color:#fff; flex-shrink:0; }
+.dashboard-status-body { display:flex; align-items:center; justify-content:center; gap:17px; padding-top:5px; }
+.admin-dashboard-home .dashboard-status-body .v2-doughnut-wrap { width:150px; height:150px; margin:0; flex-shrink:0; }
+.admin-dashboard-home .dashboard-status-body canvas { width:150px; height:150px; }
+.admin-dashboard-home .dashboard-status-panel .v2-status-list { padding:0; margin:0; min-width:90px; }
+.admin-dashboard-home .dashboard-status-panel .v2-status-list li { display:grid; grid-template-columns:13px auto auto; gap:3px 8px; margin:0 0 14px; font-size:11px; }
+.dashboard-status-panel .v2-status-dot { grid-row:1/3; align-self:start; margin-top:3px; width:12px; height:12px; }
+.dashboard-status-panel .v2-status-label { grid-column:2/4; color:#17244c; }
+.dashboard-status-panel .v2-status-list strong { grid-column:2; color:#617da7; font-weight:400; }
+.dashboard-status-panel .v2-status-pct { grid-column:3; color:#617da7; }
+.dashboard-submission-panel { display:flex; flex-direction:column; }
+.dashboard-submission-counts { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); margin:16px 0 25px; text-align:center; }
+.dashboard-submission-counts>div+div { border-left:1px solid #e3ebf6; }
+.dashboard-submission-counts strong { display:block; color:#101c43; font-size:28px; line-height:1.2; font-weight:750; font-variant-numeric:tabular-nums; }
+.dashboard-submission-counts>div:first-child strong { color:#0068ff; }
+.dashboard-submission-counts>div:nth-child(2) strong { color:#ffa700; }
+.dashboard-submission-counts span { display:block; margin-top:5px; color:#607ca5; font-size:12px; }
+.dashboard-submission-panel .dashboard-panel-footer { margin-top:auto; padding-top:12px; }
+.dashboard-submission-panel .dashboard-progress-line { margin-bottom:23px; }
+.dashboard-info-icon { display:grid; place-items:center; width:14px; height:14px; flex-shrink:0; border:1.5px solid #6d86ac; border-radius:50%; color:#6d86ac; font-size:10px; font-weight:700; }
+@media(max-width:1450px) { .admin-dashboard-home .dashboard-progress-panels { grid-template-columns:minmax(0,1.4fr) minmax(0,1fr); } .dashboard-submission-panel { grid-column:1/-1; } .dashboard-submission-counts { margin:4px 0 20px; } }
+@media(max-width:750px) { .admin-dashboard-home .dashboard-progress-panels { grid-template-columns:minmax(0,1fr); } .dashboard-submission-panel { grid-column:auto; } .dashboard-event-progress .dashboard-panel-footer { flex-wrap:wrap; } .dashboard-event-progress .dashboard-panel-footer small { margin-left:0; width:100%; } }

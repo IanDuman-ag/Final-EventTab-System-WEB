@@ -1,40 +1,46 @@
-{% extends "landingpage/base.html" %}{% load static %}
-{% block body_class %}public-games{% endblock %}
+{% extends "landingpage/base.html" %}
+{% load static %}
+{% block body_class %}
+    public-games
+{% endblock %}
 {% block content %}
-<section class="games-hero">
-<div class="games-hero-art" aria-hidden="true">
-<span class="games-hero-disc"></span>
-<img class="games-hero-athlete" src="{% static 'landingpage/assets/hero.webp' %}" alt="">
-<img class="games-hero-dancer" src="{% static 'landingpage/assets/competitions/dance.webp' %}" alt="">
-</div>
-<div class="container games-hero-heading">
-<p class="eyebrow">
+    <section class="games-hero">
+        <div class="games-hero-art" aria-hidden="true">
+            <span class="games-hero-disc"></span>
+            <img class="games-hero-athlete" src="{% static 'landingpage/assets/hero.webp' %}" alt="">
+            <img class="games-hero-dancer" src="{% static 'landingpage/assets/competitions/dance.webp' %}" alt="">
+        </div>
+        <div class="container games-hero-heading">
+            <p class="eyebrow">
 THE COURT. THE STAGE. YOUR COMMUNITY.
 </p>
-<h1>
-Games &amp; <span>Events</span>
-</h1>
-<p>
+            <h1>
+                Games &amp;
+                <span>Events</span>
+            </h1>
+            <p>
 Explore all intramural competitions.
 </p>
-</div>
-</section>
-<section class="container page-content games-directory">
-{% include "landingpage/_filters.html" %}
-<div class="event-grid">
-{% for event in events %}{% include "landingpage/_event_card.html" %}{% empty %}
-<div class="empty-state">
-<span class="empty-icon">{% include "landingpage/_icon.html" with icon="trophy" %}</span>
-<h2>
+        </div>
+    </section>
+    <section class="container page-content games-directory">
+        {% include "landingpage/_filters.html" %}
+        <div class="event-grid">
+            {% for event in events %}
+                {% include "landingpage/_event_card.html" %}
+            {% empty %}
+                <div class="empty-state">
+                    <span class="empty-icon">{% include "landingpage/_icon.html" with icon="trophy" %}</span>
+                    <h2>
 No competitions found.
 </h2>
-<p>
+                    <p>
 Try another search or clear your filters. Newly announced competitions will appear here.
 </p>
-<a class="btn btn-outline-navy" href="{% url 'public_games' %}">Show all events</a>
-</div>
-{% endfor %}
-</div>
-{% include "landingpage/_pagination.html" %}
-</section>
+                    <a class="btn btn-outline-navy" href="{% url 'public_games' %}">Show all events</a>
+                </div>
+            {% endfor %}
+        </div>
+        {% include "landingpage/_pagination.html" %}
+    </section>
 {% endblock %}

@@ -608,12 +608,20 @@ def _access_code_prefix(role_label):
 
 
 def _allocate_access_code(role_label, exclude_user_id=None):
-    """
-    Next available access code for the role: JDG01, JDG02… / SCR01, SCR02…
-    Uses the highest existing numeric suffix for that prefix and increments.
-    """
+    """Allocate random judge codes; retain sequential codes for other roles."""
     import re
     from events.models import AssignmentAccountProfile
+
+    if role_label == 'Judge':
+        import secrets
+
+        for _ in range(100):
+            candidate = ''.join(secrets.choice(string.ascii_uppercase) for _ in range(3))
+            candidate += ''.join(secrets.choice(string.digits) for _ in range(2))
+            # Include the current account so regeneration cannot reuse its code.
+            if not AssignmentAccountProfile.objects.filter(access_code__iexact=candidate).exists():
+                return candidate
+        return ''
 
     prefix = _access_code_prefix(role_label)
     if not prefix:
@@ -1149,6 +1157,39 @@ def admin_dashboard(request):
     total = ctx['total_events_count'] or 1
     ctx['completed_pct'] = int(ctx['completed_events_count'] / total * 100)
 
+    progress = []
+    for classification, label in [('major', 'Major Events'), ('minor', 'Minor Events')]:
+        classified = [event for event in all_events if event.event_classification == classification]
+        completed = sum(event.results_finalized for event in classified)
+        progress.append({
+            'key': classification, 'label': label, 'total': len(classified),
+            'completed': completed, 'remaining': len(classified) - completed,
+            'percent': round(100 * completed / len(classified)) if classified else 0,
+        })
+    ctx['classification_progress'] = progress
+    ctx['classification_completed'] = sum(row['completed'] for row in progress)
+    ctx['classification_remaining'] = sum(row['remaining'] for row in progress)
+
+    # Count complete judge sheets per round using the same rules as faculty review.
+    from events.criteria_faculty_service import criteria_rounds, _round_data, _participants
+    expected_submissions = submitted_sheets = 0
+    for event in all_events:
+        if event.scoring_method != 'criteria':
+            continue
+        judges = list(event.assigned_judges.filter(is_active=True))
+        if not judges:
+            continue
+        participants = _participants(event)
+        for index in range(len(criteria_rounds(event))):
+            monitor = _round_data(event, index, participants, judges)['judges']
+            expected_submissions += len(judges)
+            submitted_sheets += sum(row['status'] == 'Submitted' for row in monitor)
+    ctx['judge_submissions'] = {
+        'submitted': submitted_sheets, 'expected': expected_submissions,
+        'pending': expected_submissions - submitted_sheets,
+        'percent': round(100 * submitted_sheets / expected_submissions) if expected_submissions else 0,
+    }
+
     # Total participants and teams across all events
     total_participants = RegistryCandidate.objects.count()
     total_teams = Team.objects.count()
@@ -1294,6 +1335,7 @@ def admin_manage_account(request):
 @user_passes_test(lambda user: user.is_staff, login_url='login')
 def admin_tabulator_accounts(request):
     ctx = get_assignment_account_context(request, account_type='faculty_tabulator')
+    ctx['inactive_user_count'] = ctx['total_user_count'] - ctx['active_user_count']
     return render(request, 'admindash/facultyaccount.html', ctx)
 
 
@@ -1301,6 +1343,7 @@ def admin_tabulator_accounts(request):
 @user_passes_test(lambda user: user.is_staff, login_url='login')
 def admin_judge_scorer_accounts(request):
     ctx = get_assignment_account_context(request, account_type='judge_scorer')
+    ctx['inactive_user_count'] = ctx['total_user_count'] - ctx['active_user_count']
     return render(request, 'admindash/judgescoreraccount.html', ctx)
 
 
@@ -2090,7 +2133,7 @@ def _send_assignment_credentials_email(*, to_email, full_name, role_label, acces
 @login_required(login_url='login')
 @user_passes_test(lambda user: user.is_staff, login_url='login')
 def next_assignment_access_code(request):
-    """Preview the next sequential access code for Judge (JDG##) or Scorer (SCR##)."""
+    """Preview an available access code for Judge or Scorer."""
     role_raw = (request.GET.get('role') or '').strip()
     role_label = _normalize_assignment_role(role_raw)
     if role_label not in CODE_ROLES:
@@ -2102,6 +2145,8 @@ def next_assignment_access_code(request):
         exclude_user_id = int(exclude_id)
 
     code = _allocate_access_code(role_label, exclude_user_id=exclude_user_id)
+    if not code:
+        return JsonResponse({'success': False, 'message': 'Could not generate an access code. Try again.'}, status=503)
     return JsonResponse({'success': True, 'access_code': code, 'role': role_label})
 
 
@@ -2129,7 +2174,7 @@ def create_assignment_account(request):
         email = email_or_err
         if User.objects.filter(email__iexact=email).exists():
             return JsonResponse({'success': False, 'message': 'Gmail is already in use.'}, status=400)
-        # Always allocate sequential role codes (JDG01 / SCR01…) server-side
+        # Generate the authoritative access code on the server.
         access_code = _allocate_access_code(role_label)
         if not access_code:
             return JsonResponse({'success': False, 'message': 'Could not allocate an access code for this role.'}, status=500)
@@ -2350,6 +2395,52 @@ def update_assignment_account(request, account_id):
         })
     except Exception as e:
         return JsonResponse({'success': False, 'message': str(e)}, status=500)
+
+
+@login_required(login_url='login')
+@user_passes_test(lambda user: user.is_staff, login_url='login')
+@never_cache
+def reset_assignment_account_password(request, account_id):
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': 'Use POST to reset a password.'}, status=405)
+
+    account_user = _assignment_user_or_none(account_id)
+    if account_user is None or get_assignment_role(account_user) not in ('Faculty', 'Tabulator'):
+        return JsonResponse({'success': False, 'message': 'Faculty or Tabulator account not found.'}, status=404)
+    try:
+        payload = json.loads(request.body)
+    except (ValueError, UnicodeDecodeError):
+        return JsonResponse({'success': False, 'message': 'Invalid request data.'}, status=400)
+    if not isinstance(payload, dict):
+        return JsonResponse({'success': False, 'message': 'Invalid request data.'}, status=400)
+    password = payload.get('password')
+    if not isinstance(password, str) or not password:
+        return JsonResponse({'success': False, 'message': 'Enter a new password.'}, status=400)
+    if password != payload.get('password_confirm'):
+        return JsonResponse({'success': False, 'message': 'Passwords do not match.'}, status=400)
+
+    from django.contrib.auth.password_validation import validate_password
+    try:
+        validate_password(password, user=account_user)
+    except ValidationError as exc:
+        return JsonResponse({'success': False, 'message': ' '.join(exc.messages)}, status=400)
+    try:
+        with transaction.atomic():
+            account_user.set_password(password)
+            account_user.save(update_fields=['password'])
+            from rest_framework.authtoken.models import Token
+            Token.objects.filter(user=account_user).delete()
+            LogEntry.objects.create(
+                user=request.user,
+                content_type_id=ContentType.objects.get_for_model(account_user).id,
+                object_id=account_user.pk,
+                object_repr=str(account_user),
+                action_flag=CHANGE,
+                change_message='Reset account password',
+            )
+    except Exception:
+        return JsonResponse({'success': False, 'message': 'Could not reset the password. Try again.'}, status=500)
+    return JsonResponse({'success': True, 'message': 'Password reset successfully. Share the new password with the account owner.'})
 
 
 @login_required(login_url='login')
@@ -3154,10 +3245,20 @@ def admin_match_events(request, event_id=None):
             Q(name__icontains=search_query)
             | Q(division__icontains=search_query)
             | Q(venue__icontains=search_query)
+            | Q(category__icontains=search_query)
         )
     if status_filter in dict(Event.PUBLICATION_CHOICES):
         queryset = queryset.filter(publication_status=status_filter)
 
+    category_filter = request.GET.get('category', 'all').strip()
+    division_filter = request.GET.get('division', 'all').strip()
+    format_filter = request.GET.get('format', 'all').strip()
+    if category_filter != 'all':
+        queryset = queryset.filter(category=category_filter)
+    if division_filter != 'all':
+        queryset = queryset.filter(division=division_filter)
+    if format_filter != 'all':
+        queryset = queryset.filter(tournament_type=format_filter)
     events = list(queryset)
     rows = [_serialize_match_event(event) for event in events]
     User = get_user_model()
@@ -3187,6 +3288,12 @@ def admin_match_events(request, event_id=None):
         'total_count': all_match_events.count(),
         'draft_count': all_match_events.filter(publication_status=Event.PUBLICATION_DRAFT).count(),
         'published_count': all_match_events.filter(publication_status=Event.PUBLICATION_PUBLISHED).count(),
+        'division_options': list(all_match_events.exclude(division='').order_by('division').values_list('division', flat=True).distinct()),
+        'category_options': list(all_match_events.exclude(category='').order_by('category').values_list('category', flat=True).distinct()),
+        'format_options': [(value, _tournament_type_label(value)) for value in all_match_events.order_by('tournament_type').values_list('tournament_type', flat=True).distinct() if value],
+        'category_filter': category_filter,
+        'division_filter': division_filter,
+        'format_filter': format_filter,
         'search_query': search_query,
         'status_filter': status_filter,
         'edit_event_id': request.GET.get('edit', ''),

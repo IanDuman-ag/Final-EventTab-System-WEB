@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Match-Based Events · EventTab</title>
   {% include 'admindash/_bootstrap.html' %}
-  <link rel="stylesheet" href="{% static 'admindash/matchbasedevent.css' %}?v=20261023draft">
+  <link rel="stylesheet" href="{% static 'admindash/matchbasedevent.css' %}?v=20261030classification">
   <link rel="stylesheet" href="{% static 'admindash/bootstrap-admin.css' %}?v=1">
 </head>
 <body class="admin-dashboard-page admin-dashboard-v2 match-events-page">
@@ -14,10 +14,8 @@
     {% include 'admindash/_sidebar.html' with active='events_match' %}
     <div class="content-area v2-content">
       <header class="v2-topbar match-topbar">
-        <div>
-          <a class="match-breadcrumb" href="{% url 'admin_match_events' %}">Events / <strong>Match-Based</strong></a>
-          <h2 class="v2-welcome">Tournament operations</h2>
-        </div>
+        <form method="get" class="match-global-search"><span aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></svg></span><input name="q" type="search" value="{{ search_query }}" placeholder="Search events, division, or venue..." aria-label="Search events, division, or venue"></form>
+        <span class="match-season"><span aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 2v6M16 2v6M4 10h16"/></svg></span> &nbsp; {{ academic_year|default:"All events" }}</span>
       </header>
       <main class="container-fluid v2-main match-main">
         {% if messages %}
@@ -28,7 +26,7 @@
 
         <section class="match-page-head">
           <div>
-            <span class="match-kicker">MATCH CONTROL</span>
+            <a class="match-breadcrumb" href="{% url 'admin_match_events' %}">Events <span aria-hidden="true">&rsaquo;</span> <strong>Match-Based</strong></a>
             <h1>Match-Based Events</h1>
             <p>Build tournament brackets, assign officials, and publish match schedules.</p>
           </div>
@@ -36,17 +34,21 @@
         </section>
 
         <section class="match-stats" aria-label="Event status overview">
-          <div><span>All events</span><strong>{{ total_count }}</strong></div>
-          <div><span>Published</span><strong>{{ published_count }}</strong></div>
-          <div><span>Drafts</span><strong>{{ draft_count }}</strong></div>
+          <article class="match-stat"><span class="match-stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 2v6M16 2v6M4 10h16"/></svg></span><div><span>Total Events</span><strong>{{ total_count }}</strong><small>All match-based events</small></div></article>
+          <article class="match-stat match-stat--published"><span class="match-stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6ZM14 3v5h5M9 12h7M9 16h7"/></svg></span><div><span>Published</span><strong>{{ published_count }}</strong><small>Published events</small></div></article>
+          <article class="match-stat match-stat--draft"><span class="match-stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m15 4 5 5M4 20l5-1L21 7l-5-5L4 14ZM4 5v3M2.5 6.5h3"/></svg></span><div><span>Drafts</span><strong>{{ draft_count }}</strong><small>{% if draft_count %}Unpublished events{% else %}No draft events{% endif %}</small></div></article>
+          <article class="match-stat match-stat--division"><span class="match-stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9" cy="7" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3ZM16 4a3 3 0 0 1 0 6M18 13a6 6 0 0 1 4 5v3"/></svg></span><div><span>Divisions</span><strong>{{ division_options|length }}</strong><small>{{ division_options|join:", "|default:"No divisions" }}</small></div></article>
         </section>
 
         <section class="match-table-card">
           <form class="match-toolbar" method="get">
-            <label class="match-search"><span class="sr-only">Search events</span><input class="form-control" name="q" type="search" value="{{ search_query }}" placeholder="Search event, division, or venue"></label>
+            <label class="match-search"><span class="sr-only">Search events</span><input class="form-control" name="q" type="search" value="{{ search_query }}" placeholder="Search name, division, category, or venue..."></label>
+            <label><span class="sr-only">Filter category</span><select class="form-select" name="category"><option value="all">All Categories</option>{% for category in category_options %}<option value="{{ category }}" {% if category_filter == category %}selected{% endif %}>{{ category }}</option>{% endfor %}</select></label>
+            <label><span class="sr-only">Filter division</span><select class="form-select" name="division"><option value="all">All Divisions</option>{% for division in division_options %}<option value="{{ division }}" {% if division_filter == division %}selected{% endif %}>{{ division }}</option>{% endfor %}</select></label>
+            <label><span class="sr-only">Filter event type</span><select class="form-select" name="format"><option value="all">All Event Types</option>{% for value, label in format_options %}<option value="{{ value }}" {% if format_filter == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
             <label><span class="sr-only">Filter status</span>
               <select class="form-select" name="status">
-                <option value="all">All statuses</option>
+                <option value="all">All Statuses</option>
                 <option value="published" {% if status_filter == 'published' %}selected{% endif %}>Published</option>
                 <option value="draft" {% if status_filter == 'draft' %}selected{% endif %}>Draft</option>
               </select>
@@ -63,28 +65,30 @@
           </div>
           <div class="table-responsive match-table-wrap">
             <table class="table table-hover align-middle match-table">
-              <thead><tr><th><input type="checkbox" class="form-check-input" id="events-page-select" aria-label="Select events on this page"></th><th>Event Name</th><th>Category</th><th>Division</th><th>Event Type</th><th>Status</th><th>Event Date</th><th>Actions</th></tr></thead>
+              <thead><tr><th><input type="checkbox" class="form-check-input" id="events-page-select" aria-label="Select events on this page"></th><th class="match-number">#</th><th>Event Name</th><th>Category</th><th>Event Classification</th><th>Division</th><th>Event Type</th><th>Status</th><th>Event Date</th><th>Actions</th></tr></thead>
               <tbody>
                 {% for event in event_rows %}
                 <tr>
                   <td><input type="checkbox" class="form-check-input event-select" value="{{ event.id }}" aria-label="Select {{ event.name }}"></td>
-                  <td><strong>{{ event.name }}</strong><small>{{ event.venue }}</small></td>
-                  <td>{{ event.category }}</td>
+                  <td class="match-number"><span>{{ forloop.counter|stringformat:"02d" }}</span></td>
+                  <td><div class="match-event-name"><span class="match-sport-icon match-sport-icon--{{ event.sport_type|slugify }}" aria-hidden="true">{% if event.sport_type == 'Chess' %}<svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="3"/><path d="M9 8h6M10 8c0 5-1 7-3 9h10c-2-2-3-4-3-9M6 20h12M5 22h14"/></svg>{% elif event.sport_type == 'Table Tennis' %}<svg viewBox="0 0 24 24"><path d="M18 4c3 3 2 7-1 10s-6 3-9 0-3-6 0-9 7-4 10-1ZM8 14l-5 5 2 2 5-5M8 6l9 8"/><circle cx="20" cy="20" r="2"/></svg>{% elif event.sport_type == 'Badminton' %}<svg viewBox="0 0 24 24"><ellipse cx="14" cy="8" rx="5" ry="7" transform="rotate(35 14 8)"/><path d="m10 13-6 8M10 5l7 5M9 8l6 5M12 2l6 5M11 12l6-8M13 14l6-8"/></svg>{% else %}<svg viewBox="0 0 24 24"><circle cx="15" cy="4" r="2"/><path d="m5 9 5-2 4 4 4 1M11 8l-2 7-5 5M9 15l5 1 2 5M14 11l-3 3"/></svg>{% endif %}</span><div><strong>{{ event.name }}</strong><small>{{ event.venue }}</small></div></div></td>
+                  <td><span class="match-category">{{ event.category }}</span></td>
+                  <td><span class="match-classification match-classification--{{ event.classification }}">{{ event.classification_label }}</span></td>
                   <td>{{ event.division|default:"—" }}</td>
                   <td>{{ event.tournament_type_label }}</td>
                   <td><span class="match-status match-status--{{ event.publication_status }}">{{ event.publication_label }}</span></td>
-                  <td>{{ event.start_date }}{% if event.end_date != event.start_date %}<small>to {{ event.end_date }}</small>{% endif %}</td>
+                  <td class="match-date">{{ event.start_date }}{% if event.end_date != event.start_date %}<small>to {{ event.end_date }}</small>{% endif %}</td>
                   <td>
                     <div class="match-actions">
-                      <button type="button" data-view="{{ event.id }}" title="View event" aria-label="View {{ event.name }}">View</button>
+                      <button type="button" data-view="{{ event.id }}" title="View event" aria-label="View {{ event.name }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s4-6 10-6 10 6 10 6-4 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></button>
                       {% if event.can_insert_playoff %}<form method="post" action="{% url 'faculty_publication_review' event.id %}">{% csrf_token %}<input type="hidden" name="return_to" value="admin_matches"><button type="submit" name="action" value="insert_playoff">Insert Missing Third-Place Playoff</button></form>{% endif %}
-                      <button type="button" data-edit="{{ event.id }}" title="Edit event" aria-label="Edit {{ event.name }}">Edit</button>
-                      <button type="button" data-delete="{{ event.id }}" data-name="{{ event.name }}" class="danger" title="Delete event" aria-label="Delete {{ event.name }}">Delete</button>
+                      <button type="button" data-edit="{{ event.id }}" title="Edit event" aria-label="Edit {{ event.name }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 4 5 5M4 20l5-1L21 7l-5-5L4 14Z"/></svg></button>
+                      <button type="button" data-delete="{{ event.id }}" data-name="{{ event.name }}" class="danger" title="Delete event" aria-label="Delete {{ event.name }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7M14 10v7"/></svg></button>
                     </div>
                   </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="8" class="match-empty"><strong>No match events found</strong><span>Create an event or adjust the current filters.</span></td></tr>
+                <tr><td colspan="10" class="match-empty"><strong>No match events found</strong><span>Create an event or adjust the current filters.</span></td></tr>
                 {% endfor %}
               </tbody>
             </table>

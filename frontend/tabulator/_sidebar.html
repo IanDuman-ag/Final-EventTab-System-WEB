@@ -1,17 +1,58 @@
 {% load static %}
 <aside data-portal-mobile data-portal-logo="{% get_media_prefix %}landingpagelogo/logoeventtab%20(1).png" class="et-sidebar" id="etSidebar" aria-label="Tabulator navigation">
-  <div class="et-brand"><strong>Event<span>Tab</span></strong><small>TABULATOR PORTAL</small></div>
-  <nav class="et-nav" aria-label="Main navigation">
-    <a class="et-nav-link{% if active == 'dashboard' %} is-active{% endif %}" href="{% url 'tabulator_dashboard' %}{% if event %}?event_id={{ event.id }}{% endif %}" {% if active == 'dashboard' %}aria-current="page"{% endif %}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h8v8H3zm10 0h8v8h-8zM3 13h8v8H3zm10 0h8v8h-8z"/></svg>Dashboard</a>
-    <a class="et-nav-link{% if active == 'my_events' %} is-active{% endif %}" href="{% url 'tabulator_my_events' %}" {% if active == 'my_events' %}aria-current="page"{% endif %}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2v3h10V2h2v3h2v17H3V5h2V2zm12 9H5v9h14zM5 9h14V7H5z"/></svg>My Events</a>
-    <a class="et-nav-link{% if active == 'results' or active == 'full_results' %} is-active{% endif %}" href="{% url 'tabulator_results' %}{% if event %}?event_id={{ event.id }}{% endif %}" {% if active == 'results' or active == 'full_results' %}aria-current="page"{% endif %}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 2h11l4 4v16H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm1 2v16h12V7h-3V4zm2 6h8v2H8zm0 4h8v2H8z"/></svg>Results</a>
-  </nav>
-  <div class="et-sidebar-bottom">
-    <a class="et-profile-link{% if active == 'profile' %} is-active{% endif %}" href="{% url 'tabulator_profile' %}"><span class="et-user-avatar">{{ user_initials|default:'T' }}</span><span class="et-user-info"><strong>{{ user_display|default:'Tabulator' }}</strong><small>Tabulator Profile</small></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7-1.5-1.5L13 12 7.5 6.5z"/></svg></a>
-    <a class="et-logout" href="{% url 'logout' %}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17v-3H3v-4h7V7l5 5-5 5Zm2-14h8v18h-8v-2h6V5h-6V3Z"/></svg>Logout</a>
-  </div>
+    <div class="et-brand">
+        <strong>
+            Event
+            <span>Tab</span>
+        </strong>
+        <small>TABULATOR PORTAL</small>
+    </div>
+    <nav class="et-nav" aria-label="Main navigation">
+        <a class="et-nav-link{% if active == 'dashboard' %} is-active{% endif %}" href="{% url 'tabulator_dashboard' %}{% if event %}?event_id={{ event.id }}{% endif %}" {% if active == 'dashboard' %}aria-current="page"{% endif %}>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M3 3h8v8H3zm10 0h8v8h-8zM3 13h8v8H3zm10 0h8v8h-8z"/>
+            </svg>
+            Dashboard
+        </a>
+        <a class="et-nav-link{% if active == 'my_events' %} is-active{% endif %}" href="{% url 'tabulator_my_events' %}" {% if active == 'my_events' %}aria-current="page"{% endif %}>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M7 2v3h10V2h2v3h2v17H3V5h2V2zm12 9H5v9h14zM5 9h14V7H5z"/>
+            </svg>
+            My Events
+        </a>
+        <a class="et-nav-link{% if active == 'results' or active == 'full_results' %} is-active{% endif %}" href="{% url 'tabulator_results' %}{% if event %}?event_id={{ event.id }}{% endif %}" {% if active == 'results' or active == 'full_results' %}aria-current="page"{% endif %}>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M5 2h11l4 4v16H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm1 2v16h12V7h-3V4zm2 6h8v2H8zm0 4h8v2H8z"/>
+            </svg>
+            Results
+        </a>
+        <a class="et-nav-link{% if active == 'reports' %} is-active{% endif %}" href="{% url 'tabulator_reports' %}{% if event %}?event_id={{ event.id }}{% endif %}" {% if active == 'reports' %}aria-current="page"{% endif %}>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M5 2h10l5 5v15H4V2Zm1 2v16h12V8h-4V4ZM8 11h8v2H8Zm0 4h8v2H8Z"/>
+            </svg>
+            Generate Report
+        </a>
+    </nav>
+    <div class="et-sidebar-bottom">
+        <a class="et-profile-link{% if active == 'profile' %} is-active{% endif %}" href="{% url 'tabulator_profile' %}">
+            <span class="et-user-avatar">{{ user_initials|default:'T' }}</span>
+            <span class="et-user-info">
+                <strong>{{ user_display|default:'Tabulator' }}</strong>
+                <small>Tabulator Profile</small>
+            </span>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m9 5 7 7-7 7-1.5-1.5L13 12 7.5 6.5z"/>
+            </svg>
+        </a>
+        <a class="et-logout" href="{% url 'logout' %}">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M10 17v-3H3v-4h7V7l5 5-5 5Zm2-14h8v18h-8v-2h6V5h-6V3Z"/>
+            </svg>
+            Logout
+        </a>
+    </div>
 </aside>
-<div class="et-backdrop" id="etBackdrop" hidden></div>
-
+<div class="et-backdrop" id="etBackdrop" hidden>
+</div>
 <link rel="stylesheet" href="{% static 'admindash/sidebar-scrollbar.css' %}?v=20261019notifications">
 <script src="{% static 'js/admin_sidebar.js' %}?v=20261019notifications"></script>

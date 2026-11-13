@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Admin Dashboard - EventTab</title>
   {% include 'admindash/_bootstrap.html' %}
-  <link rel="stylesheet" href="{% static 'admindash/admindashboard.css' %}?v=20261029dashboard">
+  <link rel="stylesheet" href="{% static 'admindash/admindashboard.css' %}?v=20261031progress">
   <link rel="stylesheet" href="{% static 'admindash/bootstrap-admin.css' %}?v=1">
 </head>
 <body class="admin-dashboard-page admin-dashboard-home admin-dashboard-v2">
@@ -74,51 +74,28 @@
           </article>
         </section>
 
-        <!-- Charts Row -->
-        <section class="v2-charts">
-          <article class="v2-card v2-chart-card">
-            <header class="v2-card-head">
-              <div><h3>Event Activity</h3><small>Event creations and participant registrations over time.</small></div><div class="dashboard-chart-controls"><select id="activitySeries" class="v2-select" aria-label="Activity series"><option value="both">Events &amp; Participants</option><option value="events">Events</option><option value="participants">Participants</option></select><select id="activityRange" class="v2-select" aria-label="Activity period"><option value="30">Last 30 days</option><option value="60">Last 60 days</option><option value="90">Last 90 days</option></select></div>
-            </header>
-            <div class="v2-legend">
-              <span class="v2-legend-item"><span class="v2-legend-dot" style="background:#2563eb"></span>Events Created</span>
-              <span class="v2-legend-item"><span class="v2-legend-dot" style="background:#ffb300"></span>Participants</span>
+        <!-- Progress and submission overview -->
+        <section class="v2-charts dashboard-progress-panels">
+          <article class="v2-card dashboard-event-progress">
+            <header class="dashboard-panel-heading"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 13h4v9H3ZM10 3h4v19h-4ZM17 8h4v14h-4Z"/></svg><div><h3>Major and Minor Event Progress</h3><p>Completion progress for major and minor events.</p></div></header>
+            {% for item in classification_progress %}
+            <div class="dashboard-progress-group">
+              <div class="dashboard-progress-label"><strong>{{ item.label }}</strong><strong>{{ item.completed }} / {{ item.total }} completed</strong></div>
+              <div class="dashboard-progress-line"><progress class="dashboard-progress-bar dashboard-progress-bar--{{ item.key }}" max="100" value="{{ item.percent }}" aria-label="{{ item.label }} completed">{{ item.percent }}%</progress><strong>{{ item.percent }}%</strong></div>
+              <small>{{ item.remaining }} remaining</small>
             </div>
-            <canvas id="eventsOverviewChart" height="160"></canvas>
+            {% endfor %}
+            <footer class="dashboard-panel-footer"><span class="dashboard-completion-check" aria-hidden="true">&#10003;</span><strong>{{ classification_completed }} completed</strong><span aria-hidden="true">&bull;</span><strong>{{ classification_remaining }} remaining</strong><small>Completed = verified and finalized results.</small></footer>
           </article>
-
-          <article class="v2-card v2-doughnut-card">
-            <header class="v2-card-head"><h3>Events by Status</h3></header>
-            <div class="v2-doughnut-wrap">
-              <canvas id="statusDoughnut" width="160" height="160"></canvas>
-              <div class="v2-doughnut-center">
-                <strong id="doughnutTotal">0</strong>
-                <small>Total</small>
-              </div>
-            </div>
-            <ul class="v2-status-list" id="statusList"></ul>
+          <article class="v2-card v2-doughnut-card dashboard-status-panel">
+            <header class="dashboard-panel-heading"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 2a10 10 0 1 0 11 11H11ZM13 2v9h9a10 10 0 0 0-9-9Z"/></svg><div><h3>Events by Status</h3><p>Distribution of events by current status.</p></div></header>
+            <div class="dashboard-status-body"><div class="v2-doughnut-wrap"><canvas id="statusDoughnut" width="180" height="180" role="img" aria-label="Event status distribution; counts shown alongside"></canvas><div class="v2-doughnut-center"><strong id="doughnutTotal">{{ total_events_count }}</strong><small>Total</small></div></div><ul class="v2-status-list" id="statusList"></ul></div>
           </article>
-
-          <article class="v2-card v2-categories-card">
-            <header class="v2-card-head">
-              <h3>Top Categories</h3>
-              <select id="categorySort" class="v2-select" aria-label="Category ranking"><option value="count">By Events</option><option value="participants">By Participants</option></select>
-            </header>
-            <ul class="v2-cat-list" id="categoryList">
-              {% for cat in top_categories %}
-              <li class="v2-cat-row">
-                <div class="v2-cat-row-head">
-                  <span class="v2-cat-name">{{ cat.name }}</span>
-                  <span class="v2-cat-meta">{{ cat.count }}</span>
-                </div>
-                <div class="v2-cat-bar">
-                  <span class="v2-cat-fill v2-cat-fill--{{ forloop.counter }}" style="width: {{ cat.pct }}%"></span>
-                </div>
-              </li>
-              {% empty %}
-              <li class="v2-cat-empty">No category data yet.</li>
-              {% endfor %}
-            </ul>
+          <article class="v2-card dashboard-submission-panel">
+            <header class="dashboard-panel-heading"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8ZM0 21v-3a8 8 0 0 1 16 0v3ZM17 3a4 4 0 0 1 0 8M18 13a7 7 0 0 1 6 7v1h-6"/></svg><div><h3>Judge Submissions</h3><p>Overview of judge score sheet submissions.</p></div></header>
+            <div class="dashboard-submission-counts"><div><strong>{{ judge_submissions.submitted }}</strong><span>Submitted</span></div><div><strong>{{ judge_submissions.pending }}</strong><span>Pending</span></div><div><strong>{{ judge_submissions.expected }}</strong><span>Expected</span></div></div>
+            <div class="dashboard-progress-line"><progress class="dashboard-progress-bar" value="{{ judge_submissions.percent }}" max="100" aria-label="Judge score sheets submitted">{{ judge_submissions.percent }}%</progress><strong>{{ judge_submissions.percent }}%</strong></div>
+            <footer class="dashboard-panel-footer"><span class="dashboard-info-icon" aria-hidden="true">i</span><small>Based on expected judge submissions across all event rounds.</small></footer>
           </article>
         </section>
 
@@ -218,115 +195,12 @@
     </div>
   </div>
 
-  {{ activity_days|json_script:"dashboard-activity-data" }}
-  {{ dashboard_categories|json_script:"dashboard-category-data" }}
   {{ dashboard_events|json_script:"dashboard-event-data" }}
   {{ dashboard_search|json_script:"dashboard-search-data" }}
   {{ dashboard_today|json_script:"dashboard-today" }}
   <script>
   /* ── Server data ── */
-  const ACTIVITY = JSON.parse(document.getElementById('dashboard-activity-data').textContent);
   const STATUS_COUNTS = {{ status_counts_json|safe }};
-
-  /* ── Events Overview line chart (lightweight, no external libs) ── */
-  (function () {
-    const cv = document.getElementById('eventsOverviewChart');
-    if (!cv) return;
-    const ctx = cv.getContext('2d');
-
-    function drawLineChart() {
-      const days = ACTIVITY.slice(-Number(document.getElementById('activityRange').value));
-      const buckets = Array.from({length: 8}, (_, index) => days.slice(Math.floor(index * days.length / 8), Math.floor((index + 1) * days.length / 8)));
-      const CHART_LABELS = buckets.map(bucket => new Date(bucket[bucket.length - 1].date + 'T12:00:00+08:00').toLocaleDateString('en-US', {timeZone:'Asia/Manila',month:'short',day:'numeric'}));
-      const CHART_EVENTS = buckets.map(bucket => bucket.reduce((sum, day) => sum + day.events, 0));
-      const CHART_PARTS = buckets.map(bucket => bucket.reduce((sum, day) => sum + day.participants, 0));
-      const W = cv.offsetWidth, H = 200;
-      const ratio = window.devicePixelRatio || 1;
-      cv.width = W * ratio; cv.height = H * ratio;
-      cv.style.height = H + 'px';
-      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-      ctx.clearRect(0, 0, W, H);
-
-      const padL = 40, padR = 16, padT = 14, padB = 28;
-      const innerW = W - padL - padR;
-      const innerH = H - padT - padB;
-
-      const series = [
-        { key:'events', data: CHART_EVENTS, color: '#2563eb', fill: 'rgba(37, 99, 235, 0.08)' },
-        { key:'participants', data: CHART_PARTS, color: '#ffb300', fill: 'rgba(255,179,0,0.09)' },
-      ].filter(series => document.getElementById('activitySeries').value === 'both' || series.key === document.getElementById('activitySeries').value);
-
-      const allValues = [].concat(...series.map(s => s.data));
-      const maxV = Math.max(4, ...allValues, 1);
-
-      /* Grid lines */
-      ctx.strokeStyle = '#f1f5f9';
-      ctx.lineWidth = 1;
-      ctx.fillStyle = '#94a3b8';
-      ctx.font = '11px system-ui, sans-serif';
-      ctx.textAlign = 'right';
-      ctx.textBaseline = 'middle';
-      const yTicks = 4;
-      for (let i = 0; i <= yTicks; i++) {
-        const y = padT + (innerH / yTicks) * i;
-        const v = Math.round(maxV - (maxV / yTicks) * i);
-        ctx.beginPath();
-        ctx.moveTo(padL, y); ctx.lineTo(W - padR, y);
-        ctx.stroke();
-        ctx.fillText(v, padL - 6, y);
-      }
-
-      /* X labels */
-      ctx.textAlign = 'center';
-      ctx.fillStyle = '#94a3b8';
-      const stepX = CHART_LABELS.length > 1 ? innerW / (CHART_LABELS.length - 1) : 0;
-      CHART_LABELS.forEach((label, i) => {
-        if (W < 400 && i % 2 && i !== CHART_LABELS.length - 1) return;
-        ctx.fillText(label, padL + stepX * i, H - 10);
-      });
-
-      /* Plot lines */
-      series.forEach(s => {
-        if (!s.data.length) return;
-        ctx.beginPath();
-        s.data.forEach((v, i) => {
-          const x = padL + stepX * i;
-          const y = padT + innerH - (v / maxV) * innerH;
-          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-        });
-        /* Filled area */
-        ctx.lineTo(padL + stepX * (s.data.length - 1), padT + innerH);
-        ctx.lineTo(padL, padT + innerH);
-        ctx.closePath();
-        ctx.fillStyle = s.fill;
-        ctx.fill();
-
-        /* Line */
-        ctx.beginPath();
-        s.data.forEach((v, i) => {
-          const x = padL + stepX * i;
-          const y = padT + innerH - (v / maxV) * innerH;
-          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-        });
-        ctx.strokeStyle = s.color;
-        ctx.lineWidth = 2.5;
-        ctx.stroke();
-
-        /* Points */
-        ctx.fillStyle = s.color;
-        s.data.forEach((v, i) => {
-          const x = padL + stepX * i;
-          const y = padT + innerH - (v / maxV) * innerH;
-          ctx.beginPath();
-          ctx.arc(x, y, 3, 0, Math.PI * 2);
-          ctx.fill();
-        });
-      });
-    }
-    ['activityRange','activitySeries'].forEach(id => document.getElementById(id).addEventListener('change', drawLineChart));
-    drawLineChart();
-    window.addEventListener('resize', drawLineChart);
-  })();
 
   /* ── Status doughnut chart ── */
   (function () {
@@ -335,11 +209,12 @@
     const ctx = cv.getContext('2d');
 
     const segments = [
-      { key: 'ongoing',   label: 'Ongoing',   value: STATUS_COUNTS.ongoing   || 0, color: '#2563eb' },
-      { key: 'upcoming',  label: 'Upcoming',  value: STATUS_COUNTS.upcoming  || 0, color: '#fbbf24' },
-      { key: 'completed', label: 'Completed', value: STATUS_COUNTS.completed || 0, color: '#10b981' },
+      { key: 'completed', label: 'Completed', value: STATUS_COUNTS.completed || 0, color: '#0068ff' },
+      { key: 'ongoing', label: 'Ongoing', value: STATUS_COUNTS.ongoing || 0, color: '#ffb500' },
+      { key: 'upcoming', label: 'Upcoming', value: STATUS_COUNTS.upcoming || 0, color: '#76aaff' },
       { key: 'cancelled', label: 'Inactive', value: STATUS_COUNTS.cancelled || 0, color: '#ef4444' },
     ];
+    if (!STATUS_COUNTS.cancelled) segments.pop();
     const total = segments.reduce((s, x) => s + x.value, 0);
     document.getElementById('doughnutTotal').textContent = total;
 
@@ -413,19 +288,6 @@
     document.getElementById('calendarNext').onclick = () => {month = new Date(Date.UTC(month.getUTCFullYear(),month.getUTCMonth()+1,1,12));renderCalendar();};
     document.getElementById('calendarToday').onclick = () => {month = new Date(today + 'T12:00:00Z');renderCalendar();};
     renderCalendar();
-    const categories = read('dashboard-category-data');
-    document.getElementById('categorySort').addEventListener('change', event => {
-      const key = event.target.value, list = document.getElementById('categoryList');list.replaceChildren();
-      const total = categories.reduce((sum, item) => sum + item[key], 0);
-      categories.slice().sort((a,b) => b[key]-a[key]).slice(0,5).forEach(item => {
-        const row = document.createElement('li');row.className='v2-cat-row';
-        const head=document.createElement('div');head.className='v2-cat-row-head';
-        const name=document.createElement('span');name.className='v2-cat-name';name.textContent=item.name;
-        const count=document.createElement('strong');count.textContent=item[key];head.append(name,count);
-        const bar=document.createElement('div');bar.className='v2-cat-bar';const fill=document.createElement('span');fill.className='v2-cat-fill';fill.style.width=(total ? item[key]/total*100 : 0)+'%';bar.append(fill);row.append(head,bar);list.append(row);
-      });
-      if (!categories.length) list.textContent='No category data yet.';
-    });
     const search=document.getElementById('dashboardSearch'), results=document.getElementById('dashboardSearchResults'), items=read('dashboard-search-data');
     search.addEventListener('input', () => {
       const query=search.value.trim().toLowerCase();results.replaceChildren();results.hidden=!query;if(!query)return;

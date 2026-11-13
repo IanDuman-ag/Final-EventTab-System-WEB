@@ -77,7 +77,7 @@ def normalized_criterion_score(raw_score, maximum_score, criterion_weight):
     return raw / maximum * weight
 
 
-def compute_official_criteria_rankings(event, *, round_id, accepted_statuses=None, participant_ids=None, configured=False):
+def compute_official_criteria_rankings(event, *, round_id, accepted_statuses=None, participant_ids=None, configured=False, apply_tie_breaks=False):
     """Calculate one round; incomplete judge sheets do not contribute.
 
     Legacy scores stay on the legacy calculation path. In particular, an empty
@@ -205,19 +205,21 @@ def compute_official_criteria_rankings(event, *, round_id, accepted_statuses=Non
                         raise ValueError('Each ranking criterion must assign distinct ordinal ranks within each division.')
     def ordering(row):
         keys = [row['final_score'] if ranking_mode else -row['final_score']]
-        if configured:
+        if configured or apply_tie_breaks:
             for rule in event.tie_break_rules or []:
                 method = rule.get('method')
                 if method == 'highest_selected_criterion':
                     selected = str(rule.get('criterion_id') or '')
                     configured_name = next((item.get('name') for item in event.judging_criteria_config or [] if str(item.get('id')) == selected), None)
                     criterion_by_id = {criterion.pk: criterion for category in categories for criterion in category.criteria.all()}
-                    match = next((item for item in row['criteria_breakdown'] if str(item['criterion_id']) == selected or (configured_name and criterion_by_id[item['criterion_id']].name == configured_name)), None)
+                    match = next((item for item in row['criteria_breakdown'] if str(item['criterion_id']) == selected.removeprefix('esc_') or (configured_name and criterion_by_id[item['criterion_id']].name == configured_name)), None)
                     if match:
                         keys.append(match['score'] if ranking_mode else -match['score'])
                 elif method == 'highest_chief_judge':
                     match = next((item for item in row['judge_scores'] if item['judge_id'] == event.chief_judge_id), None)
                     keys.append((match['total'] if ranking_mode else -match['total']) if match else Decimal(0))
+                elif method == 'lowest_deduction':
+                    keys.append(row.get('deduction', Decimal(0)))
         return tuple(keys)
     rows.sort(key=lambda row: (*ordering(row), row['participant_id']))
     prior = None

@@ -268,8 +268,11 @@ def detail_payload(user, event, requested_round=None):
         reasons.append('No scoring criteria are available for this round.')
     if not total:
         reasons.append('No eligible participants are configured for this round.')
+    classification = portal.event_classification if portal else ''
+    classification_label = portal.get_event_classification_display() if portal and classification else ''
     return {'id': event.pk, 'judging_event_id': event.pk, 'portal_event_id': portal.pk if portal else None,
             'title': portal.name if portal else event.title, 'subtitle': portal.division if portal else '',
+            'event_classification': classification, 'classification_label': classification_label,
             'category': event.category.name, 'category_label': event.category.name.upper(),
             'category_icon': event.category.icon, 'assignment_type': 'CRITERIA BASED',
             'status': status, 'date': when.isoformat(), 'date_display': date_display(when),

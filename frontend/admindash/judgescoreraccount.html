@@ -4,40 +4,29 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Judge and Scorer Accounts - EventTab</title>
+  <title>Judge Accounts - EventTab</title>
   {% include 'admindash/_bootstrap.html' %}
-  <link rel="stylesheet" href="{% static 'admindash/judgescoreraccount.css' %}?v=20260616c">
   <link rel="stylesheet" href="{% static 'admindash/bootstrap-admin.css' %}?v=1">
+  <link rel="stylesheet" href="{% static 'admindash/judgescoreraccount.css' %}?v=20261030judgereference">
 </head>
-<body class="admin-dashboard-page manage-account-page admin-dashboard-v2" data-account-page="judge_scorer" data-default-role="Judge">
+<body class="admin-dashboard-page manage-account-page faculty-accounts-page judge-accounts-page admin-dashboard-v2" data-account-page="judge_scorer" data-default-role="Judge">
   <div class="dashboard-shell d-flex flex-column flex-lg-row">
     {% include 'admindash/_sidebar.html' with active='accounts_judge_scorer' %}
 
     <div class="content-area v2-content">
-      <header class="topbar">
-        <span class="topbar-spacer" aria-hidden="true"></span>
-        <div class="topbar-actions">
-          <button class="icon-button" type="button" aria-label="Notifications">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm8-6-2-2v-5a6 6 0 1 0-12 0v5l-2 2v1h16v-1Z"></path></svg>
-          </button>
-          <div class="profile-avatar" aria-label="{{ request.user.username }}">
-            {{ request.user.username|default:"AD"|slice:":2"|upper }}
-          </div>
-        </div>
-      </header>
-
       <main class="container-fluid main-content">
-        <section class="account-hero" aria-label="Judge and scorer accounts overview">
+        <nav class="account-breadcrumb" aria-label="Breadcrumb"><span>Accounts</span><span aria-hidden="true">&rsaquo;</span><span aria-current="page">Judge</span></nav>
+        <section class="account-hero" aria-label="Judge accounts overview">
           <div class="account-title">
-            <h2>Judge &amp; Scorer<br>Accounts</h2>
-            <p>Manage judge and scorer access codes and permissions.</p>
+            <h2>Judge Accounts</h2>
+            <p>Manage judge access codes and permissions.</p>
           </div>
 
-          <article class="users-card">
-            <span>Total Accounts</span>
-            <strong>{{ total_user_count|default:"0" }}</strong>
-            <small>{{ active_user_count|default:"0" }} active accounts</small>
-          </article>
+          <div class="account-summary" aria-label="Account statistics">
+            <article class="users-card"><span class="account-stat-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="7" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3ZM16 4a3 3 0 0 1 0 6M18 13a6 6 0 0 1 4 5v3"/></svg></span><div><span>Total Accounts</span><strong>{{ total_user_count|default:"0" }}</strong><small>{{ total_user_count|default:"0" }} accounts</small></div></article>
+            <article class="users-card users-card--active"><span class="account-stat-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="7" r="3"/><path d="M5 21v-3a7 7 0 0 1 14 0v3Z"/></svg></span><div><span>Active Accounts</span><strong>{{ active_user_count|default:"0" }}</strong><small>{% widthratio active_user_count total_user_count 100 %}% active</small></div></article>
+            <article class="users-card users-card--inactive"><span class="account-stat-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="7" r="3"/><path d="M3 21v-3a6 6 0 0 1 10-4M16 14l6 6M22 14l-6 6"/></svg></span><div><span>Inactive Accounts</span><strong>{{ inactive_user_count|default:"0" }}</strong><small>{% widthratio inactive_user_count total_user_count 100 %}% inactive</small></div></article>
+          </div>
 
           <button
             class="btn btn-primary new-account-btn"
@@ -50,10 +39,10 @@
           </button>
         </section>
 
-        <section class="accounts-panel" aria-label="Judge and scorer accounts table">
+        <section class="accounts-panel" aria-label="Judge accounts table">
           <div class="account-toolbar">
             <form class="account-filters" method="get" role="search">
-              <input class="form-control" type="text" name="q" value="{{ search_query }}" placeholder="Search judges or scorers" aria-label="Search accounts">
+              <label class="account-search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></svg><input class="form-control" type="search" name="q" value="{{ search_query }}" placeholder="Search judges..." aria-label="Search judges"></label>
               <select class="form-select" name="role" aria-label="Role">
                 <option value="all" {% if selected_role == 'all' %}selected{% endif %}>All Roles</option>
                 <option value="judge" {% if selected_role == 'judge' %}selected{% endif %}>Judge</option>
@@ -64,14 +53,9 @@
                 <option value="active" {% if selected_status == 'active' %}selected{% endif %}>Active</option>
                 <option value="inactive" {% if selected_status == 'inactive' %}selected{% endif %}>Deactivated</option>
               </select>
-              <button type="submit" aria-label="Apply filters">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17Z"></path></svg>
-              </button>
+              <button type="submit" aria-label="Apply filters"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18l-7 8v7l-4 2v-9Z"/></svg><span>Filter</span></button>
             </form>
-            <div class="table-count">
-              Displaying {{ start_index }}-{{ end_index }} of {{ filtered_user_count|default:"0" }}
-              <span>records</span>
-            </div>
+
           </div>
 
           <div id="bulk-action-bar" class="bulk-action-bar bulk-action-bar--hidden">
@@ -95,8 +79,9 @@
                   <th class="col-check">
                     <input class="form-check-input" type="checkbox" id="chk-select-all" aria-label="Select all">
                   </th>
+                  <th class="account-number">#</th>
                   <th>Name</th>
-                  <th>Gmail</th>
+                  <th>Email</th>
                   <th>Role</th>
                   <th>Access Code</th>
                   <th>Status</th>
@@ -117,13 +102,14 @@
                     <td class="col-check">
                       <input type="checkbox" class="form-check-input row-checkbox" aria-label="Select {{ row.full_name }}" value="{{ row.user.id }}">
                     </td>
+                    <td class="account-number" data-label="#"><span>{{ forloop.counter|add:start_index|add:"-1"|stringformat:"02d" }}</span></td>
                     <td data-label="Name">
                       <div class="person-cell">
-                        <span class="person-avatar">{{ row.initials }}</span>
+                        <span class="person-avatar">{{ row.full_name|slice:":1"|upper }}</span>
                         <strong>{{ row.full_name }}</strong>
                       </div>
                     </td>
-                    <td data-label="Gmail">{{ row.user.email|default:"—" }}</td>
+                    <td data-label="Email"><span class="account-email"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 6 9 7 9-7"/></svg>{{ row.user.email|default:"&mdash;" }}</span></td>
                     <td data-label="Role"><span class="role-label role-label--{{ row.role|lower }}">{{ row.role }}</span></td>
                     <td data-label="Access Code"><code class="access-code-cell">{{ row.access_code }}</code></td>
                     <td data-label="Status"><span class="status-pill {{ row.status_key }}">{{ row.status }}</span></td>
@@ -142,7 +128,7 @@
                     </td>
                   </tr>
                 {% empty %}
-                  <tr><td colspan="7" class="empty-state">No judge or scorer accounts found.</td></tr>
+                  <tr><td colspan="8" class="empty-state">No judge accounts found.</td></tr>
                 {% endfor %}
               </tbody>
             </table>
@@ -152,14 +138,15 @@
             <span>Showing {{ start_index }} to {{ end_index }} of {{ filtered_user_count|default:"0" }} records</span>
             <div class="pagination-controls">
               {% if page_obj.has_previous %}
-                <a href="?q={{ search_query|urlencode }}&role={{ selected_role }}&status={{ selected_status }}&page={{ page_obj.previous_page_number }}">Previous</a>
+                <a href="?q={{ search_query|urlencode }}&status={{ selected_status }}&role={{ selected_role|urlencode }}&page={{ page_obj.previous_page_number }}" aria-label="Previous page">&lsaquo;</a>
               {% else %}
-                <span class="disabled">Previous</span>
+                <span class="disabled" aria-disabled="true" aria-label="Previous page">&lsaquo;</span>
               {% endif %}
+              <span class="primary" aria-current="page" aria-label="Current page">{{ page_obj.number }}</span>
               {% if page_obj.has_next %}
-                <a class="primary" href="?q={{ search_query|urlencode }}&role={{ selected_role }}&status={{ selected_status }}&page={{ page_obj.next_page_number }}">Next</a>
+                <a href="?q={{ search_query|urlencode }}&status={{ selected_status }}&role={{ selected_role|urlencode }}&page={{ page_obj.next_page_number }}" aria-label="Next page">&rsaquo;</a>
               {% else %}
-                <span class="disabled primary">Next</span>
+                <span class="disabled" aria-disabled="true" aria-label="Next page">&rsaquo;</span>
               {% endif %}
             </div>
           </div>
@@ -169,6 +156,6 @@
   </div>
 
   {% include 'admindash/_assignment_modal.html' %}
-  <script src="{% static 'js/assignment_accounts.js' %}?v=20260717c"></script>
+  <script src="{% static 'js/assignment_accounts.js' %}?v=20261031randomjudge"></script>
 </body>
 </html>

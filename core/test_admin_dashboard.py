@@ -44,3 +44,37 @@ class AdminDashboardTests(TestCase):
         self.assertEqual(response.context['total_events_count'], 0)
         self.client.logout()
         self.assertEqual(self.client.get(reverse('admin_dashboard')).status_code, 302)
+
+    def test_classification_progress_requires_finalized_results(self):
+        Event.objects.create(name='Finalized major', event_date=timezone.localdate(), event_classification='major', results_finalized=True)
+        Event.objects.create(name='Unfinalized major', event_date=timezone.localdate(), event_classification='major', status='completed')
+        Event.objects.create(name='Minor', event_date=timezone.localdate(), event_classification='minor')
+        response = self.client.get(reverse('admin_dashboard'))
+        major, minor = response.context['classification_progress']
+        self.assertEqual((major['completed'], major['total'], major['percent']), (1, 2, 50))
+        self.assertEqual((minor['remaining'], minor['percent']), (1, 0))
+        self.assertEqual(response.context['classification_remaining'], 2)
+        self.assertContains(response, 'Major and Minor Event Progress')
+        self.assertContains(response, 'Judge Submissions')
+        self.assertNotContains(response, 'categorySort')
+
+    def test_judge_submission_counts_require_complete_finalized_sheets(self):
+        from events.models import EventScoringCategory, EventScoringCriterion, CriteriaScoreSubmission
+        judge = get_user_model().objects.create_user('overview-judge')
+        event = Event.objects.create(name='Judged event', event_date=timezone.localdate(), scoring_method='criteria')
+        entries = [CriteriaEventEntry.objects.create(event=event, entry_type='team', display_name=f'Entry {i}', display_order=i) for i in range(2)]
+        event.participant_ids = [entry.pk for entry in entries]
+        event.save()
+        event.assigned_judges.add(judge)
+        category = EventScoringCategory.objects.create(event=event, assigned_round_id='main', name='Performance', purpose='official', judge_mode='scoring', overall_weight_percent=100, display_order=0)
+        criterion = EventScoringCriterion.objects.create(category=category, name='Skill', weight_percent=100, max_score=100, display_order=0)
+        rows = [CriteriaScoreSubmission.objects.create(event=event, assigned_round_id='main', category=category, criterion=criterion, judge=judge, participant_id=entry.pk, source='MOBILE', status='DRAFT', raw_score=90) for entry in entries]
+        def counts():
+            return self.client.get(reverse('admin_dashboard')).context['judge_submissions']
+        self.assertEqual(counts(), {'submitted': 0, 'expected': 1, 'pending': 1, 'percent': 0})
+        rows[0].status = 'SUBMITTED'
+        rows[0].save()
+        self.assertEqual(counts()['submitted'], 0)
+        rows[1].status = 'SUBMITTED'
+        rows[1].save()
+        self.assertEqual(counts(), {'submitted': 1, 'expected': 1, 'pending': 0, 'percent': 100})

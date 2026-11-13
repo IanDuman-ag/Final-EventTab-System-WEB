@@ -6,38 +6,27 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Faculty and Tabulator Accounts - EventTab</title>
   {% include 'admindash/_bootstrap.html' %}
-  <link rel="stylesheet" href="{% static 'admindash/facultyaccount.css' %}?v=20260805a">
   <link rel="stylesheet" href="{% static 'admindash/bootstrap-admin.css' %}?v=1">
+  <link rel="stylesheet" href="{% static 'admindash/facultyaccount.css' %}?v=20261031resetcenter">
 </head>
-<body class="admin-dashboard-page manage-account-page admin-dashboard-v2" data-account-page="faculty_tabulator" data-default-role="Faculty">
+<body class="admin-dashboard-page manage-account-page faculty-accounts-page admin-dashboard-v2" data-account-page="faculty_tabulator" data-default-role="Faculty">
   <div class="dashboard-shell d-flex flex-column flex-lg-row">
     {% include 'admindash/_sidebar.html' with active='accounts_tabulator' %}
 
     <div class="content-area v2-content">
-      <header class="topbar">
-        <span class="topbar-spacer" aria-hidden="true"></span>
-        <div class="topbar-actions">
-          <button class="icon-button" type="button" aria-label="Notifications">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm8-6-2-2v-5a6 6 0 1 0-12 0v5l-2 2v1h16v-1Z"></path></svg>
-          </button>
-          <div class="profile-avatar" aria-label="{{ request.user.username }}">
-            {{ request.user.username|default:"AD"|slice:":2"|upper }}
-          </div>
-        </div>
-      </header>
-
       <main class="container-fluid main-content">
         <section class="account-hero" aria-label="Faculty and Tabulator account overview">
           <div class="account-title">
-            <h2>Faculty and<br>Tabulator Accounts</h2>
+            <span class="account-eyebrow">ACCOUNTS</span>
+            <h2>Faculty and Tabulator Accounts</h2>
             <p>Manage Faculty and Tabulator portal access and permissions.</p>
           </div>
 
-          <article class="users-card">
-            <span>Total Accounts</span>
-            <strong>{{ total_user_count|default:"0" }}</strong>
-            <small>{{ active_user_count|default:"0" }} active accounts</small>
-          </article>
+          <div class="account-summary" aria-label="Account statistics">
+            <article class="users-card"><span class="account-stat-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="7" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3ZM16 4a3 3 0 0 1 0 6M18 13a6 6 0 0 1 4 5v3"/></svg></span><div><span>Total Accounts</span><strong>{{ total_user_count|default:"0" }}</strong><small>{{ total_user_count|default:"0" }} accounts</small></div></article>
+            <article class="users-card users-card--active"><span class="account-stat-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="7" r="3"/><path d="M5 21v-3a7 7 0 0 1 14 0v3Z"/></svg></span><div><span>Active Accounts</span><strong>{{ active_user_count|default:"0" }}</strong><small>{% widthratio active_user_count total_user_count 100 %}% active</small></div></article>
+            <article class="users-card users-card--inactive"><span class="account-stat-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="7" r="3"/><path d="M3 21v-3a6 6 0 0 1 10-4M16 14l6 6M22 14l-6 6"/></svg></span><div><span>Inactive Accounts</span><strong>{{ inactive_user_count|default:"0" }}</strong><small>{% widthratio inactive_user_count total_user_count 100 %}% inactive</small></div></article>
+          </div>
 
           <button
             class="btn btn-primary new-account-btn"
@@ -53,20 +42,16 @@
         <section class="accounts-panel" aria-label="Faculty and Tabulator accounts table">
           <div class="account-toolbar">
             <form class="account-filters" method="get" role="search">
-              <input class="form-control" type="text" name="q" value="{{ search_query }}" placeholder="Search accounts" aria-label="Search accounts">
+              <label class="account-search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></svg><input class="form-control" type="search" name="q" value="{{ search_query }}" placeholder="Search by username or email..." aria-label="Search by username or email"></label>
+              <select class="form-select" name="role" aria-label="Role"><option value="all" {% if selected_role == 'all' %}selected{% endif %}>All Roles</option><option value="faculty" {% if selected_role == 'faculty' %}selected{% endif %}>Faculty</option><option value="tabulator" {% if selected_role == 'tabulator' %}selected{% endif %}>Tabulator</option></select>
               <select class="form-select" name="status" aria-label="Status">
                 <option value="all" {% if selected_status == 'all' %}selected{% endif %}>All Status</option>
                 <option value="active" {% if selected_status == 'active' %}selected{% endif %}>Active</option>
                 <option value="inactive" {% if selected_status == 'inactive' %}selected{% endif %}>Deactivated</option>
               </select>
-              <button type="submit" aria-label="Apply filters">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17Z"></path></svg>
-              </button>
+              <button type="submit" aria-label="Apply filters"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18l-7 8v7l-4 2v-9Z"/></svg><span>Filter</span></button>
             </form>
-            <div class="table-count">
-              Displaying {{ start_index }}-{{ end_index }} of {{ filtered_user_count|default:"0" }}
-              <span>records</span>
-            </div>
+
           </div>
 
           <div id="bulk-action-bar" class="bulk-action-bar bulk-action-bar--hidden">
@@ -90,8 +75,9 @@
                   <th class="col-check">
                     <input class="form-check-input" type="checkbox" id="chk-select-all" aria-label="Select all">
                   </th>
-                  <th>Username</th>
-                  <th>Gmail</th>
+                  <th class="account-number">#</th>
+                  <th>User</th>
+                  <th>Email</th>
                   <th>Role</th>
                   <th>Status</th>
                   <th>Actions</th>
@@ -111,13 +97,14 @@
                     <td class="col-check">
                       <input type="checkbox" class="form-check-input row-checkbox" aria-label="Select {{ row.user.username }}" value="{{ row.user.id }}">
                     </td>
-                    <td data-label="Username">
+                    <td class="account-number" data-label="#">{{ forloop.counter|add:start_index|add:"-1"|stringformat:"02d" }}</td>
+                    <td data-label="User">
                       <div class="person-cell">
-                        <span class="person-avatar">{{ row.initials }}</span>
-                        <strong>{{ row.user.username }}</strong>
+                        <span class="person-avatar person-avatar--{{ row.role|lower }}">{{ row.user.username|slice:":1"|upper }}</span>
+                        <div><strong>{{ row.user.username }}</strong><small>{{ row.role }} Account</small></div>
                       </div>
                     </td>
-                    <td data-label="Gmail">{{ row.user.email|default:"—" }}</td>
+                    <td data-label="Email"><span class="account-email"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 6 9 7 9-7"/></svg>{{ row.user.email|default:"&mdash;" }}</span></td>
                     <td data-label="Role"><span class="role-label role-label--{{ row.role|lower }}">{{ row.role }}</span></td>
                     <td data-label="Status"><span class="status-pill {{ row.status_key }}">{{ row.status }}</span></td>
                     <td data-label="Actions">
@@ -128,6 +115,9 @@
                         <button class="row-action edit-account" type="button" title="Edit" aria-label="Edit {{ row.user.username }}" data-update-url="{% url 'update_assignment_account' row.user.id %}">
                           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 17.25 11.06-11.06 3.75 3.75L6.75 21H3v-3.75ZM19.71 8.04 15.96 4.3l1.33-1.33a1 1 0 0 1 1.42 0l2.33 2.33a1 1 0 0 1 0 1.42l-1.33 1.33Z"></path></svg>
                         </button>
+                        <button class="row-action reset-account-password" type="button" title="Reset password" aria-label="Reset password for {{ row.user.username }}" data-reset-url="{% url 'reset_assignment_account_password' row.user.id %}">
+                          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 1-8 5H1l4-5 4 5H6a6 6 0 1 0 6-2V3Z"/></svg>
+                        </button>
                         <button class="row-action delete-account" type="button" title="Delete" aria-label="Delete {{ row.user.username }}" data-delete-url="{% url 'delete_assignment_account' row.user.id %}">
                           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm1 7h2v8h-2v-8Zm4 0h2v8h-2v-8ZM6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7Z"></path></svg>
                         </button>
@@ -135,7 +125,7 @@
                     </td>
                   </tr>
                 {% empty %}
-                  <tr><td colspan="6" class="empty-state">No Faculty or Tabulator accounts found.</td></tr>
+                  <tr><td colspan="7" class="empty-state">No Faculty or Tabulator accounts found.</td></tr>
                 {% endfor %}
               </tbody>
             </table>
@@ -145,14 +135,15 @@
             <span>Showing {{ start_index }} to {{ end_index }} of {{ filtered_user_count|default:"0" }} records</span>
             <div class="pagination-controls">
               {% if page_obj.has_previous %}
-                <a href="?q={{ search_query|urlencode }}&status={{ selected_status }}&page={{ page_obj.previous_page_number }}">Previous</a>
+                <a href="?q={{ search_query|urlencode }}&status={{ selected_status }}&role={{ selected_role|urlencode }}&page={{ page_obj.previous_page_number }}" aria-label="Previous page">&lsaquo;</a>
               {% else %}
-                <span class="disabled">Previous</span>
+                <span class="disabled" aria-disabled="true" aria-label="Previous page">&lsaquo;</span>
               {% endif %}
+              <span class="primary" aria-current="page" aria-label="Current page">{{ page_obj.number }}</span>
               {% if page_obj.has_next %}
-                <a class="primary" href="?q={{ search_query|urlencode }}&status={{ selected_status }}&page={{ page_obj.next_page_number }}">Next</a>
+                <a href="?q={{ search_query|urlencode }}&status={{ selected_status }}&role={{ selected_role|urlencode }}&page={{ page_obj.next_page_number }}" aria-label="Next page">&rsaquo;</a>
               {% else %}
-                <span class="disabled primary">Next</span>
+                <span class="disabled" aria-disabled="true" aria-label="Next page">&rsaquo;</span>
               {% endif %}
             </div>
           </div>
@@ -161,7 +152,20 @@
     </div>
   </div>
 
+  <dialog id="account-password-reset" aria-labelledby="password-reset-title">
+    <form id="account-password-reset-form" class="account-modal-form">
+      {% csrf_token %}
+      <h3 id="password-reset-title">Reset Password</h3>
+      <p id="password-reset-account"></p>
+      <div class="form-grid">
+        <label class="acc-field--full">New password<input class="form-control" type="password" id="account-new-password" autocomplete="new-password" required></label>
+        <label class="acc-field--full">Confirm new password<input class="form-control" type="password" id="account-confirm-password" autocomplete="new-password" required></label>
+      </div>
+      <p id="password-reset-message" role="status" aria-live="polite"></p>
+      <div class="password-reset-actions"><button class="btn btn-outline-secondary" type="button" id="password-reset-cancel">Cancel</button><button class="btn btn-primary" type="submit" id="password-reset-submit">Reset Password</button></div>
+    </form>
+  </dialog>
   {% include 'admindash/_assignment_modal.html' %}
-  <script src="{% static 'js/assignment_accounts.js' %}?v=20260805a"></script>
+  <script src="{% static 'js/assignment_accounts.js' %}?v=20261031passwordreset"></script>
 </body>
 </html>

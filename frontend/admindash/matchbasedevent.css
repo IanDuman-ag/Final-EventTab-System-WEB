@@ -341,3 +341,75 @@
   .confirm-dialog__actions { margin-top:16px; padding-top:14px; }
 }
 @media (prefers-reduced-motion:reduce) { * { animation:none!important; transition:none!important; } }
+/* Match listing: reference layout, scoped away from tournament dialogs. */
+.match-events-page .v2-content { background:#f4f8fd; }
+.match-events-page .match-topbar { min-height:62px; padding:12px 20px; display:flex; justify-content:space-between; gap:20px; background:#eaf1fa; border-bottom:1px solid #e3ecf7; }
+.match-global-search { display:flex; align-items:center; gap:10px; width:min(440px,65%); padding:7px 12px; border:1px solid #d7e2f0; border-radius:8px; background:#f6f9fd; color:#526a91; }
+.match-global-search input { width:100%; min-width:0; border:0; outline:0; background:transparent; color:#17234c; font-size:11px; }
+.match-global-search:focus-within { outline:2px solid #86adff; }
+.match-season { align-self:center; padding:9px 12px; border-radius:8px; background:white; color:#263967; font-size:11px; }
+.match-events-page .match-main { padding:10px 20px 24px; }
+.match-page-head { align-items:center; margin-bottom:16px; }
+.match-breadcrumb { display:block; margin-bottom:6px; color:#93a4bd; font-size:11px; }
+.match-breadcrumb span { margin:0 10px; }
+.match-breadcrumb strong { color:#0862ff; font-weight:600; }
+.match-page-head h1 { margin:0 0 3px; color:#101044; font-size:25px; line-height:1.25; font-weight:750; letter-spacing:-1px; }
+.match-page-head p { color:#5d7199; font-size:12px; }
+.match-events-page .match-primary { min-height:34px; background:#0864ff; border-color:#0864ff; border-radius:8px; padding:8px 17px; font-size:11px; }
+.match-stats { grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; background:transparent; margin-bottom:12px; }
+.match-stats .match-stat { display:flex; align-items:center; gap:20px; padding:13px 12px; min-height:86px; border:1px solid #edf2fa; border-radius:11px; background:#fbfdff; }
+.match-stats .match-stat>div { display:block; padding:0; border:0; min-width:0; }
+.match-stats .match-stat-icon { display:grid; place-items:center; flex:0 0 58px; height:56px; border-radius:13px; background:#e7f0ff; color:#0864ff; font-size:30px; line-height:1; }
+.match-stats .match-stat span:not(.match-stat-icon) { color:#5a6c96; font-size:11px; font-weight:400; text-transform:none; letter-spacing:0; }
+.match-stats .match-stat strong { display:block; color:#111342; font-size:24px; font-weight:700; line-height:1.15; font-variant-numeric:tabular-nums; }
+.match-stats .match-stat small { display:block; margin-top:2px; color:#637aa3; font-size:11px; }
+.match-stats .match-stat--published { background:#f9fdfc; }
+.match-stats .match-stat--published .match-stat-icon { color:#00aa69; background:#e1f8ee; }
+.match-stats .match-stat--published small { color:#00a96c; }
+.match-stats .match-stat--draft { background:#fffdf8; }
+.match-stats .match-stat--draft .match-stat-icon { background:#fff4d9; color:#ffa000; }
+.match-stats .match-stat--division { background:#fcfaff; }
+.match-stats .match-stat--division .match-stat-icon { background:#f0e9ff; color:#6817f5; }
+.match-table-card { border:1px solid #e8eff8; border-radius:10px; overflow:hidden; box-shadow:0 4px 15px #244d7c04; }
+.match-toolbar { display:grid; grid-template-columns:minmax(200px,3.5fr) repeat(4,minmax(110px,1fr)) auto; gap:10px; padding:11px 12px; border-color:#edf2f8; }
+.match-toolbar label { min-width:0; }
+.match-toolbar input,.match-toolbar select { width:100%; height:33px; padding-left:11px; background:#fff; border-color:#dce5f3; border-radius:6px; color:#283964; font-size:10px; }
+.match-events-page .match-toolbar .match-secondary { min-height:33px; border-radius:6px; padding:5px 15px; border-color:#dce5f3; color:#0864ff; font-size:10px; }
+.match-events-page #event-bulk-actions { min-height:43px; padding:5px 12px!important; gap:12px!important; border-color:#edf2f8!important; font-size:10px; color:#263463; }
+.match-events-page #events-select-all,.match-events-page #events-clear-selection { border:0; padding:4px 0; background:transparent; color:#263463; font-size:10px; }
+.match-events-page #events-delete-selected { min-height:30px; padding:5px 13px; border-radius:7px; font-size:10px; background:#f16b83; border-color:#f16b83; }
+.match-table { min-width:980px; margin:0; }
+.match-table th { padding:9px 8px; color:#4d608b; font-size:10px; font-weight:600; text-transform:none; letter-spacing:0; background:#f4f8fd; border:0; white-space:nowrap; }
+.match-table td { height:43px; padding:4px 8px; font-size:10px; color:#5a6d96; border-color:#eaf0f8; background:#fff; }
+.match-table th:first-child,.match-table td:first-child { width:36px; padding-left:14px; }
+.match-table .form-check-input { width:14px; height:14px; border-color:#cbd9ed; border-radius:4px; box-shadow:none; }
+.match-table .match-number { width:40px; color:#334575; font-variant-numeric:tabular-nums; }
+.match-number span { display:grid; place-items:center; width:30px; height:32px; border-radius:7px; background:#f7f9fc; }
+.match-event-name { display:flex; align-items:center; gap:12px; }
+.match-table td strong { color:#172049; font-size:10px; font-weight:600; }
+.match-table td small { margin-top:2px; color:#62769f; font-size:10px; }
+.match-sport-icon { display:grid; place-items:center; width:34px; height:34px; flex-shrink:0; background:#f2ebff; color:#721dff; border-radius:9px; font-size:23px; }
+.match-sport-icon--chess { background:#e1f8ed; color:#00a86b; }
+.match-sport-icon--table-tennis { background:#fff4d8; color:#ff9c00; }
+.match-sport-icon--badminton { background:#ffebf0; color:#f33769; }
+.match-category,.match-division { display:inline-block; padding:4px 9px; border-radius:9px; font-size:9px; font-weight:600; background:#e8f2ff; color:#0864ff; }
+.match-division--mixed { background:#f1eaff; color:#7835ff; }
+.match-division--women { background:#ffeaf0; color:#ed3662; }
+.match-status { padding:5px 9px; border-radius:9px; font-size:9px; font-weight:600; letter-spacing:0; text-transform:none; white-space:nowrap; }
+.match-status--published { background:#e0f9ed; color:#00a16b; }
+.match-status::before { content:''; display:inline-block; width:8px; height:8px; margin-right:7px; border-radius:50%; background:currentColor; }
+.match-date { white-space:nowrap; font-variant-numeric:tabular-nums; }
+.match-actions { gap:8px; }
+.match-actions button { display:grid; place-items:center; min-width:32px; min-height:32px; padding:8px; border-radius:8px; background:#edf4fc; }
+.match-actions svg { width:15px; height:15px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; pointer-events:none; }
+.match-actions form button { display:block; font-size:9px; }
+@media(max-width:1200px) { .match-toolbar { grid-template-columns:repeat(4,minmax(0,1fr)) auto; } .match-toolbar .match-search { grid-column:1/-1; } .match-stats .match-stat { gap:10px; } .match-stats .match-stat-icon { flex-basis:44px; height:48px; } }
+@media(max-width:650px) { .match-events-page .match-main { padding:12px; } .match-events-page .match-topbar { padding:12px; gap:10px; } .match-stats { grid-template-columns:repeat(2,minmax(0,1fr)); } .match-toolbar { grid-template-columns:repeat(2,minmax(0,1fr)); } .match-page-head { align-items:flex-start; gap:12px; } .match-page-head h1 { font-size:22px; } .match-page-head p { font-size:11px; } .match-page-head .match-primary { white-space:nowrap; padding:8px 10px; } .match-season { font-size:10px; } }
+.match-stat-icon svg { width:29px; height:29px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+.match-sport-icon svg { width:24px; height:24px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+
+.match-global-search>span svg,.match-season svg { width:16px; height:16px; vertical-align:middle; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+
+.match-classification { display:inline-block; padding:4px 9px; border-radius:6px; font-size:9px; font-weight:600; white-space:nowrap; background:#f3f6fb; color:#5a6d96; }
+.match-classification--major { background:#f4edff; color:#7a27f5; }
+.match-classification--minor { background:#eaf3ff; color:#0864ff; }

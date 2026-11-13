@@ -143,6 +143,18 @@ class MobileApiTests(TestCase):
         self.assertEqual(history['entries'][0]['verification_id'], 'OWN')
         self.assertEqual(self.api.get('/api/events/judge/profile/').json()['stats']['completed'], 1)
 
+    def test_assignment_list_includes_event_classification(self):
+        self.portal.event_classification = Event.CLASSIFICATION_MAJOR
+        self.portal.save(update_fields=['event_classification'])
+
+        listed = self.api.get('/api/events/judge/assignments/').json()['assignments'][0]
+        detail = self.api.get(f'/api/events/judge/assignments/{self.event.pk}/').json()
+
+        self.assertEqual(listed['event_classification'], Event.CLASSIFICATION_MAJOR)
+        self.assertEqual(listed['classification_label'], 'Major Event')
+        self.assertEqual(detail['event_classification'], Event.CLASSIFICATION_MAJOR)
+        self.assertEqual(detail['classification_label'], 'Major Event')
+
     def test_unassigned_missing_and_inactive_assignments(self):
         self.portal.assigned_judges.remove(self.judge)
         self.assertEqual(self.api.get(f'/api/events/judge/assignments/{self.event.pk}/').status_code, 404)

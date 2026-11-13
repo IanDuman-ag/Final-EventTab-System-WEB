@@ -1898,7 +1898,7 @@ class TabulatorResultsPortalTests(TestCase):
         response = self.client.get(reverse('tabulator_dashboard'), {'event_id': self.event.id})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context['dashboard_stats'],
-                         {'submitted_scores': 1, 'pending_scores': 1})
+                         {'submitted_scores': 1, 'pending_scores': 1, 'expected_scores': 2})
 
     def test_dashboard_does_not_promote_round_scores_to_overall_rankings(self):
         self.event.rounds_config = [{'name': 'Preliminary'}, {'name': 'Final', 'is_final': True}]

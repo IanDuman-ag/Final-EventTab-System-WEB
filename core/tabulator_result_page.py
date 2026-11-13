@@ -18,6 +18,15 @@ from events.models import (
 )
 
 
+def _participant_number(participant):
+    """Use the same candidate numbering as the event participant editor."""
+    if isinstance(participant, CriteriaEventEntry):
+        if participant.source_individual_id:
+            return participant.source_individual.number
+        return participant.display_order + 1
+    return getattr(participant, 'number', '')
+
+
 def _round_options(event, modern, match):
     configured = [row for row in event.rounds_config or [] if isinstance(row, dict)]
     if match:
@@ -79,7 +88,7 @@ def _modern_data(event, page, categories):
     from events.participant_removal_service import active_participant_ids
     index = next((index for index, row in enumerate(criteria_rounds(event)) if row['id'] == round_id), None)
     ids = active_participant_ids(event, index)
-    participants = list(CriteriaEventEntry.objects.filter(event=event, id__in=ids))
+    participants = list(CriteriaEventEntry.objects.filter(event=event, id__in=ids).select_related('source_individual'))
     if not participants:
         model = RegistryCandidate if event.participation_type == 'individual' else Team
         participants = list(model.objects.filter(id__in=ids, status=model.STATUS_ACTIVE))
@@ -91,7 +100,7 @@ def _modern_data(event, page, categories):
         page['scope_notice'] = 'Ranking entries are shown for review. Calculated standings are not available for this scoring mode.'
     else:
         try:
-            ranked = compute_official_criteria_rankings(event, round_id=round_id, participant_ids=ids)
+            ranked = compute_official_criteria_rankings(event, round_id=round_id, participant_ids=ids, apply_tie_breaks=True)
         except ValueError as exc:
             page['error'] = str(exc)
     page['scope_notice'] = page['scope_notice'] or 'Round standings use approved, complete judge sheets. Other submissions remain pending verification.'
@@ -101,7 +110,7 @@ def _modern_data(event, page, categories):
     rows = []
     for result in ranked:
         participant = participant_map.get(result['participant_id'])
-        rows.append(dict(result, number=getattr(participant, 'number', ''), department='',
+        rows.append(dict(result, number=_participant_number(participant), department='',
                          has_score=True, rank=result['rank'] if result['complete'] else None,
                          status='Complete' if result['complete'] else 'Awaiting judges',
                          prize=(f"Round rank {result['rank']}" if multi_round else _placement(result['rank']))
@@ -168,7 +177,7 @@ def _modern_data(event, page, categories):
         if details:
             page['breakdown_groups'].append({
                 'name': getattr(participant, 'display_name', None) or participant.name,
-                'number': getattr(participant, 'number', ''),
+                'number': _participant_number(participant),
                 'total': final_by_id.get(participant.pk) if not selected else None, 'rows': details,
             })
 
@@ -268,7 +277,9 @@ def build_results_page(request, event, payload):
             candidate__event=event.judging_event, is_locked=True,
         ).values_list('candidate_id', 'criterion_id', 'judge_id')) if event.judging_event_id else set()
         required_criteria = list(event.judging_event.criteria.values_list('pk', flat=True)) if event.judging_event_id else []
+        candidate_numbers = dict(event.judging_event.candidates.values_list('pk', 'number')) if event.judging_event_id else {}
         for row in rows:
+            row['number'] = row.get('number') or candidate_numbers.get(row.get('candidate_id'), '')
             row['complete'] = bool(page['judges'] and required_criteria) and all(
                 (row.get('candidate_id'), criterion_id, judge['id']) in locked
                 for criterion_id in required_criteria for judge in page['judges']

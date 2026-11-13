@@ -1,9 +1,175 @@
-(function(){'use strict';
-var $=function(s,r){return(r||document).querySelector(s)};var $$=function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s))};
-var sidebar=$('#etSidebar'),backdrop=$('#etBackdrop'),menu=$('#etMenuBtn');function closeMenu(){if(!sidebar)return;sidebar.classList.remove('is-open');if(backdrop){backdrop.classList.remove('is-open');backdrop.hidden=true}if(menu)menu.setAttribute('aria-expanded','false')}if(menu){menu.addEventListener('click',function(){var open=!sidebar.classList.contains('is-open');sidebar.classList.toggle('is-open',open);if(backdrop){backdrop.hidden=!open;backdrop.classList.toggle('is-open',open)}menu.setAttribute('aria-expanded',String(open))})}if(backdrop)backdrop.addEventListener('click',closeMenu);document.addEventListener('keydown',function(e){if(e.key==='Escape')closeMenu()});
-$$('[data-auto-submit]').forEach(function(el){el.addEventListener('change',function(){if(el.form)el.form.submit()})});$$('[data-print]').forEach(function(el){el.addEventListener('click',function(){window.print()})});$$('[data-confirm]').forEach(function(el){el.addEventListener('click',function(e){if(!window.confirm(el.getAttribute('data-confirm')))e.preventDefault()})});
-$$('[data-match-detail]').forEach(function(el){el.addEventListener('click',function(){var target=document.getElementById(el.getAttribute('data-match-detail'));if(target){target.hidden=!target.hidden;el.setAttribute('aria-expanded',String(!target.hidden))}})});
-var tabButtons=$$('[data-result-tab]'),tabPanels=$$('[data-result-panel]');function activateTab(name){tabButtons.forEach(function(el){var active=el.getAttribute('data-result-tab')===name;el.setAttribute('aria-selected',String(active));el.tabIndex=active?0:-1});tabPanels.forEach(function(el){el.hidden=el.getAttribute('data-result-panel')!==name})}tabButtons.forEach(function(el){el.addEventListener('click',function(){activateTab(el.getAttribute('data-result-tab'))})});if(tabButtons.length){var initial=new URLSearchParams(location.search).get('tab');activateTab(tabButtons.some(function(el){return el.getAttribute('data-result-tab')===initial})?initial:'overview')}
-var root=$('[data-refresh-url]'),toggle=$('#etAutoRefresh');if(root&&toggle){var timer=null;function update(){var url=new URL(root.getAttribute('data-refresh-url'),location.origin);url.searchParams.set('event_id',root.getAttribute('data-event-id'));fetch(url.toString(),{headers:{Accept:'application/json'}}).then(function(res){if(!res.ok)throw Error('Refresh failed');return res.json()}).then(function(data){if(data.success){var stamp=$('#etUpdatedAt');if(stamp)stamp.textContent='Updated '+new Date().toLocaleTimeString();if(data.payload&&data.payload.results){renderRows(data.payload)}}}).catch(function(){var stamp=$('#etUpdatedAt');if(stamp)stamp.textContent='Unable to refresh. Showing the last available standings.'})}function sync(){if(timer)clearInterval(timer);timer=null;if(toggle.checked)timer=setInterval(update,30000)}toggle.addEventListener('change',sync);sync()}
-function cell(value){var td=document.createElement('td');td.textContent=value==null?'—':String(value);return td}function renderRows(payload){var table=$('#etLiveTable');if(!table)return;var body=$('tbody',table);if(!body)return;body.replaceChildren();var rows=payload.results||[],isEmpty=!rows.length||(payload.event_kind==='match'&&payload.stats&&payload.stats.completed_matches===0);table.classList.toggle('is-empty',isEmpty);if(isEmpty){var tr=document.createElement('tr'),empty=cell(payload.event_kind==='match'?'Standings will appear after the first completed match.':'Standings will appear when scores are submitted.');empty.colSpan=payload.event_kind==='match'?7:6;empty.className='et-empty';tr.appendChild(empty);body.appendChild(tr);return}rows.forEach(function(row){var tr=document.createElement('tr'),values;if(payload.event_kind==='match'){values=[row.rank||'—',row.name,row.played,row.wins,row.losses,row.points]}else{values=[row.final_visible?row.rank||'—':'—',row.name,row.has_score?row.average_score:'—',row.has_score?row.weighted_score:'—',String(row.judges_submitted||0)+' / '+String(row.judge_count||0),row.status||'In Progress']}values.forEach(function(value){tr.appendChild(cell(value))});if(payload.event_kind==='match'){var formCell=document.createElement('td'),form=document.createElement('div');form.className='form-sequence';(row.form||[]).forEach(function(result){var badge=document.createElement('span');badge.className='form-badge '+(result==='W'?'win':'loss');badge.textContent=result;form.appendChild(badge)});if(!form.childNodes.length)form.textContent='—';formCell.appendChild(form);tr.appendChild(formCell)}body.appendChild(tr)})}
+(function() {
+    'use strict';
+    var $ = function(s, r) {
+        return (r || document).querySelector(s)
+    };
+    var $$ = function(s, r) {
+        return Array.prototype.slice.call((r || document).querySelectorAll(s))
+    };
+    var sidebar = $('#etSidebar'),
+        backdrop = $('#etBackdrop'),
+        menu = $('#etMenuBtn');
+
+    function closeMenu() {
+        if (!sidebar) return;
+        sidebar.classList.remove('is-open');
+        if (backdrop) {
+            backdrop.classList.remove('is-open');
+            backdrop.hidden = true
+        }
+        if (menu) menu.setAttribute('aria-expanded', 'false')
+    }
+    if (menu) {
+        menu.addEventListener('click', function() {
+            var open = !sidebar.classList.contains('is-open');
+            sidebar.classList.toggle('is-open', open);
+            if (backdrop) {
+                backdrop.hidden = !open;
+                backdrop.classList.toggle('is-open', open)
+            }
+            menu.setAttribute('aria-expanded', String(open))
+        })
+    }
+    if (backdrop) backdrop.addEventListener('click', closeMenu);
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closeMenu()
+    });
+    $$('[data-auto-submit]').forEach(function(el) {
+        el.addEventListener('change', function() {
+            if (el.form) el.form.submit()
+        })
+    });
+    $$('[data-print]').forEach(function(el) {
+        el.addEventListener('click', function() {
+            window.print()
+        })
+    });
+    $$('[data-confirm]').forEach(function(el) {
+        el.addEventListener('click', function(e) {
+            if (!window.confirm(el.getAttribute('data-confirm'))) e.preventDefault()
+        })
+    });
+    $$('[data-match-detail]').forEach(function(el) {
+        el.addEventListener('click', function() {
+            var target = document.getElementById(el.getAttribute('data-match-detail'));
+            if (target) {
+                target.hidden = !target.hidden;
+                el.setAttribute('aria-expanded', String(!target.hidden))
+            }
+        })
+    });
+    var tabButtons = $$('[data-result-tab]'),
+        tabPanels = $$('[data-result-panel]');
+
+    function activateTab(name) {
+        tabButtons.forEach(function(el) {
+            var active = el.getAttribute('data-result-tab') === name;
+            el.setAttribute('aria-selected', String(active));
+            el.tabIndex = active ? 0 : -1
+        });
+        tabPanels.forEach(function(el) {
+            el.hidden = el.getAttribute('data-result-panel') !== name
+        })
+    }
+    tabButtons.forEach(function(el) {
+        el.addEventListener('click', function() {
+            activateTab(el.getAttribute('data-result-tab'))
+        })
+    });
+    if (tabButtons.length) {
+        var initial = new URLSearchParams(location.search).get('tab');
+        activateTab(tabButtons.some(function(el) {
+            return el.getAttribute('data-result-tab') === initial
+        }) ? initial : 'overview')
+    }
+    var root = $('[data-refresh-url]'),
+        toggle = $('#etAutoRefresh');
+    if (root && toggle) {
+        var timer = null;
+
+        function update() {
+            var url = new URL(root.getAttribute('data-refresh-url'), location.origin);
+            url.searchParams.set('event_id', root.getAttribute('data-event-id'));
+            fetch(url.toString(), {
+                headers: {
+                    Accept: 'application/json'
+                }
+            }).then(function(res) {
+                if (!res.ok) throw Error('Refresh failed');
+                return res.json()
+            }).then(function(data) {
+                if (data.success) {
+                    var stamp = $('#etUpdatedAt');
+                    if (stamp) stamp.textContent = 'Updated ' + new Date().toLocaleTimeString();
+                    if (data.payload && data.payload.results) {
+                        renderRows(data.payload)
+                    }
+                }
+            }).catch(function() {
+                var stamp = $('#etUpdatedAt');
+                if (stamp) stamp.textContent = 'Unable to refresh. Showing the last available standings.'
+            })
+        }
+
+        function sync() {
+            if (timer) clearInterval(timer);
+            timer = null;
+            if (toggle.checked) timer = setInterval(update, 30000)
+        }
+        toggle.addEventListener('change', sync);
+        sync()
+    }
+
+    function cell(value) {
+        var td = document.createElement('td');
+        td.textContent = value == null ? '—' : String(value);
+        return td
+    }
+
+    function renderRows(payload) {
+        var table = $('#etLiveTable');
+        if (!table) return;
+        var body = $('tbody', table);
+        if (!body) return;
+        body.replaceChildren();
+        var rows = payload.results || [],
+            isEmpty = !rows.length || (payload.event_kind === 'match' && payload.stats && payload.stats.completed_matches === 0);
+        table.classList.toggle('is-empty', isEmpty);
+        if (isEmpty) {
+            var tr = document.createElement('tr'),
+                empty = cell(payload.event_kind === 'match' ? 'Standings will appear after the first completed match.' : 'Standings will appear when scores are submitted.');
+            empty.colSpan = payload.event_kind === 'match' ? 7 : 6;
+            empty.className = 'et-empty';
+            tr.appendChild(empty);
+            body.appendChild(tr);
+            return
+        }
+        rows.forEach(function(row) {
+            var tr = document.createElement('tr'),
+                values;
+            if (payload.event_kind === 'match') {
+                values = [row.rank || '—', row.name, row.played, row.wins, row.losses, row.points]
+            } else {
+                values = [row.final_visible ? row.rank || '—' : '—', row.name, row.has_score ? row.average_score : '—', row.has_score ? row.weighted_score : '—', String(row.judges_submitted || 0) + ' / ' + String(row.judge_count || 0), row.status || 'In Progress']
+            }
+            values.forEach(function(value) {
+                tr.appendChild(cell(value))
+            });
+            if (payload.event_kind === 'match') {
+                var formCell = document.createElement('td'),
+                    form = document.createElement('div');
+                form.className = 'form-sequence';
+                (row.form || []).forEach(function(result) {
+                    var badge = document.createElement('span');
+                    badge.className = 'form-badge ' + (result === 'W' ? 'win' : 'loss');
+                    badge.textContent = result;
+                    form.appendChild(badge)
+                });
+                if (!form.childNodes.length) form.textContent = '—';
+                formCell.appendChild(form);
+                tr.appendChild(formCell)
+            }
+            body.appendChild(tr)
+        })
+    }
 })();

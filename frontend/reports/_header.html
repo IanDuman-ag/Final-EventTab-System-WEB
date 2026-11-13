@@ -3,7 +3,7 @@
   <div class="official-report-copy">
     <h1 data-branding-school>{{ branding.school_name|default:'EventTab' }}</h1>
     <p data-branding-campus {% if not branding.campus_name %}hidden{% endif %}>{{ branding.campus_name }}</p>
-    <p class="official-product">EventTab</p>
+    {% if not hide_product %}<p class="official-product">EventTab</p>{% endif %}
     <p data-branding-subtitle {% if not branding.report_subtitle %}hidden{% endif %}>{{ branding.report_subtitle }}</p>
     <h2>{{ report_title|default:'Results Report' }}</h2>
   </div>

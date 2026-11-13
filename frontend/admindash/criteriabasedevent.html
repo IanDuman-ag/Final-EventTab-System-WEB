@@ -6,18 +6,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% if individual_workspace %}Individuals{% else %}Criteria-Based Events{% endif %} · EventTab</title>
   {% include 'admindash/_bootstrap.html' %}
-  <link rel="stylesheet" href="{% static 'admindash/criteriabasedevent.css' %}?v=20261027genderdivisions">
+  <link rel="stylesheet" href="{% static 'admindash/criteriabasedevent.css' %}?v=20261030criteriareference">
   <link rel="stylesheet" href="{% static 'admindash/bootstrap-admin.css' %}?v=1">
 </head>
 <body class="admin-dashboard-page admin-dashboard-v2 criteria-page match-events-page{% if individual_workspace %} individual-workspace{% endif %}">
   <div class="dashboard-shell d-flex flex-column flex-lg-row">
     {% if individual_workspace %}{% include 'admindash/_sidebar.html' with active='candidates' %}{% else %}{% include 'admindash/_sidebar.html' with active='events_criteria' %}{% endif %}
     <div class="content-area v2-content">
+      {% if individual_workspace %}
       <header class="v2-topbar match-topbar">
         <div>
           {% if individual_workspace %}<span class="match-breadcrumb">Participants / <strong>Individuals</strong></span><h2 class="v2-welcome">Individuals</h2>{% else %}<a class="match-breadcrumb" href="{% url 'admin_criteria_events' %}">Events / <strong>Criteria-Based</strong></a><h2 class="v2-welcome">Judging operations</h2>{% endif %}
         </div>
       </header>
+      {% endif %}
       <main class="container-fluid v2-main match-main">
         {% if individual_workspace %}
         <div class="individual-workspace-tools"><label for="individual-event">Event <select id="individual-event" aria-label="Select event for participant order"></select></label><a href="{% url 'admin_candidates' %}?event={{ request.GET.event|default:'all' }}" class="btn btn-outline-secondary">Manage individuals</a></div>
@@ -35,7 +37,7 @@
 
         <section class="match-page-head">
           <div>
-            <span class="match-kicker">CRITERIA CONTROL</span>
+            <a class="match-breadcrumb" href="{% url 'admin_criteria_events' %}">Events <span aria-hidden="true">?</span> <strong>Criteria-Based</strong></a>
             <h1>Criteria-Based Events</h1>
             <p>Configure participants, judging criteria, score settings, and championship points.</p>
           </div>
@@ -43,15 +45,15 @@
         </section>
 
         <section class="match-stats" aria-label="Event status overview">
-          <div><span>All events</span><strong>{{ total_count }}</strong></div>
-          <div><span>Published</span><strong>{{ published_count }}</strong></div>
-          <div><span>Drafts</span><strong>{{ draft_count }}</strong></div>
+          <article class="match-stat"><span class="match-stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 2v6M16 2v6M4 10h16"/></svg></span><div><span>Total Events</span><strong>{{ total_count }}</strong><small>All criteria-based events</small></div></article>
+          <article class="match-stat match-stat--published"><span class="match-stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6ZM14 3v5h5M9 12h7M9 16h7"/></svg></span><div><span>Published</span><strong>{{ published_count }}</strong><small>Published events</small></div></article>
+          <article class="match-stat match-stat--draft"><span class="match-stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m15 4 5 5M4 20l5-1L21 7l-5-5L4 14ZM4 5v3M2.5 6.5h3M19 17v4M17 19h4"/></svg></span><div><span>Drafts</span><strong>{{ draft_count }}</strong><small>{% if draft_count %}Unpublished events{% else %}No draft events{% endif %}</small></div></article>
         </section>
 
         <section class="match-table-card">
           <form class="match-toolbar" method="get">
             <label class="match-search"><span class="sr-only">Search events</span>
-              <input class="form-control" name="q" type="search" value="{{ search_query }}" placeholder="Search event, category, or venue">
+              <input class="form-control" name="q" type="search" value="{{ search_query }}" placeholder="Search event name, category, or venue...">
             </label>
             <label><span class="sr-only">Filter status</span>
               <select class="form-select" name="status">
@@ -76,14 +78,14 @@
                 <option value="-event_date" {% if sort == '-event_date' %}selected{% endif %}>Date descending</option>
               </select>
             </label>
-            <button type="submit" class="btn btn-outline-secondary match-secondary">Apply</button>
+            <button type="submit" class="btn btn-outline-secondary match-secondary"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18l-7 8v7l-4 2v-9Z"/></svg> Filter</button>
           </form>
           <div class="d-flex align-items-center flex-wrap gap-2 p-3 border-bottom" id="event-bulk-actions" data-url="{% url 'admin_bulk_delete_events' %}" data-event-type="criteria">
             {% csrf_token %}
             <button type="button" class="btn btn-sm btn-outline-secondary" id="events-select-all">Select All</button>
             <button type="button" class="btn btn-sm btn-outline-secondary" id="events-clear-selection" hidden>Clear Selection</button>
             <span id="events-selection-count" role="status" aria-live="polite">0 selected</span>
-            <button type="button" class="btn btn-sm btn-danger ms-auto" id="events-delete-selected" disabled>Delete Selected</button>
+            <button type="button" class="btn btn-sm btn-danger ms-auto" id="events-delete-selected" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7M14 10v7"/></svg> Delete Selected</button>
             <p id="events-bulk-error" class="text-danger mb-0 w-100" role="alert" hidden></p>
           </div>
           <div class="table-responsive match-table-wrap">
@@ -91,6 +93,7 @@
               <thead>
                 <tr>
                   <th><input type="checkbox" class="form-check-input" id="events-page-select" aria-label="Select events on this page"></th>
+                  <th class="match-number">#</th>
                   <th>Event Name</th>
                   <th>Category</th>
                   <th>Event Classification</th>
@@ -104,22 +107,38 @@
                 {% for event in event_rows %}
                 <tr>
                   <td><input type="checkbox" class="form-check-input event-select" value="{{ event.id }}" aria-label="Select {{ event.name }}"></td>
-                  <td><strong>{{ event.name }}</strong><small>{{ event.venue }}</small></td>
-                  <td>{{ event.category_label|default:event.category }}</td>
-                  <td>{{ event.classification_label }}</td>
+                  <td class="match-number"><span>{{ forloop.counter|add:page_obj.start_index|add:"-1"|stringformat:"02d" }}</span></td>
+                  <td><div class="match-event-name">
+                    {% with event_name=event.name|lower %}
+                    <span class="criteria-event-icon {% if event.special_event_type == 'pageant' %}criteria-event-icon--pageant{% elif 'dance' in event_name or 'music' in event_name %}criteria-event-icon--music{% elif 'yell' in event_name %}criteria-event-icon--yell{% elif 'race' in event_name %}criteria-event-icon--race{% elif 'unit' in event_name %}criteria-event-icon--group{% elif 'banner' in event_name or 'design' in event_name %}criteria-event-icon--art{% endif %}" aria-hidden="true">
+                      <svg viewBox="0 0 24 24">
+                      {% if event.special_event_type == 'pageant' %}<path d="m3 6 4 4 5-6 5 6 4-4-3 12H6ZM6 21h12"/>
+                      {% elif 'dance' in event_name or 'music' in event_name %}<path d="M9 17V5l11-2v12M9 8l11-2"/><ellipse cx="6" cy="18" rx="3" ry="2"/><ellipse cx="17" cy="16" rx="3" ry="2"/>
+                      {% elif 'yell' in event_name %}<path d="M4 9h5l11-5v16L9 15H4ZM8 15l2 6h4l-2-5M2 10v4"/>
+                      {% elif 'race' in event_name %}<circle cx="15" cy="4" r="2"/><path d="m5 9 5-2 4 4 4 1M11 8l-2 7-5 5M9 15l5 1 2 5M14 11l-3 3"/>
+                      {% elif 'unit' in event_name %}<circle cx="9" cy="7" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3ZM16 4a3 3 0 0 1 0 6M18 13a6 6 0 0 1 4 5v3"/>
+                      {% elif 'banner' in event_name or 'design' in event_name %}<path d="M12 3a9 9 0 1 0 0 18h2a2 2 0 0 0 0-4h-1a2 2 0 0 1 0-4h4a4 4 0 0 0 4-4c0-4-5-6-9-6Z"/><path d="M7 8h.01M11 6h.01M6 12h.01M16 7h.01"/>
+                      {% else %}<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4m-7-3-4-3v6Z"/>{% endif %}
+                      </svg>
+                    </span>
+                    {% endwith %}
+                    <div><strong>{{ event.name }}</strong><small>{{ event.venue }}</small></div>
+                  </div></td>
+                  <td><span class="match-category">{{ event.category_label|default:event.category }}</span></td>
+                  <td><span class="criteria-classification criteria-classification--{{ event.classification }}">{{ event.classification_label }}</span></td>
                   <td>{{ event.criteria_score_method_label }}</td>
-                  <td>{{ event.start_date }}{% if event.end_date != event.start_date %}<small>to {{ event.end_date }}</small>{% endif %}</td>
+                  <td class="criteria-event-date"><div><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 2v6M16 2v6M4 10h16"/></svg><span>{{ event.start_date }}{% if event.end_date != event.start_date %}<small>to {{ event.end_date }}</small>{% endif %}</span></div></td>
                   <td><span class="match-status match-status--{{ event.publication_status }}">{{ event.publication_label }}</span></td>
                   <td>
                     <div class="match-actions">
-                      <button type="button" data-view="{{ event.id }}" title="View event" aria-label="View {{ event.name }}">View</button>
-                      <button type="button" data-edit="{{ event.id }}" title="Edit event" aria-label="Edit {{ event.name }}">Edit</button>
-                      <button type="button" data-delete="{{ event.id }}" data-name="{{ event.name }}" data-finalized="{{ event.results_finalized|yesno:'1,0' }}" class="danger" title="Delete event" aria-label="Delete {{ event.name }}">Delete</button>
+                      <button type="button" data-view="{{ event.id }}" title="View event" aria-label="View {{ event.name }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s4-6 10-6 10 6 10 6-4 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></button>
+                      <button type="button" data-edit="{{ event.id }}" title="Edit event" aria-label="Edit {{ event.name }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 4 5 5M4 20l5-1L21 7l-5-5L4 14Z"/></svg></button>
+                      <button type="button" data-delete="{{ event.id }}" data-name="{{ event.name }}" data-finalized="{{ event.results_finalized|yesno:'1,0' }}" class="danger" title="Delete event" aria-label="Delete {{ event.name }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7M14 10v7"/></svg></button>
                     </div>
                   </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="8" class="match-empty"><strong>No criteria events found</strong><span>Select <strong>Create Event</strong> above to add your first draft.</span></td></tr>
+                <tr><td colspan="9" class="match-empty"><strong>No criteria events found</strong><span>Select <strong>Create Event</strong> above to add your first draft.</span></td></tr>
                 {% endfor %}
               </tbody>
             </table>

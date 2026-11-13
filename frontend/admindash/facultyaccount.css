@@ -1,1 +1,81 @@
 @import url("manageacc.css?v=20260616c");
+
+/* Faculty and Tabulator listing: page-local reference styling. */
+.faculty-accounts-page .v2-content { background:#f4f8ff; }
+.faculty-accounts-page .main-content { width:100%; max-width:1600px; margin:0 auto; padding:28px 24px 36px; }
+.faculty-accounts-page .account-hero { grid-template-columns:minmax(300px,1fr) minmax(500px,1.4fr) auto; gap:26px; align-items:center; margin-bottom:30px; }
+.faculty-accounts-page .account-eyebrow { display:block; margin-bottom:16px; color:#4a5c7b; font-size:10px; font-weight:750; letter-spacing:1.5px; }
+.faculty-accounts-page .account-title h2 { margin:0 0 6px; color:#101744; font-size:27px; font-weight:750; line-height:1.2; letter-spacing:-.65px; }
+.faculty-accounts-page .account-title p { width:auto; margin:0; color:#8b9cbd; font-size:13px; font-weight:400; }
+.faculty-accounts-page .account-summary { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }
+.faculty-accounts-page .users-card { display:flex; align-items:flex-start; gap:13px; min-height:98px; padding:16px 13px; border:1px solid #f0f4fb; border-radius:11px; background:#fafdff; box-shadow:0 5px 20px #385f9905; }
+.faculty-accounts-page .users-card>div { min-width:0; }
+.faculty-accounts-page .users-card span:not(.account-stat-icon) { margin:0 0 5px; color:#576b91; font-size:11px; font-weight:400; text-transform:none; letter-spacing:0; white-space:nowrap; }
+.faculty-accounts-page .users-card strong { margin:0 0 6px; color:#101744; font-size:25px; line-height:1; font-weight:700; font-variant-numeric:tabular-nums; }
+.faculty-accounts-page .users-card small { color:#637899; font-size:12px; font-weight:600; white-space:nowrap; }
+.faculty-accounts-page .users-card .account-stat-icon { display:grid; place-items:center; flex:0 0 45px; width:45px; height:45px; margin:0; border-radius:11px; background:#dceaff; color:#0964ff; }
+.faculty-accounts-page .account-stat-icon svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+.faculty-accounts-page .users-card--active { background:#f7fdf9; }
+.faculty-accounts-page .users-card--active .account-stat-icon { color:#00b656; background:#d9f9e5; }
+.faculty-accounts-page .users-card--active small { color:#00b656; }
+.faculty-accounts-page .users-card--inactive { background:#fffafb; }
+.faculty-accounts-page .users-card--inactive .account-stat-icon { color:#f34b67; background:#ffe1e9; }
+.faculty-accounts-page .new-account-btn { min-width:156px; height:41px; padding:10px 16px; margin-top:10px; border-radius:8px; background:#0864ff; border-color:#0864ff; font-size:12px; font-weight:650; box-shadow:0 5px 13px #0864ff20; }
+.faculty-accounts-page .new-account-btn:hover { background:#0754d8; }
+.faculty-accounts-page .accounts-panel { overflow:hidden; border:1px solid #eef3fa; border-radius:11px; background:#fff; box-shadow:0 5px 24px #234b7d04; }
+.faculty-accounts-page .account-toolbar { display:block; padding:16px; border-bottom:1px solid #edf2f9; }
+.faculty-accounts-page .account-filters { display:grid; grid-template-columns:minmax(240px,1fr) 166px 140px 110px; align-items:center; gap:13px; width:100%; }
+.faculty-accounts-page .account-search { position:relative; display:block; min-width:0; }
+.faculty-accounts-page .account-search svg { position:absolute; top:11px; left:13px; width:18px; height:18px; fill:none; stroke:#63799e; stroke-width:1.8; stroke-linecap:round; }
+.faculty-accounts-page .account-filters input,.faculty-accounts-page .account-filters select { width:100%; min-width:0; height:40px; border:1px solid #d8e3f2; border-radius:8px; background-color:#fff; color:#1b2c58; font-size:12px; font-weight:500; }
+.faculty-accounts-page .account-filters input { padding:0 14px 0 42px; }
+.faculty-accounts-page .account-filters input::placeholder { color:#65799c; opacity:1; }
+.faculty-accounts-page .account-filters select { padding-left:14px; padding-right:32px; }
+.faculty-accounts-page .account-filters button { display:flex; align-items:center; justify-content:center; gap:10px; width:100%; height:40px; border:1px solid #d8e3f2; border-radius:8px; background:#fff; color:#0864ff; font-size:12px; font-weight:650; }
+.faculty-accounts-page .account-filters button svg { width:17px; height:17px; fill:currentColor; }
+.faculty-accounts-page .accounts-table { min-width:800px; margin:0; }
+.faculty-accounts-page .accounts-table th { height:41px; padding:10px 18px; border:0; background:#f5f8fd; color:#405677; font-size:11px; font-weight:650; text-transform:none; letter-spacing:0; }
+.faculty-accounts-page .accounts-table td { height:76px; padding:14px 18px; border-bottom:1px solid #edf2f9; color:#344a71; font-size:12px; font-weight:400; background:#fff; }
+.faculty-accounts-page .accounts-table .col-check { width:62px; padding-left:24px; padding-right:12px; text-align:left; }
+.faculty-accounts-page .accounts-table .account-number { width:62px; font-size:12px; font-variant-numeric:tabular-nums; }
+.faculty-accounts-page .form-check-input { width:17px; height:17px; border:1px solid #cbd8eb; border-radius:4px; }
+.faculty-accounts-page .person-cell { gap:20px; min-width:200px; }
+.faculty-accounts-page .person-avatar { width:41px; height:41px; background:#e2edff; color:#0864ff; font-size:13px; font-weight:700; }
+.faculty-accounts-page .person-avatar--tabulator { background:#efdaff; color:#8c24f4; }
+.faculty-accounts-page .person-cell strong { display:block; color:#16234b; font-size:13px; font-weight:650; }
+.faculty-accounts-page .person-cell small { display:block; margin-top:5px; color:#7083a3; font-size:12px; }
+.faculty-accounts-page .account-email { display:inline-flex; align-items:center; gap:10px; white-space:nowrap; }
+.faculty-accounts-page .account-email svg { width:17px; height:17px; flex-shrink:0; fill:none; stroke:#63799c; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+.faculty-accounts-page .role-label { display:inline-block; padding:6px 12px; border-radius:13px; background:#e3eeff; color:#0864ff; font-size:10px; font-weight:650; }
+.faculty-accounts-page .role-label--tabulator { background:#f0dfff; color:#8c24f4; }
+.faculty-accounts-page .status-pill { min-height:26px; padding:5px 11px; gap:8px; font-size:12px; font-weight:500; text-transform:none; }
+.faculty-accounts-page .status-pill::before { content:''; width:10px; height:10px; border-radius:50%; background:currentColor; }
+.faculty-accounts-page .status-pill.active { color:#00a74f; background:#e1f9e9; }
+.faculty-accounts-page .status-pill.inactive { color:#ed4e68; background:#ffebef; }
+.faculty-accounts-page .row-actions { gap:18px; }
+.faculty-accounts-page .row-action { width:40px; height:41px; border-radius:10px; }
+.faculty-accounts-page .row-action svg { width:16px; height:16px; }
+.faculty-accounts-page .view-account { background:#f3f5f9; color:#637796; }
+.faculty-accounts-page .row-action.view-account svg { fill:currentColor; }
+.faculty-accounts-page .edit-account { background:#eaf2ff; color:#0864ff; }
+.faculty-accounts-page .delete-account { background:#fff0f3; color:#ee4a65; }
+.faculty-accounts-page .row-action:hover { filter:brightness(.96); }
+.faculty-accounts-page .pagination-bar { min-height:86px; padding:22px 27px; color:#607696; font-size:12px; font-weight:500; }
+.faculty-accounts-page .pagination-controls { gap:9px; }
+.faculty-accounts-page .pagination-controls a,.faculty-accounts-page .pagination-controls span { min-width:35px; width:35px; height:36px; border-color:#d5e0f0; border-radius:8px; color:#667c9f; font-size:23px; font-weight:400; }
+.faculty-accounts-page .pagination-controls .primary { background:#0864ff; border-color:#0864ff; color:#fff; font-size:12px; }
+.faculty-accounts-page .pagination-controls .disabled { opacity:.6; }
+.faculty-accounts-page .bulk-action-bar { margin:0; padding:10px 18px; border:0; border-radius:0; }
+.faculty-accounts-page :is(button,a,input,select):focus-visible { outline:2px solid #629cff; outline-offset:3px; }
+@media(max-width:1350px) { .faculty-accounts-page .account-hero { grid-template-columns:minmax(260px,1fr) auto; gap:18px; } .faculty-accounts-page .account-summary { grid-row:2; grid-column:1/-1; } .faculty-accounts-page .new-account-btn { grid-column:2; grid-row:1; } }
+@media(max-width:700px) { .faculty-accounts-page .main-content { padding:20px 12px; } .faculty-accounts-page .account-hero { grid-template-columns:1fr; } .faculty-accounts-page .account-title h2 { font-size:24px; } .faculty-accounts-page .new-account-btn { grid-column:1; grid-row:3; justify-self:start; margin-top:0; } .faculty-accounts-page .account-summary { grid-column:1; gap:8px; } .faculty-accounts-page .users-card { padding:12px 8px; gap:8px; flex-direction:column; } .faculty-accounts-page .users-card span:not(.account-stat-icon) { white-space:normal; font-size:10px; } .faculty-accounts-page .users-card small { font-size:10px; } .faculty-accounts-page .account-filters { grid-template-columns:1fr 1fr; } .faculty-accounts-page .account-search { grid-column:1/-1; } .faculty-accounts-page .account-filters button { grid-column:1/-1; } .faculty-accounts-page .pagination-bar { padding:18px 14px; gap:10px; flex-wrap:wrap; } }
+
+/* Password reset is available only in the Faculty/Tabulator listing. */
+.faculty-accounts-page .reset-account-password { background:#fff5df; color:#a97108; }
+#account-password-reset { position:fixed; inset:0; margin:auto; max-height:calc(100dvh - 32px); overflow-y:auto; width:min(440px,calc(100vw - 32px)); padding:24px; border:1px solid #dbe5f0; border-radius:12px; color:#17244b; box-shadow:0 20px 60px #17244b26; }
+#account-password-reset::backdrop { background:#10213e66; }
+#account-password-reset h3 { margin:0 0 8px; font-size:21px; }
+#password-reset-account { color:#647896; font-size:13px; }
+#password-reset-message { margin:12px 0; color:#b52a43; font-size:13px; }
+#password-reset-message.is-success { color:#008f50; }
+.password-reset-actions { display:flex; justify-content:flex-end; gap:10px; }

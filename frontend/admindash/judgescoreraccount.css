@@ -1,1 +1,37 @@
-@import url("manageacc.css?v=20260616c");
+@import url("facultyaccount.css?v=20261030facultyreference");
+
+/* Reuse account-list styling; only judge/scorer reference differences live here. */
+.judge-accounts-page .main-content { padding-top:12px; }
+.judge-accounts-page .account-breadcrumb { display:flex; align-items:center; gap:14px; margin-bottom:10px; color:#7b91b7; font-size:12px; }
+.judge-accounts-page .account-breadcrumb [aria-current] { color:#0864ff; }
+.judge-accounts-page .account-breadcrumb>span:nth-child(2) { font-size:20px; line-height:1; }
+.judge-accounts-page .account-hero { margin-bottom:16px; gap:20px; }
+.judge-accounts-page .account-title h2 { font-size:29px; }
+.judge-accounts-page .account-summary { gap:12px; }
+.judge-accounts-page .users-card { min-height:96px; }
+.judge-accounts-page .users-card small { font-size:10px; }
+.judge-accounts-page .new-account-btn { margin-top:0; }
+.judge-accounts-page .account-filters { grid-template-columns:minmax(220px,1fr) 154px 178px 132px; }
+.judge-accounts-page .account-toolbar { padding:15px; }
+.judge-accounts-page .accounts-table { min-width:950px; }
+.judge-accounts-page .accounts-table td { height:56px; padding:8px 16px; }
+.judge-accounts-page .accounts-table th { height:41px; padding-left:16px; padding-right:16px; }
+.judge-accounts-page .accounts-table .col-check { width:52px; padding-left:20px; }
+.judge-accounts-page .accounts-table .account-number { width:48px; }
+.judge-accounts-page .account-number>span { display:inline-grid; place-items:center; min-width:34px; height:28px; border-radius:8px; background:#f4f8fd; }
+.judge-accounts-page .person-cell { min-width:140px; gap:14px; }
+.judge-accounts-page .person-cell strong { font-size:12px; font-weight:600; }
+.judge-accounts-page .person-avatar { width:40px; height:40px; }
+.judge-accounts-page .accounts-table tbody tr:nth-child(5n+2) .person-avatar { color:#8b2cf6; background:#f1e5ff; }
+.judge-accounts-page .accounts-table tbody tr:nth-child(5n+3) .person-avatar { color:#00ad59; background:#dcfcef; }
+.judge-accounts-page .accounts-table tbody tr:nth-child(5n+4) .person-avatar { color:#ed790c; background:#fff0de; }
+.judge-accounts-page .accounts-table tbody tr:nth-child(5n+5) .person-avatar { color:#ee3565; background:#ffe3eb; }
+.judge-accounts-page .role-label { min-width:68px; text-align:center; border-radius:8px; padding:6px 10px; }
+.judge-accounts-page .role-label--judge { background:#f5efff; color:#8130f5; }
+.judge-accounts-page .role-label--scorer { background:#e8f6ff; color:#0875d1; }
+.judge-accounts-page .access-code-cell { display:inline-block; padding:5px 12px; border-radius:7px; background:#eaf2ff; color:#293f77; font-family:inherit; font-size:11px; font-weight:600; letter-spacing:1.2px; white-space:nowrap; }
+.judge-accounts-page .row-actions { gap:10px; }
+.judge-accounts-page .row-action { width:38px; height:36px; }
+.judge-accounts-page .edit-account { background:#e7f6ff; }
+.judge-accounts-page .pagination-bar { min-height:65px; padding:14px 22px; }
+@media(max-width:700px) { .judge-accounts-page .account-title h2 { font-size:25px; } .judge-accounts-page .account-filters { grid-template-columns:1fr 1fr; } }
